@@ -1,6 +1,6 @@
 {
   "id": "mentor.installation.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -61,7 +61,7 @@
     "Maintenance owns one hold; a drain pass can finish already admitted grading and send work and perform expiry. Migration copies only drained metadata/corpus state to a private backup."
   ],
   "authority": [
-    "Mentor owns its private state, admission, configuration, corpus import and exact worker definition. Clockwork owns binding mechanics and LaunchAgent/runtime records.",
+    "Mentor owns its private state, admission, configuration, corpus import and exact worker definition. Clockwork owns binding mechanics, LaunchAgent/runtime records, durable scheduling halts and incident email. Mentor declares halt-until-approved and retains domain pauses separately.",
     "Cell coordinated deployment owns initialized release updates and recovery ordering. Email and Nucleus keep credential and execution authority."
   ],
   "success": [
@@ -70,7 +70,8 @@
   ],
   "failure_and_recovery": [
     "Reject unsupported state or unsafe paths without creating a second database. Preserve owned holds when drain, backup, dependency readiness or rollback cannot be established.",
-    "Direct first installation is limited to uninitialized state. Disable mentor/worker before initialized coordinated deployment, then explicitly enable the desired current release afterward. Direct selector recovery is unsupported."
+    "Direct first installation is limited to uninitialized state. Disable mentor/worker before initialized coordinated deployment, then explicitly enable the desired current release afterward. Direct selector recovery is unsupported.",
+    "A retained schema-one owned binding can be replaced by the product schema-two definition. Definition changes, enable/disable and deployment preserve Clockwork incident state. Explicit binding resume requires the exact incident ID. cleanup can expire content and cancel expired jobs while halted without sending mail or admitting grading."
   ],
   "privacy": [
     "State is separate from desktop Mentor under Application Support/MentorMail. Neither configuration nor Clockwork definitions contain provider credentials, answers or critiques.",
@@ -89,13 +90,13 @@
     },
     {
       "id": "mentor.practice.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "nucleus.execution.operate",
@@ -231,7 +232,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns exact registered worker activation and runtime observations, not daily selection or practice completion.",
+        "statement": "Clockwork owns registered worker activation, failure-driven scheduling halts, retained incident notification and explicit continuation. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

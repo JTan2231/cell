@@ -27,7 +27,7 @@ after verification, or product meaning.
 
 Preserve authority:
 
-- Clockwork owns immutable definition and activation identity, binding
+- Clockwork owns declared scheduling failure enforcement, durable incidents and pause notifications, immutable definition and activation identity, binding
   selection, its generated plists, overlap admission, direct supervision, and
   runtime history.
 - The product owns release publication, durable work, locks, retry,
@@ -77,6 +77,15 @@ In both cases, code, tests, and product documentation remain authoritative for
 behavior.
 
 Stop for a new contract review before adding a daemon, network surface, agent
-execution, arbitrary command interface, workflow graph, queue, retry/backoff,
+execution, arbitrary command interface, workflow graph, product-work queue, product retry/backoff,
 secret storage, product output retention, distributed coordination, system
 service, or domain-success policy.
+
+For failure-policy changes, keep configuration and domain interpretation with
+the product. Clockwork owns durable admission halts and explicit incident-bound
+continuation. Preserve schema-one definition identities and legacy semantics;
+new policy semantics require schema two. Exercise nonzero exit, startup failure,
+signal, timeout, lost proof, reported failure with exit zero, normal overlap,
+re-observation after approval, and halt preservation across binding transitions.
+Notification tests use only synthetic local Email doubles. Preserve the fixed
+payload and provider idempotency horizon; transport failure never reopens work.

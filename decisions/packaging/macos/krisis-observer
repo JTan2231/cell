@@ -56,6 +56,9 @@ esac
 set +e
 /usr/bin/env -i \
     HOME="$HOME" \
+    CLOCKWORK_BROKER_PATH="${CLOCKWORK_BROKER_PATH:-}" \
+    CLOCKWORK_STATE_ROOT="${CLOCKWORK_STATE_ROOT:-}" \
+    CLOCKWORK_ACTIVATION_ID="${CLOCKWORK_ACTIVATION_ID:-}" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     CONVERSATIONS_CODEX="$CONVERSATIONS_CODEX" \
     KRISIS_DATABASE="$HOME/Library/Application Support/Decisions/decisions.db" \

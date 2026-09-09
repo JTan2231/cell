@@ -16,10 +16,10 @@ proof that product work succeeded.
 Prepare a regular UTF-8 TOML file of at most 1 MiB. The file must belong to the
 current user and must not be a symbolic link. Group and other users must not
 have write permission. Clockwork rejects unknown fields. A direct launch uses
-this version-one shape:
+this version-two shape:
 
 ```toml
-schema_version = 1
+schema_version = 2
 key = "owner/name"
 release_id = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 release_root = "/absolute/product/install/releases/0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -72,8 +72,7 @@ script_sha256 = "64-lowercase-hex-sha256"
 Clockwork invokes the interpreter directly with the script as data. It does
 not use the script shebang, and the literal `-c` command-string argument is
 rejected. All arguments and
-environment values are literal, and the exact registered environment replaces
-the broker environment. Secret-looking environment names are rejected; never
+environment values are literal, and the registered environment replaces the broker environment. Schema two adds the three reserved activation correlation fields described below. Secret-looking environment names are rejected; never
 place a credential in any field because definitions are durable private
 metadata, not a secret store.
 
@@ -225,7 +224,7 @@ start failure is recorded `start_failed` when that terminal write succeeds,
 otherwise the row remains conservatively `running`. A prior `running` row becomes
 `lost` only after its broker and any child are both demonstrably absent.
 
-Doctor initializes only an empty unversioned local schema-one store, refuses a
+Doctor initializes only an empty unversioned local schema-two store, refuses a
 foreign or unsupported schema, enforces private state paths, runs SQLite
 `quick_check`, resolves the current executable, and checks
 that `/bin/launchctl` exists. It also marks a retained `running` activation
@@ -270,3 +269,157 @@ rows by default. To read more, set `--limit` to a larger positive integer.
 History returns activation ID, key, trigger, timestamps, state, exit code,
 signal, and failure detail. `--details` adds the definition digest and process
 IDs. Definition and binding show return the full selected metadata.
+
+
+## Failure policy and explicit continuation
+
+Manifest schema two adds a product-owned failure configuration:
+
+```toml
+[failure]
+on_abend = "halt-until-approved"
+# email_cli = "/Users/operator/.local/bin/email"
+```
+
+Omission means `halt-until-approved`. The only exception is
+`continue-next-activation`, which retains the abend and permits the next timer
+activation. It does not retry the failed occurrence. The product declares and
+explains any exception. `email_cli` selects one absolute installed Email
+wrapper; omission selects `$HOME/.local/bin/email` for the current Clockwork
+user. This is a separately contracted Email transport, not an extension of the
+attested product launch image.
+
+A schema-two startup failure, nonzero direct-child exit, signal, timeout,
+lost activation, or broker supervision failure applies the selected policy.
+The product owns the interpretation of expected empty, waiting, and deferred
+outcomes and returns zero for those outcomes. An overlap is normal and never
+halts scheduling. Zero remains runtime evidence, not domain success.
+
+A product can report a terminal domain failure while its supervised process
+still runs, including after it durably recorded that failure:
+
+```rust
+clockwork::api::report_abend("model_failed", "job/immutable-job-id")?;
+```
+
+The helper returns `false` outside Clockwork and rejects a partial context. A
+schema-two child receives `CLOCKWORK_BROKER_PATH`, `CLOCKWORK_STATE_ROOT`, and
+`CLOCKWORK_ACTIVATION_ID` in addition to its registered environment. Preserve
+those values across a product-owned environment scrub. Registered environment
+names beginning `CLOCKWORK_` are reserved. The helper invokes the exact broker
+with `abend ACTIVATION_ID --code CODE --occurrence ID`; it does not access
+Clockwork storage directly. The activation must still be running.
+
+A report contains only a bounded machine code (64 bytes) and immutable product
+occurrence ID (256 bytes). Both permit ASCII letters, digits, `-`, `_`, `/`,
+`.`, and `:`. Do not supply source text, an email body, a credential, or an
+unbounded error message. Clockwork retains each `(key, occurrence)` once.
+Reporting that same failed occurrence after approval does not create a new
+halt. A distinct failed product attempt needs a distinct occurrence ID. Stop
+claiming successor work as soon as an abend is encountered; a report cannot
+cancel already admitted product work or make product commits atomic with the
+Clockwork incident.
+
+A default-policy abend durably opens one incident and closes admission for its
+stable key. Terminal runtime evidence and its incident commit together. A
+product report commits the incident before returning. The halt is independent
+of `enabled`, selected definition, product maintenance, and deployment.
+Switching, disabling, compensation, restart, and reinstall never clear it.
+The loaded timer may still invoke the broker, which starts no product child.
+A halted launchd invocation returns its binding receipt without another
+activation or incident. A manual run returns `binding_halted`.
+
+Inspect or explicitly approve continuation:
+
+```sh
+clockwork binding show owner/name
+clockwork incident list owner/name --limit 20
+clockwork incident show INCIDENT_ID
+clockwork binding resume owner/name INCIDENT_ID
+```
+
+`halted_incident` identifies the current incident. `failure_policy_active`
+indicates a selected schema-two definition. Incident timestamps are whole Unix
+seconds; notification timestamps and attempts describe only that incident's
+email submission attempts. `resume` requires the exact open incident, no
+running activation, and no pending binding transition. It records approval and
+opens future admission. It does not enable a disabled binding, activate a timer,
+retry a failed product occurrence, or undo committed work. Only an explicit
+user go-ahead authorizes this command; product installers must not invoke it.
+
+When a product already owns a failure pause, transfer that gate under product
+maintenance before permitting scheduled work:
+
+```sh
+clockwork binding halt owner/name --code legacy_failure --occurrence legacy/ID
+```
+
+This idempotently retains the failure incident without enabling or selecting
+work. An absent key becomes a disabled tombstone. After the durable receipt,
+the product may remove only its failure-owned scheduling gate. Keep product
+failure evidence, item recovery state, user pauses, and maintenance holds.
+Configuration remains product-owned; future scheduling failure enforcement is
+Clockwork-owned. The migration does not infer old pauses by reading product
+files or scanning old activation history.
+
+## Pause notification
+
+Each halt carries standing authority for one plain-text notification to Email's
+fixed personal recipient. The subject and body identify the binding, incident,
+failure code, occurrence, activation, halt time, and inspection/continuation
+commands. These metadata are disclosed to Email, Resend, and Gmail. Clockwork
+retains no product output, email response body, or credential. Email loads its
+own credential and owns bounded HTTP transport; exit zero establishes provider
+acceptance, not inbox delivery.
+
+Clockwork retains a pending notification in the same transaction as the halt.
+Every scheduled or manual broker visit attempts at most one due notification
+before the product gate, and one after the activation outcome. Attempts use a
+private transport lock, a fixed payload and idempotency key, a 120-second
+process bound, and at least five minutes between attempts for one incident.
+The halt remains closed when transport or notification bookkeeping fails.
+Other timers can deliver an alert for a disabled or halted product. There is
+no extra daemon or timer; if no broker is invoked, pending mail waits.
+
+Run `clockwork notification send` to attempt one due notification independently
+of product scheduling. Read its incident to distinguish `pending`, `accepted`,
+and `uncertain`. An interrupted or failed transport may already have been
+accepted. After 23 hours from the first invocation, or a backwards clock jump
+before that invocation, Clockwork makes no automatic further attempt and
+retains `uncertain`, leaving margin before Resend's 24-hour deduplication limit.
+Inspect provider acceptance before issuing
+`clockwork notification retry INCIDENT_ID`. That command explicitly approves
+possible duplication, creates a new idempotency generation, and attempts the
+same retained incident payload. It never clears the scheduling halt.
+
+## Storage and definition upgrade
+
+Clockwork 0.5 uses SQLite schema two and requires an explicit
+`clockwork migrate --backup /absolute/new-backup-directory` for schema one.
+Quiesce all Clockwork commands and product schedules first; recover running
+rows and pending binding transitions with the old binary. Migration takes a
+schema gate, refuses retained running rows, checkpoints SQLite, retains a
+private database-plus-sidecar backup, and applies the transactional schema
+change. It does not change definitions, selections, activation history, timers,
+or product pauses. Program deployment never performs this migration.
+
+Schema-one definitions keep their original digest and legacy failure behavior.
+They do not acquire the new policy merely because the database migrated.
+Register each product's schema-two definition and select it under its
+maintenance gate, preserving whether the binding was disabled and importing
+any existing failure halt. `failure_policy_active: false` makes this rollout
+gap visible. Generated plists also pin an exact Clockwork binary; refresh each
+supported product binding before releasing maintenance. Retired definitions
+remain available as historical evidence.
+
+After migration, an old Clockwork binary cannot open the new store. Database
+rollback requires the retained schema-one database and sidecars, compatible
+Clockwork and product releases, their prior definitions/plists, and quiescence.
+It must preserve all newer halt evidence; do not restore a pre-halt backup and
+silently resume work. Keep the failed store and incident export for recovery.
+
+The hidden `--state-root` test override uses `STATE_ROOT/email` as its default
+Email double, preventing isolated fixtures from selecting the real account.
+An explicit `failure.email_cli` still selects the caller's authorized wrapper.
+The canonical ordinary state path used by a product report retains the normal
+installed layout and Email default.

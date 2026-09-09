@@ -131,3 +131,10 @@ records explicitly when existing organization should reflect new instructions.
 Annals owns instruction revisions, immutable source bytes, evidence, corpus
 revisions, and reconciliation success. Use its supported named-library commands
 for deeper inspection. Do not edit its SQLite database or spool directly.
+
+An update ends on its first feed, handoff, or inbox failure. It preserves its
+completed stage report and starts no successor stage. Its Annals batch selects
+`--stop-on-failure`. When invoked by the configured Clockwork schedule, a failed
+update halts future scheduling until `clockwork binding resume conatus/update
+INCIDENT_ID` is explicitly approved. `conatus resume` only clears the product's
+operator pause; it does not clear a scheduling incident.

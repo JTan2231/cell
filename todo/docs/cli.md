@@ -276,11 +276,17 @@ follow-up**.
 `email send` sends that digest immediately through Resend. It requires a
 nonblank `RESEND_API_KEY` with no surrounding whitespace in the process
 environment and uses `todo-email/<UUIDv7>` as its idempotency key. `email send
---scheduled` changes only the key to
+--scheduled` uses the key
 `todo-daily-email/<LOCAL YYYY-MM-DD>`, identifying the most recent local 09:00
 occurrence. Neither mode submits a Resend `scheduled_at` value. One invocation
 freezes the body and key for up to three total attempts on transport failures,
 `429`, or `5xx` responses.
+
+A scheduled send that meets a deployment hold returns success with
+`{"scheduled":true,"skipped":"deployment_maintenance"}` and sends nothing.
+Other admission errors remain failures. The installed `todo/daily-email`
+Clockwork definition halts future scheduling after an abend until explicit
+approval of its exact incident. See [installation and recovery](system-installation.md).
 
 The digest contains unresolved captured concerns and all open canonical todos.
 Its body uses **Needs your decision**, **Needs follow-up**, and **Other open

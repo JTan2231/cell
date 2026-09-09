@@ -132,31 +132,37 @@ pub fn update(root: &Path) -> Result<Value> {
     let outbox = root.join("outbox");
     private_directory(&outbox)?;
     let mut queued_records = 0_u64;
-    for record in store.pending()? {
-        let path = outbox.join(format!("{}.md", record.work_name));
-        let result = write_document(&path, &record.document).and_then(|()| library.enqueue(&path));
-        match result {
-            Ok(receipt) => {
-                store.queued(&record.id, &receipt)?;
-                queued_records += 1;
-            }
-            Err(error) => {
-                store.failed_handoff(&record.id, &error.to_string())?;
-                errors.push(
-                    json!({"operation":"enqueue","record_id":record.id,"error":error.to_string()}),
-                );
-                // Stop forwarding when the library or spool cannot accept a source.
-                break;
+    if errors.is_empty() {
+        for record in store.pending()? {
+            let path = outbox.join(format!("{}.md", record.work_name));
+            let result =
+                write_document(&path, &record.document).and_then(|()| library.enqueue(&path));
+            match result {
+                Ok(receipt) => {
+                    store.queued(&record.id, &receipt)?;
+                    queued_records += 1;
+                }
+                Err(error) => {
+                    store.failed_handoff(&record.id, &error.to_string())?;
+                    errors.push(
+                        json!({"operation":"enqueue","record_id":record.id,"error":error.to_string()}),
+                    );
+                    break;
+                }
             }
         }
     }
-    // Feed failure does not prevent already captured wants from being processed.
-    let inbox_run = match library.run() {
-        Ok(result) => Some(result),
-        Err(error) => {
-            errors.push(json!({"operation":"inbox_run","error":error.to_string()}));
-            None
+    // Do not admit successor work after this activation encounters an abend.
+    let inbox_run = if errors.is_empty() {
+        match library.run() {
+            Ok(result) => Some(result),
+            Err(error) => {
+                errors.push(json!({"operation":"inbox_run","error":error.to_string()}));
+                None
+            }
         }
+    } else {
+        None
     };
     let report = json!({
         "started_at":started_at,"finished_at":now()?,
@@ -370,4 +376,45 @@ fn write_document(path: &Path, document: &str) -> Result<()> {
     file.write_all(document.as_bytes())?;
     file.sync_all()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    #[test]
+    fn feed_failure_retains_intake_without_starting_handoffs_or_processing() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        let annals = root.join("annals");
+        std::fs::write(
+            &annals,
+            "#!/bin/sh\nprintf '%s\\n' invoked >>\"${0%/*}/calls\"\nexit 1\n",
+        )?;
+        std::fs::set_permissions(&annals, std::fs::Permissions::from_mode(0o700))?;
+        let mut store = Store::create(root)?;
+        store.configure(
+            &Config {
+                annals,
+                annals_state_dir: Some(root.join("annals-state")),
+                library: "conatus".to_owned(),
+                library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+                decisions_config: root.join("decisions.toml"),
+                decisions_library_id: "fedcba9876543210fedcba9876543210".to_owned(),
+            },
+            "cursor-0",
+        )?;
+        capture_want(root, "Keep the captured wording.", "synthetic-test")?;
+
+        assert!(update(root).is_err());
+        assert_eq!(std::fs::read_to_string(root.join("calls"))?, "invoked\n");
+        assert_eq!(store.pending()?.len(), 1);
+        let report: Value =
+            serde_json::from_str(&store.setting("last_update")?.context("report")?)?;
+        assert_eq!(report["errors"][0]["operation"], "decision_feed");
+        assert_eq!(report["queued_records"], 0);
+        assert!(report["inbox_run"].is_null());
+        Ok(())
+    }
 }

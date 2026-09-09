@@ -1034,8 +1034,15 @@ pub(crate) fn run(
             &settings,
             &runner,
             forward_progress,
+            args.stop_on_failure,
             &mut summary,
         )?;
+        if args.stop_on_failure && summary.failed > 0 {
+            return Err(AppError::unexpected(
+                "inbox_job_failed",
+                "inbox batch stopped after a failed job; inspect the failed receipt before recovery",
+            ));
+        }
         debug_assert!(!queue.contains_key(&key));
     }
 
@@ -2469,6 +2476,7 @@ fn run_retry_event(
             &settings,
             &runner,
             forward_progress,
+            true,
             &mut summary,
         ) {
             let terminal = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
@@ -3406,6 +3414,7 @@ fn process_one(
     settings: &ModelSettings,
     runner: &Runner,
     forward_progress: bool,
+    stop_on_failure: bool,
     summary: &mut RunSummary,
 ) -> Result<(), AppError> {
     let ingestion_id = ensure_ingestion(library, &mut envelope)?;
@@ -3464,6 +3473,7 @@ fn process_one(
             );
         }
     }
+    let previous_run_token = envelope.receipt.model_run_token.clone();
     let result = process_work(
         library,
         &mut envelope,
@@ -3506,6 +3516,19 @@ fn process_one(
                     return Err(archived_job_error(&envelope, &error));
                 }
             };
+            let runtime_failed = if stop_on_failure
+                && envelope.receipt.model_run_token != previous_run_token
+            {
+                envelope.receipt.model_run_token.as_deref().map(|token| {
+                    db::open_read(library)?.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM model_runs WHERE token = ?1 AND failure IS NOT NULL)",
+                        [token],
+                        |row| row.get::<_, bool>(0),
+                    ).map_err(AppError::from)
+                }).transpose()?.unwrap_or(false)
+            } else {
+                false
+            };
             complete_job(
                 library,
                 spool,
@@ -3513,7 +3536,14 @@ fn process_one(
                 ingestion_id,
                 completion,
                 summary,
-            )
+            )?;
+            if runtime_failed {
+                return Err(AppError::unexpected(
+                    "inbox_runtime_failed_after_result",
+                    "runtime failed after recording the current job result; the completed delivery is preserved",
+                ));
+            }
+            Ok(())
         }
         Ok(WorkProcessing::Duplicate) => complete_job(
             library,

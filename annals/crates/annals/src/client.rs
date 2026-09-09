@@ -525,6 +525,9 @@ fn inbox_arguments(a: &mut Vec<OsString>, request: &InboxCommand) -> Result<(), 
             if let Some(seconds) = v.settle_seconds {
                 number(a, "--settle-seconds", seconds);
             }
+            if v.stop_on_failure {
+                a.push("--stop-on-failure".into());
+            }
         }
         InboxCommand::Enqueue(v) => {
             a.push("enqueue".into());

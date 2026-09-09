@@ -1,6 +1,6 @@
 # Clockwork semantic seed
 
-This project-local definition list describes only Clockwork v0.1 behavior. It
+This project-local definition list describes Clockwork behavior. It
 is input prepared for a later explicit `semantics repository seed-markdown`
 operation; its presence does not mean the `clockwork` Semantics project has
 been registered or seeded.
@@ -9,7 +9,7 @@ been registered or seeded.
 : One admitted invocation of one immutable Clockwork definition, resulting in at most one directly supervised child process and one runtime-history record. It is not a product-domain unit of success.
 
 **Definition**
-: An immutable normalized Clockwork snapshot containing one stable key's schedule, product-supplied exact release identity, pinned top-level launch image, literal process context, output paths, authority, timeout, and overlap policy; its Clockwork identity is the SHA-256 digest of its canonical concrete content.
+: An immutable normalized Clockwork snapshot containing one stable key's schedule, product-supplied exact release identity, pinned top-level launch image, literal process context, output paths, authority, timeout, overlap policy, and schema-two failure policy; its Clockwork identity is the SHA-256 digest of its canonical concrete content.
 
 **Binding**
 : The stable `owner/name` identity whose current nullable selection points to one immutable definition and whose generated LaunchAgent contains only that stable key.
@@ -43,3 +43,15 @@ been registered or seeded.
 
 **Product output**
 : The direct child's stdout or stderr bytes appended to distinct exact product-selected private files. Clockwork validates and opens those destinations but never ingests their bodies or owns their meaning or retention.
+
+**Failure policy**
+: The registering product's immutable response to a runtime or reported domain abend: halt-until-approved by default, or an explicit continue-next-activation exception. Clockwork enforces the scheduling response without deciding product success.
+
+**Scheduling halt**
+: An open Clockwork incident that prevents future activation admission for one stable binding independently of enabled state, selected release, maintenance, or installation. Only approval naming the exact incident clears it.
+
+**Abend occurrence**
+: A stable key plus immutable product failure identifier, or a failed runtime activation identity, retained once as failure evidence. Re-observation is not a new failure or automatic retry.
+
+**Pause notification**
+: One authorized fixed personal email for one scheduling halt, with pending, accepted, or uncertain transport state retained independently of the product admission gate. Acceptance does not establish inbox delivery.

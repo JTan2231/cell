@@ -67,11 +67,11 @@ pub(crate) fn definition_digest(manifest: &Manifest) -> Result<String> {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
-    if manifest.schema_version != 1 {
+    if !matches!(manifest.schema_version, 1 | 2) {
         return Err(Error::new(
             "manifest_version_unsupported",
             format!(
-                "schema_version {} is unsupported; expected 1",
+                "schema_version {} is unsupported; expected 1 or 2",
                 manifest.schema_version
             ),
         ));
@@ -104,6 +104,32 @@ pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
     }
     validate_arguments(&manifest.arguments)?;
     validate_environment(&manifest.environment)?;
+    if manifest.schema_version >= 2
+        && manifest
+            .environment
+            .keys()
+            .any(|name| name.starts_with("CLOCKWORK_"))
+    {
+        return Err(Error::new(
+            "manifest_invalid",
+            "CLOCKWORK_ environment names are reserved for activation correlation",
+        ));
+    }
+    if manifest.schema_version == 1 && manifest.failure != clockwork::api::FailurePolicy::default()
+    {
+        return Err(Error::new(
+            "manifest_invalid",
+            "failure policy requires manifest schema two",
+        ));
+    }
+    if let Some(path) = &manifest.failure.email_cli
+        && (!Path::new(path).is_absolute() || path.chars().any(char::is_control))
+    {
+        return Err(Error::new(
+            "manifest_invalid",
+            "failure.email_cli must be an absolute installed wrapper path",
+        ));
+    }
 
     let release_root = exact_directory(Path::new(&manifest.release_root), "release_root")?;
     require_not_group_or_world_writable(&release_root, "release_root")?;

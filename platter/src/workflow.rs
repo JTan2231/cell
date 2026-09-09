@@ -245,12 +245,9 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
             .iter()
             .find(|c| c.id == job.company_id)
             .map_or("Unknown employer", |c| c.name.as_str());
-        if let Err(error) = prepare_job(&settings, &store, job, company, deadline, false).await {
-            if error.is::<crate::resume::RendererFailure>() {
-                return Err(error);
-            }
-            eprintln!("deferred {}: {error}", job.id);
-        }
+        // A declined opportunity is a successful product decision. An error
+        // ends this pass before another candidate or an email can be admitted.
+        prepare_job(&settings, &store, job, company, deadline, false).await?;
     }
     ready(&store)
 }

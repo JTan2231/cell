@@ -118,6 +118,8 @@ impl JournalBinding {
             key: self.key.clone(),
             definition_digest: self.definition_digest.clone(),
             enabled: self.enabled,
+            halted_incident: None,
+            failure_policy_active: false,
             plist_sha256: self.plist_sha256.clone(),
             updated_at: self.updated_at,
         }
@@ -1618,6 +1620,7 @@ mod tests {
             release_root: "/release".to_owned(),
             authority: Authority::CurrentUserBackground,
             overlap: OverlapPolicy::Skip,
+            failure: clockwork::api::FailurePolicy::default(),
             timeout_seconds: None,
             arguments: vec!["inbox".to_owned(), "process-one".to_owned()],
             cwd: "/release".to_owned(),

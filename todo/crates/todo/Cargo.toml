@@ -7,6 +7,7 @@ edition.workspace = true
 [dependencies]
 cell-install.workspace = true
 cell-maintenance.workspace = true
+clockwork = { path = "../../../clockwork/crates/clockwork" }
 clap.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true

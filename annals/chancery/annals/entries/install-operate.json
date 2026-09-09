@@ -1,6 +1,6 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -40,6 +40,7 @@
     "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed; an explicitly requested decisions handoff instead reports maintenance still engaged."
   ],
   "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
     "Coordinated inspection stops before effects when an installed executable lacks maintenance admission support; bootstrap that compatibility release through the existing documented deployers and quiescence procedure. Adapter recovery stops on a retained installer marker or unfinished transaction rather than clearing it or another owner's hold.",
     "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
     "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status inspection and insufficient physical space can fail release staging, backup, migration, or rollback writes.",
@@ -106,8 +107,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -238,6 +239,7 @@
       }
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
       {"status": "declared", "statement": "The primary deployer discovers registered catalog libraries, records their identity and paths, fences command admission, drains admitted work, and journals consistent per-library backups and schema migrations. Rollback restores each changed library from its own pre-migration backup while preserving config, spool, and instruction history."},
       {
         "status": "declared",
@@ -319,7 +321,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 2 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
+        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 3 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

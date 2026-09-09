@@ -8,6 +8,7 @@ license = "MIT"
 [dependencies]
 cell-install.workspace = true
 cell-maintenance.workspace = true
+clockwork = { path = "../clockwork/crates/clockwork" }
 annals-api.workspace = true
 krisis-api.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }

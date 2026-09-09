@@ -21,8 +21,52 @@ use crate::store::Store;
 
 const TERMINATION_GRACE: Duration = Duration::from_secs(5);
 
-#[allow(clippy::too_many_lines)]
 pub(crate) async fn run(
+    store: &mut Store,
+    layout: &Layout,
+    key: &str,
+    trigger: Trigger,
+) -> Result<ActivationRecord> {
+    // Alert transport stays reachable before the product's disabled/halted gate.
+    if let Err(error) = crate::notification::send_pending(store, layout).await {
+        eprintln!(
+            "clockwork: pause notification remains pending ({})",
+            error.code()
+        );
+    }
+    let outcome = run_inner(store, layout, key, trigger).await;
+    // Close future admission on a pre-admission or supervision failure without
+    // inventing a terminal process result. Normal gate refusals are not abends.
+    if let Err(error) = &outcome
+        && !matches!(
+            error.code(),
+            "activation_busy" | "binding_halted" | "binding_disabled" | "binding_not_found"
+        )
+        && let Ok(definition) = store.selected_definition(key)
+        && definition.manifest.schema_version >= 2
+        && definition.manifest.failure.on_abend == clockwork::api::AbendPolicy::HaltUntilApproved
+        && let Err(persist) = store.import_halt(
+            key,
+            error.code(),
+            &format!("broker/{}", uuid::Uuid::now_v7()),
+        )
+    {
+        eprintln!(
+            "clockwork: unable to persist broker halt ({})",
+            persist.code()
+        );
+    }
+    if let Err(error) = crate::notification::send_pending(store, layout).await {
+        eprintln!(
+            "clockwork: pause notification remains pending ({})",
+            error.code()
+        );
+    }
+    outcome
+}
+
+#[allow(clippy::too_many_lines)]
+async fn run_inner(
     store: &mut Store,
     layout: &Layout,
     key: &str,
@@ -37,6 +81,7 @@ pub(crate) async fn run(
     };
 
     store.recover_stale(Some(key))?;
+    store.require_unhalted(key)?;
     if store.has_running_activation(key)? {
         return overlap(store, key, &selected.digest, trigger);
     }
@@ -348,7 +393,18 @@ pub(crate) fn exec_registered(
     let stderr = open_output(Path::new(&definition.manifest.output.stderr), "stderr")?;
     require_distinct_outputs(&stdout, &stderr)?;
     clear_gate_status(status)?;
-    let error = product_command(&definition.manifest, stdout, stderr).exec();
+    let mut command = product_command(&definition.manifest, stdout, stderr);
+    if definition.manifest.schema_version >= 2 {
+        let broker = std::env::current_exe()
+            .context("activation_context_invalid", "locate activation broker")?
+            .canonicalize()
+            .context("activation_context_invalid", "resolve activation broker")?;
+        command
+            .env("CLOCKWORK_BROKER_PATH", broker)
+            .env("CLOCKWORK_STATE_ROOT", layout.state_root())
+            .env("CLOCKWORK_ACTIVATION_ID", activation_id);
+    }
+    let error = command.exec();
     Err(Error::new(
         "activation_exec_failed",
         format!("execute registered launch image: {error}"),
@@ -688,6 +744,7 @@ mod tests {
             release_root: temporary.path().display().to_string(),
             authority: Authority::CurrentUserBackground,
             overlap: OverlapPolicy::Skip,
+            failure: clockwork::api::FailurePolicy::default(),
             timeout_seconds: None,
             arguments: vec!["literal one".to_owned(), "$NOT_EXPANDED".to_owned()],
             cwd: temporary.path().display().to_string(),

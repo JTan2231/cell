@@ -555,12 +555,13 @@ impl Store {
         Ok(())
     }
 
-    /// Read up to twenty frozen pending emails whose next attempt is due.
+    /// Read up to twenty unexpired frozen pending emails. Legacy next-attempt
+    /// timestamps no longer control admission; Clockwork owns scheduling policy.
     ///
     /// # Errors
     /// Returns database read or record-decoding errors.
     pub fn outgoing(&self, now: i64) -> Result<Vec<Outgoing>> {
-        let mut statement = self.connection.prepare("SELECT id,incoming_id,payload,first_attempt,attempts,expires_at FROM outbox WHERE state='pending' AND next_attempt<=?1 AND payload IS NOT NULL ORDER BY created_at,id LIMIT 20")?;
+        let mut statement = self.connection.prepare("SELECT id,incoming_id,payload,first_attempt,attempts,expires_at FROM outbox WHERE state='pending' AND expires_at>?1 AND payload IS NOT NULL ORDER BY created_at,id LIMIT 20")?;
         Ok(statement
             .query_map([now], |row| {
                 Ok(Outgoing {
@@ -584,12 +585,12 @@ impl Store {
         Ok(())
     }
 
-    /// Set a later attempt for an email whose acceptance is unresolved.
+    /// Retain uncertainty without choosing when scheduling may continue.
     ///
     /// # Errors
     /// Returns database write errors.
-    pub fn retry_send(&self, id: &str, next: i64) -> Result<()> {
-        self.connection.execute("UPDATE outbox SET next_attempt=?2,error_code='email_submission_unresolved' WHERE id=?1 AND state='pending'", params![id,next])?;
+    pub fn unresolved_send(&self, id: &str) -> Result<()> {
+        self.connection.execute("UPDATE outbox SET error_code='email_submission_unresolved' WHERE id=?1 AND state='pending'", [id])?;
         Ok(())
     }
 

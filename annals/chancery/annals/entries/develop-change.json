@@ -41,7 +41,7 @@
   ],
   "dependencies": [
     {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "clockwork.schedule.operate", "min_contract": 2, "max_contract_exclusive": 3}
+    {"id": "clockwork.schedule.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -51,7 +51,7 @@
   "automation": "none",
   "steps": [
     "Read `semantics.repository.explore`, query `semantics repository show annals`, and identify the Annals-owned contract being changed.",
-    "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design. Read Clockwork schedule contract 2 for scheduled-executable or binding changes.",
+    "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design. Read Clockwork schedule contract 3 for scheduled-executable or binding changes.",
     "Implement the smallest change and update the owning CLI, architecture, data, installation, telemetry, or Semantics terminology authority in the same change.",
     "Run `./annals/ci.sh`; deployment and migration remain separately authorized operations."
   ],
@@ -134,7 +134,7 @@
         "kind": "authority",
         "contract": "semantics.repository.explore"
       },
-      {"status": "declared", "statement": "Annals scheduling and packaging development relies on Clockwork schedule contract 2 for the strict executable definition, binding lifecycle, overlap, history, and launchd projection boundary.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
+      {"status": "declared", "statement": "Annals scheduling and packaging development relies on Clockwork schedule contract 3 for the strict executable definition, binding lifecycle, overlap, history, and launchd projection boundary.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
       {"status": "unsupported", "statement": "A documentation dependency or conditional requirement to consult Nucleus must not be interpreted as unconditional Nucleus runtime authority over an Annals change."}
     ]
   },

@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -34,6 +34,7 @@
     "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
   ],
   "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
     "Coordinated inspection stops before effects if an installed CLI lacks maintenance support; bootstrap its compatibility release through the existing deployer and writer-quiescence procedure. Adapter recovery stops on retained product-installer maintenance or unfinished transactions without clearing their evidence or another owner's hold.",
     "A provable failed update restores prior owned selectors, hook bytes, database and sidecars, and schedule selection; an unprovable rollback retains the private maintenance gate and transaction backup.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
@@ -62,8 +63,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -258,6 +259,7 @@
       }
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
       {
         "status": "declared",
         "statement": "The durable gate is the private sibling <database>.cell-maintenance. Hold atomically fences every other public CLI command and typed client before database access, including reads and doctor because opening state can migrate it. Existing commands may settle; holds survive process exit. Repeated hold and release are idempotent, and release removes only its owner without changing baseline or another hold."

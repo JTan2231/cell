@@ -82,7 +82,10 @@ fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<(
     )
 }
 
-fn deployment_admission(database: &Path) -> Result<cell_maintenance::Admission> {
+fn deployment_admission(
+    database: &Path,
+    scheduled_worker: bool,
+) -> Result<Option<cell_maintenance::Admission>> {
     let gate = deployment_gate(database)?;
     let result = match std::env::var("CELL_DEPLOYMENT_RUN_ID") {
         Ok(owner)
@@ -92,7 +95,11 @@ fn deployment_admission(database: &Path) -> Result<cell_maintenance::Admission> 
         }
         _ => gate.enter(),
     };
-    result.map_err(maintenance_error)
+    match result {
+        Ok(admission) => Ok(Some(admission)),
+        Err(cell_maintenance::Error::Held) if scheduled_worker => Ok(None),
+        Err(error) => Err(maintenance_error(error)),
+    }
 }
 
 #[derive(Debug, Args)]
@@ -255,7 +262,17 @@ fn run(cli: Cli) -> Result<()> {
     }
     // Opening the store may initialize or migrate it. Track this lifetime even
     // for reads so installation cannot race a reader's automatic migration.
-    let _admission = deployment_admission(&database)?;
+    let scheduled_worker = matches!(
+        &cli.command,
+        Command::Intake(arguments) if matches!(&arguments.command, IntakeCommand::Run)
+    ) && std::env::var_os("CLOCKWORK_ACTIVATION_ID")
+        .is_some_and(|value| !value.is_empty());
+    let Some(_admission) = deployment_admission(&database, scheduled_worker)? else {
+        return print(
+            &json!({"ok": true, "skipped": "deployment_maintenance"}),
+            cli.json,
+        );
+    };
     let store = Store::open(database)?;
     match cli.command {
         Command::Maintenance { .. } => unreachable!("maintenance returned before opening state"),
@@ -454,7 +471,9 @@ fn intake_command(store: &Store, command: IntakeCommand, compact: bool) -> Resul
                 )?,
                 conversations,
             );
-            print(&worker.run_once()?, compact)
+            let report = worker.run_once()?;
+            print(&report, compact)?;
+            report.ensure_success()
         }
     }
 }

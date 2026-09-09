@@ -159,28 +159,28 @@ impl Grader {
     }
 
     /// Cancel after Mentor has purged temporary request and answer content.
+    /// Return true for terminal or absent work, false for settling cancellation.
     /// The remaining job ID must identify a job owned by this Mentor run.
     ///
     /// # Errors
-    /// Rejects a job with unconfirmed ownership. Returns provider errors, timeouts,
-    /// and cancellation that is still pending.
-    pub async fn cancel_job(&self, job_id: &str) -> Result<()> {
+    /// Rejects a job with unconfirmed ownership. Returns provider errors and timeouts.
+    pub async fn cancel_job(&self, job_id: &str) -> Result<bool> {
         let id = JobId::new(job_id);
         let Some(job) = self.read_job(&id).await? else {
-            return Ok(());
+            return Ok(true);
         };
         verify_cancellation_owner(&id, &job)?;
         if job.summary.state.is_terminal() {
-            return Ok(());
+            return Ok(true);
         }
         self.request_cancellation(&id).await?;
         if let Some(job) = self.read_job(&id).await? {
             verify_cancellation_owner(&id, &job)?;
             if !job.summary.state.is_terminal() {
-                return Err(fail("Nucleus grading cancellation is still pending"));
+                return Ok(false);
             }
         }
-        Ok(())
+        Ok(true)
     }
 
     async fn read_job(&self, id: &JobId) -> Result<Option<JobV1>> {

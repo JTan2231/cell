@@ -100,7 +100,10 @@ not control provider records or copies outside the database.
 | Outgoing receipt metadata | Submission state, Resend receipt when known, attempt timestamps, and error code. Terminal records are eligible for removal after 35 days from creation. |
 | Cancellation correlation | Job ID and pending-cancellation flag. Kept until the Nucleus job is terminal or absent, even if normal metadata expiry has passed. |
 
-Cleanup runs at worker entry and exit. A stopped worker cannot enforce an exact
+Cleanup runs at worker entry and exit and through `mentor cleanup`. A halted
+schedule does not run cleanup. Use `mentor cleanup` during a halt to expire
+local content and request cancellation of expired grading jobs without polling,
+grading admission, or sending mail. A stopped worker cannot enforce an exact
 wall-clock deletion deadline. Once a critique submission receipt commits,
 Mentor clears its outgoing content and any remaining answer/request buffers
 in the same transaction. There is no command to browse prior answers or grades.
@@ -121,17 +124,31 @@ requester/job identity before consuming a result. Nucleus failure does not
 authorize a new model attempt under another ID.
 
 Before each email attempt Mentor retains the frozen payload, idempotency key,
-and first-attempt time. Failed or uncertain submissions retry that same payload
-with increasing delay, capped at one hour. The retry window ends 23 hours after
+and first-attempt time. A failed or uncertain submission stops that pass before
+another message or stage starts. Clockwork owns the scheduling halt; Mentor
+does not schedule a delayed retry. After explicit Clockwork continuation, a
+later pass can revisit only that same payload and key. An explicitly requested
+manual tick can also revisit it. The retry window ends 23 hours after
 the first attempt, or at the content deadline if earlier. It stops short of
 Resend's documented 24-hour idempotency retention. An unattempted expired
 message becomes failed; one with an attempt and no confirmed receipt becomes
 unknown. No new payload/key is generated to conceal that uncertainty.
 
 A recorded Resend receipt means submission acceptance, not Gmail delivery or
-successful threading. A worker completion means that a pass ended; inspect its
-error codes and retained outgoing states separately. Restart recovery uses the
-private records rather than rereading a prior critique into product history.
+successful threading. A stage failure returns a nonzero exit and a bounded
+error code. A pending model, settling cancellation, empty queue, exhausted
+corpus, or not-yet-due problem is an ordinary outcome. Restart recovery uses
+the private records rather than rereading a prior critique into product history.
+
+The product-owned schema-two `mentor/worker` definition declares
+`halt-until-approved`. Clockwork records and emails one retained halt incident
+and blocks further scheduled admission. Inspect `clockwork incident list
+mentor/worker` and `clockwork incident show INCIDENT_ID`. Explicitly approve
+future scheduling with `clockwork binding resume mentor/worker INCIDENT_ID`.
+Schedule enable, Mentor resume,
+deployment, and dependency recovery do not clear that halt. Continuation
+permits future passes and creates no replacement model job or send identity.
+Existing content and idempotency deadlines remain unchanged.
 
 ## Commands and observations
 
@@ -153,6 +170,7 @@ mentor --json doctor
 mentor import-corpus /absolute/corpus.json
 mentor tick
 mentor worker
+mentor cleanup
 mentor schedule enable
 mentor schedule disable
 mentor schedule status
@@ -182,7 +200,7 @@ drain as needed and inspect its result before releasing that owner's hold.
 retained records only, so they decrease after metadata cleanup and are not
 lifetime grading totals. `last_poll_completed_at` identifies the last completed
 full provider scan. `last_tick_completed_at` identifies the last completed
-worker pass, which may report stage errors. These timestamps use Unix seconds
+worker pass, including one that stopped at a stage failure. These timestamps use Unix seconds
 UTC; the daily date uses the configured IANA time zone.
 `first_delivery_date` is that zone's earliest eligible date, or `null` when no
 date restriction is configured. It is independent of pause and schedule state.

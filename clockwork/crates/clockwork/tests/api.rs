@@ -34,10 +34,8 @@ fn existing_binding_wire_shape_is_importable_without_private_state()
         ok: true,
         data: binding,
     })?;
-    assert_eq!(
-        emitted,
-        serde_json::from_slice::<serde_json::Value>(fixture)?
-    );
+    assert_eq!(emitted["data"]["halted_incident"], serde_json::Value::Null);
+    assert_eq!(emitted["data"]["failure_policy_active"], false);
     assert!(emitted["data"].get("plist_sha256").is_none());
     Ok(())
 }
@@ -49,4 +47,27 @@ fn provider_errors_and_unsupported_manifests_are_not_success() {
     assert!(result.is_err_and(|error| error.to_string().contains("binding_not_found")));
     assert!(decode::<Failure>(br#"{"ok":"true","data":{}}"#).is_err());
     assert!(Manifest::from_toml("schema_version = 999").is_err());
+}
+
+#[test]
+fn schema_one_digest_keeps_its_original_canonical_bytes() -> Result<(), Box<dyn std::error::Error>>
+{
+    use sha2::{Digest as _, Sha256};
+    let source = r#"{"schema_version":1,"key":"example/worker","release_id":"0000000000000000000000000000000000000000000000000000000000000000","release_root":"/fixture/release","authority":"current-user-background","overlap":"skip","arguments":[],"cwd":"/fixture","schedule":{"kind":"interval","seconds":60,"run_at_load":false},"launch":{"kind":"direct","program":"/fixture/release/bin/worker","sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"environment":{},"output":{"stdout":"/fixture/out","stderr":"/fixture/err"}}"#;
+    let mut manifest: Manifest = serde_json::from_str(source)?;
+    assert_eq!(
+        manifest.digest()?,
+        hex::encode(Sha256::digest(source.as_bytes()))
+    );
+    assert_eq!(serde_json::to_string(&manifest)?, source);
+    manifest.schema_version = 2;
+    assert_ne!(
+        manifest.digest()?,
+        hex::encode(Sha256::digest(source.as_bytes()))
+    );
+    assert_eq!(
+        manifest.failure.on_abend,
+        clockwork::api::AbendPolicy::HaltUntilApproved
+    );
+    Ok(())
 }

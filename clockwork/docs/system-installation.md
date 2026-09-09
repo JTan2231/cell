@@ -61,7 +61,7 @@ After deployment, diagnose explicitly:
 /Users/joey/.local/bin/chancery doctor
 ```
 
-Doctor initializes only an empty unversioned schema-one Clockwork store, refuses
+Doctor initializes only an empty unversioned schema-two Clockwork store, refuses
 foreign or unsupported schemas, and may mark retained
 `running` activations `lost` after proving their recorded processes absent. It
 does not execute a product job. Runtime exit evidence does not establish
@@ -121,3 +121,29 @@ login domain. Timer delivery and catch-up behavior remain subject to launchd,
 login/logout, sleep/wake, clock and time-zone changes, filesystem access and
 TCC, and operating-system resource pressure. No readiness check proves the
 next delivery time.
+
+## Schema-two rollout and rollback
+
+Clockwork 0.5 requires SQLite schema two. Before cutover, hold all product
+schedules, finish or recover active rows with the old binary, and resolve
+pending binding transitions. Retain prior product bindings and Clockwork
+release paths. Program installation changes selectors only.
+
+Run the new exact binary with `migrate --backup /absolute/new-backup-directory`.
+The explicit command refuses active rows, retains a private checkpointed
+database-plus-sidecar backup, and changes only schema. Then register and select
+each supported product's new schema-two definition under maintenance. Preserve
+disabled selections and import any failure-owned product halt with
+`binding halt KEY --code CODE --occurrence ID` before removing its old gate.
+Keep user pauses and product recovery evidence. Do not call `binding resume`
+as part of installation.
+
+Schema-one definitions retain their digest and legacy behavior.
+`binding show KEY` exposes `failure_policy_active: false` until a schema-two
+definition is selected. Every generated plist also pins an exact Clockwork
+binary; refresh supported bindings before releasing maintenance.
+
+Rollback across schema two requires the matching schema-one backup, sidecars,
+Clockwork/product releases, prior definitions and generated plists, plus full
+quiescence. Retain the failed store and newer incident evidence. A pre-halt
+backup must not erase a later halt or authorize resumed work.

@@ -23,6 +23,19 @@ pub struct AccountWorkerReport {
 }
 
 impl AccountWorkerReport {
+    /// Report only a failure encountered by this activation, never retained history.
+    pub fn ensure_success(&self) -> Result<()> {
+        if let Some(event_id) = &self.error_event_id {
+            return Err(Error::domain(
+                "intake_activation_failed",
+                format!(
+                    "intake {event_id} failed during this activation; inspect its retained state"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     fn running() -> Self {
         Self {
             already_running: true,
@@ -778,11 +791,18 @@ mod tests {
                     events: vec![account("a1")],
                 }]),
             },
-            Locator(root),
+            Locator(root.clone()),
             LegacyReconciler,
             LeakyAccountReconciler,
         );
-        worker.run_once().expect("worker");
+        let report = worker.run_once().expect("worker records the failure");
+        assert_eq!(
+            report
+                .ensure_success()
+                .expect_err("activation failed")
+                .code(),
+            "intake_activation_failed"
+        );
         let intake = store.account_intake("event-1").expect("intake");
         assert_eq!(intake.status, crate::domain::IntakeStatus::Failed);
         assert_eq!(
@@ -795,6 +815,21 @@ mod tests {
         for private in ["PRIVATE", "/private/project", "thread-secret"] {
             assert!(!exposed.contains(private));
         }
+        let later = AccountWorker::with_reconcilers(
+            &store,
+            Feed {
+                watermark: "a1".to_owned(),
+                pages: VecDeque::new(),
+            },
+            Locator(root),
+            LegacyReconciler,
+            AccountReconciler,
+        )
+        .run_once()
+        .expect("later empty activation");
+        later
+            .ensure_success()
+            .expect("retained failure is not a new abend");
     }
 
     #[allow(dead_code)]

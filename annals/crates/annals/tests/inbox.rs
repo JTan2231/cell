@@ -290,6 +290,7 @@ fn fake_control_name(key: &OsStr) -> Option<&'static str> {
     match key.to_str()? {
         "ANNALS_FAKE_AUTH_FAIL" => Some("auth-fail"),
         "ANNALS_FAKE_FAIL_FIRST" => Some("fail-first"),
+        "ANNALS_FAKE_FAIL_AFTER_SUBMIT" => Some("fail-after-submit"),
         "ANNALS_FAKE_BLOCK_READY" => Some("block-ready"),
         "ANNALS_FAKE_BLOCK_RELEASE" => Some("block-release"),
         "ANNALS_FAKE_AFTER_SUBMIT_READY" => Some("after-submit-ready"),
@@ -2179,6 +2180,69 @@ fn maintenance_smoke_does_not_rewrite_predecessor_spool_state() -> TestResult {
 }
 
 #[test]
+fn scheduled_batch_preserves_result_and_stops_after_late_runtime_failure() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming(
+        "01-first.txt",
+        b"Shared inbox claim.\nFirst source.\n",
+        0o600,
+    )?;
+    installation.incoming(
+        "02-next.txt",
+        b"Shared inbox claim.\nLater source.\n",
+        0o600,
+    )?;
+    let output = installation
+        .command()
+        .args(["inbox", "run", "--stop-on-failure"])
+        .env("ANNALS_FAKE_FAIL_AFTER_SUBMIT", "1")
+        .output()?;
+    failed_json(&output, "inbox_runtime_failed_after_result")?;
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["done"], 1);
+    assert_eq!(status["failed"], 0);
+    assert_eq!(status["queued"], 1);
+    assert_eq!(installation.json_ok(["stats"])?["revision"], 1);
+    assert_eq!(
+        only_archived_receipt(&installation.inbox, "queued")?["attempts"],
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn scheduled_batch_stops_after_source_failure_without_claiming_successor() -> TestResult {
+    let installation = Installation::new(0)?;
+    installation.init()?;
+    installation.incoming("01-invalid.bin", b"\xff\xfe", 0o600)?;
+    installation.incoming(
+        "02-valid.txt",
+        b"Shared inbox claim.\nA valid source for the later job.\n",
+        0o600,
+    )?;
+
+    let output = installation
+        .command()
+        .args(["inbox", "run", "--stop-on-failure"])
+        .output()?;
+    failed_json(&output, "inbox_job_failed")?;
+    let status = installation.json_ok(["inbox", "status"])?;
+    assert_eq!(status["failed"], 1);
+    assert_eq!(status["queued"], 1);
+    assert_eq!(status["processing"], 0);
+    let queued = only_archived_receipt(&installation.inbox, "queued")?;
+    assert_eq!(queued["attempts"], 0);
+    assert!(queued["ingestion_id"].is_null());
+
+    // A deliberately started later batch considers only its own outcomes.
+    let resumed = installation.json_ok(["inbox", "run", "--stop-on-failure"])?;
+    assert_eq!(resumed["failed"], 0);
+    assert_eq!(resumed["attempted"], 1);
+    Ok(())
+}
+
+#[test]
 fn permanent_input_failures_are_archived_unchanged_and_do_not_stop_the_batch() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
@@ -3544,6 +3608,10 @@ if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/fail-first' ]; then
 fi
 printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"thread\",\"turnId\":\"turn\",\"callId\":\"call\",\"namespace\":null,\"tool\":\"submit_reconciliation\",\"arguments\":{\"summary\":\"Integrate inbox source $number\",\"operations\":[{\"action\":\"create_concept\",\"ref\":\"inbox_item\",\"label\":\"Inbox concept $number\",\"parents\":[],\"evidence\":[{\"quote\":\"Shared inbox claim.\"}]}]}}}"
 IFS= read -r ignored
+if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/fail-after-submit' ]; then
+  printf '%s\n' 'simulated late model failure' >&2
+  exit 19
+fi
 if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/after-submit-ready' ]; then
   submit_ready=$(cat '__CONTROLS__/after-submit-ready')
   submit_release=$(cat '__CONTROLS__/after-submit-release')

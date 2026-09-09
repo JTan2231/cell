@@ -7,20 +7,25 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{Connection, OptionalExtension as _, TransactionBehavior, params};
 
 use crate::error::{Context as _, Error, Result};
+use crate::lock::KeyLock;
 use crate::manifest;
 use crate::model::{
     ActivationRecord, ActivationState, BindingRecord, DefinitionRecord, DefinitionSummary,
     Manifest, Trigger,
 };
 use crate::paths::{Layout, current_uid};
+use clockwork::api::{AbendPolicy, IncidentRecord};
 
 pub(crate) struct Store {
-    connection: Connection,
+    pub(crate) connection: Connection,
+    default_email_cli: String,
+    _schema_gate: KeyLock,
 }
 
 impl Store {
     pub(crate) fn open(layout: &Layout) -> Result<Self> {
         layout.prepare()?;
+        let schema_gate = KeyLock::acquire_activation_gate(layout, "clockwork/schema")?;
         let database = layout.database();
         prepare_database_file(&database)?;
         let connection = Connection::open(&database).context(
@@ -48,7 +53,11 @@ impl Store {
             "database_unavailable",
             format!("set private permissions on {}", database.display()),
         )?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            default_email_cli: layout.default_email_cli().to_string_lossy().into_owned(),
+            _schema_gate: schema_gate,
+        })
     }
 
     pub(crate) fn register_definition(
@@ -180,8 +189,13 @@ impl Store {
         let rows = statement
             .query_map([], binding_from_row)
             .context("database_read_failed", "list bindings")?;
-        rows.collect::<std::result::Result<Vec<_>, _>>()
-            .context("database_read_failed", "decode bindings")
+        let bindings = rows
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode bindings")?;
+        bindings
+            .into_iter()
+            .map(|binding| self.decorate_binding(binding))
+            .collect()
     }
 
     pub(crate) fn binding(&self, key: &str) -> Result<BindingRecord> {
@@ -190,7 +204,8 @@ impl Store {
     }
 
     pub(crate) fn optional_binding(&self, key: &str) -> Result<Option<BindingRecord>> {
-        self.connection
+        let binding = self
+            .connection
             .query_row(
                 "SELECT key, definition_digest, enabled, plist_sha256, updated_at \
                  FROM bindings WHERE key = ?1",
@@ -198,7 +213,21 @@ impl Store {
                 binding_from_row,
             )
             .optional()
-            .context("database_read_failed", "read binding")
+            .context("database_read_failed", "read binding")?;
+        binding
+            .map(|binding| self.decorate_binding(binding))
+            .transpose()
+    }
+
+    fn decorate_binding(&self, mut binding: BindingRecord) -> Result<BindingRecord> {
+        binding.halted_incident = self
+            .active_incident(&binding.key)?
+            .map(|incident| incident.id);
+        binding.failure_policy_active = match binding.definition_digest.as_deref() {
+            Some(digest) => self.definition(digest)?.manifest.schema_version >= 2,
+            None => false,
+        };
+        Ok(binding)
     }
 
     pub(crate) fn switch_binding(
@@ -238,13 +267,7 @@ impl Store {
         transaction
             .commit()
             .context("database_write_failed", "commit binding switch")?;
-        Ok(BindingRecord {
-            key: key.to_owned(),
-            definition_digest: Some(digest.to_owned()),
-            enabled: true,
-            plist_sha256: Some(plist_sha256.to_owned()),
-            updated_at,
-        })
+        self.binding(key)
     }
 
     pub(crate) fn disable_binding(
@@ -252,15 +275,6 @@ impl Store {
         key: &str,
         selected_digest: Option<&str>,
     ) -> Result<BindingRecord> {
-        let prior = self.optional_binding(key)?;
-        let definition_digest = selected_digest.map(ToOwned::to_owned).or_else(|| {
-            prior
-                .as_ref()
-                .and_then(|binding| binding.definition_digest.clone())
-        });
-        let plist_sha256 = prior
-            .as_ref()
-            .and_then(|binding| binding.plist_sha256.clone());
         let updated_at = now_unix()?;
         self.connection
             .execute(
@@ -277,13 +291,7 @@ impl Store {
                 params![key, selected_digest, updated_at],
             )
             .context("database_write_failed", "disable binding")?;
-        Ok(BindingRecord {
-            key: key.to_owned(),
-            definition_digest,
-            enabled: false,
-            plist_sha256,
-            updated_at,
-        })
+        self.binding(key)
     }
 
     pub(crate) fn clear_plist_identity(&mut self, key: &str) -> Result<BindingRecord> {
@@ -309,13 +317,7 @@ impl Store {
                 format!("binding {key} is no longer disabled"),
             ));
         }
-        Ok(BindingRecord {
-            key: binding.key,
-            definition_digest: binding.definition_digest,
-            enabled: false,
-            plist_sha256: None,
-            updated_at,
-        })
+        self.binding(key)
     }
 
     pub(crate) fn restore_binding(
@@ -406,7 +408,8 @@ impl Store {
                     id, key, definition_digest, trigger, state, admitted_at, broker_pid \
                  ) SELECT ?1, ?2, ?3, ?4, 'running', ?5, ?6 \
                    FROM bindings \
-                  WHERE key = ?2 AND enabled = 1 AND definition_digest = ?3",
+                  WHERE key = ?2 AND enabled = 1 AND definition_digest = ?3 \
+                    AND NOT EXISTS (SELECT 1 FROM incidents WHERE key = ?2 AND resumed_at IS NULL)",
                 params![
                     id,
                     key,
@@ -420,7 +423,9 @@ impl Store {
         if changed != 1 {
             return Err(Error::new(
                 "binding_changed",
-                format!("binding {key} was disabled or changed before activation admission"),
+                format!(
+                    "binding {key} was disabled, halted, or changed before activation admission"
+                ),
             ));
         }
         Ok(ActivationRecord {
@@ -515,8 +520,18 @@ impl Store {
         }
         let mut activation = self.activation(id)?;
         let finished_at = now_unix()?;
-        let changed = self
+        let definition = self.definition(&activation.definition_digest)?;
+        let email_cli = definition
+            .manifest
+            .failure
+            .email_cli
+            .clone()
+            .unwrap_or_else(|| self.default_email_cli.clone());
+        let transaction = self
             .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context("database_write_failed", "begin activation completion")?;
+        let changed = transaction
             .execute(
                 "UPDATE activations SET \
                     state = ?2, finished_at = ?3, exit_code = ?4, signal = ?5, detail = ?6 \
@@ -530,6 +545,30 @@ impl Store {
                 format!("activation {id} is no longer running"),
             ));
         }
+        let abnormal = state != ActivationState::Exited || exit_code != Some(0) || detail.is_some();
+        if abnormal && definition.manifest.schema_version >= 2 {
+            let code = match (state, exit_code, signal) {
+                (ActivationState::Exited, Some(code), _) if code != 0 => format!("exit_{code}"),
+                (ActivationState::Signaled, _, Some(number)) => format!("signal_{number}"),
+                (ActivationState::Exited, _, _) => "supervision_failed".to_owned(),
+                _ => state.as_str().to_owned(),
+            };
+            record_abend_in(
+                &transaction,
+                &AbendInput {
+                    key: &activation.key,
+                    occurrence: &format!("activation/{id}"),
+                    code: &code,
+                    activation_id: Some(id),
+                    definition_digest: Some(&activation.definition_digest),
+                    halt: definition.manifest.failure.on_abend == AbendPolicy::HaltUntilApproved,
+                    email_cli: &email_cli,
+                },
+            )?;
+        }
+        transaction
+            .commit()
+            .context("database_write_failed", "commit outcome and failure policy")?;
         activation.state = state;
         activation.finished_at = Some(finished_at);
         activation.exit_code = exit_code;
@@ -627,22 +666,202 @@ impl Store {
             let broker_absent = broker_pid.is_some_and(process_demonstrably_absent);
             let child_absent = child_pid.is_none_or(process_demonstrably_absent);
             if broker_absent && child_absent {
-                let changed = self
-                    .connection
-                    .execute(
-                        "UPDATE activations SET state = 'lost', finished_at = ?2, detail = ?3 \
-                         WHERE id = ?1 AND state = 'running'",
-                        params![
-                            id,
-                            now_unix()?,
-                            "recorded broker and any recorded child are absent"
-                        ],
-                    )
-                    .context("database_write_failed", "mark stale activation lost")?;
-                recovered += changed;
+                self.finish_activation(
+                    &id,
+                    ActivationState::Lost,
+                    None,
+                    None,
+                    Some("recorded broker and any recorded child are absent"),
+                )?;
+                recovered += 1;
             }
         }
         Ok(recovered)
+    }
+
+    pub(crate) fn require_unhalted(&self, key: &str) -> Result<()> {
+        if let Some(incident) = self.active_incident(key)? {
+            return Err(Error::new(
+                "binding_halted",
+                format!(
+                    "binding {key} is halted by incident {}; explicit approval is required",
+                    incident.id
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn active_incident(&self, key: &str) -> Result<Option<IncidentRecord>> {
+        self.connection
+            .query_row(
+                &format!("{INCIDENT_SELECT} WHERE key = ?1 AND resumed_at IS NULL"),
+                [key],
+                incident_from_row,
+            )
+            .optional()
+            .context("database_read_failed", "read active scheduling halt")
+    }
+
+    pub(crate) fn incident(&self, id: &str) -> Result<IncidentRecord> {
+        self.connection
+            .query_row(
+                &format!("{INCIDENT_SELECT} WHERE id = ?1"),
+                [id],
+                incident_from_row,
+            )
+            .optional()
+            .context("database_read_failed", "read failure incident")?
+            .ok_or_else(|| Error::new("incident_not_found", "failure incident does not exist"))
+    }
+
+    pub(crate) fn incidents(&self, key: Option<&str>, limit: usize) -> Result<Vec<IncidentRecord>> {
+        let limit = i64::try_from(limit)
+            .map_err(|_| Error::new("limit_invalid", "incident limit is too large"))?;
+        let mut query = self.connection.prepare(&format!("{INCIDENT_SELECT} WHERE (?1 IS NULL OR key = ?1) ORDER BY created_at DESC, id DESC LIMIT ?2"))
+            .context("database_read_failed", "prepare incident listing")?;
+        let rows = query
+            .query_map(params![key, limit], incident_from_row)
+            .context("database_read_failed", "list failure incidents")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode failure incidents")
+    }
+
+    pub(crate) fn report_abend(
+        &mut self,
+        activation_id: &str,
+        code: &str,
+        occurrence: &str,
+    ) -> Result<Option<IncidentRecord>> {
+        validate_failure_metadata(code, occurrence)?;
+        let activation = self.activation(activation_id)?;
+        if activation.state != ActivationState::Running {
+            return Err(Error::new(
+                "activation_state_conflict",
+                "product reports require the current running activation",
+            ));
+        }
+        let definition = self.definition(&activation.definition_digest)?;
+        if definition.manifest.schema_version < 2 {
+            return Err(Error::new(
+                "failure_policy_unavailable",
+                "product reports require a schema-two definition",
+            ));
+        }
+        let email_cli = definition
+            .manifest
+            .failure
+            .email_cli
+            .clone()
+            .unwrap_or_else(|| self.default_email_cli.clone());
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context("database_write_failed", "begin product abend report")?;
+        let still_running: bool = transaction
+            .query_row(
+                "SELECT state = 'running' FROM activations WHERE id = ?1",
+                [activation_id],
+                |row| row.get(0),
+            )
+            .context("database_read_failed", "check reporting activation")?;
+        if !still_running {
+            return Err(Error::new(
+                "activation_state_conflict",
+                "reporting activation is no longer running",
+            ));
+        }
+        let incident_id = record_abend_in(
+            &transaction,
+            &AbendInput {
+                key: &activation.key,
+                occurrence,
+                code,
+                activation_id: Some(activation_id),
+                definition_digest: Some(&activation.definition_digest),
+                halt: definition.manifest.failure.on_abend == AbendPolicy::HaltUntilApproved,
+                email_cli: &email_cli,
+            },
+        )?;
+        transaction.commit().context(
+            "database_write_failed",
+            "commit product abend and scheduling policy",
+        )?;
+        incident_id.map(|id| self.incident(&id)).transpose()
+    }
+
+    pub(crate) fn import_halt(
+        &mut self,
+        key: &str,
+        code: &str,
+        occurrence: &str,
+    ) -> Result<IncidentRecord> {
+        manifest::validate_key(key)?;
+        validate_failure_metadata(code, occurrence)?;
+        if self.optional_binding(key)?.is_none() {
+            self.disable_binding(key, None)?;
+        }
+        let binding = self.binding(key)?;
+        let definition = binding
+            .definition_digest
+            .as_deref()
+            .map(|digest| self.definition(digest))
+            .transpose()?;
+        let email_cli = definition
+            .as_ref()
+            .and_then(|d| d.manifest.failure.email_cli.clone())
+            .unwrap_or_else(|| self.default_email_cli.clone());
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context("database_write_failed", "begin existing halt import")?;
+        let incident_id = record_abend_in(
+            &transaction,
+            &AbendInput {
+                key,
+                occurrence,
+                code,
+                activation_id: None,
+                definition_digest: binding.definition_digest.as_deref(),
+                halt: true,
+                email_cli: &email_cli,
+            },
+        )?;
+        transaction
+            .commit()
+            .context("database_write_failed", "commit existing halt import")?;
+        let id = incident_id.ok_or_else(|| {
+            Error::new(
+                "failure_occurrence_conflict",
+                "this occurrence was previously recorded without a scheduling halt",
+            )
+        })?;
+        self.incident(&id)
+    }
+
+    pub(crate) fn resume(&mut self, key: &str, incident_id: &str) -> Result<BindingRecord> {
+        let incident = self.incident(incident_id)?;
+        if incident.key != key || incident.resumed_at.is_some() {
+            return Err(Error::new(
+                "incident_changed",
+                "approval must identify this binding's current open incident",
+            ));
+        }
+        if self.has_running_activation(key)? {
+            return Err(Error::new(
+                "activation_busy",
+                "finish or recover the current activation before approving continuation",
+            ));
+        }
+        let changed = self.connection.execute("UPDATE incidents SET resumed_at = ?3 WHERE key = ?1 AND id = ?2 AND resumed_at IS NULL",
+            params![key, incident_id, now_unix()?]).context("database_write_failed", "record explicit continuation approval")?;
+        if changed != 1 {
+            return Err(Error::new(
+                "incident_changed",
+                "incident changed before approval",
+            ));
+        }
+        self.binding(key)
     }
 
     pub(crate) fn quick_check(&self) -> Result<String> {
@@ -658,6 +877,207 @@ impl Store {
         }
         Ok(result)
     }
+}
+
+const INCIDENT_SELECT: &str = "SELECT id, key, activation_id, definition_digest, code, occurrence, created_at, resumed_at, notification_status, first_attempt_at, last_attempt_at, notification_attempts FROM incidents";
+
+fn incident_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<IncidentRecord> {
+    Ok(IncidentRecord {
+        id: row.get(0)?,
+        key: row.get(1)?,
+        activation_id: row.get(2)?,
+        definition_digest: row.get(3)?,
+        code: row.get(4)?,
+        occurrence: row.get(5)?,
+        created_at: row.get(6)?,
+        resumed_at: row.get(7)?,
+        notification_status: row.get(8)?,
+        first_attempt_at: row.get(9)?,
+        last_attempt_at: row.get(10)?,
+        notification_attempts: row.get(11)?,
+    })
+}
+
+fn validate_failure_metadata(code: &str, occurrence: &str) -> Result<()> {
+    for (name, value, maximum) in [("code", code, 64), ("occurrence", occurrence, 256)] {
+        if value.is_empty()
+            || value.len() > maximum
+            || !value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_/.:".contains(&byte))
+        {
+            return Err(Error::new(
+                "failure_metadata_invalid",
+                format!(
+                    "{name} must be a bounded machine identifier containing letters, digits, dash, underscore, slash, dot, or colon"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+struct AbendInput<'a> {
+    key: &'a str,
+    occurrence: &'a str,
+    code: &'a str,
+    activation_id: Option<&'a str>,
+    definition_digest: Option<&'a str>,
+    halt: bool,
+    email_cli: &'a str,
+}
+
+fn record_abend_in(connection: &Connection, input: &AbendInput<'_>) -> Result<Option<String>> {
+    let prior: Option<(Option<String>, String)> = connection
+        .query_row(
+            "SELECT incident_id, code FROM abends WHERE key = ?1 AND occurrence = ?2",
+            params![input.key, input.occurrence],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .context("database_read_failed", "check reported failure occurrence")?;
+    if let Some((incident, code)) = prior {
+        if code != input.code {
+            return Err(Error::new(
+                "failure_occurrence_conflict",
+                "failure occurrence already identifies a different code",
+            ));
+        }
+        return Ok(incident);
+    }
+    let now = now_unix()?;
+    let incident_id = if input.halt {
+        let existing: Option<String> = connection
+            .query_row(
+                "SELECT id FROM incidents WHERE key = ?1 AND resumed_at IS NULL",
+                [input.key],
+                |row| row.get(0),
+            )
+            .optional()
+            .context("database_read_failed", "check scheduling halt")?;
+        if let Some(id) = existing {
+            Some(id)
+        } else {
+            let id = uuid::Uuid::now_v7().to_string();
+            connection.execute("INSERT INTO incidents(id,key,activation_id,definition_digest,code,occurrence,created_at,email_cli) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![id,input.key,input.activation_id,input.definition_digest,input.code,input.occurrence,now,input.email_cli])
+                .context("database_write_failed", "persist scheduling halt and pending alert")?;
+            Some(id)
+        }
+    } else {
+        None
+    };
+    connection.execute("INSERT INTO abends(key,occurrence,code,activation_id,incident_id,recorded_at) VALUES (?1,?2,?3,?4,?5,?6)",
+        params![input.key,input.occurrence,input.code,input.activation_id,incident_id,now])
+        .context("database_write_failed", "retain product or runtime abend")?;
+    Ok(incident_id)
+}
+
+/// Migration is separate from opening state and from program deployment.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn migrate(layout: &Layout, backup: &Path) -> Result<()> {
+    layout.prepare()?;
+    let _schema_gate =
+        KeyLock::try_acquire_transition(layout, "clockwork/schema")?.ok_or_else(|| {
+            Error::new(
+                "migration_busy",
+                "quiesce all Clockwork commands before migration",
+            )
+        })?;
+    if !crate::launchd::pending_transitions(layout)?.is_empty() {
+        return Err(Error::new(
+            "migration_busy",
+            "resolve pending binding transitions with the old binary before migration",
+        ));
+    }
+    prepare_database_file(&layout.database())?;
+    let connection = Connection::open(layout.database())
+        .context("database_unavailable", "open migration database")?;
+    let version: i64 = connection
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .context("database_schema_invalid", "read migration schema")?;
+    if version != 1 {
+        return Err(Error::new(
+            "database_schema_unsupported",
+            "migration requires the exact Clockwork schema-one database",
+        ));
+    }
+    verify_schema(&connection, 1)?;
+    let running: bool = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM activations WHERE state = 'running')",
+            [],
+            |row| row.get(0),
+        )
+        .context("database_read_failed", "check migration quiescence")?;
+    if running {
+        return Err(Error::new(
+            "migration_busy",
+            "use the old binary to finish or recover running activations before migration",
+        ));
+    }
+    if !backup.is_absolute() || backup.exists() {
+        return Err(Error::new(
+            "backup_path_invalid",
+            "backup must be a new absolute directory",
+        ));
+    }
+    let parent = backup
+        .parent()
+        .ok_or_else(|| Error::new("backup_path_invalid", "backup requires a parent directory"))?;
+    if parent
+        .canonicalize()
+        .context("backup_path_invalid", "resolve backup parent")?
+        != parent
+    {
+        return Err(Error::new(
+            "backup_path_invalid",
+            "backup parent must be canonical",
+        ));
+    }
+    fs::create_dir(backup).context("backup_failed", "create migration backup directory")?;
+    fs::set_permissions(backup, fs::Permissions::from_mode(0o700))
+        .context("backup_failed", "make backup directory private")?;
+    let checkpoint: (i64, i64, i64) = connection
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .context("backup_failed", "checkpoint quiescent database")?;
+    if checkpoint.0 != 0 {
+        return Err(Error::new("migration_busy", "database checkpoint is busy"));
+    }
+    for suffix in ["", "-wal", "-shm"] {
+        let source = layout
+            .database()
+            .with_file_name(format!("clockwork.db{suffix}"));
+        if source.exists() {
+            let mut input =
+                std::fs::File::open(&source).context("backup_failed", "open backup source")?;
+            let mut output = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .open(backup.join(format!("clockwork.db{suffix}")))
+                .context("backup_failed", "create backup file")?;
+            std::io::copy(&mut input, &mut output).context("backup_failed", "copy backup bytes")?;
+            output
+                .sync_all()
+                .context("backup_failed", "sync backup file")?;
+        }
+    }
+    std::fs::File::open(backup)
+        .and_then(|file| file.sync_all())
+        .context("backup_failed", "sync backup directory")?;
+    connection
+        .execute_batch("PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL;")
+        .context("database_write_failed", "configure migration durability")?;
+    connection
+        .execute_batch(include_str!("../migrate-v1-v2.sql"))
+        .context(
+            "database_write_failed",
+            "migrate Clockwork schema one to two",
+        )?;
+    verify_schema(&connection, 2)
 }
 
 fn prepare_database_file(path: &Path) -> Result<()> {
@@ -706,6 +1126,8 @@ fn binding_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<BindingRecord> 
         key: row.get(0)?,
         definition_digest: row.get(1)?,
         enabled: row.get::<_, i64>(2)? != 0,
+        halted_incident: None,
+        failure_policy_active: false,
         plist_sha256: row.get(3)?,
         updated_at: row.get(4)?,
     })
@@ -734,9 +1156,15 @@ fn initialize_or_verify_schema(connection: &Connection) -> Result<()> {
             connection
                 .execute_batch(include_str!("../schema.sql"))
                 .context("database_schema_invalid", "initialize Clockwork schema")?;
-            verify_schema_one(connection)?;
+            verify_schema(connection, 2)?;
         }
-        1 => verify_schema_one(connection)?,
+        1 => {
+            return Err(Error::new(
+                "database_migration_required",
+                "Clockwork schema one requires explicit migrate --backup DIR before this binary can open it",
+            ));
+        }
+        2 => verify_schema(connection, 2)?,
         other => {
             return Err(Error::new(
                 "database_schema_unsupported",
@@ -747,7 +1175,7 @@ fn initialize_or_verify_schema(connection: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn verify_schema_one(connection: &Connection) -> Result<()> {
+fn verify_schema(connection: &Connection, version: i64) -> Result<()> {
     let marker: Option<(String, i64)> = connection
         .query_row(
             "SELECT product, schema_version FROM clockwork_meta WHERE singleton = 1",
@@ -756,26 +1184,28 @@ fn verify_schema_one(connection: &Connection) -> Result<()> {
         )
         .optional()
         .context("database_schema_invalid", "read Clockwork schema marker")?;
-    if marker != Some(("clockwork".to_owned(), 1)) {
+    if marker != Some(("clockwork".to_owned(), version)) {
         return Err(Error::new(
             "database_schema_unsupported",
-            "database does not carry the Clockwork schema-one marker",
+            "database does not carry the Clockwork selected schema marker",
         ));
     }
-    let expected = Connection::open_in_memory().context(
-        "database_schema_invalid",
-        "open schema-one reference database",
-    )?;
+    let expected = Connection::open_in_memory()
+        .context("database_schema_invalid", "open schema reference database")?;
     expected
-        .execute_batch(include_str!("../schema.sql"))
+        .execute_batch(if version == 1 {
+            include_str!("../schema-v1.sql")
+        } else {
+            include_str!("../schema.sql")
+        })
         .context(
             "database_schema_invalid",
-            "construct schema-one reference database",
+            "construct schema reference database",
         )?;
     if schema_objects(connection)? != schema_objects(&expected)? {
         return Err(Error::new(
             "database_schema_unsupported",
-            "database objects do not exactly match Clockwork schema one",
+            "database objects do not exactly match the declared Clockwork schema",
         ));
     }
     Ok(())
@@ -930,5 +1360,253 @@ mod tests {
                 .map(|row| (&row.trigger, &row.state)),
             Some((&Trigger::Manual, &ActivationState::SkippedOverlap))
         );
+    }
+    fn policy_fixture(
+        schema: u32,
+        policy: clockwork::api::AbendPolicy,
+    ) -> (tempfile::TempDir, Layout, Store, String) {
+        let temporary = tempdir().expect("temporary directory");
+        let layout = Layout::isolated(temporary.path());
+        let mut store = Store::open(&layout).expect("store");
+        let manifest = clockwork::api::Manifest {
+            schema_version: schema,
+            key: "example/worker".into(),
+            release_id: "0".repeat(64),
+            release_root: "/fixture/release".into(),
+            authority: clockwork::api::Authority::CurrentUserBackground,
+            overlap: clockwork::api::OverlapPolicy::Skip,
+            failure: clockwork::api::FailurePolicy {
+                on_abend: policy,
+                email_cli: None,
+            },
+            timeout_seconds: None,
+            arguments: vec![],
+            cwd: "/fixture".into(),
+            schedule: clockwork::api::Schedule::Interval {
+                seconds: 60,
+                run_at_load: false,
+            },
+            launch: clockwork::api::LaunchImage::Direct {
+                program: "/fixture/release/worker".into(),
+                sha256: "0".repeat(64),
+            },
+            environment: std::collections::BTreeMap::new(),
+            output: clockwork::api::Output {
+                stdout: "/fixture/out".into(),
+                stderr: "/fixture/err".into(),
+            },
+        };
+        let digest = manifest.digest().expect("digest");
+        store
+            .register_definition(&digest, &manifest)
+            .expect("register fixture");
+        store
+            .switch_binding("example/worker", &digest, &"1".repeat(64))
+            .expect("select fixture");
+        (temporary, layout, store, digest)
+    }
+
+    #[test]
+    fn every_abnormal_runtime_outcome_atomically_closes_admission() {
+        use clockwork::api::AbendPolicy;
+        for (state, exit, signal) in [
+            (ActivationState::StartFailed, None, None),
+            (ActivationState::Exited, Some(7), None),
+            (ActivationState::Signaled, None, Some(15)),
+            (ActivationState::TimedOut, None, Some(9)),
+            (ActivationState::Lost, None, None),
+        ] {
+            let (_temporary, layout, mut store, digest) =
+                policy_fixture(2, AbendPolicy::HaltUntilApproved);
+            let activation = store
+                .begin_activation("example/worker", &digest, Trigger::Launchd)
+                .expect("admit");
+            store
+                .finish_activation(&activation.id, state, exit, signal, None)
+                .expect("finish");
+            assert_eq!(
+                store.activation(&activation.id).expect("activation").state,
+                state
+            );
+            let incident = store
+                .active_incident("example/worker")
+                .expect("incident")
+                .expect("halted");
+            assert_eq!(incident.notification_status, "pending");
+            assert!(
+                store
+                    .begin_activation("example/worker", &digest, Trigger::Launchd)
+                    .is_err()
+            );
+            drop(store);
+            let store = Store::open(&layout).expect("reopen");
+            assert_eq!(
+                store
+                    .binding("example/worker")
+                    .expect("binding")
+                    .halted_incident,
+                Some(incident.id)
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_continue_and_legacy_definitions_do_not_halt() {
+        use clockwork::api::AbendPolicy;
+        for (schema, policy) in [
+            (2, AbendPolicy::ContinueNextActivation),
+            (1, AbendPolicy::HaltUntilApproved),
+        ] {
+            let (_temporary, _layout, mut store, digest) = policy_fixture(schema, policy);
+            let activation = store
+                .begin_activation("example/worker", &digest, Trigger::Manual)
+                .expect("admit");
+            store
+                .finish_activation(&activation.id, ActivationState::Exited, Some(3), None, None)
+                .expect("finish");
+            assert!(
+                store
+                    .active_incident("example/worker")
+                    .expect("incident")
+                    .is_none()
+            );
+            assert_eq!(
+                store
+                    .binding("example/worker")
+                    .expect("binding")
+                    .failure_policy_active,
+                schema == 2
+            );
+            assert!(
+                store
+                    .begin_activation("example/worker", &digest, Trigger::Launchd)
+                    .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn product_report_halts_even_when_the_child_exits_zero_and_is_deduplicated_after_approval() {
+        let (_temporary, _layout, mut store, digest) =
+            policy_fixture(2, clockwork::api::AbendPolicy::HaltUntilApproved);
+        let activation = store
+            .begin_activation("example/worker", &digest, Trigger::Manual)
+            .expect("admit");
+        let first = store
+            .report_abend(&activation.id, "model_failed", "job/one")
+            .expect("report")
+            .expect("incident");
+        let again = store
+            .report_abend(&activation.id, "model_failed", "job/one")
+            .expect("report twice")
+            .expect("incident");
+        assert_eq!(first.id, again.id);
+        assert!(store.resume("example/worker", &first.id).is_err());
+        store
+            .finish_activation(&activation.id, ActivationState::Exited, Some(0), None, None)
+            .expect("finish");
+        assert!(store.resume("example/worker", "wrong-incident").is_err());
+        store
+            .resume("example/worker", &first.id)
+            .expect("explicit approval");
+        let next = store
+            .begin_activation("example/worker", &digest, Trigger::Manual)
+            .expect("next admission");
+        store
+            .report_abend(&next.id, "model_failed", "job/one")
+            .expect("repeat historical evidence");
+        assert!(
+            store
+                .active_incident("example/worker")
+                .expect("incident")
+                .is_none()
+        );
+        assert_eq!(store.incidents(None, 20).expect("history").len(), 1);
+    }
+
+    #[test]
+    fn selection_disable_and_compensation_preserve_the_failure_halt() {
+        let (_temporary, _layout, mut store, digest) =
+            policy_fixture(2, clockwork::api::AbendPolicy::HaltUntilApproved);
+        let prior = store.binding("example/worker").expect("prior");
+        let incident = store
+            .import_halt("example/worker", "legacy_failure", "legacy/one")
+            .expect("import");
+        store
+            .disable_binding("example/worker", Some(&digest))
+            .expect("disable");
+        store
+            .clear_plist_identity("example/worker")
+            .expect("clear plist");
+        store
+            .switch_binding("example/worker", &digest, &"2".repeat(64))
+            .expect("switch");
+        store
+            .restore_binding("example/worker", Some(&prior))
+            .expect("compensate");
+        let binding = store.binding("example/worker").expect("binding");
+        assert!(binding.enabled);
+        assert_eq!(binding.halted_incident, Some(incident.id.clone()));
+        store
+            .disable_binding("example/worker", None)
+            .expect("disable again");
+        let resumed = store
+            .resume("example/worker", &incident.id)
+            .expect("explicit continuation");
+        assert!(!resumed.enabled);
+        assert!(resumed.halted_incident.is_none());
+    }
+
+    #[test]
+    fn migration_requires_explicit_backup_and_preserves_legacy_definition_identity() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let (_basis_dir, _basis_layout, basis, digest) =
+            policy_fixture(1, clockwork::api::AbendPolicy::HaltUntilApproved);
+        let definition = basis.definition(&digest).expect("legacy definition");
+        let temporary = tempdir().expect("temporary");
+        let layout = Layout::isolated(temporary.path());
+        layout.prepare().expect("layout");
+        let connection = rusqlite::Connection::open(layout.database()).expect("legacy database");
+        connection
+            .execute_batch(include_str!("../schema-v1.sql"))
+            .expect("legacy schema");
+        connection.execute("INSERT INTO definitions(digest,key,manifest_json,registered_at) VALUES (?1,'example/worker',?2,1)",
+            params![digest,serde_json::to_string(&definition.manifest).expect("canonical manifest")]).expect("legacy definition row");
+        connection.execute("INSERT INTO bindings(key,definition_digest,enabled,updated_at) VALUES ('example/worker',?1,0,1)", [&digest]).expect("legacy disabled binding");
+        connection.execute("INSERT INTO activations(id,key,definition_digest,trigger,state,admitted_at,finished_at,exit_code) VALUES ('old-failure','example/worker',?1,'launchd','exited',1,2,3)", [&digest]).expect("legacy terminal failure");
+        drop(connection);
+        std::fs::set_permissions(layout.database(), std::fs::Permissions::from_mode(0o600))
+            .expect("private database");
+        assert!(Store::open(&layout).is_err());
+        let backup = temporary
+            .path()
+            .canonicalize()
+            .expect("canonical")
+            .join("backup");
+        super::migrate(&layout, &backup).expect("migration");
+        let store = Store::open(&layout).expect("new schema");
+        assert_eq!(
+            store
+                .definition(&digest)
+                .expect("preserved definition")
+                .digest,
+            digest
+        );
+        let binding = store.binding("example/worker").expect("preserved binding");
+        assert!(!binding.enabled);
+        assert!(!binding.failure_policy_active);
+        assert!(binding.halted_incident.is_none());
+        assert_eq!(
+            store
+                .activation("old-failure")
+                .expect("preserved history")
+                .exit_code,
+            Some(3)
+        );
+        assert_eq!(store.quick_check().expect("check"), "ok");
+        let backup_connection =
+            rusqlite::Connection::open(backup.join("clockwork.db")).expect("backup");
+        super::verify_schema(&backup_connection, 1).expect("schema one backup");
+        super::verify_schema(&store.connection, 2).expect("schema two live fixture");
     }
 }

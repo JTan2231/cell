@@ -1,6 +1,6 @@
 {
   "id": "krisis.decision.capture",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -32,12 +32,13 @@
     "Each eligible completed exchange has one durable decision or no-decision outcome.",
     "A positive result has a summary heading, full normalized conversation through the selected exchange, a stable document key, exact Markdown bytes and digest, and a durable target-bound outbox.",
     "Before classification, Krisis verifies and binds the exact Annals config path and expected library ID; delivery succeeds only when that target returns a matching created or replayed acceptance receipt.",
-    "A failed observation is durably retained on its first processing error. That handled outcome permits worker success and does not determine worker health."
+    "A failed observation is durably retained on its first processing error. The worker then returns nonzero; Clockwork halts its schedule. Historical failure counts do not determine current worker health or create new incidents."
   ],
   "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
     "The full frozen conversation must fit the prompt bound. Oversized sources fail without truncation; no context expansion or content-fitness check is imposed.",
     "An observation fails on its first returned processing error. Explicit retry resumes an ambiguous request or acknowledgement with the same frozen run and job; saved results remain valid after later runtime failure.",
-    "An Annals delivery error marks its observation failed and retains exact pending bytes. Failed observations and their documents are excluded from automatic work until explicit retry; other work continues.",
+    "An Annals delivery error marks its observation failed and retains exact pending bytes. Failed observations and their documents are excluded from automatic work until explicit retry; other scheduled work waits for Clockwork continuation.",
     "Observation retry and proven-unavailable unbound source abandonment require their explicit guarded recovery commands. Retry preserves failure history; repeated hooks and reconciliation never requeue failed observations."
   ],
   "privacy": [
@@ -63,8 +64,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "interfaces": [
@@ -158,7 +159,7 @@
       },
       {
         "status": "declared",
-        "statement": "Failed observations are retained outcomes for optional later inspection, not active worker faults. Pending document counts include deliveries held by failed observations. Health uses live serial lock ownership and durable worker timing, independently of failure counts."
+        "statement": "Historical failed observations are retained outcomes. A newly failed observation is a worker error and scheduled abend. Pending document counts include deliveries held by failed observations. Health uses live serial lock ownership and durable worker timing, independently of failure counts."
       }
     ],
     "identity_and_units": [
@@ -208,6 +209,7 @@
       }
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
       {
         "status": "declared",
         "statement": "The private run saves the source, exact request, job identity and accepted tool result before acknowledgement. After the job settles, coverage and exact document outbox commit in one SQLite transaction. Interruption resumes the same saved run."

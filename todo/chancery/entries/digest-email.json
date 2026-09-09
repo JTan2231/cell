@@ -1,6 +1,6 @@
 {
   "id": "todo.digest.email",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -23,7 +23,8 @@
   ],
   "authority": [
     "Todo owns the current digest projection and installed sender/recipient configuration.",
-    "Resend owns external submission and delivery records; the recipient provider owns final receipt."
+    "Resend owns external submission and delivery records; the recipient provider owns final receipt.",
+    "Todo continues to send the digest directly through Resend using configured addresses. Clockwork sends operational incident alerts through Email's installed fixed-recipient CLI; the two message and credential authorities remain separate."
   ],
   "success": [
     "Preview exactly identifies the configured sender, recipient, subject, attention count, pending-concern count, open-todo count, and current body without network access.",
@@ -33,7 +34,9 @@
   "failure_and_recovery": [
     "Transport, rate-limit, and server failures are retried only within the command's bounded three-attempt policy using the same frozen body and key.",
     "There is no Todo delivery table or background retry queue; inspect Resend and installed logs after command failure.",
-    "A manual send does not consume the scheduled occurrence's key."
+    "A manual send does not consume the scheduled occurrence's key.",
+    "The product-owned schema-two todo/daily-email definition declares halt-until-approved. Startup failure, crash, timeout or nonzero scheduled completion retains a Clockwork incident and closes later admission. Clockwork submits one retained incident notification through Email to its fixed personal recipient. Explicit binding resume requires the exact incident ID; it neither sends a digest nor reconciles uncertain acceptance. Definition changes, deployment and maintenance preserve the halt.",
+    "Todo retains no frozen digest between invocations. A later scheduled invocation renders current state under the local-date key; payload equality and continuing provider deduplication are not guaranteed. Inspect Resend before explicitly retrying uncertainty. Clockwork continuation does not extend the provider window or authorize a duplicate."
   ],
   "privacy": [
     "Sending discloses aggregate counts, every open canonical todo's current title, generic plain-language stage labels, applicable typed references, and read-only inspection commands to Resend and the configured recipient's email provider.",
@@ -65,7 +68,8 @@
     ],
     "outputs": [
       {"status": "declared", "statement": "Preview returns configured From, To, subject, attention, pending-concern and open-todo counts, and exact plain-text and HTML bodies without network access."},
-      {"status": "declared", "statement": "Send returns Resend submission acceptance for one frozen message and idempotency key; recipient receipt is a separate external outcome."}
+      {"status": "declared", "statement": "Send returns Resend submission acceptance for one frozen message and idempotency key; recipient receipt is a separate external outcome."},
+      {"status": "declared", "statement": "Scheduled mode refused only by a deployment hold returns a successful deployment_maintenance skip with scheduled:true and sends nothing. This is distinct from submission acceptance."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Needs your decision, Needs follow-up, and Other open todos are current derived attention groups; empty groups are omitted and accepted desired state leaves the umbrella open."},
@@ -85,21 +89,29 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "One send invocation freezes its body and idempotency key and uses them for at most three total attempts on transport, rate-limit, or server failure."},
-      {"status": "declared", "statement": "Manual and scheduled invocations use distinct key spaces. Todo stores no digest state in SQLite and schedules no later retry after command failure."}
+      {"status": "declared", "statement": "Manual and scheduled invocations use distinct key spaces. Todo stores no digest state in SQLite and schedules no later retry after command failure."},
+      {"status": "declared", "statement": "A scheduled email send encountering a deployment hold returns success with data {scheduled:true,skipped:\"deployment_maintenance\"}, sends nothing and does not create an abend. Other admission failures remain errors. Manual mutations remain blocked by maintenance."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Retries are bounded to three total attempts, sending is immediate, and the user-owned daily schedule is one machine-local 09:00 LaunchAgent occurrence without RunAtLoad."},
+      {"status": "declared", "statement": "Retries are bounded to three total attempts, sending is immediate, and the user-owned daily schedule is one machine-local 09:00 Clockwork occurrence without run-at-load, with overlap skip and 180-second activation timeout."},
       {"status": "unspecified", "statement": "No Resend quota, recipient-provider latency, delivery deadline, perpetual retention, or maximum digest-size service-level objective is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 2 distinguishes local preview, immediate send, and local-occurrence scheduled mode while keeping sender, recipient, and API-key ownership explicit."},
+      {"status": "declared", "statement": "Capability contract 3 preserves local preview, direct Resend send and local-occurrence idempotency while adding Clockwork default halt policy and a successful scheduled-maintenance skip."},
       {"status": "unspecified", "statement": "No compatibility window for future digest schemas, Resend APIs, email-provider behavior, or external retention policies is promised."}
     ],
     "reliances": [
       {"status": "declared", "statement": "External send relies on Resend for API acceptance and submission records, but no dedicated installed Chancery contract describes that service promise.", "target": "resend", "kind": "external"},
       {"status": "unsupported", "statement": "Final recipient receipt is outside this submission-acceptance promise and must be confirmed separately when delivery is the required outcome."},
-      {"status": "declared", "statement": "Automatic daily invocation relies on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.", "target": "launchd", "kind": "readiness"}
+      {"status": "declared", "statement": "Clockwork owns the configured scheduled activation, durable halt, incident notification through Email and explicit continuation. Todo owns the exact schema-two definition and domain send interpretation. Machine-local timer delivery retains Clockwork's session and availability limits.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"}
     ]
   },
-  "manual": "manuals/digest-email.md"
+  "manual": "manuals/digest-email.md",
+  "dependencies": [
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ]
 }

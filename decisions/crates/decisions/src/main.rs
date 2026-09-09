@@ -140,7 +140,10 @@ fn maintenance_command(database: &Path, command: MaintenanceCommand) -> AppResul
     )
 }
 
-fn deployment_admission(database: &Path) -> AppResult<cell_maintenance::Admission> {
+fn deployment_admission(
+    database: &Path,
+    scheduled_worker: bool,
+) -> AppResult<Option<cell_maintenance::Admission>> {
     let gate = deployment_gate(database)?;
     let result = match std::env::var("CELL_DEPLOYMENT_RUN_ID") {
         Ok(owner)
@@ -150,7 +153,11 @@ fn deployment_admission(database: &Path) -> AppResult<cell_maintenance::Admissio
         }
         _ => gate.enter(),
     };
-    result.map_err(maintenance_error)
+    match result {
+        Ok(admission) => Ok(Some(admission)),
+        Err(cell_maintenance::Error::Held) if scheduled_worker => Ok(None),
+        Err(error) => Err(maintenance_error(error)),
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -266,7 +273,16 @@ fn run(cli: Cli) -> AppResult<()> {
     }
     // Store::open may migrate persistent state even for a diagnostic/read.
     // The maintenance status command remains available without opening it.
-    let _admission = deployment_admission(&database)?;
+    let scheduled_worker = matches!(
+        &cli.command,
+        Command::Observe {
+            command: ObserveCommand::Process
+        }
+    ) && std::env::var_os("CLOCKWORK_ACTIVATION_ID")
+        .is_some_and(|value| !value.is_empty());
+    let Some(_admission) = deployment_admission(&database, scheduled_worker)? else {
+        return print_json(&json!({"ok": true, "skipped": "deployment_maintenance"}));
+    };
     if let Command::Document { command } = cli.command {
         return document_command::run(command);
     }
@@ -606,6 +622,23 @@ fn process_worker(
             process_one_observation(store, &annals).map(observation_output)
         }
     })();
+    let result = result.and_then(|output| {
+        if let ProcessOutput::Observation(ObservationProcess {
+            observation: Some(observation),
+            ..
+        }) = &output
+            && observation.status == "failed"
+        {
+            return Err(AppError::new(
+                "observation_processing_failed",
+                format!(
+                    "observation {} failed; inspect its retained failure before recovery",
+                    observation.observation_id
+                ),
+            ));
+        }
+        Ok(output)
+    });
     let worked = match &result {
         Ok(ProcessOutput::Account(_)) => true,
         Ok(ProcessOutput::Observation(output)) => output.processed,
@@ -1661,6 +1694,36 @@ mod tests {
             },
             context: Vec::new(),
         }
+    }
+
+    #[test]
+    fn failed_observation_stops_worker_and_preserves_next_observation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let mut store = Store::open(&directory.path().join("decisions.db"))?;
+        store.activate_observer(0)?;
+        let one = store.ingest_observation("session", "turn-first")?;
+        let two = store.ingest_observation("session", "turn-second")?;
+        let first = store
+            .next_observation_before(None)?
+            .ok_or("queued observation")?;
+        let second = if first.id == one.id { two } else { one };
+        let target = crate::account::AnnalsConfig {
+            binary: directory.path().join("missing-annals"),
+            config: directory.path().join("annals.toml"),
+            expected_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
+        };
+        let error = super::process_worker(&mut store, Ok(Some(target)))
+            .err()
+            .ok_or("recording an observation failure must not hide the abend")?;
+        assert_eq!(error.code, "observation_processing_failed");
+        assert_eq!(store.observation(&first.id)?.status, "failed");
+        assert_eq!(store.observation(&second.id)?.status, "queued");
+        assert_eq!(
+            store.next_observation_before(None)?.map(|value| value.id),
+            Some(second.id)
+        );
+        Ok(())
     }
 
     #[test]

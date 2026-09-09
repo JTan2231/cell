@@ -1,4 +1,4 @@
-schema_version = 1
+schema_version = 2
 key = "krisis/observer"
 release_id = "__RELEASE_ID__"
 release_root = "__RELEASE_ROOT__"
@@ -6,6 +6,9 @@ authority = "current-user-background"
 overlap = "skip"
 arguments = []
 cwd = "__KRISIS_STATE__"
+
+[failure]
+on_abend = "halt-until-approved"
 
 [schedule]
 kind = "interval"

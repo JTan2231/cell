@@ -1,7 +1,8 @@
 # User-owned macOS installation
 
 Todo runs synchronously. It owns no daemon, root-owned files or log service.
-Its user installation includes a LaunchAgent that runs the email command daily.
+Its user installation declares the `todo/daily-email` Clockwork binding.
+Clockwork owns scheduled admission, failure halts and its generated LaunchAgent.
 Routing, assessment, design and `todo new` research use the user's separately
 installed Nucleus service for Codex execution and authentication. Reads,
 decisions, migration and email delivery do not use Nucleus.
@@ -16,8 +17,10 @@ export RESEND_API_KEY='re_replace_with_the_real_key'
 ```
 
 The key is not stored in Todo's configuration or LaunchAgent plist. The
-packaged zsh runner sources `~/.zshrc` for each occurrence, extracts the key,
-and starts Todo with a scrubbed environment. The secret is absent from the
+pinned native `bin/todo-daily-email` runner invokes its exact release's packaged
+zsh script and `libexec/todo` payload. The script sources `~/.zshrc` for each
+occurrence, extracts the key, and starts Todo with a scrubbed environment.
+It does not follow the mutable public Todo selector. The secret is absent from the
 plist and process arguments.
 
 Then build and test Todo and pass its absolute executable path plus the
@@ -41,7 +44,7 @@ The layout is:
 
 ```text
 ~/.local/bin/todo
-~/Library/LaunchAgents/org.todo.daily-email.plist
+~/Library/LaunchAgents/org.clockwork.todo.daily-email.plist  # Clockwork-owned
 ~/Library/Application Support/Chancery/providers/
   todo -> Todo's current release share/chancery/todo
 ~/Library/Application Support/Todo/
@@ -88,43 +91,45 @@ release selector, so documentation and executable rollback together. Todo
 creates that one selector even when Chancery is not yet installed, never changes
 another provider's selector, and does not depend on Chancery at runtime.
 
-Before an update can change database state, it records whether the email
-LaunchAgent is loaded and quiesces it. It creates a private transaction
-directory, asks the candidate binary to run `todo migrate --backup` with a
-nonexistent absolute path inside that directory, switches the release
-selector, and validates the installed CLI. Only then does it install the final
-`org.todo.daily-email` definition.
+Before changing database state, the installer captures the prior Clockwork
+binding and any supported legacy `org.todo.daily-email` plist, loaded state and
+disabled override. It proves that these records belong to the selected Todo
+release. Competing enabled Clockwork and legacy schedules are refused. Loaded
+legacy services with a disabled override or no attributable plist are refused;
+restoring them would require changing operator state.
 
-It bootstraps an update only if the schedule was previously loaded; an
-unloaded schedule remains unloaded. Fresh installation bootstraps only when no
-existing plist or disabled override records an operator choice. The deployer
-never changes launchd enable/disable overrides. A service that is both loaded
-and disabled is refused before quiescence because launchd cannot reload it
-without changing that override.
+Standalone installation creates its own durable admission hold. Coordinated
+deployment uses the captured run's hold. The installer drains admitted work,
+disables an enabled Clockwork binding and boots out a loaded legacy service.
+It records private recovery evidence, runs the candidate's backup-bearing
+migration, and proves held storage readiness before publishing selectors.
 
-Standalone installation creates its own durable admission hold and coordinated
-deployment retains its captured run's hold throughout these changes. Public
-commands stay suspended during migration and database recovery. Recovery uses
-SQLite's exclusive destination locking to restore the migration backup instead
-of replacing a database underneath an active connection.
+Under that hold, the installer removes only the verified legacy plist and
+registers an inert schema-two Clockwork definition for the exact native runner.
+It then publishes and checks the installed CLI and selects the definition.
+An update restores captured enabled intent; an inactive schedule stays inactive.
+A fresh installation enables its binding only when no prior binding, legacy
+plist or disabled override records an operator choice. The installer never
+changes legacy launchd enable/disable overrides.
 
-If exclusive recovery or any schedule restoration cannot be proved,
-maintenance and the private transaction directory remain for product recovery.
-The Todo deployment adapter captures loaded/disabled state and proves that the
-live plist matches the selected release's rendered template. Verification and
-recovery retain the hold if those controls drift, including interruption
-between bootout and bootstrap.
+Clockwork's failure halt is independent of enabled intent. Definition changes,
+installation, rollback and maintenance release do not clear an incident. The
+new definition has no run-at-load trigger. A scheduled send that meets a
+maintenance hold returns a successful skip and does not send mail.
 
-Recovery never guesses whether an unload was an operator pause or an
-incomplete installer step.
+A failed update restores captured database, configuration, selectors and exact
+prior schedule state. Recovery first disables the candidate binding and any
+active legacy service, then restores the verified prior binding or legacy
+projection. It never intentionally loads both. Database restoration uses
+SQLite's exclusive destination locking while public mutation remains suspended.
+Nucleus authentication and state are never restored by Todo.
 
-The candidate migrator writes a complete pre-migration SQLite backup before
-the version-2 transaction begins. If migration, selector switching, smoke
-testing, plist installation, or bootstrap later fails, the deployer restores
-the prior database, release selector, frontend, configuration, plist, and
-loaded-service state. An update retains the prior release through `previous`.
-The transaction-local backup is removed only after the update has succeeded;
-it is not a user backup policy.
+If ownership, exclusive database recovery or schedule restoration cannot be
+proved, the installer retains maintenance and private transaction evidence.
+Do not infer recovery from matching program files alone. Clockwork retains its
+own definitions and incident history independently of Todo's transaction files.
+An update retains the prior release through `previous`. The transaction-local
+migration backup is removed only after success; it is not a user backup policy.
 
 Running the same deploy command with a new release binary performs an update.
 An identical package reuses its release directory. A fresh install requires
@@ -141,47 +146,65 @@ outside the deployer, first stop callers and choose an absolute backup path
 that does not exist:
 
 ```sh
-launchctl bootout "gui/$(id -u)/org.todo.daily-email" 2>/dev/null || true
+clockwork binding disable todo/daily-email
 todo --database "/absolute/path/to/todo.db" migrate \
   --backup "/absolute/path/to/retained/todo-v1.db.backup"
 ```
 
 For a version-1 database, Todo creates the complete backup and retains it after
 a successful transactional migration. It refuses a relative or existing
-backup path. Verify the migrated database before reloading the LaunchAgent.
+backup path. Verify the migrated database before restoring the captured Clockwork selection
+and enabled intent. Do not clear a failure incident as part of migration.
 When the selected database is already current, `migrate` succeeds as a no-op
 without creating, reading, or modifying the supplied backup path.
 
 ## Schedule and validation
 
-The LaunchAgent uses launchd `StartCalendarInterval` with hour `9` and minute
-`0`. That means 09:00 according to the Mac's local clock, including local
-daylight-saving changes. It has no `RunAtLoad`. It invokes
-`todo email send --scheduled`, which sends the current digest immediately and
-uses a stable key for the most recent local 09:00 occurrence. It does not submit
-a future Resend `scheduled_at` request.
+The product-owned schema-two definition uses machine-local 09:00, no
+run-at-load, skipped overlap and a 180-second activation timeout. It pins the
+exact native `bin/todo-daily-email` image with `HOME` as its only registered
+environment value. Clockwork verifies that image and invokes it directly.
+The runner executes its same-release script and `libexec/todo` payload with
+`email send --scheduled`. The digest sends immediately with a stable key for
+the most recent local 09:00 occurrence; it does not submit Resend `scheduled_at`.
 
-If the logged-in Mac is asleep at 09:00, launchd coalesces the occurrence and
-runs it after wake. A user LaunchAgent cannot guarantee a 09:00 submission
-while the Mac is powered off or the user is logged out; that stricter guarantee
-would require an always-on host with access to Todo's authoritative state.
+The definition declares the default `halt-until-approved` policy. Startup
+failure, nonzero exit, crash or timeout closes Clockwork admission and retains
+one incident notification. Clockwork uses the installed Email CLI to submit
+that alert to Email's fixed personal recipient. Todo continues to send the
+digest directly through Resend to its separately configured recipient.
+Credentials and digest content do not enter the Clockwork definition or alert.
 
-Validate the content and delivery immediately after deployment instead of
-waiting for the next 09:00 occurrence:
+Inspect without sending:
 
 ```sh
-source "$HOME/.zshrc"
 todo email preview
-todo email send
-launchctl print "gui/$(id -u)/org.todo.daily-email"
+clockwork binding show todo/daily-email
+clockwork history todo/daily-email --limit 20
+clockwork incident list todo/daily-email
+clockwork incident show INCIDENT_ID
 ```
 
-The manual send uses its own ad-hoc idempotency key and does not consume the
-scheduled occurrence's key. Confirm receipt and inspect Resend's delivery log.
-For later launchd failures, read
-`~/Library/Logs/Todo/email.stderr.log`; successful command output goes to the
-adjacent `email.stdout.log`. There is no Todo delivery table or background
-retry queue.
+After resolving the cause and checking any uncertain Resend outcome, explicitly
+approve future scheduling:
+
+```sh
+clockwork binding resume todo/daily-email INCIDENT_ID
+```
+
+Resume requires the exact incident ID. It does not send, replay a missed
+occurrence, reconcile provider acceptance, or extend Resend deduplication.
+`todo email send` is a separate authorized immediate send with its own ad hoc
+key. Todo retains no delivery table, frozen cross-invocation digest, or
+background retry queue. One invocation retries only its frozen payload/key
+within the existing three-attempt transport bound.
+
+Product stdout and stderr remain in `~/Library/Logs/Todo/email.stdout.log` and
+`email.stderr.log`. Clockwork owns its separate broker logs and incident state.
+The timer depends on the user's macOS GUI session and launchd delivery. A
+sleeping Mac can run after wake; a powered-off Mac or logged-out user has no
+09:00 execution guarantee. Neither Clockwork history nor an accepted Resend
+receipt proves final inbox delivery.
 
 The digest sends aggregate counts, every open canonical todo's current title,
 generic plain-language stage labels, typed concern, routing, todo, assessment,
@@ -220,7 +243,11 @@ directory contains `deployment-maintenance/`. Databases in that directory share 
 New research and ordinary mutations, including scheduled email send, retain a
 shared admission guard through completion. Holds prevent new admissions
 before input is retained, and do not interrupt already admitted research or
-change an operator configuration. Read-only commands remain available.
+change an operator configuration. A scheduled digest refused only by a hold
+returns success with `data` equal to
+`{"scheduled":true,"skipped":"deployment_maintenance"}`. It sends nothing and
+does not create a failure incident. Other admission errors remain failures.
+Read-only commands remain available.
 
 JSON returns `data.maintenance` with `protocol_version: 1`, `holds`, `drained`,
 and `nonterminal_jobs`. Drain requires both no live admission guard and no

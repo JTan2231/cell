@@ -32,7 +32,11 @@ Preserve these boundaries in code and documentation:
   Sender comparison and a random route token do not establish authentication.
 - An exact Nucleus request is persisted before admission. Rediscovery checks
   its identity; terminal failure does not create an automatic new attempt.
-- A frozen email payload/key is reused only within the bounded retry window.
+- Clockwork owns failure-driven scheduling halts and explicit continuation.
+  Mentor declares the policy and stops at the first failed stage. Domain pause
+  and maintenance remain separate. Cleanup admits no practice work.
+- A frozen email payload/key is reused only within the bounded retry window
+  after scheduling continuation or an explicit manual pass, without backoff.
   Unknown submission does not become assumed failure or a new send identity.
 - Temporary answer/request/critique content is cleared as work advances, on
   accepted response submission, or when a tick observes expiry. Retained

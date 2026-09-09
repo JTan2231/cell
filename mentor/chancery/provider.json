@@ -8,15 +8,16 @@
   "promise_scope": {
     "authoritative_for": [
       "Mentor owns daily problem reservation, frozen corpus selection, assignment reply tokens, eligible incoming-message records, exact temporary grading requests, outgoing payloads and accepted-submission metadata.",
-      "Mentor owns its private schema-one state, content expiry, terminal metadata cleanup, admission pause and maintenance, configuration, corpus import and explicit selection of mentor/worker."
+      "Mentor owns its private schema-one state, content expiry, terminal metadata cleanup, admission pause and maintenance, configuration, corpus import and explicit selection of mentor/worker.",
+      "The product owns its schema-two Clockwork schedule definition and declares halt-until-approved. Clockwork owns failure-policy enforcement and retained scheduling incidents; product domain recovery remains separate."
     ],
     "not_authoritative_for": [
       "The desktop Mentor app owns authored exercises and rubric. Email owns fixed addresses, credentials and transport; Resend owns receiving records and submission acceptance; the inbox provider owns delivery and thread presentation.",
-      "Nucleus owns model execution and its retained records. Clockwork owns scheduled activation and runtime history. Mentor neither removes those records nor treats runtime completion as email receipt."
+      "Nucleus owns model execution and its retained records. Clockwork owns scheduled activation, durable failure halts, explicit continuation, incident email and runtime history. Mentor neither removes those records nor treats runtime completion as email receipt."
     ],
     "inventory": {
       "covers": [
-        "All public Mentor daily-practice, worker, configuration, pause/resume, corpus import, status/doctor, schedule, maintenance, initialization, supported migration and maintained installation outcomes, plus scoped development of those interfaces."
+        "All public Mentor daily-practice, worker, cleanup, configuration, pause/resume, corpus import, status/doctor, schedule, maintenance, initialization, supported migration and maintained installation outcomes, plus scoped development of those interfaces."
       ],
       "completeness": "complete",
       "excludes": [
@@ -29,7 +30,8 @@
     ],
     "shared_privacy_and_retention": [
       "The product keeps no answer/critique archive. Pending content is cleared on accepted response submission or when a worker observes its 24-hour expiry. Ordinary terminal message metadata is eligible for cleanup after 35 days; assignment/corpus records and unresolved cancellation correlation remain.",
-      "Nucleus, Resend and the inbox provider retain independent copies. Source and Chancery bundles contain authored problems and rubric, not user answers, critiques or credentials. This is not a zero-retention promise."
+      "Nucleus, Resend and the inbox provider retain independent copies. Source and Chancery bundles contain authored problems and rubric, not user answers, critiques or credentials. This is not a zero-retention promise.",
+      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
     ],
     "compatibility_and_retirement": [
       "Product release 0.1.0, private database schema 1, corpus schema 1, grading input mentor.critique-input.v1, and these entry contract versions are distinct identities. Unsupported state, inputs or provider capabilities fail explicitly.",
@@ -37,7 +39,7 @@
     ],
     "operational_limits": [
       "One exclusive product runner, at most one daily assignment per configured local date, no missed-day backfill, and no repeated reserved problem ID. The worker visits at most four 100-record receiving pages per pass and advances grading without waiting for model completion.",
-      "Answers are bounded to 128 KiB, HTML extraction inputs to 1 MiB, final critiques to 64 KiB. Grading has a 1200-second active limit; pending content has a 24-hour deadline, and sends stop retrying 23 hours after first attempt or at the content deadline.",
+      "Answers are bounded to 128 KiB, HTML extraction inputs to 1 MiB, final critiques to 64 KiB. Grading has a 1200-second active limit; pending content has a 24-hour deadline, and exact payload reuse ends 23 hours after first attempt or at the content deadline. Clockwork continuation does not extend those deadlines.",
       "The supported Clockwork binding is an interval of 60 seconds with no run-at-load, overlap skip and a 90-second activation timeout. There is no timer, model or final-delivery latency guarantee."
     ]
   },

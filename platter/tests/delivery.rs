@@ -309,3 +309,44 @@ async fn daily_preparation_failure_does_not_send_or_create_an_edition() -> Resul
     assert_eq!(fixture.current_edition()?.status, "frozen");
     Ok(())
 }
+
+#[tokio::test]
+async fn daily_candidate_preparation_error_is_not_reported_as_an_empty_success() -> Result<()> {
+    let fixture = Fixture::new("Accepted unexpected")?;
+    let mut settings = workflow::config(fixture.root())?;
+    settings.cast_executable = fixture.root().join("candidate-cast");
+    fs::write(
+        &settings.cast_executable,
+        "#!/bin/sh\n/bin/cat \"$0.json\"\n",
+    )?;
+    fs::set_permissions(&settings.cast_executable, fs::Permissions::from_mode(0o700))?;
+    platter::write_json(
+        &fixture.root().join("candidate-cast.json"),
+        &serde_json::json!({
+            "schema_version":1,"snapshot_revision":1,"captured_at":"2026-09-07T23:00:00Z",
+            "companies":[],"source_health":[],"coverage":[],
+            "jobs":[{
+                "id":"candidate","revision":1,"company_id":"example","source_id":"fixture",
+                "source_key":"fixture","title":"Engineer","url":"http://example.com/job",
+                "first_seen_at":"2026-09-07T23:00:00Z","last_seen_at":"2026-09-07T23:00:00Z",
+                "availability":"listed","missing_complete_snapshots":0,"evidence":[],
+                "compensation":[],"geographic_eligibility":[],"parser_version":"fixture"
+            }]
+        }),
+    )?;
+    Store::open(fixture.root())?.set_setting("config", &settings)?;
+    let error = workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+        .await
+        .err()
+        .context("candidate error was silently treated as an empty pool")?;
+    // HTTP is rejected locally, before any network, CRM or model invocation.
+    assert!(error.to_string().contains("posting must use public HTTPS"));
+    assert!(
+        Store::open(fixture.root())?
+            .edition("2026-09-07")?
+            .is_none()
+    );
+    assert!(!fixture.email_output("calls").exists());
+    assert_eq!(fixture.current_edition()?.status, "frozen");
+    Ok(())
+}

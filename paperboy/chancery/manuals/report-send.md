@@ -73,6 +73,20 @@ Resume an interrupted brief with `run --brief BRIEF_ID`. An ambiguous admission
 reuses the exact request and job ID. After a terminal generation failure,
 `--retry-agent` creates a new Nucleus job. There is no automatic new attempt.
 
+The product-owned schema-two daily definition declares `halt-until-approved`.
+Startup failure, crash, timeout, or a nonzero report run creates a durable
+Clockwork halt and one retained incident email. An already accepted daily
+occurrence is an ordinary no-op. Clockwork blocks subsequent scheduled work
+until explicit approval.
+
+Inspect `clockwork incident list paperboy/daily` and
+`clockwork incident show INCIDENT_ID`. After resolving the cause, explicitly
+approve future scheduling with `clockwork binding resume paperboy/daily
+INCIDENT_ID`. This does not retry the failed brief, authorize `--retry-agent`,
+reconcile an uncertain send, or reset its message identity. Select that brief
+separately for recovery. Binding enable, disable, release changes and
+maintenance release preserve Clockwork incidents.
+
 An uncertain email blocks automatic resend. Inspect Resend, then record the
 observed outcome:
 

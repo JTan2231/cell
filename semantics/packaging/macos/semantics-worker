@@ -42,6 +42,9 @@ fi
 
 exec /usr/bin/env -i \
     HOME="$HOME" \
+    CLOCKWORK_BROKER_PATH="${CLOCKWORK_BROKER_PATH:-}" \
+    CLOCKWORK_STATE_ROOT="${CLOCKWORK_STATE_ROOT:-}" \
+    CLOCKWORK_ACTIVATION_ID="${CLOCKWORK_ACTIVATION_ID:-}" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     CONVERSATIONS_CODEX="$codex_path" \
     SEMANTICS_ANNALS="$HOME/.local/bin/annals" \

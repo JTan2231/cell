@@ -74,11 +74,13 @@ serial worker lock. It verifies the Annals target for that work. The first
 processing error marks the observation `failed`, retains the error, and removes
 it from automatic selection. This includes missing or incomplete sources,
 classification errors, uncertain dependency calls, and delivery errors.
-A recorded observation failure returns exit zero with observation status `failed`.
-A worker error that prevents a durable outcome returns nonzero.
+A newly recorded observation failure returns nonzero with
+`observation_processing_failed`. Errors that prevent a durable outcome also
+return nonzero. Both cause the configured Clockwork schedule to halt.
 
 Failed deliveries retain the exact pending document and target. Their observations
-remain failed until explicit retry. Other observations and deliveries can proceed.
+remain failed until explicit retry. Other observations and deliveries wait for
+explicit Clockwork continuation when a scheduling incident is active.
 Repeated hooks and reconciliation never requeue a failed observation.
 
 `krisis observe status [--date YYYY-MM-DD]` reports baseline, queue states,
@@ -108,11 +110,12 @@ state commands, it opens and can migrate Krisis state and obeys maintenance hold
 `working` means the serial worker lock has a live owner. `idle` means no worker
 owns it and the last run finished within the selected interval. Empty polls
 update the last finish time without resetting how long the worker has been idle.
-A recorded observation failure counts as a handled run and does not harm health.
+A newly failed observation sets the last worker error. Historical failure counts
+do not create new worker errors or scheduling incidents.
 
 The default idle limit is 180 seconds for the installed 60-second schedule.
 A longer interval produces `stale`. This is a local diagnostic threshold, not a
-Clockwork delivery guarantee. `error` reports the last unhandled worker error.
+Clockwork delivery guarantee. `error` reports the last worker error, including a newly failed observation.
 `interrupted` means a started run has no recorded finish and no lock owner.
 `unobserved` means this database has no worker activity record yet.
 

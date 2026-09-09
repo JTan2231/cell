@@ -32,7 +32,7 @@ Clockwork owns:
 
 - definition identity and immutability;
 - stable binding selection and generated `org.clockwork.*` LaunchAgents;
-- per-key overlap admission;
+- per-key overlap admission, declared failure-policy enforcement, durable halt incidents, and pause-email state;
 - verification and direct supervision of the registered launch image; and
 - activation identity, timestamps, process identity, and terminal runtime
   state.
@@ -225,7 +225,7 @@ delivery SLA.
 ## Deliberate exclusions
 
 Clockwork has no agent execution, Nucleus submission, daemon, HTTP or network
-surface, workflow dependencies, fan-out, retry engine, backoff, queue,
+surface, workflow dependencies, fan-out, product retry engine, backoff, product-work queue,
 distributed lock, secret store, output capture, product log rotation, calendar
 expressions beyond the documented forms, or system/root service mode.
 
@@ -237,3 +237,26 @@ Clockwork executable. The CLI serializes these same types. Manifest decoding
 is structural; registration still performs the authoritative local-artifact
 and scheduling checks. Private plist bookkeeping is excluded from binding
 exports.
+
+## Failure boundary
+
+Each schema-two product definition declares the response to an abend. Omission
+halts its stable binding until explicit approval; an intentional
+`continue-next-activation` exception permits the next activation. Clockwork
+observes process failures. Products report terminal domain failures through
+`clockwork::api::report_abend` and stop successor admission within their batch.
+Expected empty, waiting, deferred, and overlap outcomes remain normal.
+
+One incident closes admission independently of selection and enabled state.
+Runtime completion and its abend commit atomically; an in-process report
+commits its halt before returning. Binding transitions and compensation do not
+snapshot or restore incidents. Resume targets an exact incident and never
+retries product work or enables a disabled binding.
+
+A pending Email notification is part of the halt transaction. Broker visits
+attempt due notifications before the product gate and after outcomes, including
+for other halted or disabled keys. No resident worker is added. Transport never
+controls whether the gate remains closed. The fixed payload, five-minute retry
+spacing, 120-second process bound, and 23-hour deduplication horizon constrain
+notification recovery; later retries need explicit duplicate-risk approval.
+Use the CLI contract for commands, fields, privacy, and upgrade requirements.

@@ -261,3 +261,25 @@ and every command and provider selector. There is no supported path-only
 removal sequence. Keep the installation intact until a product-owned operation
 establishes those identities. Retained state, versioned release bytes, and
 Clockwork history require their own retention decisions.
+
+## Scheduled failure policy
+
+Both `annals/inbox` and `annals/decisions-inbox` use Clockwork definition schema
+2 with `[failure] on_abend = "halt-until-approved"`. The release-local runner
+selects `inbox run --stop-on-failure`. This batch option stops after its first
+failed job, including an item-local source failure, and returns nonzero before
+claiming a successor. It does not create an Annals scheduling-pause record.
+Ordinary manual `inbox run` retains its item-local continuation behavior.
+
+Clockwork retains the incident, halts later activations, and queues one email
+notification through `HOME/.local/bin/email`. Inspect `clockwork incident list
+annals/inbox` or the `annals/decisions-inbox` key and `clockwork incident show
+INCIDENT_ID`. Only explicit approval followed by `clockwork binding resume KEY
+INCIDENT_ID` releases that scheduling halt. Definition switches, deployment,
+Annals `inbox resume`, and dependency recovery do not release it.
+
+A low-storage readiness result, operator pause, maintenance, or empty queue is
+not an abend. A storage-probe or authentication error is an abend. Annals retains
+operator pauses, bounded retry-event halts, exact attempts, and domain recovery.
+Scheduling continuation neither retries a failed delivery nor clears these
+product controls. Existing failed archives are history, not new incidents.

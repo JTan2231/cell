@@ -54,6 +54,8 @@ enum Command {
     PrepareDaily,
     /// Prepare, freeze and send today's edition with applicable send authorization.
     RunDaily,
+    /// Print the selected release's daily Clockwork definition; do not enable it.
+    ScheduleDefinition,
     Preview {
         day: String,
         #[arg(long)]
@@ -122,6 +124,15 @@ async fn run() -> Result<()> {
             selected == root,
             "Platter uses one canonical database; --state-dir must select its canonical state directory"
         );
+    }
+    if matches!(cli.command, Command::ScheduleDefinition) {
+        let definition = platter::installation::schedule_definition(&home, &root)?;
+        if cli.json {
+            println!("{}", serde_json::json!({"ok":true,"data":definition}));
+        } else {
+            print!("{}", definition.to_toml()?);
+        }
+        return Ok(());
     }
     let operation = administrative(&cli.command, &home, &root).await?;
     if let Some(data) = operation {
@@ -229,6 +240,7 @@ async fn run() -> Result<()> {
             println!("exported: {}", output.display());
         }
         Command::Status
+        | Command::ScheduleDefinition
         | Command::Doctor { .. }
         | Command::Maintenance { .. }
         | Command::Migrate { .. } => {

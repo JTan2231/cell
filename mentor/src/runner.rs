@@ -1,4 +1,4 @@
-//! One short scheduled pass. Network failures do not block unrelated stages.
+//! One short pass that stops work admission at the first failed stage.
 
 use crate::grading::{Grader, Progress};
 use crate::mail::{self, FrozenEmail};
@@ -17,8 +17,8 @@ const MAX_PAGES_PER_TICK: usize = 4;
 /// Advance one bounded worker pass and report content-free stage outcomes.
 ///
 /// # Errors
-/// Returns admission, locking, configuration or database failures. Provider
-/// failures remain retryable stage error codes in the returned observation.
+/// Returns admission, storage or content-free stage failures. Scheduled errors
+/// reach Clockwork as a nonzero exit; Clockwork owns the durable scheduling halt.
 pub async fn tick(root: &Path, recovery: bool) -> Result<Value> {
     let _admission = if recovery {
         crate::gate(root).recover()?
@@ -27,73 +27,91 @@ pub async fn tick(root: &Path, recovery: bool) -> Result<Value> {
     };
     let _lock = crate::store::runner_lock(root)?;
     let store = Store::open(root)?;
-    let now = crate::now();
-    store.expire(now)?;
+    store.expire(crate::now())?;
     let config = store.config()?;
-    let email = Client::new(config.email_executable.clone());
-    let grader = Grader::for_current_user();
-    let mut errors = Vec::new();
-
-    if let Ok(grader) = &grader {
-        if !matches!(
-            timeout(
-                Duration::from_secs(15),
-                cancel_expired(root, &store, grader)
-            )
-            .await,
-            Ok(Ok(()))
-        ) {
-            errors.push("grading_cancellation_pending");
-        }
-    } else {
-        errors.push("grading_client_unavailable");
+    let result = advance(root, &store, &config, recovery).await;
+    // Cleanup never admits a successor job or sends a message after an abend.
+    store.expire(crate::now())?;
+    store.set_meta("last_tick_completed_at", &crate::now().to_string())?;
+    store.set_meta(
+        "last_tick_errors",
+        result.as_ref().err().copied().unwrap_or(""),
+    )?;
+    if let Err(code) = result {
+        return Err(fail(code));
     }
+    Ok(
+        json!({"paused":config.paused,"recovery":recovery,"completed_at":crate::now(),"error_codes":[]}),
+    )
+}
+
+async fn advance(
+    root: &Path,
+    store: &Store,
+    config: &Config,
+    recovery: bool,
+) -> std::result::Result<(), &'static str> {
+    let email = Client::new(config.email_executable.clone());
+    let grader = Grader::for_current_user().map_err(|_| "grading_client_unavailable")?;
+    timeout(
+        Duration::from_secs(15),
+        cancel_expired(root, store, &grader),
+    )
+    .await
+    .map_err(|_| "grading_cancellation_timed_out")?
+    .map_err(|_| "grading_cancellation_failed")?;
 
     // A hold or pause stops new admission. Existing exchanges can still finish.
     if !config.paused && !recovery {
-        if select_daily(&store, &config, crate::now()).is_err() {
-            errors.push("daily_selection_failed");
-        }
-        if !matches!(
-            timeout(Duration::from_secs(20), poll(&store, &email, crate::now())).await,
-            Ok(Ok(()))
-        ) {
-            errors.push("reply_poll_failed");
-        }
+        select_daily(store, config, crate::now()).map_err(|_| "daily_selection_failed")?;
+        timeout(Duration::from_secs(20), poll(store, &email, crate::now()))
+            .await
+            .map_err(|_| "reply_poll_timed_out")?
+            .map_err(|_| "reply_poll_failed")?;
     }
-    if let Ok(grader) = &grader
-        && !matches!(
-            timeout(
-                Duration::from_secs(20),
-                advance_grading(root, &store, grader)
-            )
-            .await,
-            Ok(Ok(()))
-        )
-    {
-        errors.push("grading_pending_or_failed");
-    }
-    if !matches!(
-        timeout(Duration::from_secs(20), send_pending(&store, &email)).await,
-        Ok(Ok(()))
-    ) {
-        errors.push("email_submission_unresolved");
-    }
+    timeout(
+        Duration::from_secs(20),
+        advance_grading(root, store, &grader),
+    )
+    .await
+    .map_err(|_| "grading_timed_out")?
+    .map_err(|_| "grading_failed")?;
+    timeout(Duration::from_secs(20), send_pending(store, &email))
+        .await
+        .map_err(|_| "email_submission_unresolved")?
+        .map_err(|_| "email_submission_unresolved")?;
+    Ok(())
+}
+
+/// Expire local content and settle expired-job cancellation without practice work.
+///
+/// # Errors
+/// Returns storage, locking or cancellation errors. No send or model admission occurs.
+pub async fn cleanup(root: &Path) -> Result<Value> {
+    let _admission = crate::gate(root).recover()?;
+    let _lock = crate::store::runner_lock(root)?;
+    let store = Store::open(root)?;
     store.expire(crate::now())?;
-    store.set_meta("last_tick_completed_at", &crate::now().to_string())?;
-    errors.sort_unstable();
-    errors.dedup();
-    store.set_meta("last_tick_errors", &errors.join(","))?;
+    if !store.cancellation_jobs()?.is_empty() {
+        let grader = Grader::for_current_user()?;
+        timeout(
+            Duration::from_secs(15),
+            cancel_expired(root, &store, &grader),
+        )
+        .await
+        .map_err(|_| fail("grading_cancellation_timed_out"))??;
+    }
     Ok(
-        json!({"paused":config.paused,"recovery":recovery,"completed_at":crate::now(),"error_codes":errors}),
+        json!({"completed_at":crate::now(),"pending_cancellation_count":store.cancellation_jobs()?.len()}),
     )
 }
 
 async fn cancel_expired(root: &Path, store: &Store, grader: &Grader) -> Result<()> {
     for (incoming, job) in store.cancellation_jobs()? {
-        grader.cancel_job(&job).await?;
-        store.finish_cancellation(&incoming)?;
-        remove_scratch(root, &job);
+        if grader.cancel_job(&job).await? {
+            store.finish_cancellation(&incoming)?;
+            remove_scratch(root, &job);
+        }
     }
     Ok(())
 }
@@ -298,7 +316,7 @@ async fn advance_grading(root: &Path, store: &Store, grader: &Grader) -> Result<
         return Ok(());
     };
     if incoming.state != "grading" && !store.cancellation_jobs()?.is_empty() {
-        return Err(fail("previous grading cancellation is still pending"));
+        return Ok(());
     }
     if incoming.expires_at <= crate::now() {
         return Ok(());
@@ -360,7 +378,6 @@ async fn advance_grading(root: &Path, store: &Store, grader: &Grader) -> Result<
 }
 
 async fn send_pending(store: &Store, email: &Client) -> Result<()> {
-    let mut unresolved = false;
     for outgoing in store.outgoing(crate::now())? {
         let now = crate::now();
         if outgoing.expires_at <= now
@@ -379,22 +396,136 @@ async fn send_pending(store: &Store, email: &Client) -> Result<()> {
         {
             store.sent(&outgoing, &receipt.id, crate::now())?;
         } else {
-            let exponent = outgoing.attempts.min(6);
-            let delay = (60_i64 * (1_i64 << exponent)).min(3600);
-            store.retry_send(&outgoing.id, crate::now() + delay)?;
-            unresolved = true;
+            store.unresolved_send(&outgoing.id)?;
+            return Err(fail("email submission is unresolved"));
         }
     }
-    if unresolved {
-        Err(fail("email submission is unresolved"))
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 fn remove_scratch(root: &Path, job_id: &str) {
     if uuid::Uuid::parse_str(job_id).is_ok() {
         // The grader has no filesystem access, so this is an empty directory.
         let _ = std::fs::remove_dir(root.join("scratch").join(job_id));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    fn private_temp() -> Result<tempfile::TempDir> {
+        let temporary = tempfile::tempdir()?;
+        std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))?;
+        Ok(temporary)
+    }
+
+    fn queued_mail(store: &Store, id: &str, now: i64) -> Result<String> {
+        let payload = serde_json::to_string(&FrozenEmail {
+            message: email::api::Message {
+                subject: "Fixture".into(),
+                body: "Synthetic fixture body".into(),
+                idempotency_key: Some(format!("mentor/test/{id}")),
+            },
+            reply: email::api::ReplyOptions::default(),
+        })?;
+        store.connection.execute(
+            "INSERT INTO outbox(id,payload,state,created_at,expires_at,next_attempt) VALUES(?1,?2,'pending',?3,?4,?3)",
+            rusqlite::params![id, payload, now, now + WORK_LIFETIME],
+        )?;
+        Ok(payload)
+    }
+
+    fn failing_email(root: &Path) -> Result<std::path::PathBuf> {
+        let executable = root.join("fake-email");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"$0.calls\"\n/bin/cat >/dev/null\nexit 1\n",
+        )?;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
+        Ok(executable)
+    }
+
+    #[tokio::test]
+    async fn unresolved_send_stops_before_the_next_message_and_keeps_exact_payload() -> Result<()> {
+        let temporary = private_temp()?;
+        let store = Store::initialize(temporary.path())?;
+        let now = crate::now();
+        let payload = queued_mail(&store, "first", now - 1)?;
+        queued_mail(&store, "second", now)?;
+        let executable = failing_email(temporary.path())?;
+        assert!(
+            send_pending(&store, &Client::new(&executable))
+                .await
+                .is_err()
+        );
+        let queued = store.outgoing(crate::now())?;
+        assert_eq!(queued.len(), 2);
+        assert_eq!(queued[0].payload, payload);
+        assert_eq!(queued[0].attempts, 1);
+        assert!(queued[0].first_attempt.is_some());
+        assert_eq!(queued[1].attempts, 0);
+        assert_eq!(
+            std::fs::read_to_string(executable.with_extension("calls"))?,
+            "--payload-stdin\n"
+        );
+        store.expire(crate::now() + SEND_WINDOW)?;
+        let state: String =
+            store
+                .connection
+                .query_row("SELECT state FROM outbox WHERE id='first'", [], |row| {
+                    row.get(0)
+                })?;
+        assert_eq!(state, "unknown");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn polling_failure_returns_an_error_before_any_pending_mail_is_sent() -> Result<()> {
+        let temporary = private_temp()?;
+        let store = Store::initialize(temporary.path())?;
+        let mut config = store.config()?;
+        config.paused = false;
+        config.first_delivery_date = Some("2999-01-01".into());
+        config.email_executable = failing_email(temporary.path())?;
+        store.set_config(&config)?;
+        queued_mail(&store, "pending", crate::now())?;
+        assert_eq!(
+            tick(temporary.path(), false)
+                .await
+                .err()
+                .map(|e| e.to_string())
+                .as_deref(),
+            Some("reply_poll_failed")
+        );
+        assert_eq!(store.outgoing(crate::now())?[0].attempts, 0);
+        assert_eq!(
+            store.meta("last_tick_errors")?.as_deref(),
+            Some("reply_poll_failed")
+        );
+        assert_eq!(
+            std::fs::read_to_string(config.email_executable.with_extension("calls"))?,
+            "receive\n"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn cleanup_expires_content_without_sending_pending_mail() -> Result<()> {
+        let temporary = private_temp()?;
+        let store = Store::initialize(temporary.path())?;
+        queued_mail(&store, "expired", crate::now() - WORK_LIFETIME)?;
+        queued_mail(&store, "pending", crate::now())?;
+        cleanup(temporary.path()).await?;
+        assert_eq!(store.outgoing(crate::now())?.len(), 1);
+        assert_eq!(store.outgoing(crate::now())?[0].attempts, 0);
+        let content: Option<String> = store.connection.query_row(
+            "SELECT payload FROM outbox WHERE id='expired'",
+            [],
+            |row| row.get(0),
+        )?;
+        assert!(content.is_none());
+        Ok(())
     }
 }

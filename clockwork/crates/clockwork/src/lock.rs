@@ -12,6 +12,18 @@ pub(crate) struct KeyLock {
 }
 
 impl KeyLock {
+    pub(crate) fn try_acquire_notifications(layout: &Layout) -> Result<Option<Self>> {
+        let file = open(&layout.locks_root().join("notification-delivery.lock"))?;
+        match FileExt::try_lock_exclusive(&file) {
+            Ok(()) => Ok(Some(Self { file })),
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(error) => Err(Error::new(
+                "key_lock_unavailable",
+                format!("lock notification delivery: {error}"),
+            )),
+        }
+    }
+
     pub(crate) fn acquire_management(layout: &Layout, key: &str) -> Result<Self> {
         let file = open(&layout.management_lock_path(key))?;
         FileExt::lock_exclusive(&file)

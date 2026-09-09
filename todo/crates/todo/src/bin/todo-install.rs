@@ -1,5 +1,8 @@
-//! Todo owns database migration and its daily-email schedule. The zsh runner
+//! Todo owns database migration and daily-email configuration. The zsh runner
 //! remains a runtime credential boundary; installation never invokes email.
+
+#[path = "todo-install/schedule.rs"]
+mod clockwork_schedule;
 
 use std::collections::BTreeMap;
 use std::ffi::{OsStr, OsString};
@@ -414,7 +417,7 @@ fn rendered_plist(template: &Path, home: &Path) -> Result<Value> {
     Ok(value)
 }
 
-fn schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Schedule> {
+fn legacy_schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Schedule> {
     let plist = home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
     if let Some(template) = template {
         owned(&plist, home)?.ok_or_else(|| Error::new("Todo schedule plist is absent"))?;
@@ -469,6 +472,44 @@ fn schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Sc
     })
 }
 
+fn schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Schedule> {
+    let plist = home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
+    let legacy_present = owned(&plist, home)?.is_some();
+    let legacy = legacy_schedule(home, launchctl, template.filter(|_| legacy_present))?;
+    if legacy.loaded && !legacy_present {
+        return Err(Error::new(
+            "Todo legacy service is loaded without its owned plist",
+        ));
+    }
+    let selected = clockwork_schedule::binding(home)?;
+    if let Some(binding) = selected
+        .as_ref()
+        .filter(|binding| binding.definition_digest.is_some())
+    {
+        clockwork_schedule::verify(
+            home,
+            binding,
+            if legacy_present {
+                None
+            } else {
+                template.and_then(Path::parent).and_then(Path::parent)
+            },
+        )?;
+        if binding.enabled && (legacy.loaded || legacy_present) {
+            return Err(Error::new(
+                "Todo has competing legacy and Clockwork schedules",
+            ));
+        }
+        if !legacy_present {
+            return Ok(Schedule {
+                loaded: binding.enabled,
+                disabled: legacy.disabled,
+            });
+        }
+    }
+    Ok(legacy)
+}
+
 fn plan(args: &InstallArgs, home: &Path) -> Result<ReleasePlan> {
     if [&args.binary, &args.bundle, &args.package]
         .iter()
@@ -508,12 +549,19 @@ fn plan(args: &InstallArgs, home: &Path) -> Result<ReleasePlan> {
         (
             "package/install".into(),
             SourceFile {
-                source: installer,
+                source: installer.clone(),
                 mode: 0o755,
             },
         ),
         (
             "bin/todo-daily-email".into(),
+            SourceFile {
+                source: installer,
+                mode: 0o755,
+            },
+        ),
+        (
+            "package/todo-daily-email".into(),
             SourceFile {
                 source: args.package.join("todo-daily-email"),
                 mode: 0o755,
@@ -687,8 +735,15 @@ fn install(
             "Todo operator schedule changed since inspection",
         ));
     }
-    if prior_schedule.loaded && (prior_schedule.disabled || prior_plist.is_none()) {
-        return Err(Error::new("Todo loaded schedule cannot be safely restored"));
+    let prior_clockwork = clockwork_schedule::binding(home)?;
+    if let Some(binding) = &prior_clockwork {
+        clockwork_schedule::verify(home, binding, None)?;
+    }
+    let legacy_loaded = legacy_schedule(home, &args.launchctl, None)?.loaded;
+    if legacy_loaded && (prior_schedule.disabled || prior_plist.is_none()) {
+        return Err(Error::new(
+            "Todo loaded legacy schedule cannot be safely restored",
+        ));
     }
     let transaction = tempfile::Builder::new()
         .prefix(".transaction.")
@@ -706,6 +761,11 @@ fn install(
             0o600,
         )?;
     }
+    write_atomic(
+        &transaction.path().join("clockwork.before.json"),
+        &serde_json::to_vec(&prior_clockwork)?,
+        0o600,
+    )?;
     let candidate_raw = prepared.root.join("libexec/todo");
     let active = before.current.as_ref().map_or_else(
         || candidate_raw.clone(),
@@ -778,7 +838,19 @@ fn install(
     let mut publication = None;
     let backup = transaction.path().join("database.before.db");
     let result = (|| -> Result<InstallSnapshot> {
-        if prior_schedule.loaded {
+        if clockwork_schedule::binding(home)? != prior_clockwork {
+            return Err(Error::new(
+                "Todo Clockwork selection changed since inspection",
+            ));
+        }
+        if prior_clockwork
+            .as_ref()
+            .is_some_and(|binding| binding.enabled)
+        {
+            service_changed = true;
+            clockwork_schedule::disable(home, None)?;
+        }
+        if legacy_loaded {
             service_changed = true;
             call(
                 &args.launchctl,
@@ -824,22 +896,12 @@ fn install(
             &maintenance(&candidate_raw, &database, home, &owner, "ready", true)?,
             &owner,
         )?;
-        let rendered = rendered_plist(
-            &prepared.root.join("package/org.todo.daily-email.plist"),
-            home,
-        )?;
-        write_atomic(&plist_path, &serde_json::to_vec(&rendered)?, 0o644)?;
-        call(
-            Path::new("/usr/bin/plutil"),
-            &[
-                "-convert".into(),
-                "xml1".into(),
-                plist_path.as_os_str().to_owned(),
-            ],
-            home,
-            Some(&owner),
-            30,
-        )?;
+        // Retire only the fully attributed legacy projection while held. The
+        // Clockwork candidate has no run-at-load trigger and is registered inert.
+        if prior_plist.is_some() {
+            fs::remove_file(&plist_path)?;
+        }
+        let registered = clockwork_schedule::register(home, &prepared.root, transaction.path())?;
         let selected = tx.publish(&prepared, &suspension.after, |_| {
             call(
                 &home.join(".local/bin/todo"),
@@ -860,21 +922,12 @@ fn install(
         let result = selected.after.clone();
         publication = Some(selected);
         let should_load = prior_schedule.loaded
-            || (before.current.is_none() && prior_plist.is_none() && !prior_schedule.disabled);
-        if should_load {
-            service_changed = true;
-            call(
-                &args.launchctl,
-                &[
-                    "bootstrap".into(),
-                    domain.clone().into(),
-                    plist_path.as_os_str().to_owned(),
-                ],
-                home,
-                Some(&owner),
-                180,
-            )?;
-        }
+            || (before.current.is_none()
+                && prior_plist.is_none()
+                && prior_clockwork.is_none()
+                && !prior_schedule.disabled);
+        service_changed = true;
+        clockwork_schedule::select(home, &registered.digest, should_load)?;
         if schedule(
             home,
             &args.launchctl,
@@ -905,25 +958,25 @@ fn install(
                     ));
                 }
                 let observed_plist = owned(&plist_path, home)?;
-                let candidate_plist = observed_plist.is_some()
-                    && plist_value(&plist_path, home)?
-                        == rendered_plist(
-                            &prepared.root.join("package/org.todo.daily-email.plist"),
-                            home,
-                        )?;
-                if observed_plist != prior_plist && !candidate_plist {
+                if observed_plist.is_some() && observed_plist != prior_plist {
                     return Err(Error::new(
-                        "Todo schedule definition changed independently; recovery hold retained",
+                        "Todo legacy schedule changed independently; hold retained",
                     ));
                 }
-                if service_changed && schedule(home, &args.launchctl, None)?.loaded {
-                    call(
-                        &args.launchctl,
-                        &strings(&["bootout", &target]),
-                        home,
-                        Some(&owner),
-                        180,
-                    )?;
+                if service_changed {
+                    if let Some(binding) = clockwork_schedule::binding(home)? {
+                        clockwork_schedule::verify(home, &binding, None)?;
+                        clockwork_schedule::disable(home, None)?;
+                    }
+                    if legacy_schedule(home, &args.launchctl, None)?.loaded {
+                        call(
+                            &args.launchctl,
+                            &strings(&["bootout", &target]),
+                            home,
+                            Some(&owner),
+                            180,
+                        )?;
+                    }
                 }
                 let unpublished = if let Some(receipt) = &publication {
                     let paused = tx.suspend(&receipt.after, &suspended_paths)?;
@@ -953,7 +1006,12 @@ fn install(
                     tx.restore(receipt, |_| Ok(()))?;
                 }
                 tx.restore(&suspension, |_| Ok(()))?;
-                if prior_schedule.loaded {
+                if let Some(binding) = &prior_clockwork
+                    && let Some(digest) = &binding.definition_digest
+                {
+                    clockwork_schedule::select(home, digest, binding.enabled)?;
+                }
+                if legacy_loaded {
                     call(
                         &args.launchctl,
                         &[
@@ -1106,7 +1164,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Todo installation and schedule inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"schedule":schedule_state,"runtime":current,"maintenance_products":["nucleus"],"after":["nucleus"]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"schedule":schedule_state,"runtime":current,"maintenance_products":["nucleus"],"after":["nucleus","clockwork"]}),
             ))
         }
         Operation::Hold => {
@@ -1280,6 +1338,17 @@ fn run(command: Command) -> Result<Value> {
 }
 
 fn main() -> ExitCode {
+    if std::env::args_os()
+        .next()
+        .as_deref()
+        .and_then(|path| Path::new(path).file_name())
+        == Some(OsStr::new("todo-daily-email"))
+    {
+        if clockwork_schedule::frontend().is_err() {
+            eprintln!("todo: scheduled payload is unavailable");
+        }
+        return ExitCode::FAILURE;
+    }
     if std::env::args_os()
         .next()
         .as_deref()

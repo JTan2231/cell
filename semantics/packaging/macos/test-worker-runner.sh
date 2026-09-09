@@ -41,7 +41,10 @@ env | LC_ALL=C sort >"$HOME/environment"
 printf '%s\n' '{"already_running":false,"events_seen":0}'
 EOF
 chmod 0755 "$release/bin/semantics-worker" "$release/libexec/semantics"
-if ! HOME="$home" "$release/bin/semantics-worker" >"$temporary/stdout" 2>"$temporary/stderr"; then
+if ! HOME="$home" CLOCKWORK_BROKER_PATH="$temporary/clockwork" \
+    CLOCKWORK_STATE_ROOT="$temporary/clockwork-state" \
+    CLOCKWORK_ACTIVATION_ID="00000000-0000-4000-8000-000000000001" \
+    "$release/bin/semantics-worker" >"$temporary/stdout" 2>"$temporary/stderr"; then
     sed 's/^/worker test: /' "$temporary/stderr" >&2
     exit 1
 fi
@@ -52,6 +55,9 @@ grep -Fx "CONVERSATIONS_CODEX=$(cat "$home/expected-codex")" "$home/environment"
 grep -Fx "SEMANTICS_ANNALS=$home/.local/bin/annals" "$home/environment" >/dev/null
 grep -Fx "SEMANTICS_ANNALS_CONFIG=$home/Library/Application Support/Annals/decisions/config.toml" "$home/environment" >/dev/null
 grep -Fx "SEMANTICS_DATABASE=$home/Library/Application Support/Semantics/semantics.db" "$home/environment" >/dev/null
+grep -Fx "CLOCKWORK_BROKER_PATH=$temporary/clockwork" "$home/environment" >/dev/null
+grep -Fx "CLOCKWORK_STATE_ROOT=$temporary/clockwork-state" "$home/environment" >/dev/null
+grep -Fx 'CLOCKWORK_ACTIVATION_ID=00000000-0000-4000-8000-000000000001' "$home/environment" >/dev/null
 ! grep -E 'TOKEN|KEY|SECRET|SSH|NPM|CARGO' "$home/environment" >/dev/null
 
 maintenance="$home/Library/Application Support/Semantics/.clockwork-maintenance"

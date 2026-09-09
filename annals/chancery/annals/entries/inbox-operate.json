@@ -1,6 +1,6 @@
 {
   "id": "annals.inbox.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -34,6 +34,7 @@
     "Original failed jobs and deliveries remain unchanged after retry."
   ],
   "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
     "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
     "A storage probe failure prevents a claim and exits nonzero; insufficient storage halts an attended retry until the operator continues it.",
     "When low storage closes the gate, preserve the queued work and leave storage remediation or a reserve change to the user under explicit target-scoped consent.",
@@ -59,6 +60,7 @@
     {"label": "Continue halted event", "invocation": "/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>"}
   ],
   "dependencies": [
+    {"id": "clockwork.schedule.operate", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
@@ -110,9 +112,10 @@
       {"status": "unsupported", "statement": "Direct job.json editing, manual archive moves, direct SQLite writes, and host-wide service or storage control are not supported inbox surfaces."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
       {"status": "declared", "statement": "An exact original pending reconciliation is reusable by a retry child only while its corpus and instruction revisions remain current. Otherwise the child examines under current instructions. Already committed or recorded results survive later instruction changes or execution failures."},
       {"status": "declared", "statement": "Each job moves from a complete queued envelope to at most one processing attempt and one terminal archive; terminal jobs never return to queued."},
-      {"status": "declared", "statement": "A known item-local failure archives that item and ordinary draining may continue, while unexpected model or runtime failure archives the current job and ends the activation nonzero."},
+      {"status": "declared", "statement": "A known item-local failure archives that item. Manual ordinary draining may continue; --stop-on-failure, used by scheduled runners, returns nonzero before a successor claim. Unexpected model or runtime failure also ends the activation. A later runtime failure preserves an already recorded or applied result."},
       {"status": "declared", "statement": "Pause prevents the next claim after active work finishes but permits registration. Maintenance separately blocks spool mutation. Resume clears only pause."},
       {"status": "declared", "statement": "A halted retry continues only its unattempted children and never retries a failed child; original failed history remains unchanged."}
     ],
@@ -123,11 +126,12 @@
       {"status": "unspecified", "statement": "No queue capacity, maximum file size, throughput, scheduling fairness, or wall-clock completion bound is promised here."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 3, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
+      {"status": "declared", "statement": "Capability contract version 4, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."},
       {"status": "declared", "statement": "Supported installation and recovery procedures preserve historical envelopes and use product-owned migration rather than manual reinterpretation."},
       {"status": "unspecified", "statement": "No cross-release spool-format support window or deprecation period is promised."}
     ],
     "reliances": [
+      {"status": "declared", "statement": "Scheduled failure enforcement uses Clockwork schedule contract 3; Annals configures the policy and retains domain attempts and recovery.", "target": "clockwork", "kind": "control", "contract": "clockwork.schedule.operate"},
       {
         "status": "declared",
         "statement": "Dispatch and retry-child processing rely on Nucleus for authenticated one-attempt model execution and raw runtime records; Annals retains queue, retry, and domain-result authority.",

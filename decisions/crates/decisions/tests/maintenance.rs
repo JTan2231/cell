@@ -14,6 +14,7 @@ fn command(database: &Path) -> Command {
         .arg(database)
         .arg("--json")
         .env_remove("CELL_DEPLOYMENT_RUN_ID")
+        .env_remove("CLOCKWORK_ACTIVATION_ID")
         .env_remove("KRISIS_ANNALS_BINARY")
         .env_remove("KRISIS_ANNALS_CONFIG")
         .env_remove("KRISIS_ANNALS_LIBRARY_ID");
@@ -70,6 +71,38 @@ fn maintenance_does_not_initialize_state_and_fences_public_clients() -> TestResu
     assert!(
         matches!(client.activate(Some(1)), Err(ClientError::Failed(message))
         if message.contains("deployment_maintenance"))
+    );
+    assert!(!database.exists());
+    Ok(())
+}
+
+#[test]
+fn scheduled_worker_skips_only_a_valid_deployment_hold_before_opening_state() -> TestResult {
+    let temporary = tempfile::tempdir()?;
+    let database = temporary.path().join("krisis.db");
+    let gate = cell_maintenance::Gate::new(temporary.path().join("krisis.db.cell-maintenance"));
+    gate.hold("run-a")?;
+    let skipped = success(
+        &command(&database)
+            .env("CLOCKWORK_ACTIVATION_ID", "fixture-activation")
+            .args(["observe", "process"])
+            .output()?,
+    )?;
+    assert_eq!(skipped["skipped"], "deployment_maintenance");
+    assert!(!database.exists());
+    held(&command(&database).args(["observe", "process"]).output()?);
+    held(
+        &command(&database)
+            .env("CLOCKWORK_ACTIVATION_ID", "fixture-activation")
+            .args(["observe", "status"])
+            .output()?,
+    );
+    std::fs::write(gate.path().join("holds/run-a"), "invalid-owner\n")?;
+    held(
+        &command(&database)
+            .env("CLOCKWORK_ACTIVATION_ID", "fixture-activation")
+            .args(["observe", "process"])
+            .output()?,
     );
     assert!(!database.exists());
     Ok(())

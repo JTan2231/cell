@@ -48,10 +48,10 @@ records a target-bound outbox and supplies the sole active production path.
 ## Observation outcomes and worker health
 
 The observer records the first returned processing error as a failed observation
-and continues with other work. Preserve error history across explicit retries.
+and returns nonzero before successor work. Preserve error history across explicit retries.
 An uncertain saved job or accepted classification must reuse its run; a failed
 pending delivery must reuse its key, exact bytes, and target. A recorded
-observation failure is a successful worker run, not an operational alarm.
+observation failure is an abend for the configured Clockwork schedule.
 
 Keep `health` independent of retained failures. It reports live lock ownership,
 last run timing, continuous idle time, and unhandled worker errors. Empty polls

@@ -2,13 +2,13 @@
 
 Clockwork uses one private SQLite database at
 `~/Library/Application Support/Clockwork/clockwork.db` by default. Schema
-version 1 stores definitions, bindings, and activations.
+version 2 stores definitions, bindings, activations, abends, and incidents.
 
 ## Definitions
 
 A definition is a complete immutable snapshot of one stable key's schedule,
 launch image, literal arguments, working directory, non-secret environment,
-output paths, authority, timeout, and overlap policy. Its identity is the
+output paths, authority, timeout, overlap policy, and schema-two failure policy. Its identity is the
 SHA-256 digest of the canonical JSON encoding of the fully concrete normalized
 definition content. Registration returns the existing identity for identical
 content or inserts a new row. It never changes an existing definition.
@@ -112,14 +112,15 @@ database and parent-directory modes. Per-key filesystem locks coordinate
 separate short-lived broker processes. Product durable work must not be stored
 inside the Clockwork transaction or inferred from it.
 
-A fixed `clockwork_meta` marker distinguishes schema one from an unrelated or
+A fixed `clockwork_meta` marker distinguishes the selected schema from an unrelated or
 partial SQLite database. Clockwork initializes only an empty unversioned file
-and refuses unknown versions or missing schema-one objects; opening the store
+and refuses unknown versions or missing schema-two objects; opening the store
 does not relabel or fill in an incompatible database.
 
-Schema version 1 has no automatic migration. A future schema change must ship
-an explicit migration and a quiescent database-plus-sidecar backup and rollback
-procedure. Deployment of Clockwork program bytes does not initialize, migrate,
+Schema version 2 requires explicit `migrate --backup DIR` from schema one.
+The command retains a quiescent private database-plus-sidecar backup before the
+transaction. It preserves old definition bytes and identities; only new
+schema-two definitions opt into failure enforcement. Deployment of Clockwork program bytes does not initialize, migrate,
 delete, or prune this state. The program deployer separately validates the
 exact staged Chancery provider through an explicitly supplied candidate reader
 before changing its command or provider selectors.
@@ -129,3 +130,25 @@ arguments, schedule, and scrubbed environment. Activation records reveal when
 and how direct processes ran. State therefore remains private to the current
 user. Product secrets and output bodies are prohibited because local file mode
 is not a secret-management or content-retention policy.
+
+## Abends and incidents
+
+`abends` retains immutable `(key, occurrence)` evidence with machine code,
+optional activation ID, optional incident ID, and recording time. It prevents
+a previously reported product failure from creating another halt after explicit
+continuation. Runtime failures use their activation ID as their occurrence.
+Schema-one definitions retain their legacy behavior until replaced explicitly.
+
+`incidents` retains one halt's stable UUID, binding, first activation and
+selected definition when available, machine code, occurrence, creation and
+explicit-resumption times. A unique partial index permits at most one open
+incident per key. The admission insert requires no open incident in the same
+SQLite statement. An enabled selection can therefore remain halted through
+switch, disable, rollback, and reinstall.
+
+The incident also freezes the Email CLI path and rendering version-one input.
+It retains notification status (`pending`, `accepted`, or `uncertain`), first
+and last attempt times, total attempted invocations, and an idempotency
+generation changed only by explicit duplicate-risk approval. Attempts and
+acceptance describe Email submission, not product completion or inbox delivery.
+No email body, provider response body, credential, or product output is stored.

@@ -29,7 +29,13 @@ impl Layout {
             return Err(Error::new("home_invalid", "HOME must be an absolute path"));
         }
         let home = canonical_existing_directory(&home, "HOME")?;
-        if let Some(root) = state_root {
+        let default_root = canonical_future_path(
+            &home.join("Library/Application Support/Clockwork"),
+            "Clockwork state root",
+        )?;
+        // The reporting helper supplies the canonical state path even for the
+        // ordinary installed layout. Do not reinterpret it as test isolation.
+        if let Some(root) = state_root.filter(|root| root != &default_root) {
             if !root.is_absolute() {
                 return Err(Error::new(
                     "state_root_invalid",
@@ -145,6 +151,15 @@ impl Layout {
 
     pub(crate) fn home(&self) -> &Path {
         &self.home
+    }
+
+    pub(crate) fn default_email_cli(&self) -> PathBuf {
+        if self.overridden {
+            // A synthetic run must never select the operator's real Email account.
+            self.state_root.join("email")
+        } else {
+            self.home.join(".local/bin/email")
+        }
     }
 
     pub(crate) fn state_root_override(&self) -> Option<&Path> {

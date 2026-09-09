@@ -606,7 +606,9 @@ async fn serve_mailbox(
                 .pending_committed_revision(&intake.event_id, job_id.as_str())?
                 .is_some()
             {
-                return store.finalize_applied(&intake.event_id, job_id.as_str());
+                let revision = store.finalize_applied(&intake.event_id, job_id.as_str())?;
+                report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                return Ok(revision);
             }
             return match job.summary.state {
                 JobState::Completed => Err(Error::domain(
@@ -724,7 +726,9 @@ async fn serve_account_mailbox(
                 .account_pending_committed_revision(&intake.event_id, job_id.as_str())?
                 .is_some()
             {
-                return store.finalize_account_applied(&intake.event_id, job_id.as_str());
+                let revision = store.finalize_account_applied(&intake.event_id, job_id.as_str())?;
+                report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                return Ok(revision);
             }
             return match job.summary.state {
                 JobState::Completed => Err(Error::domain(
@@ -744,6 +748,17 @@ async fn serve_account_mailbox(
             };
         }
     }
+}
+
+fn report_committed_runtime_failure(state: JobState, job_id: &str) -> Result<()> {
+    if matches!(state, JobState::Failed | JobState::Cancelled) {
+        clockwork::api::report_abend("nucleus_job_terminal_failed", job_id)
+            .map_err(|_| Error::domain(
+                "scheduling_report_failed",
+                "cannot report terminal runtime failure; the committed semantic result is preserved",
+            ))?;
+    }
+    Ok(())
 }
 
 async fn post_result_stably(

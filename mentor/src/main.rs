@@ -47,6 +47,8 @@ enum Command {
     /// Run one bounded pass through selection, receiving, grading and sending.
     #[command(alias = "worker")]
     Tick,
+    /// Expire temporary content and cancel expired grading jobs; never send or grade.
+    Cleanup,
     /// Import a versioned collection exported from the Mentor desktop source.
     ImportCorpus {
         path: PathBuf,
@@ -122,6 +124,7 @@ async fn run(command: Command) -> Result<Value> {
     let root = mentor::state_root()?;
     match command {
         Command::Tick => mentor::runner::tick(&root, false).await,
+        Command::Cleanup => mentor::runner::cleanup(&root).await,
         Command::Schedule { operation } => mentor::installation::schedule(
             &root,
             match operation {

@@ -83,12 +83,13 @@ fn manifest(root: &Path, release: &ReleaseInfo) -> Result<Manifest> {
         .sha256
         .clone();
     Ok(Manifest {
-        schema_version: 1,
+        schema_version: 2,
         key: WORKER_KEY.into(),
         release_id: release.release_id.clone(),
         release_root: path_text(&release_root)?,
         authority: Authority::CurrentUserBackground,
         overlap: OverlapPolicy::Skip,
+        failure: clockwork::api::FailurePolicy::default(),
         timeout_seconds: Some(90),
         arguments: vec!["--json".into(), "worker".into()],
         cwd: path_text(root)?,
@@ -128,7 +129,11 @@ fn require_owned_binding(root: &Path, client: &Client, binding: &BindingRecord) 
     let spec = specification();
     let release =
         transaction::verify_release_at(&spec.layout(), &release_root, &|path| spec.legacy(path))?;
-    if definition.digest != digest || definition.manifest != manifest(root, &release)? {
+    let mut expected = manifest(root, &release)?;
+    // A retained schema-one selection remains owned and can be upgraded. Its
+    // immutable bytes and Clockwork incident state must not be rewritten.
+    expected.schema_version = definition.manifest.schema_version;
+    if definition.digest != digest || definition.manifest != expected {
         return Err(fail(
             "mentor/worker does not match Mentor's supported worker definition",
         ));

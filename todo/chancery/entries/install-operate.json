@@ -1,6 +1,6 @@
 {
   "id": "todo.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -8,7 +8,7 @@
   "summary": "Initialize or migrate Todo's database, or deploy, validate, diagnose, and recover the user-owned macOS installation and daily email service.",
   "use_when": [
     "Todo storage needs initialization or a supported migration with a backup.",
-    "The installed CLI, content-addressed release, configuration, database, or daily email LaunchAgent must be deployed or diagnosed.",
+    "The installed CLI, content-addressed release, configuration, database, or daily Clockwork binding must be deployed or diagnosed.",
     "A deployment must durably hold new admissions, observe actual runtime settlement, check installation readiness, or release only its own hold."
   ],
   "do_not_use_when": [
@@ -20,24 +20,27 @@
   "effects": [
     "Initialization creates a new empty database and refuses to replace an existing path.",
     "Migration creates and retains a complete backup before the version-two transaction. For a current database, migration is a no-op.",
-    "Deployment stages and switches content-addressed releases, may migrate the database, rewrites installed configuration when requested, and installs or updates the daily email LaunchAgent.",
-    "Deployment rollback can restore captured database, release, configuration, plist, and loaded-service state before commit.",
+    "Deployment stages and switches content-addressed releases, may migrate the database, updates requested configuration, and registers the exact native daily runner in Clockwork. Under maintenance it retires only the fully attributed legacy plist and preserves captured enabled intent.",
+    "Deployment rollback can restore captured database, release, configuration, prior Clockwork binding and any verified legacy service state before commit.",
     "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
   ],
   "authority": [
-    "Todo owns its SQLite schema, migration, installation, configuration, and email LaunchAgent.",
-    "Nucleus remains separately authoritative for research execution and authentication; Resend remains authoritative for email submission."
+    "Todo owns SQLite schema, migration, installation, configuration, exact native runner and the schema-two todo/daily-email definition. Clockwork owns binding mechanics, generated LaunchAgent, durable failure halt, incident email and explicit continuation.",
+    "Nucleus remains separately authoritative for research execution and authentication; Resend remains authoritative for email submission.",
+    "Todo continues to send the digest directly through Resend using configured addresses. Clockwork sends operational incident alerts through Email's installed fixed-recipient CLI; the two message and credential authorities remain separate."
   ],
   "success": [
     "The selected database is current and inspectable, and any required pre-migration backup remains at the explicit caller-owned path.",
-    "The installed CLI smoke test, Nucleus readiness, email preview/send validation, and LaunchAgent status are checked as applicable.",
+    "The installed CLI smoke test, Nucleus readiness, email preview validation, and Clockwork binding status are checked as applicable.",
     "A failed pre-commit update restores the exact captured installed state."
   ],
   "failure_and_recovery": [
     "Ordinary commands never migrate implicitly; stop callers and use the supported migrator.",
     "On interrupted deployment, inspect the deployer's rollback result, selected release, database, configuration, plist, and loaded service before retrying.",
     "Do not infer 09:00 delivery while the Mac is off or the user is logged out; a user LaunchAgent cannot guarantee it.",
-    "An incomplete drain, foreign hold, or unavailable runtime never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract."
+    "An incomplete drain, foreign hold, or unavailable runtime never becomes success; retain the named holds and durable job/domain evidence and follow the owning recovery contract.",
+    "The product-owned schema-two todo/daily-email definition declares halt-until-approved. Startup failure, crash, timeout or nonzero scheduled completion retains a Clockwork incident and closes later admission. Clockwork submits one retained incident notification through Email to its fixed personal recipient. Explicit binding resume requires the exact incident ID; it neither sends a digest nor reconciles uncertain acceptance. Definition changes, deployment and maintenance preserve the halt.",
+    "Competing Clockwork and legacy schedules, independently changed definitions, or loaded legacy state that cannot be safely restored are refused. Recovery disables the candidate before restoring the verified prior binding or legacy projection. Never load both schedules; preserve legacy disabled overrides."
   ],
   "privacy": [
     "The Todo database, migration backups, configuration, and logs can expose directions, notes, paths, design state, and email metadata.",
@@ -61,8 +64,8 @@
       "invocation": "/Users/joey/.local/bin/todo email preview"
     },
     {
-      "label": "Inspect LaunchAgent",
-      "invocation": "launchctl print gui/<UID>/org.todo.daily-email"
+      "label": "Inspect Clockwork binding",
+      "invocation": "clockwork binding show todo/daily-email"
     },
     {
       "label": "Hold deployment admission",
@@ -80,6 +83,11 @@
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
     }
@@ -107,7 +115,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment requires an absolute tested Todo binary, healthy compatible Nucleus, explicit installed-state authority, and complete sender and recipient configuration on first install."
+        "statement": "Deployment requires an absolute tested Todo binary, healthy compatible Nucleus, explicit installed-state authority, and complete sender and recipient configuration on first install. Compatible installed Clockwork schedule contract 3 is required for installation and binding inspection."
       }
     ],
     "inputs": [
@@ -127,7 +135,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment returns a validated content-addressed current release, stable command and Todo-owned provider selectors, current database and config, and installed daily email LaunchAgent, with previous release retained when applicable."
+        "statement": "Deployment returns a validated content-addressed current release, stable command and Todo-owned provider selectors, current database and config, and installed daily Clockwork binding, with previous release retained when applicable."
       },
       {
         "status": "declared",
@@ -147,7 +155,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "SQLite schema version, Todo package and provider release, content-addressed release hash, LaunchAgent label org.todo.daily-email, and public Todo IDs are separate identities."
+        "statement": "SQLite schema version, Todo package and provider release, content-addressed release hash, Clockwork key todo/daily-email and generated label org.clockwork.todo.daily-email; retired label org.todo.daily-email, and public Todo IDs are separate identities."
       },
       {
         "status": "declared",
@@ -171,7 +179,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Operations run as the current user and own only Todo's selected database, config, release, command, provider selector, LaunchAgent, and logs."
+        "statement": "Operations run as the current user and own only Todo's selected database, config, release, command, provider selector, legacy schedule handoff, product definition and logs. Clockwork owns its generated schedule and retained incidents."
       },
       {
         "status": "unsupported",
@@ -185,17 +193,21 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment stages content-addressed bytes, quiesces the email service, backs up and migrates, switches and validates selectors, then installs the service; any pre-commit failure restores captured database and installed state."
+        "statement": "Deployment captures the prior binding and supported legacy plist/loaded/disabled state, holds and drains work, disables active scheduling, migrates under backup, registers an inert native schema-two definition and validates publication before selecting it. Updates preserve enabled intent; fresh installs enable only without prior binding, legacy plist or disabled override. Failure restores attributable prior state; uncertain recovery retains maintenance. Clockwork incident state is not cleared."
       },
       {
         "status": "declared",
         "statement": "Deployment maintenance protocol version 1 stores each hold with its run ID. It atomically prevents new admission while admitted work settles. Drain status reports durable Todo work. Release removes only the named owner's hold and preserves independent operator pauses."
+      },
+      {
+        "status": "declared",
+        "statement": "A scheduled email send encountering a deployment hold returns success with data {scheduled:true,skipped:\"deployment_maintenance\"}, sends nothing and does not create an abend. Other admission failures remain errors. Manual mutations remain blocked by maintenance."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Todo owns no daemon; the only service is one user LaunchAgent invoking the synchronous email command, and deployment changes only Todo-owned installation paths."
+        "statement": "Todo has no daemon. Its schema-two Clockwork definition starts one native release-pinned daily runner, with local 09:00, no run-at-load, skipped overlap and a 180-second activation timeout. The default abend policy halts scheduling until explicit approval."
       },
       {
         "status": "unspecified",
@@ -205,7 +217,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 1 supports explicit backup-bearing migration to SQLite schema 2 and content-addressed release rollback with package and provider releases kept equal."
+        "statement": "Capability contract 3 supports a guarded legacy-to-Clockwork schedule handoff, schema-two default halt policy, explicit backup-bearing migration to SQLite schema 2 and compatible content-addressed release rollback."
       },
       {
         "status": "declared",
@@ -232,9 +244,10 @@
       },
       {
         "status": "declared",
-        "statement": "Installation and scheduled daily digest execution rely on per-user launchd supervision, but no dedicated installed Chancery contract describes launchd readiness.",
-        "target": "launchd",
-        "kind": "readiness"
+        "statement": "Clockwork owns the configured scheduled activation, durable halt, incident notification through Email and explicit continuation. Todo owns the exact schema-two definition and domain send interpretation. Machine-local timer delivery retains Clockwork's session and availability limits.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
       }
     ]
   },

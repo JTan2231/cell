@@ -9,6 +9,34 @@ use serde_json::Value;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
+fn scheduled_email_skips_maintenance_without_credentials_or_submission() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let database = directory.path().join("todo.db");
+    assert!(run(&database, &["init"])?.status.success());
+    assert!(
+        run(&database, &["maintenance", "hold", "email-update"])?
+            .status
+            .success()
+    );
+    let skipped = run(&database, &["--json", "email", "send", "--scheduled"])?;
+    assert!(skipped.status.success());
+    assert_eq!(
+        stdout_json(&skipped)?["data"],
+        serde_json::json!({
+            "scheduled": true,
+            "skipped": "deployment_maintenance"
+        })
+    );
+    let manual = run(&database, &["--json", "email", "send"])?;
+    assert!(!manual.status.success());
+    assert_eq!(
+        stderr_json(&manual)?["error"]["code"],
+        "deployment_maintenance"
+    );
+    Ok(())
+}
+
+#[test]
 fn init_and_json_errors_follow_the_cli_contract() -> TestResult {
     let directory = tempfile::tempdir()?;
     let database = directory.path().join("todo.db");

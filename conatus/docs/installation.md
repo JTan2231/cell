@@ -76,3 +76,27 @@ runner.
 An installed release upgrade does not retarget an existing immutable schedule.
 Generate, register, and select a new definition when the scheduled runner should
 use the new release. Preserve the previous selection for explicit recovery.
+
+## Scheduled failure policy
+
+Conatus generates Clockwork definition schema 2 for `conatus/update`, with
+`[failure] on_abend = "halt-until-approved"`. An update stops admitting work on
+its first feed or handoff error. Annals dispatch uses `inbox run
+--stop-on-failure`, so a failed source also stops its batch. The update retains
+completed stage results before returning nonzero. A failed feed no longer starts
+pending handoffs, and a failed handoff no longer starts inbox processing.
+
+Clockwork owns the durable scheduling halt and one retained email notification
+through `HOME/.local/bin/email`. Inspect `clockwork incident list conatus/update`
+and `clockwork incident show INCIDENT_ID`. After explicit approval, use
+`clockwork binding resume conatus/update INCIDENT_ID` to allow future scheduling.
+A new definition, deployment, `conatus resume`, or Annals recovery cannot clear
+that incident. Schema-one bindings acquire this behavior only after an explicit
+schema-two definition switch; definition generation does not activate it.
+
+Conatus' operator pause, Annals' operator pause and bounded retry-event halts,
+source identities, handoff receipts, and explicit domain retry remain with their
+products. Empty work and Annals low-storage dispatch readiness are successful
+outcomes. A failed enqueue, including insufficient copy capacity, is an abend.
+Continuation permits pending handoffs under their existing identity rules; it
+does not give a failed Annals attempt another try.

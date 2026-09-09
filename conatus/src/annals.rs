@@ -116,6 +116,7 @@ impl Annals {
             .client
             .call(&Request::Inbox(InboxCommand::Run(InboxRunArgs {
                 settle_seconds: None,
+                stop_on_failure: true,
             })))? {
             Response::InboxRun(result) => Ok(serde_json::to_value(result)?),
             _ => bail!("Annals did not return an inbox run result"),

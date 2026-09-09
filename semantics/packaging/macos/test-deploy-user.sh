@@ -122,7 +122,7 @@ case "\$command:\${1:-}" in
         definition_home=\$(definition_value HOME)
         stdout=\$(definition_value stdout)
         stderr=\$(definition_value stderr)
-        printf '{"ok":true,"data":{"digest":"%s","key":"semantics/worker","registered_at":1,"manifest":{"schema_version":1,"key":"semantics/worker","release_id":"%s","release_root":"%s","authority":"current-user-background","overlap":"skip","arguments":[],"cwd":"%s","schedule":{"kind":"interval","seconds":60,"run_at_load":false},"launch":{"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":"%s","script":"%s","script_sha256":"%s"},"environment":{"HOME":"%s"},"output":{"stdout":"%s","stderr":"%s"}}}}\n' \
+        printf '{"ok":true,"data":{"digest":"%s","key":"semantics/worker","registered_at":1,"manifest":{"schema_version":2,"key":"semantics/worker","release_id":"%s","release_root":"%s","authority":"current-user-background","overlap":"skip","arguments":[],"cwd":"%s","schedule":{"kind":"interval","seconds":60,"run_at_load":false},"launch":{"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":"%s","script":"%s","script_sha256":"%s"},"environment":{"HOME":"%s"},"output":{"stdout":"%s","stderr":"%s"}}}}\n' \
             "\$digest" "\$release_id" "\$release_root" "\$cwd" \
             "\$interpreter_hash" "\$script" "\$script_hash" "\$definition_home" \
             "\$stdout" "\$stderr"

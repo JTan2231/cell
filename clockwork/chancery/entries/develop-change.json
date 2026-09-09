@@ -21,7 +21,7 @@
     "Release, deployment, validation against a real binding, and Semantics operations remain separate effects."
   ],
   "authority": [
-    "Clockwork owns only definition identity, stable selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, and runtime history.",
+    "Clockwork owns only definition identity, stable selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime history, durable declared-policy failure halts, explicit continuation, and pause notification state.",
     "Products retain release, durable-work, retry, secret, logging, recovery, and domain-success authority; launchd retains trigger-delivery authority.",
     "Until project `clockwork` is explicitly registered and seeded, Cell is the maintained shared-terminology authority; implementation and product contracts remain behavior authority."
   ],
@@ -33,7 +33,7 @@
     "`clockwork/ci.sh` completes green before release or deployment."
   ],
   "failure_and_recovery": [
-    "Do not broaden runtime input into caller-controlled argv, weaken artifact checks, infer domain success, capture product output, or add automatic retry.",
+    "Do not broaden runtime input into caller-controlled argv, weaken artifact checks, infer domain success, capture product output, or add automatic product retry.",
     "Keep binding state, plist bytes, and launchd loaded state coherent through staged transition and compensation; when an incomplete projection remains attributable to Clockwork, durably attempt fail-disabled recovery, and otherwise retain and recovery-gate unattributable state without destructive mutation.",
     "Packaging changes retain exact content identity, version/provider matching, candidate-reader validation of the exact staged provider before selector mutation, foreign-state refusal, stable selectors, and rollback without touching product bindings or runtime state."
   ],

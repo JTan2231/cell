@@ -7,10 +7,11 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Paperboy owns daily and ad hoc briefs, exact agent attempts, immutable summaries, email attempts, admission holds, and its explicit Clockwork binding selection."
+      "Paperboy owns daily and ad hoc briefs, exact agent attempts, immutable summaries, email attempts, admission holds, and its explicit Clockwork binding selection.",
+      "The product owns its schema-two Clockwork schedule definition and declares halt-until-approved. Clockwork owns failure-policy enforcement and retained scheduling incidents; product domain recovery remains separate."
     ],
     "not_authoritative_for": [
-      "Conversations and Codex App Server own source history; Nucleus owns agent execution and authentication; Clockwork owns activation records; Email and Resend own submission; Gmail owns inbox receipt."
+      "Conversations and Codex App Server own source history; Nucleus owns agent execution and authentication; Clockwork owns activation records, scheduling failure halts, explicit continuation and incident email; Email and Resend own submission; Gmail owns inbox receipt."
     ],
     "inventory": {
       "covers": [
@@ -25,10 +26,11 @@
       "Current-user private local state. Agent tools retrieve source text on demand and submit a summary; no shell, web, workspace, or email tools. Installed commands do not call Chancery."
     ],
     "shared_privacy_and_retention": [
-      "Agent tool replies and Nucleus records may retain private conversation text. Sending discloses the frozen report to Resend and the personal recipient provider. Credentials remain with Nucleus and Email. No automatic pruning."
+      "Agent tool replies and Nucleus records may retain private conversation text. Sending discloses the frozen report to Resend and the personal recipient provider. Credentials remain with Nucleus and Email. No automatic pruning.",
+      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
     ],
     "compatibility_and_retirement": [
-      "Independent product release, schema-one records, version-one report toolset and version-one public contracts. Unsupported state and runtime capabilities fail explicitly."
+      "Independent product release, schema-one records, version-one report toolset and version-two public contracts. Unsupported state and runtime capabilities fail explicitly."
     ],
     "operational_limits": [
       "One local runner at a time. Daily local-calendar 09:00 and independent ad hoc occurrences. 24 elapsed hours per report. No guaranteed timer, model, or final-delivery latency; no unbounded idempotency guarantee."

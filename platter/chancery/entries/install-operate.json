@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -64,6 +64,10 @@
     {
       "label": "Validate supported state and take deployment backup",
       "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH"
+    },
+    {
+      "label": "Print the selected release daily failure policy without activation",
+      "invocation": "platter schedule-definition"
     }
   ],
   "effects": [
@@ -85,7 +89,8 @@
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
     "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema two plus originals and cleanup recovery metadata.",
     "Older binaries cannot operate schema two. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
-    "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported."
+    "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
+    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
   "privacy": [
     "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",
@@ -114,8 +119,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -238,7 +243,7 @@
       },
       {
         "status": "declared",
-        "statement": "Separately managed daily-runner activation and binding recovery use Clockwork schedule contract 2. This is an operator action; Platter installation never activates or updates a binding.",
+        "statement": "The product-owned schema-two definition declares halt-until-approved. Clockwork owns activation, durable failure admission, incident email and explicit continuation; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

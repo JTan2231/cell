@@ -19,8 +19,9 @@ EOF
 chmod 0755 "$release/bin/annals-inbox" "$release/libexec/annals"
 ANNALS_TEST_CAPTURE="$capture" "$release/bin/annals-inbox"
 expected="program=$release/bin/../libexec/annals
-argc=3
+argc=4
 arg=--quiet
 arg=inbox
-arg=run"
+arg=run
+arg=--stop-on-failure"
 [ "$(cat "$capture")" = "$expected" ]

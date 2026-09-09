@@ -104,9 +104,42 @@ Each product owns its data and success rules. Nucleus owns execution. A complete
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.
 
-Clockwork owns activation and direct-process history. Products own their work,
-locks, retries, idempotency, logs, and recovery. A process exit does not establish
-product success. Inspect the product record for that result.
+Clockwork owns activation, direct-process history, and the configured response
+to an abend. Products own definition configuration, work, locks, idempotency,
+logs, and domain recovery. A process exit does not establish product success.
+Products report a failed scheduled operation even when its domain result was
+already committed; the commit remains valid.
+
+Schema-two definitions default to `halt-until-approved`. Clockwork durably
+blocks that binding and queues one metadata-only failure alert through Email.
+Products may explicitly configure `continue-next-activation`. Empty queues,
+deployment holds and declared readiness waits are expected product outcomes;
+they do not become failures solely because no work was performed.
+
+Inspect an incident and its product evidence before approving its exact ID with
+`clockwork binding resume KEY INCIDENT_ID`. Approval clears that halt only. It
+does not enable a disabled binding, resend uncertain email, retry a model job,
+or discard retained work. Disable, reinstall, and definition selection preserve
+halts. Product recovery still controls whether a particular attempt is safe.
+
+| Definition | Product-owned rules retained |
+| --- | --- |
+| `annals/inbox`, `annals/decisions-inbox` | Operator pause and readiness waits; archive a failed source once, then stop the scheduled batch. |
+| `conatus/update` | Preserve source/feed identity; stop after the first failed update stage. |
+| `krisis/observer` | Preserve coverage and pending document identity; explicit observation retry. |
+| `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
+| `mentor/worker` | Preserve frozen message/key limits; cleanup-only expiry remains available while scheduling is halted. |
+| `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
+| `platter/daily` | Declared source-readiness deferrals; preserve edition bytes and uncertain-send recovery. |
+| `todo/daily-email` | Preserve digest occurrence keys and credential loading; skip deliberate deployment holds. |
+
+Before migrating Clockwork runtime state, capture and disable existing bindings,
+settle activations, and use its explicit backup-bearing migration. Old schema-one
+definitions retain their historical policy until products generate and select
+schema-two definitions. Preserve each captured enabled state and operator pause
+when rebinding. Todo's installer retires its fully attributed legacy LaunchAgent
+before selecting its Clockwork successor. Follow the Clockwork installation
+contract for compatible binary/state recovery and notification retry limits.
 
 Nucleus owns its private Codex credentials. Requesters do not copy or refresh
 them. Conversations reads normal-user history through App Server; it does not

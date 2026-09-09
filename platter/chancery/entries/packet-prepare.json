@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -69,6 +69,10 @@
     {
       "label": "Export a retained artifact",
       "invocation": "platter export ARTIFACT_ID /absolute/chosen/output.pdf"
+    },
+    {
+      "label": "Print the selected release daily failure policy without activation",
+      "invocation": "platter schedule-definition"
     }
   ],
   "effects": [
@@ -96,7 +100,8 @@
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
     "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
-    "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job."
+    "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
+    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -125,8 +130,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -304,7 +309,7 @@
       },
       {
         "status": "declared",
-        "statement": "A separately authorized Clockwork binding may activate the exact released run-daily program. Clockwork owns the timer and process result; Platter owns date selection, admission, preparation and delivery outcomes. Direct invocation needs no timer.",
+        "statement": "The product-owned schema-two definition declares halt-until-approved. Clockwork owns activation, durable failure admission, incident email and explicit continuation; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

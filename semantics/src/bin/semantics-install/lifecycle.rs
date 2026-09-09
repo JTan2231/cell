@@ -710,7 +710,7 @@ pub(super) fn definition(paths: &Paths, release: &Path) -> Result<Value> {
         let escaped = serde_json::to_string(&value)?;
         rendered = rendered.replace(&format!("__{key}__"), &escaped[1..escaped.len() - 1]);
     }
-    let value: toml::Value = toml::from_str(&rendered)?;
+    let value = clockwork::api::Manifest::from_toml(&rendered)?;
     Ok(serde_json::to_value(value)?)
 }
 

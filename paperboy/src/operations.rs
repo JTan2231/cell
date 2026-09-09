@@ -270,7 +270,7 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
     let home = crate::home()?;
     let codex = crate::agent::source_config()?.codex_path;
     let definition: clockwork::api::Manifest = serde_json::from_value(
-        json!({"schema_version":1,"key":KEY,"release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","arguments":["run","--scheduled"],"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin","CONVERSATIONS_CODEX":codex},"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
+        json!({"schema_version":2,"key":KEY,"release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","failure":{"on_abend":"halt-until-approved"},"arguments":["run","--scheduled"],"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin","CONVERSATIONS_CODEX":codex},"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
     )?;
     let manifest = root.join("daily.toml");
     if manifest.exists() {

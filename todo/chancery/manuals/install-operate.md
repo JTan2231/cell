@@ -1,7 +1,8 @@
 # Operate the Todo installation and database
 
 Todo is a synchronous local CLI with a SQLite database. It has no Todo daemon.
-The user installation additionally owns one daily email LaunchAgent; Nucleus
+Todo declares the `todo/daily-email` Clockwork binding; Clockwork owns its
+generated LaunchAgent, failure admission and incident notification. Nucleus
 is a separate service used only by model-assisted research.
 
 ## Database initialization and migration
@@ -29,8 +30,8 @@ direction in their documented destination records.
 
 ## Deploy or update on macOS
 
-Build and test a candidate, verify Nucleus, and invoke the product deployer
-only with explicit installed-state authority:
+Build and test a candidate, verify compatible Nucleus and Clockwork, and invoke
+the product deployer only with explicit installed-state authority:
 
 ```sh
 cd /Users/joey/rust/cell
@@ -51,24 +52,35 @@ The Rust `todo-install` executable is sealed with the tested Todo binary.
 It uses shared `cell-install-v2` immutable file inventories and selector
 transactions, while Todo owns admission, database migration and schedule
 recovery. The predecessor format-1 release remains verifiable. The installed
-frontend is Rust; the static zsh email runner retains its credential contract.
+frontend is Rust. The pinned native daily runner executes its exact release's
+packaged zsh credential script and `libexec/todo` payload, rather than a mutable
+public selector. The script sources `~/.zshrc`, passes only the Resend key through
+its existing scrubbed environment, and never places it in process arguments.
 
-The deployer stages a content-addressed release, records the email LaunchAgent's
-loaded state and stops it. It creates a private transaction directory, runs
-the candidate's migration with a backup, then switches the release selector.
-It validates the installed CLI before installing the final plist. Updates reload the
-schedule only if it was loaded before the update; unloaded schedules remain
-unloaded, and launchd enable/disable overrides are never changed. A fresh install
-loads its schedule only if no existing plist or disabled override records an
-operator choice. Loaded-and-disabled services are refused before quiescence
-because restoring them would require changing the disabled override. A
-pre-commit failure restores the captured database, release, frontend,
-configuration, plist, and loaded-service state. The previous release remains
-available through the installation selector.
-The coordinated adapter captures loaded/disabled state and checks the owned
-rendered plist against the selected release. An ambiguous service-state change
-keeps the deployment hold during verification or recovery; it is not silently
-reloaded or reported recovered.
+The deployer stages a content-addressed release and captures the exact prior
+Clockwork binding plus any legacy `org.todo.daily-email` plist, loaded state
+and disabled override. It proves ownership against the installed release and
+refuses competing active schedules or a loaded legacy service whose disabled
+override prevents safe restoration.
+
+Under its durable maintenance hold, it drains admissions, disables an enabled
+Clockwork binding and boots out a loaded legacy service. It records private
+recovery evidence and runs the candidate's migration with a backup. After held
+storage readiness, it removes only the verified legacy plist, registers an
+inert schema-two definition, publishes and validates selectors, then selects
+the Clockwork definition. The native runner, config and private log destinations
+remain Todo-owned. Clockwork owns the generated LaunchAgent and runtime state.
+
+Updates preserve enabled or disabled intent. A fresh installation enables only
+when no prior binding, legacy plist or disabled override records an operator
+choice. The installer does not change legacy launchd enable/disable overrides.
+The previous release remains available. Recovery disables the candidate before
+restoring the exact prior binding or legacy projection; it never intentionally
+loads both. Unattributable drift retains the hold and recovery evidence.
+
+The schema-two definition declares `halt-until-approved`. A Clockwork failure
+incident survives binding changes, deployment, rollback and maintenance release.
+Only explicit continuation of that exact incident permits future scheduling.
 
 Standalone installation creates its own durable admission hold; coordinated
 installation uses the captured run's hold. Recovery restores a migration backup
@@ -85,13 +97,24 @@ key remains in the process environment rather than Todo config or plist.
 /Users/joey/.local/bin/nucleus health
 /Users/joey/.local/bin/todo email preview
 /Users/joey/.local/bin/todo email send
-launchctl print "gui/$(id -u)/org.todo.daily-email"
+clockwork binding show todo/daily-email
+clockwork history todo/daily-email --limit 20
+clockwork incident list todo/daily-email
 ```
 
 Email send is externally consequential and requires separate authorization;
-preview can validate content without disclosure. The LaunchAgent runs at local
-09:00 without RunAtLoad and may run after wake. It cannot submit while the Mac
-is off or the user is logged out.
+preview can validate content without disclosure. The definition runs at local
+09:00 without run-at-load, skips overlap and limits activation to 180 seconds.
+It depends on the macOS GUI session and may run after wake; it cannot promise
+submission while the Mac is off or the user is logged out.
+
+Startup failure, crash, timeout or nonzero send completion halts scheduling in
+Clockwork. Inspect `clockwork incident show INCIDENT_ID`. After resolving the
+cause and any uncertain Resend acceptance, use `clockwork binding resume
+todo/daily-email INCIDENT_ID` for explicit continuation. It does not send or
+retry a digest. Clockwork owns the retained incident and sends its notification
+through Email's installed CLI to Email's fixed personal recipient. Todo's digest
+continues to use direct Resend transport and Todo-configured addresses.
 
 Todo database, backups, config, logs, and email content are private. Do not
 delete retained state, overwrite backups, publish a release, or change Resend
@@ -111,7 +134,11 @@ directory contains `deployment-maintenance/`. Databases in that directory share 
 New research and ordinary mutations, including scheduled email send, retain a
 shared admission guard through completion. Holds prevent new admissions
 before input is retained, and do not interrupt already admitted research or
-change an operator configuration. Read-only commands remain available.
+change an operator configuration. A scheduled digest refused only by a hold
+returns success with `data` equal to
+`{"scheduled":true,"skipped":"deployment_maintenance"}`. It sends nothing and
+does not create a failure incident. Other admission errors remain failures.
+Read-only commands remain available.
 
 JSON returns `data.maintenance` with `protocol_version: 1`, `holds`, `drained`,
 and `nonterminal_jobs`. Drain requires both no live admission guard and no

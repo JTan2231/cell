@@ -12,7 +12,8 @@
     ],
     "not_authoritative_for": [
       "Nucleus owns model execution, authentication, job state and raw protocol history. Resend and the recipient provider own external email submission and receipt.",
-      "Source artifacts and independently stewarded systems supply the selected assessment inputs."
+      "Source artifacts and independently stewarded systems supply the selected assessment inputs.",
+      "Clockwork owns scheduled activation, durable failure halts, incident notifications and explicit continuation. Email supplies Clockwork's fixed-recipient alert transport; Todo digest transport and addresses remain Todo-owned direct Resend configuration."
     ],
     "inventory": {
       "covers": [

@@ -14,6 +14,8 @@ pub struct Manifest {
     pub release_root: String,
     pub authority: Authority,
     pub overlap: OverlapPolicy,
+    #[serde(default, skip_serializing_if = "FailurePolicy::is_default")]
+    pub failure: FailurePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<u64>,
     #[serde(default)]
@@ -36,6 +38,48 @@ pub enum Authority {
 #[serde(rename_all = "kebab-case")]
 pub enum OverlapPolicy {
     Skip,
+}
+
+/// Product-owned response to an abend. Schema two defaults to a durable halt.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FailurePolicy {
+    #[serde(default)]
+    pub on_abend: AbendPolicy,
+    /// Installed Email wrapper. Omission selects $HOME/.local/bin/email.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email_cli: Option<String>,
+}
+
+impl FailurePolicy {
+    fn is_default(&self) -> bool {
+        self == &Self::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AbendPolicy {
+    #[default]
+    HaltUntilApproved,
+    ContinueNextActivation,
+}
+
+/// One retained scheduling halt. Notification times describe this incident's email.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct IncidentRecord {
+    pub id: String,
+    pub key: String,
+    pub activation_id: Option<String>,
+    pub definition_digest: Option<String>,
+    pub code: String,
+    pub occurrence: String,
+    pub created_at: i64,
+    pub resumed_at: Option<i64>,
+    pub notification_status: String,
+    pub first_attempt_at: Option<i64>,
+    pub last_attempt_at: Option<i64>,
+    pub notification_attempts: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -107,6 +151,10 @@ pub struct BindingRecord {
     pub key: String,
     pub definition_digest: Option<String>,
     pub enabled: bool,
+    #[serde(default)]
+    pub halted_incident: Option<String>,
+    #[serde(default)]
+    pub failure_policy_active: bool,
     pub updated_at: i64,
 }
 
@@ -256,7 +304,7 @@ impl Manifest {
     /// Returns an error for malformed TOML or an unsupported schema version.
     pub fn from_toml(source: &str) -> Result<Self, Error> {
         let manifest: Self = toml::from_str(source).map_err(|e| Error(e.to_string()))?;
-        if manifest.schema_version != 1 {
+        if !matches!(manifest.schema_version, 1 | 2) {
             return Err(Error(format!(
                 "unsupported Clockwork manifest schema {}",
                 manifest.schema_version
@@ -369,6 +417,47 @@ impl Client {
         }
         self.invoke(&args)
     }
+    /// Import a product's existing failure halt without enabling or selecting work.
+    pub fn halt(&self, key: &str, code: &str, occurrence: &str) -> Result<IncidentRecord, Error> {
+        self.invoke(&[
+            "binding".as_ref(),
+            "halt".as_ref(),
+            key.as_ref(),
+            "--code".as_ref(),
+            code.as_ref(),
+            "--occurrence".as_ref(),
+            occurrence.as_ref(),
+        ])
+    }
+    /// Clear this exact active incident only after explicit user approval.
+    pub fn resume(&self, key: &str, incident_id: &str) -> Result<BindingRecord, Error> {
+        self.invoke(&[
+            "binding".as_ref(),
+            "resume".as_ref(),
+            key.as_ref(),
+            incident_id.as_ref(),
+        ])
+    }
+    pub fn incident(&self, incident_id: &str) -> Result<IncidentRecord, Error> {
+        self.invoke(&["incident".as_ref(), "show".as_ref(), incident_id.as_ref()])
+    }
+    pub fn incidents(
+        &self,
+        key: Option<&str>,
+        limit: usize,
+    ) -> Result<SelectionPage<IncidentRecord>, Error> {
+        let limit = limit.to_string();
+        let mut args = vec![
+            "incident".as_ref(),
+            "list".as_ref(),
+            "--limit".as_ref(),
+            limit.as_ref(),
+        ];
+        if let Some(key) = key {
+            args.push(key.as_ref());
+        }
+        self.invoke(&args)
+    }
     pub fn bindings(&self) -> Result<SelectionPage<BindingRecord>, Error> {
         self.bindings_limit(20)
     }
@@ -454,4 +543,43 @@ impl From<ActivationRecord> for ActivationSummary {
             detail: record.detail,
         }
     }
+}
+
+/// Report a terminal product failure from the currently supervised activation.
+/// The occurrence identifies one immutable product failure, not a polling tick.
+/// Stop successor work after reporting. No context means an ordinary direct invocation.
+///
+/// # Errors
+/// Rejects partial context, invalid metadata, a stale activation, or persistence failure.
+pub fn report_abend(code: &str, occurrence: &str) -> Result<bool, Error> {
+    let names = [
+        "CLOCKWORK_BROKER_PATH",
+        "CLOCKWORK_STATE_ROOT",
+        "CLOCKWORK_ACTIVATION_ID",
+    ];
+    let values = names.map(std::env::var_os);
+    if values
+        .iter()
+        .all(|value| value.as_ref().is_none_or(|value| value.is_empty()))
+    {
+        return Ok(false);
+    }
+    let [Some(executable), Some(state_root), Some(activation)] = values else {
+        return Err(Error("incomplete Clockwork activation context".to_owned()));
+    };
+    if !std::path::Path::new(&executable).is_absolute()
+        || !std::path::Path::new(&state_root).is_absolute()
+    {
+        return Err(Error("invalid Clockwork activation context".to_owned()));
+    }
+    let client = Client::new(executable).with_state_root(state_root);
+    let _: Option<IncidentRecord> = client.invoke(&[
+        "abend".as_ref(),
+        activation.as_os_str(),
+        "--code".as_ref(),
+        code.as_ref(),
+        "--occurrence".as_ref(),
+        occurrence.as_ref(),
+    ])?;
+    Ok(true)
 }

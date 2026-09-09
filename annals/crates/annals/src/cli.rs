@@ -501,6 +501,9 @@ pub struct InboxRunArgs {
     /// Minimum age of an unchanged incoming file.
     #[arg(long, value_name = "SECONDS")]
     pub settle_seconds: Option<u64>,
+    /// Stop this batch after its first failed job; scheduled runners select this.
+    #[arg(long)]
+    pub stop_on_failure: bool,
 }
 
 #[derive(Debug, Clone, Args)]

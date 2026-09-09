@@ -12,8 +12,8 @@ use decisions::document::{Classification, Snapshot, classification_schema};
 use fs2::FileExt as _;
 use nucleus_client::NucleusClient;
 use nucleus_core::{
-    AbsolutePath, AgentInvocationV1, BuiltinToolsV1, JobId, JobRequestV1, LogSchemaV1, ModelId,
-    PROTOCOL_VERSION_V1, ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolCallV1,
+    AbsolutePath, AgentInvocationV1, BuiltinToolsV1, JobId, JobRequestV1, JobState, LogSchemaV1,
+    ModelId, PROTOCOL_VERSION_V1, ReasoningEffort, Requester, SchemaId, TimeoutSeconds, ToolCallV1,
     ToolCallsQueryV1, ToolDefinitionV1, ToolResultV1, ToolsetDefinitionsV1, ToolsetRef,
     ToolsetRegistrationV1, WorkspaceAccess,
 };
@@ -561,9 +561,23 @@ async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> App
                     ),
                 ));
             }
+            if matches!(job.summary.state, JobState::Failed | JobState::Cancelled) {
+                report_runtime_failure(&run.request.id)?;
+            }
             return Ok(());
         }
     }
+}
+
+fn report_runtime_failure(job_id: &JobId) -> AppResult<()> {
+    clockwork::api::report_abend("nucleus_job_terminal_failed", job_id.as_str())
+        .map(|_| ())
+        .map_err(|_| {
+            AppError::new(
+                "scheduling_report_failed",
+                "cannot report runtime failure; the saved classification is preserved",
+            )
+        })
 }
 
 fn atomic_write(directory: &Path, name: &str, bytes: &[u8]) -> AppResult<()> {

@@ -3,11 +3,11 @@
   "provider": {
     "id": "clockwork",
     "name": "Clockwork",
-    "release": "0.4.0"
+    "release": "0.5.0"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, and runtime activation history."
+      "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime activation history, durable failure halts and their email notification state."
     ],
     "not_authoritative_for": [
       "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success. launchd owns timer delivery under the current macOS user session."

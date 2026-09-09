@@ -61,6 +61,7 @@ struct Definition {
     release_root: PathBuf,
     authority: &'static str,
     overlap: &'static str,
+    failure: clockwork::api::FailurePolicy,
     arguments: Vec<String>,
     cwd: PathBuf,
     schedule: Schedule,
@@ -126,12 +127,13 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
         bail!("Conatus logs path must be a regular directory");
     }
     let definition = Definition {
-        schema_version: 1,
+        schema_version: 2,
         key: "conatus/update",
         release_id: release.release_id,
         release_root: release_root.clone(),
         authority: "current-user-background",
         overlap: "skip",
+        failure: clockwork::api::FailurePolicy::default(),
         arguments: vec![
             "--state-dir".to_owned(),
             state_dir

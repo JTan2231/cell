@@ -24,8 +24,10 @@ modify the desktop app's `~/Library/Application Support/Mentor/` directory.
 The installer owns the `~/.local/bin/mentor` and
 `~/.local/bin/mentor-install` command selectors and the installed
 `~/Library/Application Support/Chancery/providers/mentor` provider selector.
-Clockwork owns the `mentor/worker` binding, its activation records, and its
-generated LaunchAgent. Mentor does not write a LaunchAgent itself.
+Clockwork owns the `mentor/worker` binding, activation records, durable failure
+halt, incident notification, and generated LaunchAgent. Mentor owns its
+definition and declares `halt-until-approved`. Mentor does not write a
+LaunchAgent itself.
 
 ## Install program bytes
 
@@ -62,7 +64,8 @@ inspection and publication refuse the change. The coordinator uses Mentor's
 candidate's `migrate --backup ABS`, publishes matched artifacts, and calls
 `doctor` before releasing its exact hold. Maintenance responses use
 `protocol_version: 1`, `holds`, and `drained` in the JSON data envelope.
-Domain pause is independent of deployment holds.
+Domain pause is independent of deployment holds and Clockwork's failure halt.
+Disabling, switching or re-enabling the binding preserves that halt.
 
 Direct `mentor-install recover` is unsupported: selecting older bytes alone
 cannot prove compatibility with current database state. Coordinator recovery
@@ -125,10 +128,19 @@ separate private files. No shell profile is sourced by Mentor's launcher.
 The executable hash comes from the verified selected release.
 
 Daily delivery time, time zone, exercise selection, incoming-message progress,
-and recovery decisions remain Mentor's responsibilities. Clockwork supplies
-periodic activation and does not decide whether a problem is due or an answer
-has been graded. A timeout or missed activation can be followed by a later
-pass over retained work; completion is established by Mentor's records.
+and payload safety remain Mentor's responsibilities. Clockwork owns the
+configured response to an abend. The schema-two definition defaults to halting
+until explicit approval and uses the installed Email wrapper for the incident
+notification. A failure stops the current pass before further work. A timeout
+halts scheduling; a missed activation alone is not a detected abend. Clockwork
+does not decide whether a problem is due or an answer has been graded.
+
+Inspect and continue an exact incident through `clockwork.schedule.operate`.
+Continuation does not reset Mentor's deadlines or replace a model job or frozen
+message. `mentor cleanup` remains available while halted to expire temporary
+content and cancel expired model jobs without admitting practice work. No
+automatic cleanup occurs while the worker is halted; exact wall-clock deletion
+and cancellation deadlines are not guaranteed.
 
 ```sh
 mentor schedule status

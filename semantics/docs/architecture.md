@@ -66,7 +66,7 @@ rollback retain the gate. Existing product log files must likewise
 be current-user-owned regular non-hard-linked files; deployment makes their
 mode `0600` without truncating content before definition registration.
 
-Clockwork records only schedule, definition, binding, and process outcomes. It
+Clockwork records schedule, definition, binding, process, and scheduling-incident outcomes. It
 does not inspect Semantics domain state or ingest product log bodies. A zero
 process exit reports only that the one-shot invocation returned successfully;
 the Semantics database and worker report remain authoritative for intake and
@@ -102,3 +102,30 @@ Upstream adapters use `annals-api` and `krisis_api::lifecycle` clients and
 exported response types, then convert them to Semantics-owned document and
 legacy intake records. Exchange contract 2 supplies the complete text. They do not define upstream wire replicas. Existing
 local source traits retain worker policy and synthetic-test substitution.
+
+## Scheduled failure policy
+
+Semantics configures Clockwork definition schema 2 for `semantics/worker` with
+`[failure] on_abend = "halt-until-approved"`. A worker reports only failures
+encountered by its current invocation. `intake run` prints its report and returns
+nonzero when `error_event_id` is present. Retained failed intake is not rescanned
+as a new incident. Normal mailbox waiting, an overlapping worker, a paused
+project, maintenance, or no eligible intake does not itself constitute an abend.
+A returned dependency or reconciliation error is an abend even when its job
+remains in progress awaiting definitive recovery evidence.
+
+A terminal failed or cancelled Nucleus job after a semantic commit preserves
+that commit and reports its exact job ID to Clockwork. The report contains a
+bounded code and opaque identity, never document text or raw runtime diagnostics.
+The runner forwards Clockwork's correlated activation context through its
+otherwise scrubbed environment. It does not poll historical completed jobs.
+
+Clockwork owns the durable halt, future admission, and one retained notification
+through `HOME/.local/bin/email`. Inspect `clockwork incident list
+semantics/worker` and `clockwork incident show INCIDENT_ID`. Only explicit
+approval followed by `clockwork binding resume semantics/worker INCIDENT_ID`
+releases that halt. Definition switches, deployment, project resume, and intake
+retry preserve it. The last two operations remain Semantics-owned domain controls.
+Scheduling continuation creates no retry and cannot authorize a new request
+while a prior Nucleus job remains uncertain. Schema-one definitions acquire the
+new policy only when a schema-two definition is explicitly selected.

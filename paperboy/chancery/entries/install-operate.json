@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -61,7 +61,8 @@
     "A report is generated when its summary is committed. A send succeeds when provider acceptance is retained. Installation succeeds after exact candidate readiness and release of run-owned holds. Schedule enable succeeds when Clockwork commits its binding."
   ],
   "failure_and_recovery": [
-    "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety."
+    "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
+    "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout closes Clockwork admission and retains one incident notification. Explicit Clockwork continuation permits future scheduling only; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear incidents."
   ],
   "privacy": [
     "Source text can enter private tool replies and Nucleus records; final email text leaves for Resend and the personal inbox provider. Secrets never enter prompts, product records or Clockwork definitions."
@@ -84,8 +85,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -194,7 +195,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork supplies exact release activation, schedule selection and runtime history.",
+        "statement": "Clockwork supplies exact release activation, product-configured halt-until-approved enforcement, retained incident notification, explicit continuation, schedule selection and runtime history.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

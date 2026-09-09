@@ -3,9 +3,10 @@
   "product": "todo",
   "application": "Todo",
   "dependencies": [
-    "nucleus"
+    "nucleus",
+    "clockwork"
   ],
-  "description": "Product-owned Rust installation and database recovery preserving the exact daily-email schedule state.",
+  "description": "Product-owned database and program installation with an attributed Clockwork daily-email handoff that preserves scheduling intent and failure halts.",
   "adapter_binary": "todo-install",
   "maintenance_products": [
     "nucleus"

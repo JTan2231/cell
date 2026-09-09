@@ -136,8 +136,8 @@ A working duration measures lock ownership, not classifier progress.
 Working and idle exit zero; all other states print the report and exit nonzero.
 Use `doctor` to check dependency readiness.
 
-The first processing error marks its observation failed. Recording that outcome
-is a successful worker run. Historical failures do not determine health and need
+The first processing error marks its observation failed and ends the worker
+nonzero. Historical failure counts do not determine health and need
 no repeated alert. `observe status` reports their count for optional later review.
 `observe retry OBSERVATION_ID` is explicit recovery. It preserves prior failures,
 resumes uncertain saved jobs, and releases failed pending deliveries using their
@@ -147,3 +147,26 @@ Schema 5-to-6 adds worker activity and failure history without requeuing work.
 The migration copies currently failed observations into history and cannot
 reconstruct older overwritten errors. Preserve the database and document runs
 in the quiescent backup; restore the compatible database and binary together.
+
+## Scheduled failure policy
+
+Krisis configures Clockwork definition schema 2 for `krisis/observer` with
+`[failure] on_abend = "halt-until-approved"`. A launch, dependency, classification,
+source, or Annals delivery failure halts future activations. Saving the failed
+observation does not make that activation successful. An empty poll or valid
+maintenance gate is a successful no-work result. Krisis owns these outcome
+meanings and its configuration; Clockwork owns the durable scheduling incident,
+admission gate, and one retained email notification through
+`HOME/.local/bin/email`.
+
+Inspect `clockwork incident list krisis/observer` and `clockwork incident show
+INCIDENT_ID`. After explicit approval, use `clockwork binding resume
+krisis/observer INCIDENT_ID`. This allows later scheduling and does not retry a
+failed observation. Use the separate guarded `observe retry OBSERVATION_ID` when
+that recovery is authorized. It retains saved requests, accepted classifications,
+exact documents, target identity, and idempotent Annals acceptance.
+
+Definition switches and deployment preserve the Clockwork incident. Existing
+failed observations remain terminal history; cutover does not re-alert or retry
+them. The retired Decisions schedules remain disabled. Schema-one definitions
+keep their old policy until a schema-two definition is explicitly selected.

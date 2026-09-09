@@ -7,6 +7,7 @@ mod launchd;
 mod lock;
 mod manifest;
 mod model;
+mod notification;
 mod paths;
 mod store;
 
@@ -65,6 +66,29 @@ enum Command {
     },
     /// Check private state and local runtime prerequisites.
     Doctor,
+    /// Explicitly migrate the quiescent schema-one database after retaining a backup.
+    Migrate {
+        #[arg(long)]
+        backup: PathBuf,
+    },
+    /// Inspect retained scheduling failure incidents.
+    Incident {
+        #[command(subcommand)]
+        command: IncidentCommand,
+    },
+    /// Deliver or explicitly recover pause notifications, independently of product admission.
+    Notification {
+        #[command(subcommand)]
+        command: NotificationCommand,
+    },
+    /// Report a terminal product failure for the current activation (normally use `api::report_abend`).
+    Abend {
+        activation_id: String,
+        #[arg(long)]
+        code: String,
+        #[arg(long)]
+        occurrence: String,
+    },
     /// Private launchd admission path. It accepts a stable key only.
     #[command(name = "__launchd", hide = true)]
     Launchd { key: String },
@@ -91,6 +115,26 @@ enum DefinitionCommand {
 }
 
 #[derive(Debug, Subcommand)]
+enum IncidentCommand {
+    List {
+        key: Option<String>,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    Show {
+        id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum NotificationCommand {
+    /// Attempt one due pause email; safe within the retained deduplication window.
+    Send,
+    /// Explicitly approve duplicate risk and retry an uncertain email after provider inspection.
+    Retry { id: String },
+}
+
+#[derive(Debug, Subcommand)]
 enum BindingCommand {
     /// Atomically select a registered definition and load its `LaunchAgent`.
     Switch { key: String, digest: String },
@@ -101,6 +145,16 @@ enum BindingCommand {
         #[arg(long, value_name = "DEFINITION_DIGEST")]
         select: Option<String>,
     },
+    /// Import one pre-existing product failure halt without enabling a schedule.
+    Halt {
+        key: String,
+        #[arg(long)]
+        code: String,
+        #[arg(long)]
+        occurrence: String,
+    },
+    /// Explicitly approve future scheduling for the exact current incident.
+    Resume { key: String, incident_id: String },
     /// List stable bindings.
     List {
         #[arg(long, default_value_t = 20)]
@@ -166,6 +220,13 @@ async fn run(cli: Cli) -> Result<()> {
         return result;
     }
     let layout = Layout::discover(cli.state_root)?;
+    if let Command::Migrate { backup } = &cli.command {
+        store::migrate(&layout, backup)?;
+        return emit(
+            &serde_json::json!({"schema_version": 2, "backup": backup}),
+            cli.json,
+        );
+    }
     let mut store = Store::open(&layout)?;
     match cli.command {
         Command::Definition { command } => match command {
@@ -201,6 +262,29 @@ async fn run(cli: Cli) -> Result<()> {
                     select.as_deref(),
                 )?;
                 emit(&binding, cli.json)
+            }
+            BindingCommand::Halt {
+                key,
+                code,
+                occurrence,
+            } => {
+                manifest::validate_key(&key)?;
+                let _gate = lock::KeyLock::acquire_transition(&layout, &key)?;
+                let incident = store.import_halt(&key, &code, &occurrence)?;
+                emit(&incident, cli.json)
+            }
+            BindingCommand::Resume { key, incident_id } => {
+                manifest::validate_key(&key)?;
+                let _gate =
+                    lock::KeyLock::try_acquire_transition(&layout, &key)?.ok_or_else(|| {
+                        Error::new(
+                            "activation_busy",
+                            "wait for the current activation before approving continuation",
+                        )
+                    })?;
+                launchd::require_no_pending_transition(&layout, &key)?;
+                store.recover_stale(Some(&key))?;
+                emit(&store.resume(&key, &incident_id)?, cli.json)
             }
             BindingCommand::List { limit } => emit_page(store.bindings()?, limit, cli.json),
             BindingCommand::Show { key } => {
@@ -276,8 +360,50 @@ async fn run(cli: Cli) -> Result<()> {
             )
         }
         Command::Launchd { key } => {
-            let activation = executor::run(&mut store, &layout, &key, Trigger::Launchd).await?;
-            emit(&activation, cli.json)
+            match executor::run(&mut store, &layout, &key, Trigger::Launchd).await {
+                Ok(activation) => emit(&activation, cli.json),
+                Err(error) if error.code() == "binding_halted" => {
+                    emit(&store.binding(&key)?, cli.json)
+                }
+                Err(error) => Err(error),
+            }
+        }
+        Command::Incident { command } => match command {
+            IncidentCommand::List { key, limit } => {
+                if limit == 0 || limit == usize::MAX {
+                    return Err(Error::new(
+                        "limit_invalid",
+                        "incident limit must be positive and bounded",
+                    ));
+                }
+                if let Some(key) = &key {
+                    manifest::validate_key(key)?;
+                }
+                emit_page(store.incidents(key.as_deref(), limit + 1)?, limit, cli.json)
+            }
+            IncidentCommand::Show { id } => emit(&store.incident(&id)?, cli.json),
+        },
+        Command::Notification { command } => {
+            let selected = if let NotificationCommand::Retry { id } = command {
+                notification::approve_retry(&mut store, &layout, &id)?;
+                Some(id)
+            } else {
+                None
+            };
+            let attempted =
+                notification::send_selected(&mut store, &layout, selected.as_deref()).await?;
+            emit(&serde_json::json!({"attempted": attempted}), cli.json)
+        }
+        Command::Abend {
+            activation_id,
+            code,
+            occurrence,
+        } => emit(
+            &store.report_abend(&activation_id, &code, &occurrence)?,
+            cli.json,
+        ),
+        Command::Migrate { .. } => {
+            unreachable!("migration is dispatched before opening runtime state")
         }
         Command::Exec { .. } => Err(Error::new(
             "activation_gate_invalid",

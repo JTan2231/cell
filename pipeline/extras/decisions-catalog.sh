@@ -19,6 +19,8 @@ ln -s "$PIPELINE_ROOT/nucleus/chancery" "$registry/nucleus"
 ln -s "$PIPELINE_ROOT/annals/chancery/annals" "$registry/annals"
 ln -s "$PIPELINE_ROOT/clockwork/chancery" "$registry/clockwork"
 ln -s "$PIPELINE_ROOT/semantics/chancery" "$registry/semantics"
+ln -s "$PIPELINE_ROOT/chancery/provider" "$registry/chancery"
+ln -s "$PIPELINE_ROOT/email/chancery" "$registry/email"
 
 catalog=$(cargo run --manifest-path "$workspace_manifest" \
     --package chancery --locked --quiet -- \

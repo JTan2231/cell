@@ -98,6 +98,14 @@ pub(crate) fn run(cli: &Cli, config: &Config, database: &Path) -> AppResult<Comm
         } else {
             gate.enter()
         };
+        if matches!(&admission, Err(cell_maintenance::Error::Held))
+            && matches!(&cli.command, Command::Email(EmailCommand::Send(args)) if args.scheduled)
+        {
+            return Ok(CommandOutput::new(
+                json!({"scheduled": true, "skipped": "deployment_maintenance"}),
+                "Skipped scheduled digest during deployment maintenance",
+            ));
+        }
         Some(
             admission
                 .map_err(|error| AppError::conflict("deployment_maintenance", error.to_string()))?,

@@ -15,6 +15,7 @@ cell-maintenance.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 clap.workspace = true
+clockwork = { path = "../clockwork/crates/clockwork" }
 fs2.workspace = true
 reqwest = { workspace = true, features = ["rustls"] }
 rusqlite.workspace = true

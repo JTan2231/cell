@@ -1,6 +1,6 @@
 {
   "id": "mentor.practice.use",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -35,6 +35,10 @@
     {
       "label": "Resume authorized practice admission",
       "invocation": "mentor resume"
+    },
+    {
+      "label": "Expire content and cancel expired jobs without practice admission",
+      "invocation": "mentor --json cleanup"
     }
   ],
   "effects": [
@@ -51,8 +55,9 @@
   ],
   "failure_and_recovery": [
     "Persist the exact grading request before ambiguous admission and rediscover only the same job. Do not create a replacement job automatically after terminal failure.",
-    "Retry only the frozen email payload/key, with bounded backoff, until the earlier content deadline or 23 hours from first send attempt. Preserve unknown acceptance rather than generate a new payload/key.",
-    "Pause stops new assignments and polling admission; existing work may finish. Expired grading work clears local content and queues cancellation by retained job ID."
+    "Retry only the frozen email payload/key, after explicit scheduling continuation or a manual pass, until the earlier content deadline or 23 hours from first send attempt. Preserve unknown acceptance rather than generate a new payload/key.",
+    "Pause stops new assignments and polling admission; existing work may finish. Expired grading work clears local content and queues cancellation by retained job ID.",
+    "The first failed stage stops the worker. Clockwork blocks future scheduled passes until binding resume names the exact incident. A later pass preserves original content/idempotency deadlines and never creates a replacement model attempt or message identity. Legacy next_attempt backoff timestamps no longer govern admission."
   ],
   "privacy": [
     "Account receiving access can expose unrelated metadata through Email, but Mentor fetches full bodies only for its recognized assignment routes. Do not log content.",
@@ -76,8 +81,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -110,7 +115,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The daily subject is the problem title and body is only the authored problem. Replies contain a requested qualitative critique or bounded processing/failure guidance. --json returns selected status or tick data in its envelope; it exposes no answer or critique bodies. A tick can return ok:true with nonempty data.error_codes; this means the pass completed with unresolved stages, not that every domain operation succeeded."
+        "statement": "The daily subject is the problem title and body is only the authored problem. Replies contain a requested qualitative critique or bounded processing/failure guidance. --json returns selected status or tick data in its envelope; it exposes no answer or critique bodies. A stage failure stops the pass and returns ok:false with a nonzero exit. Pending model work, settling cancellation and empty/not-due selection are expected outcomes."
       }
     ],
     "data_semantics": [
@@ -148,7 +153,7 @@
       },
       {
         "status": "declared",
-        "statement": "Pending incoming-derived content expires 24 hours after provider receipt; problem payloads expire 24 hours after reservation. Cleanup runs on ticks. Eligible terminal metadata expires after 35 days from incoming receipt or outgoing creation, while unresolved cancellation and assignment/corpus records remain."
+        "statement": "Pending incoming-derived content expires 24 hours after provider receipt; problem payloads expire 24 hours after reservation. Cleanup runs on ticks or explicit cleanup-only passes. A halted worker cannot enforce wall-clock content expiry; cleanup can expire content and cancel expired jobs without practice admission. Eligible terminal metadata expires after 35 days from incoming receipt or outgoing creation, while unresolved cancellation and assignment/corpus records remain."
       }
     ],
     "operational_limits": [
@@ -195,7 +200,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns exact registered worker activation and runtime observations, not daily selection or practice completion.",
+        "statement": "Clockwork owns registered worker activation, failure-driven scheduling halts, retained incident notification and explicit continuation. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

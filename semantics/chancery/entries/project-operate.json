@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -35,6 +35,7 @@
     "Each registered root has a unique project identity. New document grounding, when supplied, names the original Annals library/event/document; it is not an intake prerequisite."
   ],
   "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
     "Coordinated inspection stops before effects if the installed public CLI lacks maintenance support; bootstrap a compatible admission release through the existing deployer and quiescence procedure. Adapter recovery stops on a retained product-installer maintenance marker or unfinished transaction and never erases it or another owner's hold to force progress.",
     "Pause the affected project before semantic maintenance; paused state prevents a late Nucleus proposal from committing.",
     "A failed deployment restores prior selectors and the quiescent database plus sidecars. It restores the exact prior non-null Clockwork selection and enabled state, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled-null binding becomes a disabled tombstone that may retain the candidate digest because Clockwork has no clear-selection operation; a previously disabled selected definition is restored without transient activation. Semantics retains exact release bytes for every registered immutable definition. Before releasing the worker flock, an unprovable rollback retains the release-independent maintenance gate, exact private current-release selector, authenticated hold, and recovery backup while attempting both scheduler cleanups and removing public selectors.",
@@ -45,7 +46,7 @@
   "privacy": [
     "Private SQLite can contain complete documents and normalized conversation, retained historical projections and anchors, project path history, and repository meanings. New documents need no resolved cwd.",
     "Each new job receives the complete accepted document and selected repository snapshot. Semantics retains those bytes for replay; routine logs exclude document and project text.",
-    "Clockwork receives executable paths, hashes, schedule, working directory, scrubbed environment, product log paths, and process outcomes only; it does not read or retain Semantics log bodies or semantic content.",
+    "Clockwork receives executable paths, hashes, schedule, working directory, scrubbed environment, product log paths, process outcomes and bounded incident codes and opaque identities; it does not read or retain Semantics log bodies or semantic content.",
     "Nucleus uses workspace none, no shell, no web, and a neutral temporary cwd.",
     "Service logs contain only counters, opaque IDs, and bounded product-owned failures; they must not contain raw dependency diagnostics, decision statements, conversation text, project content, anchors, paths, prompts, credentials, diffs, commands, or tool payloads."
   ],
@@ -62,8 +63,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -201,6 +202,7 @@
       }
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
       {
         "status": "declared",
         "statement": "The durable gate is the private sibling <database>.cell-maintenance. Hold atomically fences every other public CLI command and typed client before SQLite access, including reads and doctor because opening state may migrate it. Existing commands may settle and holds survive process exit. Repeated hold and release are idempotent; release removes only its owner and preserves project pause, activation, and cursor state."
@@ -231,7 +233,7 @@
       },
       {
         "status": "declared",
-        "statement": "Operation contract 6 uses schema 3, Annals exchange 2, Nucleus execution 3, and Clockwork schedule 2. New semantic-document-reconciliation/1 schemas allow empty effects and document grounding. Historical schemas, bytes, correlations, and cursors remain unchanged."
+        "statement": "Operation contract 7 uses schema 3, Annals exchange 2, Nucleus execution 3, and Clockwork schedule 3. New semantic-document-reconciliation/1 schemas allow empty effects and document grounding. Historical schemas, bytes, correlations, and cursors remain unchanged."
       }
     ],
     "reliances": [

@@ -5,4 +5,4 @@ set -eu
 umask 077
 
 runner_dir=${0%/*}
-exec "$runner_dir/../libexec/annals" --quiet inbox run
+exec "$runner_dir/../libexec/annals" --quiet inbox run --stop-on-failure

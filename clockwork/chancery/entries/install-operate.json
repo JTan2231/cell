@@ -20,7 +20,7 @@
   "effects": [
     "Deployment stages immutable binary, Rust installer, cell-install-v2 manifest, and Clockwork-owned Chancery bytes under private application support, invokes an explicitly supplied candidate Chancery reader on the exact staged provider, and atomically switches the current stable release selector only after that validation succeeds.",
     "Deployment may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `~/.local/bin/clockwork-install`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
-    "Doctor initializes only an empty unversioned private schema-one Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
+    "Doctor initializes only an empty unversioned private schema-two Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
     "Uninstall detaches only owned command, installer, provider, current, and previous selectors after refusing remaining Clockwork plists; when needed it may create an empty private Clockwork state root solely to share the deployment lock path, but it creates no runtime database and retains releases, database, runtime locks, logs, history, and product artifacts."
   ],
   "authority": [
@@ -117,7 +117,7 @@
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Identical deployment is idempotent, update retains a validated previous generation, candidate-reader rejection occurs before selector mutation, and later failure before commit restores command and provider selection together or detaches all public selectors if coherent restoration cannot be completed."},
-      {"status": "declared", "statement": "Program deployment and rollback never mutate product definitions or bindings; doctor may initialize only an empty unversioned schema-one store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."}
+      {"status": "declared", "statement": "Program deployment and rollback never mutate product definitions or bindings; doctor may initialize only an empty unversioned schema-two store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private content-addressed program-release tree; it starts no daemon and deploys no product binding."}

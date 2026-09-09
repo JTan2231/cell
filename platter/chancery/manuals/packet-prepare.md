@@ -129,24 +129,38 @@ before any preparation: a frozen edition sends its exact retained bytes, an
 accepted edition returns its recorded result without resending, and an
 uncertain edition fails without retrying or preparing replacement packets.
 No ready packets means no edition or email. A later explicit invocation may
-try an empty day again. Missed dates are not backfilled. Preparation failures
-retain their existing per-job handling; a failed Cast export stops the run.
+try an empty day again. Missed dates are not backfilled. The first preparation
+error stops the run before another candidate or an email starts. Accepted
+artifacts and frozen delivery records remain retained. A declined opportunity
+is an ordinary decision and permits the next candidate. A failed Cast export
+stops the run.
 Output contains the edition date, delivery status and selected packet count,
 or the no-edition result. It does not print the message body or PDF bytes.
 
 An explicit user instruction to enable daily sending supplies standing
 authority for each ordinary daily brief and its resume attachments to Email's
 fixed personal recipient. Without that authority, use preparation or preview
-only. A manually managed Clockwork binding may invoke the exact installed
-`run-daily` binary at 18:00 machine-local time. Binding activation is a separate
+only. A separately managed Clockwork binding may invoke the exact installed
+`run-daily` binary at 18:00 machine-local time. `platter schedule-definition`
+prints the selected release's product-owned schema-two definition with
+`halt-until-approved`; it does not register or enable a binding. Activation is a separate
 authorized operation under `clockwork.schedule.operate`; the installer and
 stored 09:00 fields do not enable it. Platter status and doctor report the
 schedule as external and do not probe the binding. Email's installed wrapper
 loads its existing credential; no credential belongs in a schedule definition.
 Starting at 18:00 makes no promise about completion or inbox arrival time.
 
+The first abend creates a durable Clockwork halt and one incident email. Use
+`clockwork incident list platter/daily` and `clockwork incident show INCIDENT_ID`
+to inspect it. After repair, explicitly approve future scheduling with
+`clockwork binding resume platter/daily INCIDENT_ID`. This does not retry a
+preparation, reconcile uncertainty, or replace an edition or send key. Binding
+changes, deployment and maintenance release preserve the halt.
+
 Normal preview fetches posting text again, defers unavailable sources and marks
-changed packets stale. Existing frozen editions return stored contents without
+changed packets stale. These readiness decisions remain Platter's expected
+outcomes; a declined or stale packet and an empty ready pool are not an abend.
+Existing frozen editions return stored contents without
 another fetch. An edition stores exact subject and body, a stable idempotency
 key, delivery status and receipt. Its ordered attachments reference immutable
 PDF artifacts and their filenames. It does not copy PDFs to a directory.

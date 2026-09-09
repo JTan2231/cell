@@ -350,6 +350,10 @@ pub enum Data {
         changed: bool,
     },
     EmailPreview(EmailPreview),
+    EmailSkipped {
+        scheduled: bool,
+        skipped: String,
+    },
     EmailSent {
         email_id: String,
         idempotency_key: String,

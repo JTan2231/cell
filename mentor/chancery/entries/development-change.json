@@ -1,6 +1,6 @@
 {
   "id": "mentor.development.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -34,7 +34,7 @@
   ],
   "authority": [
     "Mentor owns exact temporary requests, answer eligibility, corpus identity, selection, retention and accepted-submission rules.",
-    "Email owns transport and addresses; Nucleus owns runtime/authentication/retention; Clockwork owns activation. Do not copy provider wire structs or use their private databases."
+    "Email owns transport and addresses; Nucleus owns runtime/authentication/retention; Clockwork owns activation, failure-policy enforcement and incident notifications. Do not copy provider wire structs or use their private databases."
   ],
   "success": [
     "Source, public CLI/types, corpus/state semantics, retention, provider dependencies and manuals describe the same scoped implementation.",
@@ -50,13 +50,13 @@
   "dependencies": [
     {
       "id": "mentor.practice.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "mentor.installation.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "semantics.repository.explore",

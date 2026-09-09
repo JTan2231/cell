@@ -29,8 +29,9 @@ The first observation processing error marks that observation failed and
 retains its error. This includes missing or incomplete sources, classification,
 dependency, target, digest, and receipt errors. A delivery failure keeps exact
 bytes pending and excludes the failed observation from automatic delivery.
-Other work continues. A durably recorded observation failure returns exit zero;
-worker errors that prevent a durable outcome return nonzero.
+A newly recorded observation failure returns nonzero with
+`observation_processing_failed`. The configured Clockwork schedule halts before
+other work starts. Errors that prevent a durable outcome also return nonzero.
 
 Failed observations do not retry automatically. Repeated hooks and reconciliation
 preserve their failed state. Use `krisis observe retry OBSERVATION_ID` after
@@ -67,13 +68,13 @@ dependency. It obeys maintenance admission and can migrate the database.
 
 `working` means the serial processing lock has a live owner. `idle` means the
 worker has finished a run within the selected limit. Empty polls update the last
-finish without resetting continuous idle time. A handled failed observation is
-a normal worker outcome. Retained failures require no recurring alert.
+finish without resetting continuous idle time. A newly failed observation is a
+worker error. Historical failed observations do not create recurring incidents.
 
 The idle limit defaults to 180 seconds for the installed 60-second schedule.
 `stale` means the last finished run is older than that limit. It is a diagnostic
-threshold, not a scheduling guarantee. `error` means the last worker run failed
-to record a normal outcome. `interrupted` means a started run has no finish and
+threshold, not a scheduling guarantee. `error` means the last worker run failed,
+including a newly recorded observation failure. `interrupted` means a started run has no finish and
 no lock owner. `unobserved` means no worker activity has been recorded yet.
 
 JSON reports `ok`, `state`, `checked_at`, `state_since`,
@@ -90,3 +91,28 @@ Schema 5-to-6 migration adds worker activity and failure history, preserving
 existing failures without retrying them. It cannot restore older overwritten
 attempt errors. Back up the database and document runs before a schema upgrade;
 older binaries cannot open schema 6.
+
+## Scheduled failure policy
+
+Krisis configures Clockwork definition schema 2 for `krisis/observer` with
+`[failure] on_abend = "halt-until-approved"`. A launch, dependency, classification,
+source, or Annals delivery failure halts future activations. Saving the failed
+observation does not make that activation successful. A failed or cancelled
+Nucleus job after an accepted classification preserves the classification and
+reports that exact job to Clockwork; it creates no successor attempt. An empty poll or valid
+maintenance gate is a successful no-work result. Krisis owns these outcome
+meanings and its configuration; Clockwork owns the durable scheduling incident,
+admission gate, and one retained email notification through
+`HOME/.local/bin/email`.
+
+Inspect `clockwork incident list krisis/observer` and `clockwork incident show
+INCIDENT_ID`. After explicit approval, use `clockwork binding resume
+krisis/observer INCIDENT_ID`. This allows later scheduling and does not retry a
+failed observation. Use the separate guarded `observe retry OBSERVATION_ID` when
+that recovery is authorized. It retains saved requests, accepted classifications,
+exact documents, target identity, and idempotent Annals acceptance.
+
+Definition switches and deployment preserve the Clockwork incident. Existing
+failed observations remain terminal history; cutover does not re-alert or retry
+them. The retired Decisions schedules remain disabled. Schema-one definitions
+keep their old policy until a schema-two definition is explicitly selected.

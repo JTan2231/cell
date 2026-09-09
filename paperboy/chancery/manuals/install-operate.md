@@ -19,7 +19,7 @@ The shared builder seals production artifacts. The coordinator holds affected
 requester admission, drains existing work, and selects the exact program and
 provider release. Paperboy owns its private database and recovery. Nucleus owns
 execution and credentials; Conversations owns history reads; Email owns submission;
-Clockwork owns activation.
+Clockwork owns activation, durable scheduling halts and incident notification.
 
 Deployment initializes an absent schema-one database or backs up an existing
 supported database before candidate selection. Unsupported versions stop it.
@@ -77,13 +77,15 @@ Enable registers and selects the exact `paperboy/daily` Clockwork definition.
 It succeeds when Clockwork commits that binding. The schedule starts at local
 09:00, has no run-at-load trigger, skips overlap, and limits an activation to
 2,100 seconds. It requires a macOS GUI login session. No start-delay or inbox
-arrival guarantee is provided.
+arrival guarantee is provided. The product-owned schema-two definition declares
+`halt-until-approved` and uses the installed Email wrapper for incident mail.
 
 The runner reports exactly 86,400 seconds ending at the most recent local
 09:00. It does not replay older missed mornings. Local timezone changes affect
 future triggers; daylight-saving changes can produce gaps or overlaps.
 
-Program installation preserves existing selected digests and enabled states.
+Program installation preserves existing selected digests, enabled states and
+Clockwork failure incidents. Enable or disable does not clear an incident.
 After an upgrade, explicitly enable the schedule to select the new release.
 Retain releases pinned by schedules, including disabled selections.
 
@@ -101,6 +103,14 @@ admission reuses the exact retained request.
 For uncertain email, inspect Resend before using `paperboy reconcile` with an
 acceptance receipt or confirmed nonacceptance. Never infer absence from a timeout.
 A retained submission receipt does not establish final inbox delivery.
+
+A startup failure, crash, timeout, or nonzero report completion halts the
+schedule in Clockwork. Inspect `clockwork incident list paperboy/daily` and
+`clockwork incident show INCIDENT_ID`. After repair, explicitly approve future
+scheduling with `clockwork binding resume paperboy/daily INCIDENT_ID`. This
+does not retry a brief, create a new agent attempt, reconcile an uncertain send,
+or reset its message identity. Use the selected Paperboy recovery operation
+separately. Maintenance release and deployment never clear the failure halt.
 
 ## Privacy and operational limits
 

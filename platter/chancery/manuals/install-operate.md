@@ -151,6 +151,23 @@ calendar trigger at 18:00, run-at-load false, and skip-on-overlap. The Platter
 configuration time zone determines the edition date; Clockwork's trigger
 follows the machine zone. Installation does not create or update this binding.
 
+`platter schedule-definition` prints the product-owned schema-two TOML from
+the verified selected executable and configuration. It declares the default
+`halt-until-approved` policy and uses Platter's configured Email wrapper for
+incident notifications. It captures absolute renderer overrides when supplied,
+uses the canonical state root as the working directory, and selects distinct
+`daily.stdout.log` and `daily.stderr.log` files there. It creates no files,
+registers no definition, and changes no binding. To prepare a private manifest:
+
+```sh
+umask 077
+platter schedule-definition > /absolute/private/platter-daily.toml
+```
+
+Review and register that definition through Clockwork, preserving any intended
+existing timer, environment and output-path configuration. Clockwork retains
+the failure halt independently of definition selection and enabled state.
+
 Before replacing a scheduled release, capture its binding digest and enabled
 state, then disable the binding for cutover. Deploy through Cell, verify the
 candidate release, and register a new definition pinned to its exact release
@@ -168,3 +185,7 @@ process outcomes; Platter's retained edition and receipt establish submission
 acceptance. `clockwork binding disable platter/daily` stops future activations
 and retains the definition and history. Uncertain sends stay held under the
 preparation contract; changing a binding does not authorize another send.
+Inspect `clockwork incident list platter/daily` after a failure. Once the cause
+is resolved, `clockwork binding resume platter/daily INCIDENT_ID` explicitly
+permits future scheduling. It creates no preparation attempt and does not
+reconcile an uncertain edition. No deployment step clears this incident.
