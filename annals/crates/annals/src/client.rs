@@ -428,6 +428,7 @@ fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
         Command::DecisionFeed(v) => {
             a.push("decision-feed".into());
             match v {
+                DecisionFeedCommand::Start => a.push("start".into()),
                 DecisionFeedCommand::Watermark => a.push("watermark".into()),
                 DecisionFeedCommand::Page(v) => {
                     a.push("page".into());
@@ -658,7 +659,7 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
         Command::Diff(_) => decode!(Diff),
         Command::Revert(_) => decode!(Reverted),
         Command::DecisionFeed(v) => match v {
-            DecisionFeedCommand::Watermark => decode!(Watermark),
+            DecisionFeedCommand::Start | DecisionFeedCommand::Watermark => decode!(Watermark),
             DecisionFeedCommand::Page(_) => decode!(DecisionPage),
         },
         Command::Inbox(v) => match v {

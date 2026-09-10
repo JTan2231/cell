@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(
     version,
-    about = "Research the preceding 24 hours of conversations and email an ASD-STE100 daily report"
+    about = "Research conversations or accepted decisions and email an ASD-STE100 report"
 )]
 struct Cli {
     #[arg(long, global = true)]
@@ -29,6 +29,14 @@ enum Commands {
         brief: Option<String>,
         #[arg(long, requires = "brief")]
         retry_agent: bool,
+        #[command(flatten)]
+        source: SourceArgs,
+        /// Inclusive period start in RFC3339, for an ad hoc report.
+        #[arg(long, requires_all = ["ad_hoc", "until"], conflicts_with_all = ["scheduled", "brief"])]
+        from: Option<chrono::DateTime<chrono::FixedOffset>>,
+        /// Exclusive period end in RFC3339, for an ad hoc report.
+        #[arg(long, requires_all = ["ad_hoc", "from"], conflicts_with_all = ["scheduled", "brief"])]
+        until: Option<chrono::DateTime<chrono::FixedOffset>>,
     },
     /// List report metadata; the limit applies to briefs.
     List {
@@ -43,6 +51,8 @@ enum Commands {
     Schedule {
         #[arg(value_parser=["enable","disable","status"])]
         operation: String,
+        #[command(flatten)]
+        source: SourceArgs,
     },
     /// Resolve an uncertain submission using separately observed provider evidence.
     Reconcile {
@@ -53,7 +63,10 @@ enum Commands {
         not_accepted: bool,
     },
     /// Inspect deployment readiness without creating a report or model job.
-    Doctor,
+    Doctor {
+        #[command(flatten)]
+        source: SourceArgs,
+    },
     /// Initialize schema one or preserve a complete deployment backup.
     Migrate {
         #[arg(long)]
@@ -65,6 +78,26 @@ enum Commands {
         operation: String,
         owner: Option<String>,
     },
+}
+
+#[derive(clap::Args)]
+struct SourceArgs {
+    /// Report source. Defaults to conversations.
+    #[arg(long, value_enum)]
+    report: Option<paperboy::ReportKind>,
+    /// Explicit identity-bound Annals decisions-library config.
+    #[arg(long)]
+    annals_config: Option<PathBuf>,
+}
+
+impl SourceArgs {
+    fn options(&self, period: Option<(i64, i64)>) -> paperboy::operations::ReportOptions {
+        paperboy::operations::ReportOptions {
+            kind: self.report.unwrap_or_default(),
+            annals_config: self.annals_config.clone(),
+            period,
+        }
+    }
 }
 
 async fn execute(cli: &Cli) -> Result<Value> {
@@ -81,12 +114,29 @@ async fn execute(cli: &Cli) -> Result<Value> {
             scheduled,
             brief,
             retry_agent,
+            source,
+            from,
+            until,
         } => {
             ensure!(
                 *ad_hoc || *scheduled || brief.is_some(),
                 "choose --ad-hoc, --scheduled, or --brief ID"
             );
-            paperboy::operations::run(&root, *ad_hoc, brief.as_deref(), *retry_agent).await
+            ensure!(
+                brief.is_none() || source.report.is_none() && source.annals_config.is_none(),
+                "--brief uses its retained report source"
+            );
+            let period = from
+                .zip(*until)
+                .map(|(from, until)| (from.timestamp(), until.timestamp()));
+            paperboy::operations::run(
+                &root,
+                *ad_hoc,
+                brief.as_deref(),
+                *retry_agent,
+                &source.options(period),
+            )
+            .await
         }
         Commands::List { limit } => paperboy::store::Store::open(&root)?.list(*limit),
         Commands::Show { id } => paperboy::operations::show(&root, id),
@@ -94,13 +144,26 @@ async fn execute(cli: &Cli) -> Result<Value> {
             let brief = paperboy::store::Store::open(&root)?.brief(id)?;
             Ok(json!({"brief_id":brief.id,"subject":brief.subject,"body":brief.body}))
         }
-        Commands::Schedule { operation } => paperboy::operations::schedule(&root, operation),
+        Commands::Schedule { operation, source } => {
+            ensure!(
+                operation == "enable" || source.report.is_none() && source.annals_config.is_none(),
+                "source options apply to schedule enable"
+            );
+            paperboy::operations::schedule(
+                &root,
+                operation,
+                source.report.unwrap_or_default(),
+                source.annals_config.as_deref(),
+            )
+        }
         Commands::Reconcile {
             attempt,
             receipt,
             not_accepted,
         } => paperboy::operations::reconcile(&root, attempt, receipt.as_deref(), *not_accepted),
-        Commands::Doctor => paperboy::operations::doctor(&root).await,
+        Commands::Doctor { source } => {
+            paperboy::operations::doctor(&root, &source.options(None)).await
+        }
         Commands::Migrate { backup } => paperboy::operations::migrate(&root, backup),
         Commands::Maintenance { operation, owner } => {
             paperboy::operations::maintenance(&root, operation, owner.as_deref()).await
@@ -135,5 +198,44 @@ async fn main() -> std::process::ExitCode {
             eprintln!("{}", json!({"ok":false,"error":error.to_string()}));
             std::process::ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_period_requires_both_bounds_and_an_ad_hoc_run() {
+        let args = [
+            "paperboy",
+            "run",
+            "--ad-hoc",
+            "--report",
+            "decisions",
+            "--annals-config",
+            "/private/decisions.toml",
+            "--from",
+            "2026-09-09T09:00:00-05:00",
+            "--until",
+            "2026-09-10T09:00:00-05:00",
+        ];
+        assert!(Cli::try_parse_from(args).is_ok());
+        assert!(Cli::try_parse_from(&args[..9]).is_err());
+        let mut scheduled = args;
+        scheduled[2] = "--scheduled";
+        assert!(Cli::try_parse_from(scheduled).is_err());
+        assert!(
+            Cli::try_parse_from([
+                "paperboy",
+                "schedule",
+                "enable",
+                "--report",
+                "decisions",
+                "--annals-config",
+                "/private/decisions.toml"
+            ])
+            .is_ok()
+        );
     }
 }

@@ -1,9 +1,9 @@
-# Research and email a conversation report
+# Research and email a report
 
-Paperboy researches a selected interval of local Codex conversation history,
-retains a report, and sends it to Email's fixed personal recipient. Use this
-capability for an authorized report. It does not mutate source tasks or send
-to another recipient.
+Paperboy researches local Codex conversations or Krisis decision documents
+accepted into Annals during a selected interval. It retains the report and
+sends it to Email's fixed personal recipient. Use this capability for an
+authorized report. Source reads do not change conversations or Annals documents.
 
 The operation requires supported private state, compatible providers,
 normal-user history access, and authenticated Nucleus. An ad hoc send requires
@@ -14,6 +14,9 @@ explicit authority. A daily run requires standing personal-email authority.
 ```sh
 paperboy run --ad-hoc
 paperboy run --scheduled
+paperboy run --ad-hoc --report decisions --annals-config /absolute/decisions.toml
+paperboy run --ad-hoc --report decisions --annals-config /absolute/decisions.toml \
+  --from 2026-09-09T09:00:00-05:00 --until 2026-09-10T09:00:00-05:00
 paperboy list --limit 20
 paperboy show BRIEF_ID
 paperboy preview BRIEF_ID
@@ -31,6 +34,21 @@ occurrence. A scheduled occurrence ends at the most recent local 09:00. Its
 start is inclusive, its end exclusive, and its length exactly 86,400 seconds.
 A late run keeps that cutoff; older missed mornings are not replayed.
 Daylight-saving changes can produce a one-hour gap or overlap between windows.
+For an ad hoc report, `--from` and `--until` replace the default window. Supply
+both as RFC3339 timestamps with offsets; start is inclusive and end is exclusive.
+
+The default report kind is `conversations`. `--report decisions` requires an
+absolute `--annals-config` for an identity-bound decisions library. Paperboy uses
+the installed `~/.local/bin/annals` command and its typed feed client. This mode
+requires Annals to support `decision-feed start`. It reads accepted documents
+before or after librarian processing. The agent selects the requested period by
+Annals `accepted_at`, not a decision date mentioned in the document. It chooses
+the report's organization, grouping, and context.
+
+`run --brief` uses the retained source and timeframe. It does not accept source
+overrides. Daily occurrence identities distinguish conversation and decision
+reports at the same cutoff. The single daily binding selects one report kind;
+see the installation contract to select it.
 
 ## Records and interpretation
 
@@ -48,11 +66,16 @@ These records have stable UUID identities. The daily identity uses the local
 seconds. Brief bounds describe source time. Summary time records local acceptance.
 Attempt times describe their execution or submission observations.
 
-The agent receives source pointers and the requested interval. It reads history
-on demand through bounded tools. History pagination reports `selected_count`,
+The agent receives source pointers and the requested interval. It reads its
+source on demand through bounded tools. History pagination reports `selected_count`,
 `offset`, `next_offset`, and `has_more` for the filtered metadata or message
 collection. These counts do not measure real-world events or prove complete
-source retention. A provider read failure remains an error.
+source retention. Decision reads return Annals events with complete document
+text, acceptance times, watermark, and cursors. The tool selects documents by
+the brief’s acceptance-time bounds. `has_more` means the unfiltered source page
+was nonempty; continue until it is false even after an empty or short filtered
+page. The agent selects report material from those documents. No persistent feed consumer or report
+snapshot is added. A provider read failure remains an error.
 
 The agent uses `gpt-5.6-sol` with medium reasoning and submits its final text
 through `submit_summary`. Instructions require the ASD-STE100 Issue 9 house
@@ -108,13 +131,15 @@ provide unlimited deduplication. Preserve failed and uncertain records.
 | Clockwork activation | 2,100 seconds |
 | Email invocation observation | 180 seconds |
 | History page | At most 100 records |
+| Decision page | At most 200 events and 4 MiB of document bytes |
 | Final report body | At most 64,000 UTF-8 bytes |
 
 Nucleus permits eight active attempts across all requesters. No maximum source
 age, launch delay, completion time, throughput, or inbox arrival time is promised.
 The daily schedule requires a macOS GUI session and has no run-at-load trigger.
 
-The agent has history-read tools and `submit_summary`. Workspace, local
+The conversation agent has history-read tools. The decision agent has
+`read_decisions`. Both use `submit_summary`. Workspace, local
 execution, web, and email tools are disabled. Retrieved text is evidence and
 cannot change these permissions.
 
@@ -124,6 +149,6 @@ wrapper loads its credential; secrets do not enter Paperboy records, agent
 requests, or Clockwork definitions. Logs contain metadata and bounded diagnostics.
 There is no automatic local pruning. Back up Paperboy and Nucleus separately.
 
-Schema 1 and `paperboy/daily-report/1` preserve retained request meaning. There
+Schema 1, `paperboy/daily-report/1`, and `paperboy/decision-report/1` preserve retained request meaning. There
 is no general future compatibility window, legacy database migration, or direct
 incompatible rollback. Installation and schedule changes are separate operations.

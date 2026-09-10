@@ -4,7 +4,8 @@ Semantics-Project: paperboy
 
 - Query the installed Paperboy semantic repository before analysis or changes.
   It owns terminology and history; code, tests and documentation define behavior.
-- Keep the requester small. Conversations owns history, Nucleus owns agent
+- Keep the requester small. Conversations owns history, Annals owns accepted
+  decision documents, Nucleus owns agent
   execution, Email owns submission, and Clockwork owns scheduled activation.
 - Give the agent source pointers and the requested timeframe. It retrieves
   its own evidence. Require ASD-STE100 Issue 9 and no process commentary.

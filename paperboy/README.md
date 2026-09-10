@@ -1,8 +1,8 @@
 # Paperboy
 
-Paperboy emails a daily report of the preceding 24 hours of local Codex
-conversation activity. A Nucleus agent reads the history through Conversations
-and writes the report. Email submits it to the fixed personal recipient.
+Paperboy emails reports of local Codex conversations or Krisis decisions accepted
+into Annals. A Nucleus agent reads the selected source and writes the report.
+Email submits it to the fixed personal recipient.
 
 ## Example
 

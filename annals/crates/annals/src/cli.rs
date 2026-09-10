@@ -401,6 +401,8 @@ pub enum InboxCommand {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum DecisionFeedCommand {
+    /// Return a cursor before the first accepted document.
+    Start,
     /// Freeze and report the current accepted-account watermark.
     Watermark,
     /// Read one bounded page fixed to a previously returned watermark.

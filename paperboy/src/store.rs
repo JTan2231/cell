@@ -73,6 +73,17 @@ pub struct Brief {
     pub email_key: String,
 }
 
+impl Brief {
+    #[must_use]
+    pub fn report_kind(&self) -> crate::ReportKind {
+        if self.source_pointers["report"] == "decisions" {
+            crate::ReportKind::Decisions
+        } else {
+            crate::ReportKind::Conversations
+        }
+    }
+}
+
 pub struct Store {
     pub connection: Connection,
 }
@@ -202,9 +213,21 @@ impl Store {
     }
 
     pub fn create(&self, occurrence: &str, end: i64, timezone: &str) -> Result<Brief> {
-        let id = uuid::Uuid::now_v7().to_string();
         let pointers = json!({"source":"Conversations: normal-user local Codex history","discover":"list_conversations","read":"read_conversation"});
-        self.connection.execute("INSERT OR IGNORE INTO briefs(id,occurrence,scheduled_for,window_start,window_end,timezone,source_pointers,created_at,email_key) VALUES(?1,?2,?3,?4,?3,?5,?6,?7,?8)",params![id,occurrence,end,end-86400,timezone,pointers.to_string(),crate::now(),format!("paperboy/{id}")])?;
+        self.create_report(occurrence, end - 86400, end, timezone, &pointers)
+    }
+
+    pub fn create_report(
+        &self,
+        occurrence: &str,
+        start: i64,
+        end: i64,
+        timezone: &str,
+        pointers: &Value,
+    ) -> Result<Brief> {
+        ensure!(end > start, "report end must be after its start");
+        let id = uuid::Uuid::now_v7().to_string();
+        self.connection.execute("INSERT OR IGNORE INTO briefs(id,occurrence,scheduled_for,window_start,window_end,timezone,source_pointers,created_at,email_key) VALUES(?1,?2,?3,?4,?3,?5,?6,?7,?8)",params![id,occurrence,end,start,timezone,pointers.to_string(),crate::now(),format!("paperboy/{id}")])?;
         let actual: String = self.connection.query_row(
             "SELECT id FROM briefs WHERE occurrence=?1",
             [occurrence],
@@ -227,7 +250,7 @@ impl Store {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let items = ids.iter().take(limit).map(|id| {
             let brief=self.brief(id)?;
-            Ok(json!({"id":brief.id,"occurrence":brief.occurrence,"window_start":brief.window_start,"window_end":brief.window_end,"summary_recorded_at":brief.summary_recorded_at,"provider_message_id":self.accepted_receipt(id)?}))
+            Ok(json!({"id":brief.id,"report":brief.report_kind().name(),"occurrence":brief.occurrence,"window_start":brief.window_start,"window_end":brief.window_end,"summary_recorded_at":brief.summary_recorded_at,"provider_message_id":self.accepted_receipt(id)?}))
         }).collect::<Result<Vec<Value>>>()?;
         Ok(json!({"items":items,"has_more":ids.len()>limit}))
     }

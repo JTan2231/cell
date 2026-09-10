@@ -15,6 +15,14 @@ before publication or deployment. From the Cell root:
 ./deploy.sh paperboy
 ```
 
+Decision reports require the Annals feed's `start` operation. Deploy the updated
+Annals and Paperboy together when adding this support:
+
+```sh
+./deploy.sh plan annals paperboy
+./deploy.sh annals paperboy
+```
+
 The shared builder seals production artifacts. The coordinator holds affected
 requester admission, drains existing work, and selects the exact program and
 provider release. Paperboy owns its private database and recovery. Nucleus owns
@@ -37,6 +45,7 @@ and email attempts. Records can contain private conversation text.
 ```sh
 paperboy init
 paperboy doctor
+paperboy doctor --report decisions --annals-config /absolute/decisions.toml
 paperboy-install inspect
 ```
 
@@ -72,6 +81,19 @@ paperboy schedule enable
 paperboy schedule status
 paperboy schedule disable
 ```
+
+The single daily binding selects one report kind. To select decision reports:
+
+```sh
+paperboy schedule enable --report decisions --annals-config /absolute/decisions.toml
+```
+
+This replaces the daily conversation selection. Run `schedule enable` without
+source options to select conversations. Ad hoc reports remain independent.
+Decision reports use documents accepted by Annals during the requested interval.
+The absolute config must identify a decisions library and its expected persistent
+ID. Schedule arguments retain this selection across deployment. Doctor with the
+same source options checks the read-only Annals starting-cursor operation.
 
 Enable registers and selects the exact `paperboy/daily` Clockwork definition.
 It succeeds when Clockwork commits that binding. The schedule starts at local
@@ -113,7 +135,8 @@ separately. Maintenance release and deployment never clear the failure halt.
 
 ## Privacy and operational limits
 
-Report runs read normal-user conversation history through Conversations and
+Report runs read normal-user conversation history through Conversations or
+accepted Krisis documents through Annals and
 process it through Nucleus. Final report text leaves for Resend and the personal
 inbox provider. The agent has no workspace, local execution, web, or mail tool.
 Email's installed wrapper loads credentials. Secrets stay out of Paperboy state,

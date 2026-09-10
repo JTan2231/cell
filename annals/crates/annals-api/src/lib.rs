@@ -157,7 +157,19 @@ impl Client {
     /// # Errors
     /// Returns a bounded transport, rejection, or incompatible-response failure.
     pub fn watermark(&self) -> Result<Watermark, Error> {
-        let watermark: Watermark = self.json(&["decision-feed".into(), "watermark".into()])?;
+        self.feed_cursor("watermark")
+    }
+
+    /// Return an opaque cursor before the first accepted document.
+    ///
+    /// # Errors
+    /// Returns a bounded transport, rejection, or incompatible-response failure.
+    pub fn start(&self) -> Result<Watermark, Error> {
+        self.feed_cursor("start")
+    }
+
+    fn feed_cursor(&self, command: &str) -> Result<Watermark, Error> {
+        let watermark: Watermark = self.json(&["decision-feed".into(), command.into()])?;
         require_version(watermark.contract_version)?;
         require_library_id(&watermark.library_id)?;
         require_text(&watermark.watermark, 1_024)?;

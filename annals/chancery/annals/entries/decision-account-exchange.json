@@ -65,6 +65,10 @@
     {
       "label": "Rust document exchange",
       "invocation": "annals_api::Client::{accept,watermark,read_page}"
+    },
+    {
+      "label": "Start reading existing accepted documents",
+      "invocation": "annals --config <DECISIONS_CONFIG> decision-feed start"
     }
   ],
   "dependencies": [],
@@ -98,6 +102,10 @@
       {
         "status": "declared",
         "statement": "A page takes one committed watermark, one earlier watermark or item cursor, and a limit from 1 through 200."
+      },
+      {
+        "status": "declared",
+        "statement": "decision-feed start takes the same explicit library selection and returns a Watermark-shaped opaque cursor before the first acceptance. Use it as page --after to read existing documents without a retained consumer cursor."
       }
     ],
     "outputs": [
@@ -128,6 +136,10 @@
       {
         "status": "declared",
         "statement": "accepted_at describes Annals acceptance, not occurrence of a decision. SHA-256 identifies exact document bytes. File and page content bounds count UTF-8 bytes; the event limit counts records."
+      },
+      {
+        "status": "declared",
+        "statement": "accepted_at is an RFC3339 timestamp of Annals acceptance."
       }
     ],
     "completeness_and_freshness": [

@@ -23,6 +23,30 @@ struct Installation {
 
 type KrisisSuccessEnvelope = annals_api::SuccessEnvelope<annals_api::AcceptanceReceipt>;
 
+#[test]
+fn a_new_reader_can_page_existing_documents_from_the_start() -> TestResult {
+    let installation = Installation::new()?;
+    let document = installation.file(
+        "decision.md",
+        "# Adopt the proposal\n\nSource conversation.",
+    )?;
+    installation.accept("existing-decision", &document)?;
+    let client = annals_api::Client::new(env!("CARGO_BIN_EXE_annals"), &installation.config);
+    let start = client.start()?;
+    let watermark = client.watermark()?;
+    let page = client.read_page(&start.watermark, &watermark.watermark, 1)?;
+    assert_eq!(page.library_id, installation.library_id);
+    assert_eq!(page.events.len(), 1);
+    assert_eq!(page.events[0].document_id, "existing-decision");
+    assert_eq!(page.events[0].document, fs::read_to_string(&document)?);
+    assert!(!page.events[0].accepted_at.is_empty());
+    let end = client.read_page(&page.next_cursor, &watermark.watermark, 1)?;
+    assert!(end.events.is_empty());
+    assert_eq!(end.next_cursor, page.next_cursor);
+    assert_eq!(client.start()?.watermark, start.watermark);
+    Ok(())
+}
+
 impl Installation {
     fn new() -> TestResult<Self> {
         let directory = tempfile::tempdir()?;

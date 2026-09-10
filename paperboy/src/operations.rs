@@ -13,7 +13,15 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 
+use crate::ReportKind;
 use crate::store::{Store, private_directory, runner_lock};
+
+#[derive(Default)]
+pub struct ReportOptions {
+    pub kind: ReportKind,
+    pub annals_config: Option<PathBuf>,
+    pub period: Option<(i64, i64)>,
+}
 
 pub async fn maintenance(root: &Path, operation: &str, owner: Option<&str>) -> Result<Value> {
     let gate = crate::gate(root);
@@ -43,7 +51,7 @@ pub async fn maintenance(root: &Path, operation: &str, owner: Option<&str>) -> R
     )
 }
 
-pub async fn doctor(root: &Path) -> Result<Value> {
+pub async fn doctor(root: &Path, options: &ReportOptions) -> Result<Value> {
     let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
     let gate = crate::gate(root);
     let _guard = if let Some(owner) = &owner {
@@ -70,7 +78,22 @@ pub async fn doctor(root: &Path) -> Result<Value> {
     }
     let client = NucleusClient::for_current_user()?;
     crate::agent::readiness(&client, owner.as_deref()).await?;
-    crate::agent::source_config()?;
+    let pointers = options
+        .kind
+        .source_pointers(options.annals_config.as_deref())?;
+    if options.kind == ReportKind::Decisions {
+        annals_api::Client::new(
+            pointers["annals_binary"]
+                .as_str()
+                .context("Annals binary absent")?,
+            pointers["annals_config"]
+                .as_str()
+                .context("Annals config absent")?,
+        )
+        .start()?;
+    } else {
+        crate::agent::source_config()?;
+    }
     for command in ["email", "clockwork"] {
         let executable = crate::home()?.join(".local/bin").join(command);
         cell_install::command::checked(
@@ -96,7 +119,13 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<Value> {
     Ok(json!({"schema_version":1,"initialized":!existed,"backup_created":existed}))
 }
 
-pub async fn run(root: &Path, ad_hoc: bool, selected: Option<&str>, retry: bool) -> Result<Value> {
+pub async fn run(
+    root: &Path,
+    ad_hoc: bool,
+    selected: Option<&str>,
+    retry: bool,
+    options: &ReportOptions,
+) -> Result<Value> {
     let _admission = if selected.is_some() {
         crate::gate(root).recover()?
     } else {
@@ -108,7 +137,10 @@ pub async fn run(root: &Path, ad_hoc: bool, selected: Option<&str>, retry: bool)
         store.brief(id)?
     } else {
         let now = Local::now();
-        let end = if ad_hoc {
+        let end = if let Some((_, end)) = options.period {
+            ensure!(ad_hoc, "an explicit period requires an ad hoc report");
+            end
+        } else if ad_hoc {
             now.timestamp()
         } else {
             let today = now
@@ -137,11 +169,17 @@ pub async fn run(root: &Path, ad_hoc: bool, selected: Option<&str>, retry: bool)
         };
         let occurrence = if ad_hoc {
             format!("ad-hoc/{}", uuid::Uuid::now_v7())
+        } else if options.kind == ReportKind::Decisions {
+            format!("daily/decisions/{end}")
         } else {
             format!("daily/{end}")
         };
         let timezone = format!("system local time ({})", now.offset());
-        store.create(&occurrence, end, &timezone)?
+        let pointers = options
+            .kind
+            .source_pointers(options.annals_config.as_deref())?;
+        let start = options.period.map_or(end - 86400, |(start, _)| start);
+        store.create_report(&occurrence, start, end, &timezone, &pointers)?
     };
     if let Some(receipt) = store.accepted_receipt(&brief.id)? {
         return Ok(
@@ -239,7 +277,12 @@ pub fn reconcile(
     Ok(json!({"email_attempt_id":attempt,"outcome":if receipt.is_some(){"accepted"}else{"failed"}}))
 }
 
-pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
+pub fn schedule(
+    root: &Path,
+    operation: &str,
+    kind: ReportKind,
+    annals_config: Option<&Path>,
+) -> Result<Value> {
     const KEY: &str = "paperboy/daily";
     let clockwork = clockwork::api::Client::new(crate::home()?.join(".local/bin/clockwork"));
     if operation == "status" {
@@ -251,7 +294,7 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
         return Ok(serde_json::to_value(clockwork.disable(KEY, None)?)?);
     }
     ensure!(operation == "enable", "unsupported schedule operation");
-    let definition = schedule_definition(root)?;
+    let definition = schedule_definition_for(root, kind, annals_config)?;
     let manifest = root.join("daily.toml");
     if manifest.exists() {
         crate::store::regular(&manifest)?;
@@ -272,6 +315,15 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
 
 /// Prepare the exact selected release without changing schedule activation.
 pub fn schedule_definition(root: &Path) -> Result<clockwork::api::Manifest> {
+    schedule_definition_for(root, ReportKind::Conversations, None)
+}
+
+fn schedule_definition_for(
+    root: &Path,
+    kind: ReportKind,
+    annals_config: Option<&Path>,
+) -> Result<clockwork::api::Manifest> {
+    kind.source_pointers(annals_config)?;
     let executable = fs::canonicalize(crate::home()?.join(".local/bin/paperboy"))?;
     let release = executable
         .parent()
@@ -289,9 +341,25 @@ pub fn schedule_definition(root: &Path) -> Result<clockwork::api::Manifest> {
     let logs = root.join("logs");
     private_directory(&logs)?;
     let home = crate::home()?;
-    let codex = crate::agent::source_config()?.codex_path;
+    let mut environment = json!({"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin"});
+    let mut arguments = vec!["run".to_string(), "--scheduled".to_string()];
+    if kind == ReportKind::Decisions {
+        arguments.extend([
+            "--report".into(),
+            "decisions".into(),
+            "--annals-config".into(),
+            annals_config
+                .context("Annals config required")?
+                .to_str()
+                .context("Annals config must be UTF-8")?
+                .into(),
+        ]);
+    } else {
+        environment["CONVERSATIONS_CODEX"] =
+            serde_json::to_value(crate::agent::source_config()?.codex_path)?;
+    }
     let definition: clockwork::api::Manifest = serde_json::from_value(
-        json!({"schema_version":2,"key":"paperboy/daily","release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","failure":{"on_abend":"halt-until-approved"},"arguments":["run","--scheduled"],"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin","CONVERSATIONS_CODEX":codex},"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
+        json!({"schema_version":2,"key":"paperboy/daily","release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","failure":{"on_abend":"halt-until-approved"},"arguments":arguments,"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":environment,"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
     )?;
     Ok(definition)
 }

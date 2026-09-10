@@ -209,7 +209,8 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
             }
         }
         Command::DecisionFeed(command) => match command {
-            DecisionFeedCommand::Watermark => decision_feed::watermark(path, config),
+            DecisionFeedCommand::Start => decision_feed::watermark(path, config, true),
+            DecisionFeedCommand::Watermark => decision_feed::watermark(path, config, false),
             DecisionFeedCommand::Page(args) => decision_feed::page(path, config, args),
         },
         Command::Change(command) => match command {

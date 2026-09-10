@@ -60,10 +60,15 @@ its job failed.
 
 ## Consume a fixed prefix
 
-Capture a watermark, then page strictly after a previously retained watermark
-or item cursor:
+Get a starting cursor with `decision-feed start` when reading existing documents
+for the first time. It returns the same `Watermark` shape with an opaque cursor
+before the first acceptance. It reads the selected library without changing it.
+Capture a current watermark, then page after the starting cursor, a previously
+retained watermark, or an item cursor:
 
 ```sh
+annals --config /absolute/path/to/decisions/config.toml --json \
+  decision-feed start
 annals --config /absolute/path/to/decisions/config.toml --json \
   decision-feed watermark
 annals --config /absolute/path/to/decisions/config.toml --json \
@@ -78,7 +83,7 @@ consumer acknowledgement.
 
 The exchange wire contract is version 2. Each event contains `cursor`,
 `event_id`, `document_id` (the producer key), `source_name`, `source_sha256`,
-`accepted_at`, and `document` (complete unchanged UTF-8 text). These are Annals
+`accepted_at` (RFC3339 acceptance time), and `document` (complete unchanged UTF-8 text). These are Annals
 transport and storage facts, not required fields inside the document. Accepted
 text is available before inbox dispatch and after later success or failure.
 The feed makes no claim about the agent's interpretation or retention outcome.
@@ -103,7 +108,7 @@ also stops acceptance and does not authorize cleanup.
 ## Rust access
 
 Local Rust callers use `annals_api::Client::new(binary, decisions_config)` with
-`accept`, `watermark`, and `read_page`. The client and Annals share the exported
+`accept`, `start`, `watermark`, and `read_page`. The client and Annals share the exported
 receipt, watermark, page, and `AcceptedDocumentEvent` structs. Annals owns
 admission and accepted-content access; no Krisis content codec is involved. The client invokes
 the same CLI with the same effects and does not bypass its identity or storage

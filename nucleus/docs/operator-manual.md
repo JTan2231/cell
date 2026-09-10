@@ -46,7 +46,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/README.md) |
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/README.md) |
 | Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
-| Paperboy | Daily reports from local conversation history | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
+| Paperboy | Reports from conversations or accepted Krisis decisions | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/README.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/decisions/README.md) |
 | Semantics | Registered project terminology and its revision history | [Semantics](/Users/joey/rust/cell/semantics/README.md) |
@@ -66,7 +66,7 @@ requesting products --> Nucleus --> isolated Codex app-server
 
 Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
-Krisis --> dedicated Annals decisions library --> Semantics and Conatus
+Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy
 Cast --> Platter <-- CRM career entries
 Platter, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
@@ -95,7 +95,8 @@ unhealthy. See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/so
 
 Annals exchange contract 2 accepts the handed text without a decision schema
 or source lookup. It owns ordinary storage metadata and returns complete accepted
-documents through its dedicated feed. Conatus forwards those exact bytes to its
+documents through its dedicated feed. Paperboy reads that feed on demand and
+reports documents selected by Annals acceptance time. Conatus forwards those exact bytes to its
 library. Semantics supplies each post-activation document to each participating
 project's reconciliation agent. Its `semantic-document-reconciliation/1` toolset
 allows an empty result without creating a semantic revision. Interpretation and

@@ -115,10 +115,15 @@ pub(crate) fn insert_acceptance(
 pub(crate) fn watermark(
     path: &std::path::Path,
     config: &Config,
+    from_start: bool,
 ) -> Result<CommandOutput, AppError> {
     let connection = db::open_read(path)?;
     let library_id = require_expected_library(&connection, config)?;
-    let sequence = maximum_sequence(&connection)?;
+    let sequence = if from_start {
+        0
+    } else {
+        maximum_sequence(&connection)?
+    };
     let token = encode_cursor(&CursorPayload {
         version: CURSOR_VERSION,
         kind: CursorKind::Watermark,

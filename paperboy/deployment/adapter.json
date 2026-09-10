@@ -6,7 +6,8 @@
     "conversations",
     "email",
     "nucleus",
-    "clockwork"
+    "clockwork",
+    "annals"
   ],
   "maintenance_products": [],
   "description": "Install and initialize Paperboy under maintenance; update its disabled daily definition and restore saved intent.",
@@ -28,6 +29,10 @@
     "clockwork": {
       "minimum": "0.6.0",
       "before": "0.7.0"
+    },
+    "annals": {
+      "minimum": "0.20.1",
+      "before": "0.21.0"
     }
   },
   "activation_bindings": [

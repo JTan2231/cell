@@ -4,15 +4,15 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Research and email the daily conversation report",
-  "summary": "Have an agent retrieve the requested conversation timeframe, retain an ASD-STE100 report without process commentary, and send it to the fixed personal inbox.",
+  "title": "Research and email a conversation or decision report",
+  "summary": "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox.",
   "use_when": [
-    "Have an agent retrieve the requested conversation timeframe, retain an ASD-STE100 report without process commentary, and send it to the fixed personal inbox."
+    "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox."
   ],
   "do_not_use_when": [
     "The request is to mutate source tasks, contact another recipient, certify STE compliance, or infer final inbox delivery."
   ],
-  "outcome": "Have an agent retrieve the requested conversation timeframe, retain an ASD-STE100 report without process commentary, and send it to the fixed personal inbox.",
+  "outcome": "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox.",
   "interfaces": [
     {
       "label": "Send an independent report now",
@@ -49,6 +49,10 @@
     {
       "label": "Reconcile confirmed nonacceptance",
       "invocation": "paperboy reconcile EMAIL_ATTEMPT_ID --not-accepted"
+    },
+    {
+      "label": "Report accepted decisions",
+      "invocation": "paperboy run --ad-hoc --report decisions --annals-config <DECISIONS_CONFIG> [--from <RFC3339> --until <RFC3339>]"
     }
   ],
   "effects": [
@@ -87,6 +91,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -109,6 +118,10 @@
       {
         "status": "declared",
         "statement": "Brief identity or occurrence, absolute requested timeframe, source pointers, and versioned fixed agent instructions. The initial task contains no preloaded conversation content."
+      },
+      {
+        "status": "declared",
+        "statement": "--report decisions selects Annals acceptance-time reporting and requires an absolute --annals-config for an identity-bound decisions library. The default kind is conversations. Ad hoc --from and --until accept an inclusive/exclusive RFC3339 interval."
       }
     ],
     "outputs": [
@@ -121,12 +134,16 @@
       {
         "status": "declared",
         "statement": "A brief owns one requested interval and accepted immutable summary. An agent attempt owns one exact job request and durable tool replies. An email attempt represents one Email invocation. Source retrieval remains agent-directed."
+      },
+      {
+        "status": "declared",
+        "statement": "Decision reports select Annals documents by accepted_at, not original decision occurrence time. The agent chooses organization, grouping and context. Brief source pointers retain the report kind and Annals selection; no separate consumer cursor or report snapshot is maintained."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Brief, agent-attempt and email-attempt IDs are stable UUID identities. Daily occurrence identity is the local 09:00 cutoff instant; ad hoc IDs are independent. All record and tool filter timestamps use Unix seconds. Window start is inclusive, end exclusive; length is 86400 seconds."
+        "statement": "Brief and attempt IDs are stable UUIDs. Daily identities distinguish report kind and local 09:00 cutoff; ad hoc identities are independent. Record and filter times use Unix seconds; Annals accepted_at uses RFC3339. Windows are inclusive/exclusive and default to 86400 seconds; explicit ad hoc bounds replace that duration."
       }
     ],
     "completeness_and_freshness": [
@@ -137,12 +154,16 @@
       {
         "status": "unspecified",
         "statement": "No maximum source age, launch delay, model start/completion time or inbox receipt time is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Decision tools preserve document bytes and feed cursors while filtering events to the brief acceptance-time interval. has_more is true for any nonempty unfiltered source page; continue until false even after an empty filtered page. Page events count accepted documents, not distinct decisions. Feed reads do not depend on later librarian processing."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "The typed Nucleus client and Conversations library perform agent execution and on-demand reads. Clockwork uses its provider-owned typed CLI client. Email uses its installed credential-loading CLI. Agent workspace, local execution and web access are disabled."
+        "statement": "The typed Nucleus client and Conversations library perform agent execution and on-demand reads. Clockwork uses its provider-owned typed CLI client. Email uses its installed credential-loading CLI. Agent workspace, local execution and web access are disabled. The decision tool uses annals_api::Client::{start,watermark,read_page} against the selected config."
       }
     ],
     "lifecycle_and_consistency": [
@@ -154,7 +175,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One active product runner, 1200-second active agent timeout, 1800-second total agent wait, 2100-second Clockwork timeout, and 180-second Email invocation observation. History pages contain up to 100 records; final body is at most 64000 UTF-8 bytes."
+        "statement": "One active product runner, 1200-second active agent timeout, 1800-second total agent wait, 2100-second Clockwork timeout, and 180-second Email invocation observation. History pages contain up to 100 records; final body is at most 64000 UTF-8 bytes. Decision pages have at most 200 events and 4 MiB of document bytes."
       },
       {
         "status": "unspecified",
@@ -164,7 +185,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Private schema 1 and paperboy/daily-report toolset 1. Exact retained requests preserve invocation meaning. No legacy database migration or direct incompatible rollback exists."
+        "statement": "Private schema 1, paperboy/daily-report toolset 1, and paperboy/decision-report toolset 1. Existing conversation requests retain their meaning. No database migration is required for decision source pointers."
       },
       {
         "status": "unspecified",
@@ -199,6 +220,13 @@
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Annals supplies unchanged accepted Krisis documents, acceptance times and feed start/watermark/page reads through its typed CLI client. Decision reports require the start operation.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
       }
     ]
   },
