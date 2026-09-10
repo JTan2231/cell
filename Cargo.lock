@@ -22,7 +22,7 @@ dependencies = [
 
 [[package]]
 name = "annals"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "annals-api",
  "base64",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "annals-api"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "rusqlite",
  "serde",
