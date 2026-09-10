@@ -15,6 +15,23 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[test]
+fn successive_deployments_keep_distinct_repeatable_backups() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path().join("state");
+    let first = temporary.path().join("backups/first.sqlite");
+    let second = temporary.path().join("backups/second.sqlite");
+    platter::migration::migrate(&root, &first)?;
+    let first_bytes = fs::read(&first)?;
+    platter::migration::migrate(&root, &first)?;
+    platter::migration::migrate(&root, &second)?;
+    let second_bytes = fs::read(&second)?;
+    platter::migration::migrate(&root, &second)?;
+    assert_eq!(fs::read(first)?, first_bytes);
+    assert_eq!(fs::read(second)?, second_bytes);
+    Ok(())
+}
+
 fn cli(home: &Path, socket: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_platter"));
     command

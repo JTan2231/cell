@@ -2,8 +2,35 @@
   "schema": 1,
   "product": "paperboy",
   "application": "Paperboy",
-  "dependencies": ["conversations", "email", "nucleus", "clockwork"],
-  "maintenance_products": ["nucleus"],
-  "description": "Install Paperboy under requester maintenance; preserve reports and explicitly managed schedule pins.",
-  "adapter_binary": "paperboy-install"
+  "dependencies": [
+    "conversations",
+    "email",
+    "nucleus",
+    "clockwork"
+  ],
+  "maintenance_products": [],
+  "description": "Install and initialize Paperboy under maintenance; update its disabled daily definition and restore saved intent.",
+  "adapter_binary": "paperboy-install",
+  "requester_service": "nucleus",
+  "runtime_versions": {
+    "conversations": {
+      "minimum": "0.5.1",
+      "before": "0.6.0"
+    },
+    "email": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    },
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "paperboy/daily"
+  ]
 }

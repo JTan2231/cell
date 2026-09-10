@@ -30,8 +30,7 @@ To replace the pinned Annals executable, repeat `init` with the same library,
 decisions config, and Annals state root. Conatus verifies both pinned library
 identities before saving the new executable path. The cursor, records,
 instructions, and pause state remain unchanged. The result reports
-`initialized: false` and whether the executable was `rebound`. Select a new
-Clockwork definition separately when replacing the Conatus release.
+`initialized: false` and whether the executable was `rebound`. Cell deployment updates its selected Clockwork definition during configuration.
 
 An update consumes all new accepted events through its chosen watermark. Each
 event and cursor advancement commit in the same local transaction. The feed
@@ -134,9 +133,8 @@ skip, and writes product output under `STATE/logs/`. It contains no credential.
 Clockwork registration returns the digest; binding selection activates it.
 
 Before switching, establish the product's ready initialized state and retain
-the prior binding/release selection for recovery. An upgrade does not retarget
-an existing immutable definition. Prepare, register, and select another
-definition explicitly. Do not keep old and new inbox schedules active together.
+the prior binding/release selection for recovery. Direct program installation does not retarget an existing immutable definition.
+Cell deployment performs this retargeting during configuration. Do not keep old and new inbox schedules active together.
 
 These operations require available local Annals interfaces; integration also
 requires Annals' configured authenticated Nucleus execution path. Clockwork
@@ -181,3 +179,27 @@ products. Empty work and Annals low-storage dispatch readiness are successful
 outcomes. A failed enqueue, including insufficient copy capacity, is an abend.
 Continuation permits pending handoffs under their existing identity rules; it
 does not give a failed Annals attempt another try.
+
+## Coordinated deployment setup
+
+Cell deployment captures Conatus configuration, product pause and the exact
+`conatus/update` selection. It holds durable admission, temporarily pauses
+updates and disables the selected binding. Drain waits for admitted commands
+and the prior runner lock. Installation selects programs first; configuration
+then initializes absent state or rebinds the final Annals executable through
+`init`. Existing library identities, cursor, records and instructions remain.
+
+Deployment settings accept `state_dir`, `decisions_config`, `annals_state_dir`,
+`library` and `enabled`. Paths must be absolute. Existing library selections
+cannot change during deployment. Fresh defaults use the Conatus state root,
+the installed Annals state root and its `decisions/config.toml`, and library
+`conatus`. Supply other selections explicitly. An absent schedule remains
+absent unless `enabled` is supplied. Existing bindings retain their timer,
+arguments, environment and output paths while selecting the new exact program
+disabled. Activation restores enabled intent and the captured product pause
+only after all holds release. No deployment clears a Clockwork incident.
+
+`conatus --json config` reads only persistent dependency and library selections.
+`conatus maintenance status|drain`, `hold OWNER` and `release OWNER` expose its
+owner-scoped admission gate. Holds survive interruption. Recovery completes
+configuration for a coherent selected release before releasing its own hold.

@@ -3,9 +3,12 @@
 
 use std::collections::BTreeMap;
 use std::ffi::OsString;
+use std::fs;
+use std::io::Write;
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use cell_install::adapter::{Context, Operation, reply};
 use cell_install::legacy::{LegacyProof, LegacyProvider, LegacySpec};
@@ -187,6 +190,24 @@ fn maintenance(home: &Path, owner: &str, operation: &str, named: bool) -> Result
     let mut args = vec!["--compact", "maintenance", operation];
     if named {
         args.push(owner);
+    }
+    if !home.join(".local/bin/nucleus").exists()
+        && !home
+            .join("Library/Application Support/Nucleus/nucleus.db")
+            .exists()
+    {
+        let gate = cell_maintenance::Gate::new(
+            home.join("Library/Application Support/Nucleus/deployment-maintenance"),
+        );
+        let status = match operation {
+            "hold" => gate.hold(owner),
+            "release" => gate.release(owner),
+            _ => gate.status(),
+        }
+        .map_err(|error| Error::new(error.to_string()))?;
+        return Ok(
+            json!({"protocol_version":1,"holds":status.holds,"drained":status.drained,"nonterminal_jobs":0}),
+        );
     }
     let value = json_call(home, Some(owner), &args)?;
     Ok(cell_install::command::maintenance(&value)?.clone())
@@ -391,14 +412,20 @@ fn install(
     }
     if let Some(owner) = owner {
         sole(&maintenance(home, owner, "status", false)?, owner)?;
-        let health = json_call(
-            home,
-            Some(owner),
-            &["--compact", "maintenance", "health", owner],
-        )?;
-        if harness(&health)? != args.codex {
-            return Err(Error::new("configured Nucleus harness changed"));
+        if before.current.is_some() {
+            let health = json_call(
+                home,
+                Some(owner),
+                &["--compact", "maintenance", "health", owner],
+            )?;
+            if harness(&health)? != args.codex {
+                return Err(Error::new("configured Nucleus harness changed"));
+            }
         }
+        write_cutover(
+            home,
+            &json!({"owner":owner,"before":before,"candidate":prepared.info,"codex":args.codex,"codex_home":args.codex_home}),
+        )?;
     }
     let receipt = tx.publish(&prepared, &before, |_| Ok(()))?;
     let mut service_args = strings(&["service", "install", "--daemon"]);
@@ -432,6 +459,9 @@ fn install(
         return Err(error);
     }
     verify_copies(home, &prepared.info)?;
+    if owner.is_some() {
+        fs::remove_file(cutover_path(home))?;
+    }
     Ok(receipt.after)
 }
 
@@ -455,7 +485,18 @@ fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
     if harness(&health)? != Path::new(expected) {
         return Err(Error::new("Nucleus harness changed since inspection"));
     }
-    Ok(json!({"service_ready":true}))
+    let snapshot = inspect(&ctx.home)?;
+    let expected_version = snapshot
+        .current
+        .as_ref()
+        .and_then(|info| info.versions.get("nucleusd"))
+        .ok_or_else(|| Error::new("Nucleus daemon version is absent from selected package"))?;
+    if health["daemonVersion"] != *expected_version {
+        return Err(Error::new(
+            "resident Nucleus daemon version differs from selected package",
+        ));
+    }
+    Ok(json!({"service_ready":true,"daemon_version":expected_version}))
 }
 
 #[allow(
@@ -464,14 +505,23 @@ fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
 )]
 fn adapter(operation: Operation) -> Result<Value> {
     let ctx = Context::read("nucleus", "nucleus", "nucleus-install", VERSION)?;
-    if std::fs::symlink_metadata(
-        ctx.home
-            .join("Library/Application Support/Nucleus/.deploy-lock"),
-    )
-    .is_ok()
+    ctx.validate_settings(&["codex_bin", "codex_home"], &[])?;
+    if !matches!(operation, Operation::Recover)
+        && std::fs::symlink_metadata(
+            ctx.home
+                .join("Library/Application Support/Nucleus/.deploy-lock"),
+        )
+        .is_ok()
     {
         return Err(Error::new(
             "Nucleus installation transaction is active or retained; product recovery is required",
+        ));
+    }
+    if matches!(operation, Operation::Recover) {
+        recover_cutover(&ctx)?;
+    } else if cutover_path(&ctx.home).exists() {
+        return Err(Error::new(
+            "Nucleus has an unfinished service cutover; recover its recorded deployment",
         ));
     }
     let snapshot = inspect(&ctx.home)?;
@@ -487,7 +537,7 @@ fn adapter(operation: Operation) -> Result<Value> {
                 .as_str()
                 .map(PathBuf::from)
                 .ok_or_else(|| Error::new("captured harness missing"))?,
-            codex_home: None,
+            codex_home: ctx.prior()?["codex_home"].as_str().map(PathBuf::from),
             home: HomeArgs {
                 home: Some(ctx.home.clone()),
             },
@@ -510,10 +560,41 @@ fn adapter(operation: Operation) -> Result<Value> {
         }
     };
     match operation {
+        Operation::Configure => Ok(reply(
+            "configured",
+            "Nucleus configured harness, authentication and held service verified",
+            runtime(&ctx, true)?,
+        )),
+        Operation::Activate => Ok(reply(
+            "activated",
+            "product install transaction preserved operational intent",
+            json!({}),
+        )),
         Operation::Inspect => {
             if snapshot.current.is_none() {
-                return Err(Error::new(
-                    "existing configured Nucleus installation required",
+                let (codex, codex_home) = fresh_settings(&ctx)?;
+                let status = maintenance(&ctx.home, &ctx.request.run_id, "status", false)?;
+                if status["holds"] != json!([]) {
+                    return Err(Error::new("another operation holds fresh Nucleus"));
+                }
+                plan(
+                    &InstallArgs {
+                        binary: ctx.binary("nucleus")?,
+                        daemon: ctx.binary("nucleusd")?,
+                        bundle: ctx.request.source_root.join("nucleus/chancery"),
+                        codex: codex.clone(),
+                        codex_home: codex_home.clone(),
+                        home: HomeArgs {
+                            home: Some(ctx.home.clone()),
+                        },
+                        expected_current: Some("absent".into()),
+                    },
+                    &ctx.home,
+                )?;
+                return Ok(reply(
+                    "ready",
+                    "fresh Nucleus configuration and explicit authentication source inspected",
+                    json!({"current":"absent","installed":snapshot,"runtime":status,"harness_executable":codex,"codex_home":codex_home,"maintenance_products":[],"after":[]}),
                 ));
             }
             let status = maintenance(&ctx.home, &ctx.request.run_id, "status", false)?;
@@ -540,7 +621,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Nucleus installation and configured harness inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":harness(&health)?,"maintenance_products":["annals","krisis","semantics","crm","todo","platter","paperboy","mentor"],"after":[]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":harness(&health)?,"maintenance_products":[],"after":[]}),
             ))
         }
         Operation::Hold => {
@@ -554,20 +635,19 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply("held", "new Nucleus admission held", status))
         }
         Operation::Drain => {
-            let deadline = Instant::now() + Duration::from_secs(600);
-            loop {
-                let status = maintenance(&ctx.home, &ctx.request.run_id, "status", false)?;
-                if status["holds"] != json!([ctx.request.run_id]) {
-                    return Err(Error::new("Nucleus drain requires sole owner"));
-                }
-                if status["drained"] == true {
-                    return Ok(reply("drained", "Nucleus jobs and slots settled", status));
-                }
-                if Instant::now() >= deadline {
-                    return Err(Error::new("Nucleus did not drain; hold retained"));
-                }
-                std::thread::sleep(Duration::from_secs(1));
+            let status = maintenance(&ctx.home, &ctx.request.run_id, "status", false)?;
+            if status["holds"] != json!([ctx.request.run_id]) {
+                return Err(Error::new("drain requires the sole deployment owner"));
             }
+            Ok(reply(
+                if status["drained"] == true {
+                    "drained"
+                } else {
+                    "waiting"
+                },
+                "Nucleus jobs and slots",
+                status,
+            ))
         }
         Operation::Apply => {
             if !ctx.selected() {
@@ -609,10 +689,14 @@ fn adapter(operation: Operation) -> Result<Value> {
         }
         Operation::Recover => {
             let recovery = ctx.request.recovery.clone().unwrap_or_default();
-            if recovery["apply_started"] == true && recovery["applied"] != true {
-                return Err(Error { message: "Nucleus service cutover is uncertain; hold retained. Use supported Nucleus service recovery before resolving deployment".into(), disposition: Disposition::Uncertain });
-            }
             let unchanged = snapshot == prior()?;
+            if unchanged && snapshot.current.is_none() {
+                return Ok(reply(
+                    "recovered",
+                    "Nucleus remains absent with no service cutover",
+                    json!({"safe_to_release":true,"installed":"prior"}),
+                ));
+            }
             if !unchanged {
                 prove()?;
             }
@@ -672,4 +756,163 @@ fn run(command: Command) -> Result<Value> {
 
 fn main() -> ExitCode {
     cell_install::adapter::finish(run(Cli::parse().command))
+}
+
+fn cutover_path(home: &Path) -> PathBuf {
+    home.join("Library/Application Support/Nucleus/service-cutover.json")
+}
+
+fn write_cutover(home: &Path, value: &Value) -> Result<()> {
+    let path = cutover_path(home);
+    fs::create_dir_all(
+        path.parent()
+            .ok_or_else(|| Error::new("invalid Nucleus state path"))?,
+    )?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| Error::new(error.to_string()))?
+        .as_nanos();
+    let next = path.with_extension(format!("next-{}-{stamp}", std::process::id()));
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&next)?;
+    file.write_all(&serde_json::to_vec(value)?)?;
+    file.sync_all()?;
+    fs::rename(next, &path)?;
+    fs::File::open(
+        path.parent()
+            .ok_or_else(|| Error::new("invalid Nucleus state path"))?,
+    )?
+    .sync_all()?;
+    Ok(())
+}
+
+fn fresh_settings(ctx: &Context) -> Result<(PathBuf, Option<PathBuf>)> {
+    let settings = ctx.request.settings.as_ref().unwrap_or(&Value::Null);
+    let codex = settings["codex_bin"]
+        .as_str()
+        .map(PathBuf::from)
+        .ok_or_else(|| Error::new("fresh Nucleus requires settings.nucleus.codex_bin"))?;
+    if !codex.is_absolute() {
+        return Err(Error::new("Nucleus codex_bin must be absolute"));
+    }
+    cell_install::file_digest(&codex)?;
+    let version = call(&codex, &strings(&["--version"]), &ctx.home, None, 30)?;
+    if String::from_utf8_lossy(&version.stdout).trim()
+        != format!("codex-cli {}", nucleus_codex::SUPPORTED_CODEX_VERSION)
+    {
+        return Err(Error::new(
+            "fresh Nucleus requires its exactly supported Codex version",
+        ));
+    }
+    let owned = ctx
+        .home
+        .join("Library/Application Support/Nucleus/codex-home");
+    let source = if owned.join("auth.json").exists() {
+        owned
+    } else {
+        settings["codex_home"].as_str().map(PathBuf::from).ok_or_else(|| Error::new("fresh Nucleus requires settings.nucleus.codex_home pointing to an authenticated Codex home"))?
+    };
+    if !source.is_absolute() {
+        return Err(Error::new("Nucleus codex_home must be absolute"));
+    }
+    let auth = source.join("auth.json");
+    let meta = fs::symlink_metadata(&auth)?;
+    if !meta.is_file()
+        || meta.uid() != fs::metadata(&ctx.home)?.uid()
+        || meta.permissions().mode() & 0o777 != 0o600
+        || meta.nlink() != 1
+        || meta.len() > 4 * 1024 * 1024
+    {
+        return Err(Error::new(
+            "Nucleus authentication source must be a private owned regular file",
+        ));
+    }
+    nucleus_codex::validate_auth_document(&fs::read(auth)?)
+        .map_err(|error| Error::new(error.to_string()))?;
+    Ok((fs::canonicalize(codex)?, Some(fs::canonicalize(source)?)))
+}
+
+fn recover_cutover(ctx: &Context) -> Result<()> {
+    {
+        let layout = layout();
+        let _lock = cell_install::transaction::lock_installation(&layout, &ctx.home, &legacy)?;
+    }
+    let path = cutover_path(&ctx.home);
+    if !path.exists() {
+        return Ok(());
+    }
+    let meta = fs::symlink_metadata(&path)?;
+    if !meta.is_file()
+        || meta.nlink() != 1
+        || meta.uid() != fs::metadata(&ctx.home)?.uid()
+        || meta.mode() & 0o777 != 0o600
+    {
+        return Err(Error::new(
+            "Nucleus recovery evidence is not private owned state",
+        ));
+    }
+    let saved: Value = serde_json::from_slice(&fs::read(&path)?)?;
+    if saved["owner"] != ctx.request.run_id {
+        return Err(Error::new(
+            "Nucleus service cutover belongs to another owner",
+        ));
+    }
+    let before: InstallSnapshot = serde_json::from_value(saved["before"].clone())?;
+    if json!(before) != ctx.prior()?["installed"] {
+        return Err(Error::new(
+            "Nucleus cutover baseline differs from deployment",
+        ));
+    }
+    let info: ReleaseInfo = serde_json::from_value(saved["candidate"].clone())?;
+    let root = release_root(&ctx.home, &info);
+    let codex = saved["codex"]
+        .as_str()
+        .ok_or_else(|| Error::new("missing Nucleus recovery harness"))?;
+    if saved["codex"] != ctx.prior()?["harness_executable"] {
+        return Err(Error::new("Nucleus recovery harness differs"));
+    }
+    let args = InstallArgs {
+        binary: ctx.binary("nucleus")?,
+        daemon: ctx.binary("nucleusd")?,
+        bundle: ctx.request.source_root.join("nucleus/chancery"),
+        codex: codex.into(),
+        codex_home: None,
+        home: HomeArgs {
+            home: Some(ctx.home.clone()),
+        },
+        expected_current: None,
+    };
+    verify_plan(&info, &plan(&args, &ctx.home)?)?;
+    let layout = layout();
+    let mut tx = cell_install::transaction::lock_installation(&layout, &ctx.home, &legacy)?;
+    let prepared = cell_install::transaction::PreparedRelease {
+        root: root.clone(),
+        info: info.clone(),
+    };
+    tx.recover(&before, &prepared, true, |_| Ok(()))?;
+    let mut arguments = strings(&["service", "recover", "--daemon"]);
+    arguments.push(root.join("libexec/nucleusd").into_os_string());
+    arguments.extend(strings(&["--codex", codex]));
+    if !ctx
+        .home
+        .join("Library/Application Support/Nucleus/codex-home/auth.json")
+        .exists()
+        && let Some(source) = saved["codex_home"].as_str()
+    {
+        arguments.extend(strings(&["--codex-home", source]));
+    }
+    call(
+        &root.join("bin/nucleus"),
+        &arguments,
+        &ctx.home,
+        Some(&ctx.request.run_id),
+        180,
+    )?;
+    verify_copies(&ctx.home, &info)?;
+    runtime(ctx, true)?;
+    fs::remove_file(path)?;
+    Ok(())
 }

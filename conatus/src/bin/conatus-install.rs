@@ -31,5 +31,9 @@ fn main() -> ExitCode {
         );
         return ExitCode::SUCCESS;
     }
-    cell_install::simple::main(&specification(), env!("CARGO_PKG_VERSION"))
+    cell_install::simple::main_with_lifecycle(
+        &specification(),
+        env!("CARGO_PKG_VERSION"),
+        conatus::installation::lifecycle,
+    )
 }

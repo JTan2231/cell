@@ -163,6 +163,19 @@ maintenance gate remains engaged.
 
 ## Run-owned deployment admission
 
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
 ```text
 annals --library DATABASE --json maintenance status
 annals --library DATABASE --json maintenance hold RUN_ID
@@ -195,9 +208,9 @@ enabled booleans, and does not choose a legacy activation watermark. It first
 requires maintenance support from the installed CLI. Unsupported old binaries
 stop coordinated inspection before effects and need one compatibility update
 through the existing deployers and quiescence procedure; the new candidate
-cannot fence an old binary. Recovery stops on retained product-installer
-maintenance or an unfinished transaction and retains the outer run hold for
-the documented product recovery procedure.
+cannot fence an old binary. Recovery invokes each retained product transaction with the matching outer
+run owner before it verifies the recovered installation. Unknown ownership,
+changed evidence, or incomplete recovery retains the outer hold.
 
 ## Fresh-state cutover
 
@@ -278,3 +291,10 @@ not an abend. A storage-probe or authentication error is an abend. Annals retain
 operator pauses, bounded retry-event halts, exact attempts, and domain recovery.
 Scheduling continuation neither retries a failed delivery nor clears these
 product controls. Existing failed archives are history, not new incidents.
+
+Deployment settings accept only `enabled`. `enabled` must be a boolean.
+For example, `{"annals":{"enabled":false}}` keeps the candidate schedule
+disabled after group activation. This setting applies to both installer-owned inbox bindings. An omitted value preserves
+captured intent; a new schedule defaults to enabled. Recovery to the prior
+configuration preserves captured intent and ignores this override. Incident
+halts and operator pauses remain in force.

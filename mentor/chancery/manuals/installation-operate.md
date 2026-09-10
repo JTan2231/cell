@@ -56,14 +56,17 @@ before the Mentor database exists. `--home ABS` and
 
 Initialized installations use the Cell maintained deployment coordinator.
 Mentor orders selected Email, Nucleus, and Clockwork releases before itself.
-Its maintenance closure includes Nucleus, which also holds Mentor during shared
-updates. Deployment cleanup uses the `MentorMail` installation root.
-Disable `mentor/worker` before deployment; an enabled binding makes installer
-inspection and publication refuse the change. The coordinator uses Mentor's
-`maintenance hold`, `status`, `drain`, and `release` interface, runs the
-candidate's `migrate --backup ABS`, publishes matched artifacts, and calls
-`doctor` before releasing its exact hold. Maintenance responses use
-`protocol_version: 1`, `holds`, and `drained` in the JSON data envelope.
+Nucleus replacement holds installed Mentor admission. A Mentor-only deployment
+leaves Nucleus admission open. Cleanup uses the `MentorMail` installation root.
+The coordinator captures worker and configuration state, disables the worker,
+holds and drains admission, runs the candidate's `migrate --backup ABS`, and
+publishes matched artifacts. Configuration selects a disabled exact worker
+definition. After doctor and hold release, activation restores captured enabled
+state. Existing operator pauses and failure halts remain. Fresh state uses
+Mentor's default daily time and enables its worker after verification unless setup
+requests otherwise. The receiving domain comes from supplied settings or Email's
+sole configured receiving domain.
+Maintenance responses use `protocol_version: 1`, `holds`, and `drained`.
 Domain pause is independent of deployment holds and Clockwork's failure halt.
 Disabling, switching or re-enabling the binding preserves that halt.
 
@@ -156,16 +159,12 @@ lock with active work. Enable must respect every hold.
 
 ## Updating an existing installation
 
-1. Explicitly disable `mentor/worker` and allow admitted work to drain through
-   the maintained deployment procedure.
-2. Use the Cell coordinator to install the candidate and matching provider
-   with a run-owned hold and schema-one migration backup.
-3. Resolve any deployment failure before releasing the hold.
-4. Explicitly run `mentor schedule enable` after the deployment completes.
+Run `./deploy.sh mentor` from the Cell checkout. The coordinator owns suspension,
+backup, installation, worker pin selection, verification and activation. No
+separate schedule command is required for an ordinary update. A stopped run
+retains unresolved recovery evidence for the next deployment command.
 
-Re-enabling constructs a definition for the newly selected immutable release.
-The installer never silently starts a schedule or redirects an old pinned
-definition to different executable bytes. Prior release bytes, definitions,
+Prior release bytes, definitions,
 and activation history remain retained. Schedule enable can reuse an already
 registered identical definition after an interrupted attempt. A mismatched
 existing definition, unsafe manifest, or unavailable provider is reported as
@@ -200,3 +199,28 @@ the drained database exactly and is never overwritten. With no database yet,
 migration initializes paused schema-one state and reports `backup:null`. The
 backup and Mentor content cleanup do not remove Nucleus or mail-provider
 records.
+
+## Deployment setup and recovery
+
+Product setup accepts the existing configuration fields and an `enabled` boolean.
+It does not accept incoming-mail progress changes. Omitted settings preserve the
+saved values. A fresh deployment uses the default daily/worker schedule, with
+activation enabled and domain pause removed after verification. An explicit
+`paused` or `enabled` value overrides that default.
+
+Before maintenance, resolve a missing receiving domain through Email's
+`receive settings` interface. A domain supplied with this product or the selected
+Email setup takes precedence. An empty or ambiguous result requires a supplied
+domain; deployment does not inspect received mail to infer account settings.
+An initialized product's absent binding remains absent unless activation is
+explicitly requested.
+
+Recovery uses the original captured configuration and worker intent. It restores
+a disabled exact definition before release and then applies the captured pause
+and enabled settings. Fresh initialization's temporary pause is not operator
+intent. Existing pause and failure halt evidence survives every phase.
+
+The retained coordinator directory holds this product's migration receipt. It
+records the completed schema and original backup digests before configuration
+changes. Recovery checks that evidence and reuses the backup; it does not
+replace the original backup with already configured state.

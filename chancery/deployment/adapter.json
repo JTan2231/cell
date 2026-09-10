@@ -4,5 +4,8 @@
   "application": "Chancery",
   "dependencies": [],
   "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "chancery-install"
+  "adapter_binary": "chancery-install",
+  "companions": [
+    "usher"
+  ]
 }

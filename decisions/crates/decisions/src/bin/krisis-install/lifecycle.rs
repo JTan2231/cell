@@ -637,7 +637,7 @@ fn cutover(
     atomic_write(
         &evidence.join("prior.json"),
         &serde_json::to_vec(
-            &json!({"selection":prior,"controls":controls,"services":services,"hook":hook,"binding_receipt":receipt}),
+            &json!({"owner":paths.deployment_run_id.as_deref().and_then(|owner| owner.to_str()),"home":paths.home,"candidate":prepared.info,"selection":prior,"controls":controls,"services":services,"hook":hook,"binding_receipt":receipt}),
         )?,
         0o600,
     )?;
@@ -734,7 +734,13 @@ fn cutover(
         if !touched.contains(&ACTIVE) {
             touched.push(ACTIVE);
         }
-        switch(paths, &options.clockwork, ACTIVE, digest, true)?;
+        switch(
+            paths,
+            &options.clockwork,
+            ACTIVE,
+            digest,
+            paths.deployment_run_id.is_none(),
+        )?;
         for key in [LEGACY_OBSERVER, LEGACY_DAILY] {
             let mut expected = controls[key].clone();
             expected.enabled = false;
@@ -750,6 +756,18 @@ fn cutover(
         Ok(())
     })();
     if let Err(error) = result {
+        if paths.deployment_run_id.is_some()
+            && prior.current.is_none()
+            && binding(paths, &options.clockwork, ACTIVE)?
+                .definition_digest
+                .as_deref()
+                == Some(digest)
+        {
+            return Err(Error::new(format!(
+                "{error}; fresh Krisis candidate retained for owned forward recovery at {}",
+                evidence.display()
+            )));
+        }
         let rollback: Result<()> = (|| {
             // Public candidate access must be removed before restoring database bytes.
             if let Some(selection) = &suspended {
@@ -806,6 +824,158 @@ fn cutover(
     }
     fs::remove_dir_all(evidence)?;
     Ok(())
+}
+
+/// Restore an interrupted coordinated cutover from its exact private evidence.
+/// This never starts observation, repeats classification, or clears an incident.
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the ordered recovery proof and rollback steps together"
+)]
+pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
+    let mut paths = Paths::new(home(options.home.clone())?)?;
+    paths.deployment_run_id = Some(owner.into());
+    if !exists(&paths.install)? {
+        return Ok(None);
+    }
+    let mut candidate = None;
+    let entries = fs::read_dir(&paths.install)?.collect::<std::io::Result<Vec<_>>>()?;
+    for entry in entries {
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".transaction-")
+        {
+            continue;
+        }
+        let evidence = entry.path();
+        directory(&evidence, paths.uid, 0o700)?;
+        let journal = evidence.join("prior.json");
+        owned_file(&journal, paths.uid, Some(0o600))?;
+        let saved: Value = serde_json::from_slice(&fs::read(journal)?)?;
+        require(
+            saved["owner"] == owner && saved["home"] == json!(paths.home),
+            "Krisis recovery belongs to another deployment",
+        )?;
+        let prior: InstallSnapshot = serde_json::from_value(saved["selection"].clone())?;
+        let candidate_info: transaction::ReleaseInfo =
+            serde_json::from_value(saved["candidate"].clone())?;
+        let prepared = transaction::PreparedRelease {
+            root: package::root(&paths, &candidate_info),
+            info: candidate_info,
+        };
+        package::matches_candidate(&paths, &prepared.info, options)?;
+        let controls: BTreeMap<String, Binding> =
+            serde_json::from_value(saved["controls"].clone())?;
+        let hook: SavedFile = serde_json::from_value(saved["hook"].clone())?;
+        let receipt: SavedFile = serde_json::from_value(saved["binding_receipt"].clone())?;
+        require(
+            hook.path == paths.hooks
+                && receipt.path == paths.binding
+                && hook.uid == paths.uid
+                && receipt.uid == paths.uid,
+            "Krisis recovery has foreign paths",
+        )?;
+        let pins = Pins {
+            annals_binary: options.annals.clone(),
+            annals_config: options.annals_config.clone(),
+            annals_library_id: options.annals_library_id.clone(),
+            codex: options.codex.clone(),
+        };
+        let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
+        engage(&paths, &prepared.info.release_id, &digest, &pins)?;
+        let layout = package::layout();
+        let verifier = |root: &Path| package::legacy_info(root, paths.uid);
+        let mut tx = transaction::lock_installation(&layout, &paths.home, &verifier)?;
+        let actual = transaction::inspect_detached_installation(&layout, &paths.home, &verifier)?;
+        require(
+            actual.current == prior.current || actual.current.as_ref() == Some(&prepared.info),
+            "Krisis recovery found a foreign program generation",
+        )?;
+        for key in [ACTIVE, LEGACY_OBSERVER, LEGACY_DAILY] {
+            let actual = binding(&paths, &options.clockwork, key)?;
+            let before = controls
+                .get(key)
+                .ok_or_else(|| Error::new("missing prior Krisis control"))?;
+            require(
+                actual.definition_digest == before.definition_digest
+                    || (key == ACTIVE && actual.definition_digest.as_deref() == Some(&digest)),
+                "Krisis recovery found a foreign schedule",
+            )?;
+            if actual.enabled {
+                disable(&paths, &options.clockwork, key, &actual)?;
+            }
+        }
+        if prior.current.is_none()
+            && binding(&paths, &options.clockwork, ACTIVE)?
+                .definition_digest
+                .as_deref()
+                == Some(&digest)
+        {
+            owned_file(&evidence.join("publication.json"), paths.uid, Some(0o600))?;
+            require(
+                fs::read(&paths.hooks)? == fs::read(prepared.root.join("package/hooks.json"))?,
+                "fresh Krisis recovery hook changed",
+            )?;
+            let receipt = binding_receipt(&paths)?;
+            require(
+                receipt["release_id"] == prepared.info.release_id
+                    && receipt["definition_digest"] == digest,
+                "fresh Krisis recovery receipt changed",
+            )?;
+            doctor(&paths, &prepared.root.join("libexec/krisis"), &pins)?;
+            tx.recover(&prior, &prepared, true, |_| Ok(()))?;
+            release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
+            let retained = paths.state.join("backups/deployments");
+            directory(&retained, paths.uid, 0o700)?;
+            fs::rename(&evidence, retained.join(entry.file_name()))?;
+            candidate = Some(candidate.unwrap_or(true));
+            continue;
+        }
+        tx.suspend(
+            &actual,
+            &layout
+                .public
+                .iter()
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>(),
+        )?;
+        hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
+        assert_closed(&paths)?;
+        let database = evidence.join("database.json");
+        if exists(&database)? {
+            owned_file(&database, paths.uid, Some(0o600))?;
+            let files: Vec<SavedFile> = serde_json::from_slice(&fs::read(database)?)?;
+            let expected: Vec<_> = ["", "-wal", "-shm", "-journal"]
+                .iter()
+                .map(|suffix| PathBuf::from(format!("{}{suffix}", paths.database.display())))
+                .collect();
+            require(
+                files.len() == expected.len()
+                    && files.iter().zip(&expected).all(|(file, path)| {
+                        file.path == *path && file.uid == paths.uid && file.mode == 0o600
+                    }),
+                "Krisis database recovery inventory is invalid",
+            )?;
+            for file in files {
+                file.restore()?;
+            }
+        }
+        receipt.restore()?;
+        tx.recover(&prior, &prepared, false, |_| Ok(()))?;
+        hook.restore()?;
+        for (key, before) in controls {
+            if let Some(digest) = before.definition_digest {
+                switch(&paths, &options.clockwork, &key, &digest, false)?;
+            }
+        }
+        release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
+        let retained = paths.state.join("backups/deployments");
+        directory(&retained, paths.uid, 0o700)?;
+        fs::rename(&evidence, retained.join(entry.file_name()))?;
+        candidate = Some(false);
+    }
+    Ok(candidate)
 }
 
 pub fn uninstall(options: &Control) -> Result<Value> {
@@ -883,6 +1053,13 @@ pub fn uninstall(options: &Control) -> Result<Value> {
     Ok(
         json!({"ok":true,"data":{"uninstalled":true,"retained_release":current.release_id,"maintenance":true}}),
     )
+}
+
+pub fn recover_lock(paths: &Paths) -> Result<()> {
+    let layout = package::layout();
+    let verifier = |root: &Path| package::legacy_info(root, paths.uid);
+    let _lock = transaction::lock_installation(&layout, &paths.home, &verifier)?;
+    Ok(())
 }
 
 #[cfg(test)]

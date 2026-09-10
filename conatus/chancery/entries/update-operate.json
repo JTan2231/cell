@@ -17,7 +17,8 @@
   "effects": [
     "May create a named general library, append instructions, and persist Conatus configuration and feed intake.",
     "Update enqueues immutable documents and runs Annals automatic integration. Retry and re-examination can use model allowance and apply valid changes.",
-    "Installation changes only the packaged release selection; separately requested Clockwork binding selection activates the runner."
+    "Direct installation changes only the packaged release selection; Cell deployment also configures state and manages saved runner intent.",
+    "Cell deployment holds admission, suspends the runner, initializes absent state or rebinds the final Annals executable while preserving both library IDs, cursor, records and instructions, registers a disabled exact definition, and restores captured pause and enabled intent after all holds release."
   ],
   "authority": [
     "Conatus owns intake, baseline, handoff, framing and views. Annals owns library content, graph interpretation, model submission and recovery. Clockwork owns activation; Nucleus owns execution."
@@ -99,6 +100,10 @@
       {
         "status": "declared",
         "statement": "init selects executable, decisions config, optional Annals state root and named library. update consumes new events and pending local handoffs. retry selects an inclusive failed Annals job-ID interval. reexamine selects one Conatus input. instructions set accepts one file. pause/resume selects the local processing gate. Installation and schedule-definition use explicit candidate and output paths."
+      },
+      {
+        "status": "declared",
+        "statement": "Optional deployment settings: state_dir, decisions_config, annals_state_dir, library and enabled. Existing library selections cannot change. config returns only persistent paths and library IDs; maintenance exposes owner-scoped holds and drain."
       }
     ],
     "outputs": [
@@ -130,14 +135,21 @@
       }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
+      {
+        "status": "declared",
+        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."
+      },
       {
         "status": "declared",
         "statement": "Conatus serializes its mutating update paths. Input events and frozen outgoing documents survive handoff failure. New documents are enqueued without prior work add; Annals owns retention and automatic application. Failed attempts require explicit bounded retry. Annals preserves a committed or recorded result after later runtime failure."
       },
       {
         "status": "declared",
-        "statement": "Library initialization installs no schedule or model job. Installation does not initialize state or change an active schedule. Definition generation does not register or enable Clockwork. Pause gates subsequent update calls. An active update finishes and explicit retry or re-examination remains available. Pause does not cancel admitted Annals work or disable a Clockwork binding."
+        "statement": "Library initialization installs no schedule or model job. Direct program installation does not initialize state or change an active schedule. Definition generation does not register or enable Clockwork. Pause gates subsequent update calls. An active update finishes and explicit retry or re-examination remains available. Pause does not cancel admitted Annals work or disable a Clockwork binding."
+      },
+      {
+        "status": "declared",
+        "statement": "Cell deployment holds admission, suspends the runner, initializes absent state or rebinds the final Annals executable while preserving both library IDs, cursor, records and instructions, registers a disabled exact definition, and restores captured pause and enabled intent after all holds release."
       }
     ],
     "reliances": [

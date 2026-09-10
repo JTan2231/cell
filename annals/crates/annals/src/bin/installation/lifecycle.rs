@@ -448,7 +448,6 @@ pub(super) fn hold(
 }
 
 pub(super) fn drained(payload: &Path, library: &Path, home: &Path, owner: &str) -> Result<()> {
-    let until = Instant::now() + Duration::from_secs(45);
     loop {
         let status = hold(payload, library, home, owner, "status")?;
         if status["holds"] != json!([owner]) {
@@ -456,11 +455,6 @@ pub(super) fn drained(payload: &Path, library: &Path, home: &Path, owner: &str) 
         }
         if status["drained"] == true {
             return Ok(());
-        }
-        if Instant::now() >= until {
-            return Err(Error::new(
-                "Annals admitted commands have not drained; hold retained",
-            ));
         }
         std::thread::sleep(Duration::from_millis(200));
     }
@@ -1158,11 +1152,7 @@ fn apply_library(
             &journal.key,
             &disabled,
             digest,
-            if journal.outer_hold {
-                !journal.prior_control.present || journal.prior_control.enabled
-            } else {
-                true
-            },
+            !journal.outer_hold,
         )?;
     }
     if handoff {
@@ -1186,7 +1176,7 @@ fn apply_library(
         hold(&payload, &library, &journal.home, &journal.owner, "release")?;
     }
     release_named_libraries(journal)?;
-    let mut data = json!({"contract_version":1,"release_id":journal.candidate.release_id,"config":library.join("config.toml"),"clockwork_key":journal.key,"clockwork_definition":journal.candidate_digest,"maintenance":library.join("spool/.maintenance").exists(),"selected":!handoff,"enabled":!journal.no_start && !handoff && (!journal.outer_hold || !journal.prior_control.present || journal.prior_control.enabled)});
+    let mut data = json!({"contract_version":1,"release_id":journal.candidate.release_id,"config":library.join("config.toml"),"clockwork_key":journal.key,"clockwork_definition":journal.candidate_digest,"maintenance":library.join("spool/.maintenance").exists(),"selected":!handoff,"enabled":!journal.no_start && !handoff && !journal.outer_hold});
     if decisions {
         data["library_id"] = annals(
             &payload,
@@ -1445,9 +1435,7 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         } else {
             schedule::Control {
                 present: true,
-                enabled: !journal.outer_hold
-                    || !journal.prior_control.present
-                    || journal.prior_control.enabled,
+                enabled: !journal.outer_hold,
                 digest: journal.candidate_digest.clone(),
             }
         };

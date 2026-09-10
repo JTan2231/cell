@@ -84,6 +84,8 @@ enum Command {
         output: PathBuf,
     },
     Status,
+    /// Read retained configuration without probing dependencies or preparing work.
+    Config,
 }
 
 #[derive(Subcommand)]
@@ -124,6 +126,13 @@ async fn run() -> Result<()> {
             selected == root,
             "Platter uses one canonical database; --state-dir must select its canonical state directory"
         );
+    }
+    if matches!(cli.command, Command::Config) {
+        println!(
+            "{}",
+            serde_json::json!({"ok":true,"data":{"config":workflow::config(&root)?}})
+        );
+        return Ok(());
     }
     if matches!(cli.command, Command::ScheduleDefinition) {
         let definition = platter::installation::schedule_definition(&home, &root)?;
@@ -240,6 +249,7 @@ async fn run() -> Result<()> {
             println!("exported: {}", output.display());
         }
         Command::Status
+        | Command::Config
         | Command::ScheduleDefinition
         | Command::Doctor { .. }
         | Command::Maintenance { .. }

@@ -13,13 +13,13 @@ import os
 from pathlib import Path
 import pwd
 import re
-import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tarfile
 import time
+import tomllib
 from typing import Any, Iterator, Sequence
 import uuid
 
@@ -30,12 +30,13 @@ if __package__ in (None, ""):
 from ci_broker import client as ci_client
 from ci_broker.broker import MINIMAL_ENVIRONMENT
 from deployment import candidate
+from deployment.inventory import descriptor
 
 SCHEMA = 1
-MUTATIONS = frozenset(("hold", "drain", "apply", "release", "recover"))
+MUTATIONS = frozenset(("hold", "drain", "apply", "configure", "release", "activate", "recover"))
 EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
             "apply": "applied", "verify": "verified", "release": "released",
-            "recover": "recovered"}
+            "recover": "recovered", "configure": "configured", "activate": "activated"}
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 RUN_ID = re.compile(r"[0-9a-f]{32}")
 MAX_REPLY = 1024 * 1024
@@ -117,17 +118,6 @@ def source_file(root: Path, revision: str, relative: str) -> str:
     return git(root, "show", f"{revision}:{relative}")
 
 
-def descriptor(text: str) -> dict[str, str]:
-    """The existing product inventory contains literal shell assignments only."""
-    values: dict[str, str] = {}
-    for token in shlex.split(text, comments=True):
-        name, separator, value = token.partition("=")
-        if not separator or not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name in values:
-            raise DeploymentError("invalid literal product descriptor")
-        values[name] = value
-    return values
-
-
 def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
     paths = git(root, "ls-tree", "--name-only", revision, "pipeline/products/").splitlines()
     products: dict[str, dict[str, Any]] = {}
@@ -149,6 +139,9 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
         if metadata is not None:
             if not isinstance(metadata, dict) or metadata.get("schema") != 1 or metadata.get("product") != name:
                 raise DeploymentError(f"invalid committed adapter declaration: {name}")
+            if "application" in metadata and (not isinstance(metadata["application"], str)
+                    or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", metadata["application"])):
+                raise DeploymentError(f"invalid installation application: {name}")
             names(metadata.get("dependencies", []))
             adapter_binary = metadata.get("adapter_binary")
             if adapter_binary is not None:
@@ -164,7 +157,14 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
             "product": name, "directory": directory, "adapter": adapter_path,
             "metadata": metadata, "profile": values["DEPLOY_PROFILE"],
             "aliases": values.get("PRODUCT_ALIASES", "").split(),
+            "providers": {row.split("|")[0]: row.split("|")[2]
+                          for row in values.get("PROVIDERS", "").splitlines() if row},
         }
+        if values.get("RELEASE_UNITS"):
+            unit = values["RELEASE_UNITS"].splitlines()[0].split("|")
+            manifest = tomllib.loads(source_file(root, revision, unit[3]))
+            products[name]["version"] = (manifest["workspace"]["package"] if unit[2] == "workspace-package"
+                                         else manifest["package"])["version"]
     if not products:
         raise DeploymentError("committed source contains no Cell product inventory")
     for name, item in products.items():
@@ -172,6 +172,32 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
             unknown = set(item["metadata"].get("dependencies", [])) - products.keys()
             if unknown:
                 raise DeploymentError(f"{name} names unknown deployment prerequisites: {', '.join(sorted(unknown))}")
+            metadata = item["metadata"]
+            for field in ("companions", "maintenance_products"):
+                if set(names(metadata.get(field, []))) - products.keys():
+                    raise DeploymentError(f"{name} names an unknown {field} product")
+            ranges = metadata.get("runtime_versions", {})
+            if not isinstance(ranges, dict) or set(ranges) - set(metadata.get("dependencies", [])):
+                raise DeploymentError(f"{name} runtime compatibility must name declared dependencies")
+            for bounds in ranges.values():
+                compatible_version(None, bounds)
+            contracts = metadata.get("runtime_contracts", {})
+            if not isinstance(contracts, dict) or set(contracts) - set(metadata.get("dependencies", [])):
+                raise DeploymentError(f"{name} runtime contracts must name declared dependencies")
+            for required in contracts.values():
+                if not isinstance(required, dict) or not required:
+                    raise DeploymentError("required runtime contracts must be a nonempty object")
+                for entry, bounds in required.items():
+                    if (not isinstance(entry, str) or not re.fullmatch(r"[a-z][a-z0-9.-]*", entry)
+                            or not isinstance(bounds, dict) or set(bounds) != {"minimum", "before"}
+                            or type(bounds["minimum"]) is not int or type(bounds["before"]) is not int
+                            or not 0 < bounds["minimum"] < bounds["before"]):
+                        raise DeploymentError("required runtime contract interval is invalid")
+            bindings = metadata.get("activation_bindings", [])
+            if (not isinstance(bindings, list) or any(not isinstance(key, str)
+                    or not re.fullmatch(r"[a-z][a-z0-9-]*/[a-z][a-z0-9-]*", key) for key in bindings)
+                    or len(bindings) != len(set(bindings))):
+                raise DeploymentError(f"{name} has invalid owned activation bindings")
     return products
 
 
@@ -192,6 +218,107 @@ def ordered(selected: Sequence[str], after: dict[str, Sequence[str]]) -> list[st
         result.extend(ready)
         pending.difference_update(ready)
     return result
+
+
+def installed_product(name: str, metadata: dict[str, Any] | None = None) -> bool:
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    # Presence is deliberately conservative. An interrupted installation with
+    # missing commands still needs its sealed product inspector and recovery.
+    paths = [home / ".local/bin" / name, home / ".local/bin" / f"{name}-install",
+             home / "Library/Application Support/Chancery/providers" / name]
+    if metadata and metadata.get("application"):
+        paths.append(home / "Library/Application Support" / metadata["application"] / "install")
+    return any(path.exists() or path.is_symlink() for path in paths)
+
+
+def version_tuple(value: str) -> tuple[int, int, int]:
+    if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", value):
+        raise DeploymentError("runtime compatibility requires a three-part release version")
+    return tuple(int(part) for part in value.split("."))
+
+
+def compatible_version(version: str | None, bounds: Any) -> bool:
+    if not isinstance(bounds, dict) or set(bounds) != {"minimum", "before"}:
+        raise DeploymentError("runtime compatibility requires minimum and exclusive before versions")
+    minimum, before = version_tuple(bounds["minimum"]), version_tuple(bounds["before"])
+    if minimum >= before:
+        raise DeploymentError("runtime compatibility version interval is empty")
+    return version is not None and minimum <= version_tuple(version) < before
+
+
+def installed_version(name: str, metadata: dict[str, Any]) -> str | None:
+    """Read a selection hint; the sealed inspector must prove it before hold."""
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    if not metadata.get("application"):
+        return None
+
+    install = home / "Library/Application Support" / metadata["application"] / "install"
+    try:
+        root = (install / "current").resolve(strict=True)
+        if root.parent != install / "releases" or not re.fullmatch(r"[0-9a-f]{64}", root.name):
+            return None
+        manifest = read_json(root / "manifest.json")
+        if manifest.get("format") != "cell-install-v2" or manifest.get("product") != name:
+            return None
+        version = manifest.get("versions", {}).get(name)
+        version_tuple(version)
+        return version
+    except (OSError, ValueError, candidate.CandidateError, DeploymentError):
+        return None
+
+
+def contract_versions(item: dict[str, Any], *, root: Path | None = None,
+                      revision: str | None = None) -> dict[str, int]:
+    """Read only explicitly indexed supported promises; do not infer runtime edges."""
+    result = {}
+    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+    for provider, source in item.get("providers", {}).items():
+        def read(relative: str) -> dict[str, Any]:
+            path = Path(relative)
+            if path.is_absolute() or ".." in path.parts:
+                raise DeploymentError("provider contract path escapes its bundle")
+            if root is not None and revision is not None:
+                value = json.loads(source_file(root, revision, f"{source}/{relative}"))
+            else:
+                value = read_json(home / "Library/Application Support/Chancery/providers" / provider / path)
+            if not isinstance(value, dict):
+                raise ValueError("interface contract must be an object")
+            return value
+        try:
+            bundle = read("provider.json")
+            owner = bundle.get("provider")
+            if not isinstance(owner, dict) or owner.get("id") != provider:
+                continue
+            for relative in bundle["entries"]:
+                entry = read(relative)
+                if entry.get("support") == "supported" and type(entry.get("contract_version")) is int:
+                    if entry["id"] in result:
+                        raise DeploymentError("duplicate required interface contract")
+                    result[entry["id"]] = entry["contract_version"]
+        except (OSError, ValueError, KeyError, TypeError, candidate.CandidateError):
+            if root is not None:
+                raise DeploymentError("committed interface contracts could not be read") from None
+            return {}
+    return result
+
+
+def compatible_contracts(available: dict[str, int], required: dict[str, Any]) -> bool:
+    return all(entry in available and bounds["minimum"] <= available[entry] < bounds["before"]
+               for entry, bounds in required.items())
+
+
+def setup_settings(path: Path | None) -> dict[str, Any]:
+    if path is None:
+        return {}
+    if not path.is_absolute():
+        raise DeploymentError("settings file must be an absolute path")
+    if path.stat().st_size > MAX_REPLY:
+        raise DeploymentError("settings file exceeds one MiB")
+    value = read_json(path)
+    if any(not NAME.fullmatch(name) or not isinstance(settings, dict)
+           for name, settings in value.items()):
+        raise DeploymentError("settings must map canonical product names to configuration objects")
+    return value
 
 
 def plan(root: Path, requested: Sequence[str]) -> dict[str, Any]:
@@ -215,10 +342,43 @@ def plan(root: Path, requested: Sequence[str]) -> dict[str, Any]:
             selected.append(name)
     if not selected:
         raise DeploymentError("select at least one system")
+    roots = list(selected)
+    reasons = {name: "requested" for name in roots}
+    pending = list(selected)
+    while pending:
+        name = pending.pop(0)
+        for dependency in names(products[name]["metadata"].get("dependencies", [])):
+            item = products[dependency]
+            if item["metadata"] is None:
+                raise DeploymentError(f"{name} needs an unavailable deployment dependency: {dependency}")
+            present = installed_product(dependency, item["metadata"])
+            bounds = products[name]["metadata"].get("runtime_versions", {}).get(dependency)
+            compatible = bounds is None or compatible_version(installed_version(dependency, item["metadata"]), bounds)
+            required = products[name]["metadata"].get("runtime_contracts", {}).get(dependency, {})
+            compatible = compatible and (not required or compatible_contracts(contract_versions(item), required))
+            if dependency not in selected and (not present or not compatible):
+                selected.append(dependency)
+                pending.append(dependency)
+                reasons[dependency] = f"{'missing' if not present else 'incompatible or unproved'} runtime dependency of {name}"
+        for companion in names(products[name]["metadata"].get("companions", [])):
+            if companion not in products or products[companion]["metadata"] is None:
+                raise DeploymentError(f"{name} names an unavailable deployment companion: {companion}")
+            if companion not in selected and installed_product(companion, products[companion]["metadata"]):
+                selected.append(companion)
+                pending.append(companion)
+                reasons[companion] = f"installed companion of {name}"
     dependencies = {name: item["metadata"].get("dependencies", [])
                     for name, item in products.items() if item["metadata"] is not None}
+    for name in selected:
+        for dependency, bounds in products[name]["metadata"].get("runtime_versions", {}).items():
+            if dependency in selected and not compatible_version(products[dependency].get("version"), bounds):
+                raise DeploymentError(f"{name} cannot use the committed {dependency} candidate; runtime releases are incompatible")
+        for dependency, required in products[name]["metadata"].get("runtime_contracts", {}).items():
+            if dependency in selected and not compatible_contracts(contract_versions(products[dependency], root=root, revision=revision), required):
+                raise DeploymentError(f"{name} cannot use the committed {dependency} candidate; required interface contracts are unavailable")
     return {"schema": SCHEMA, "source_commit": revision,
-            "products": ordered(selected, dependencies), "catalog": products,
+            "products": ordered(selected, dependencies), "requested_products": roots,
+            "selection_reasons": reasons, "catalog": products,
             "publication": "none", "source_policy": "committed local main; working edits excluded"}
 
 
@@ -247,10 +407,12 @@ def archive_source(root: Path, revision: str, destination: Path) -> dict[str, An
 
 
 def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
-               *, verbose: bool = False) -> Path:
+               *, verbose: bool = False, settings: dict[str, Any] | None = None) -> Path:
     if sys.version_info < (3, 11):
         raise DeploymentError("deployment requires Python 3.11 or newer")
     chosen = plan(root, requested)
+    if set(settings or {}) - chosen["catalog"].keys():
+        raise DeploymentError("settings name a product outside the committed inventory")
     storage = storage or state_root()
     private_directory(storage)
     run_id = uuid.uuid4().hex
@@ -260,12 +422,12 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
     private_directory(run)
     for directory in ("candidates", "steps"):
         private_directory(run / directory)
-    data = {**chosen, "run_id": run_id, "state": "created", "created_at": now(),
+    data = {**chosen, "lifecycle_version": 3, "run_id": run_id, "state": "created", "created_at": now(),
             "updated_at": now(), "repository": str(root), "run_dir": str(run),
             "source_root": str(run / "source"), "worktree": str(run / "worktree"),
             "python": str(Path(sys.executable).resolve()), "records": {}, "events": [],
             "active_operation": None, "affected": [], "mutation_started": False,
-            "apply_started": False, "verbose": verbose, "diagnostics": [],
+            "apply_started": False, "verbose": verbose, "diagnostics": [], "settings": settings or {},
             "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"}}
     durable_json(run / "run.json", data)
     try:
@@ -330,6 +492,8 @@ def cleanup_active(storage: Path) -> None:
     private_directory(path)
     if (path / "run.json").exists():
         data = read_json(path / "run.json")
+        if unresolved(data):
+            raise DeploymentError("unfinished deployment retained for automatic recovery on the next deployment")
         repository = Path(data["repository"])
         worktree = (path / "worktree").resolve()
         registered = git(repository, "worktree", "list", "--porcelain").splitlines()
@@ -340,6 +504,44 @@ def cleanup_active(storage: Path) -> None:
     for directory, _, _ in os.walk(path, followlinks=False):
         Path(directory).chmod(0o700)
     shutil.rmtree(path)
+
+
+def unresolved(data: dict[str, Any]) -> bool:
+    return (bool(data.get("mutation_started"))
+            and data.get("state") not in ("installed", "succeeded", "cleanup_failed", "recovered")
+            and data.get("recovery", {}).get("state") != "succeeded")
+
+
+def reconcile_active(storage: Path, lock_fd: int) -> None:
+    path = storage / "active"
+    if path.is_symlink():
+        raise DeploymentError("refusing symbolic active deployment workspace")
+    if not (path / "run.json").exists():
+        return
+    if not unresolved(read_json(path / "run.json")):
+        return
+    run = Run(path, lock_fd)
+    run.check_source()
+    print("cell-deploy: recovering the unfinished deployment before starting the requested deployment", file=sys.stderr, flush=True)
+    if run.data.get("lifecycle_version", 1) >= 3:
+        result = subprocess.call([run.data["python"], str(run.source / "deployment/cli.py"),
+                                  "_recover", str(path), str(lock_fd)],
+                                 env=runtime_environment(), pass_fds=(lock_fd,))
+        if result:
+            detail = read_json(path / "run.json").get("recovery", {}).get("detail", "pinned recovery did not finish")
+            raise DeploymentError(f"unfinished deployment could not recover: {detail}")
+        if unresolved(read_json(path / "run.json")):
+            raise DeploymentError("pinned recovery returned without resolving its transaction")
+        return
+    try:
+        run.recover()
+        run.data["recovery"] = {"state": "succeeded"}
+        run.save()
+    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
+        run.data["recovery"] = {"state": "failed", "detail": bounded_text(error, MAX_DETAIL)}
+        run.data["state"] = "stopped"
+        run.save()
+        raise DeploymentError(f"unfinished deployment could not recover: {error}") from error
 
 
 def capture_diagnostics(path: Path, data: dict[str, Any], phase: str) -> None:
@@ -569,7 +771,23 @@ class Run:
                    "run_dir": str(self.path), "source_root": str(self.source),
                    "candidate_dir": str(directory) if directory else None, "candidate": manifest,
                    "prior": record.get("prior"), "selected_products": self.data["products"],
+                   "affected_products": self.data["affected"],
+                   "activation_bindings": sorted({key for name in self.data["affected"]
+                       for key in self.data["catalog"][name]["metadata"].get("activation_bindings", [])}),
+                   "settings": self.data.get("settings", {}).get(product),
+                   "dependency_settings": {name: self.data.get("settings", {})[name]
+                       for name in item["metadata"].get("dependencies", []) if name in self.data.get("settings", {})},
                    "recovery": record.get("recovery_context")}
+        dependencies = {}
+        for dependency in item["metadata"].get("dependencies", []):
+            dependency_dir, dependency_manifest = self.candidate_for(dependency)
+            if dependency_dir is not None and dependency_manifest is not None:
+                dependencies[dependency] = {"candidate_dir": str(dependency_dir), "candidate": dependency_manifest}
+        if dependencies:
+            request["dependency_candidates"] = dependencies
+        if self.data.get("lifecycle_version", 1) < 3:
+            for key in ("settings", "dependency_settings", "dependency_candidates", "affected_products", "activation_bindings"):
+                request.pop(key, None)
         returncode, output = self.command(product, operation, command, request)
         if output.stat().st_size > MAX_REPLY:
             raise DeploymentError(f"{product} {operation} reply exceeds the protocol bound")
@@ -580,7 +798,8 @@ class Run:
         if reply.get("schema") != SCHEMA or not isinstance(reply.get("data"), dict):
             raise DeploymentError(f"{product} {operation} returned an unsupported outcome")
         self.event("outcome", product=product, operation=operation, response=reply, returncode=returncode)
-        if returncode != 0 or reply.get("status") != EXPECTED[operation]:
+        waiting = operation == "drain" and reply.get("status") == "waiting"
+        if returncode != 0 or not (reply.get("status") == EXPECTED[operation] or waiting):
             raise DeploymentError(bounded_text(f"{product} {operation} stopped: {reply.get('detail', 'outcome not proved')}", MAX_DETAIL))
         self.data["active_operation"] = None
         self.save()
@@ -611,6 +830,10 @@ class Run:
         # as selected products. Prepare their declared maintenance closure once,
         # before any hold; this does not select them for installation.
         prepared_products = set(self.data["products"])
+        for product, item in self.data["catalog"].items():
+            metadata = item["metadata"] or {}
+            if metadata.get("requester_service") in self.data["products"] and installed_product(product, metadata):
+                prepared_products.add(product)
         pending = list(prepared_products)
         while pending:
             product = pending.pop()
@@ -622,6 +845,11 @@ class Run:
                 if entry["metadata"].get("adapter_binary") and affected not in prepared_products:
                     prepared_products.add(affected)
                     pending.append(affected)
+        self.data["maintenance_products"] = sorted(prepared_products)
+        dependencies = {dependency for product in self.data["products"]
+                        for dependency in self.data["catalog"][product]["metadata"].get("dependencies", [])}
+        self.data["dependency_products"] = sorted(dependencies - prepared_products)
+        prepared_products.update(dependencies)
         self.data["prepared_products"] = sorted(prepared_products)
         command = [self.data["python"], str(self.worktree / "deployment" / "build.py"),
                    "--source-root", str(self.worktree), "--output", str(preparation)]
@@ -655,7 +883,23 @@ class Run:
     def inspect(self) -> None:
         self.data["state"] = "inspecting"
         self.save()
-        pending = list(self.data["products"])
+        # Retained dependencies are inspected by sealed owning adapters but do
+        # not acquire holds or configuration changes merely for being read.
+        for product in self.data.get("dependency_products", []):
+            response = self.adapter(product, "inspect")
+            self.record(product)["dependency_prior"] = response["data"]
+            snapshot = response["data"].get("installation", response["data"].get("installed", response["data"].get("selection")))
+            installed = snapshot.get("current") if isinstance(snapshot, dict) else None
+            version = installed.get("versions", {}).get(product) if isinstance(installed, dict) else None
+            for consumer in self.data["products"]:
+                bounds = self.data["catalog"][consumer]["metadata"].get("runtime_versions", {}).get(product)
+                if bounds is not None and not compatible_version(version, bounds):
+                    raise DeploymentError(f"{product} changed or could not prove {consumer}'s required runtime release")
+                required = self.data["catalog"][consumer]["metadata"].get("runtime_contracts", {}).get(product, {})
+                if required and not compatible_contracts(contract_versions(self.data["catalog"][product]), required):
+                    raise DeploymentError(f"{product} cannot prove {consumer}'s required installed interface contracts")
+            self.save()
+        pending = list(self.data.get("maintenance_products", self.data.get("prepared_products", self.data["products"])))
         inspected: set[str] = set()
         after: dict[str, list[str]] = {}
         while pending:
@@ -679,10 +923,17 @@ class Run:
 
     def phase(self, operation: str, products: Sequence[str]) -> None:
         self.data["state"] = {"hold": "holding", "drain": "draining", "apply": "applying",
-                              "verify": "verifying", "release": "releasing"}[operation]
+                              "configure": "configuring", "verify": "verifying",
+                              "release": "releasing", "activate": "activating"}[operation]
         self.save()
         for product in products:
             response = self.adapter(product, operation)
+            while operation == "drain" and response["status"] == "waiting":
+                if time.monotonic() - self.last_heartbeat >= HEARTBEAT_SECONDS:
+                    print(f"cell-deploy: waiting for {product}: {bounded_text(response.get('detail', ''), MAX_DETAIL)}", file=sys.stderr, flush=True)
+                    self.last_heartbeat = time.monotonic()
+                time.sleep(1)
+                response = self.adapter(product, operation)
             record = self.record(product)
             record[operation] = response
             if operation == "hold":
@@ -695,23 +946,35 @@ class Run:
         self.prepare()
         self.inspect()
         affected = self.data["affected"]
-        requesters = [product for product in affected if product != "nucleus"]
-        self.phase("hold", requesters)
-        self.phase("drain", requesters)
-        if "nucleus" in affected:
-            # Requester workflows may need continuation jobs while settling.
-            # Close Nucleus admission only after those workflows have drained.
-            self.phase("hold", ["nucleus"])
-            self.phase("drain", ["nucleus"])
+        self.quiesce()
         self.phase("apply", self.data["products"])
+        self.phase("configure", affected)
         self.phase("verify", affected)
+        for product in self.data.get("dependency_products", []):
+            response = self.adapter(product, "inspect")
+            prior = self.record(product)["dependency_prior"]
+            for key in ("installation", "installed", "selection"):
+                if response["data"].get(key) != prior.get(key):
+                    raise DeploymentError(f"retained runtime dependency changed during deployment: {product}")
         release_order = [product for product in affected if product != "nucleus"]
         if "nucleus" in affected:
             release_order.append("nucleus")
         self.phase("release", release_order)
+        self.phase("activate", affected)
         self.data["state"] = "installed"
         self.data["detail"] = "Selected products verified; every run-owned maintenance hold released."
         self.event("installed")
+
+    def quiesce(self) -> None:
+        # An admitted consumer can still need ordinary provider commands.
+        # Drain it before closing its providers, using the declared topology.
+        for product in reversed(self.data["affected"]):
+            if product != "nucleus":
+                self.phase("hold", [product])
+                self.phase("drain", [product])
+        if "nucleus" in self.data["affected"]:
+            self.phase("hold", ["nucleus"])
+            self.phase("drain", ["nucleus"])
 
     def recover(self) -> None:
         previous_state = self.data["state"]
@@ -729,24 +992,44 @@ class Run:
         affected = self.data["affected"]
         if active and active["product"] not in affected:
             raise DeploymentError("the uncertain operation has no captured product baseline")
-        def recover_product(product: str) -> None:
+        for product in affected:
             record = self.record(product)
             record["recovery_context"] = {"state": previous_state, "active_operation": active,
+                                           "installed": record.get("recover", {}).get("data", {}).get("installed"),
                                            "held": record.get("held", False),
                                            "applied": bool(record.get("apply")),
                                            "apply_started": any(
                                                event.get("product") == product and event.get("operation") == "apply"
                                                and event.get("state") == "starting" for event in self.data["events"]),
                                            "verified": bool(record.get("verify")),
+                                           "configured": bool(record.get("configure")),
+                                           "released": bool(record.get("release")),
+                                           "activated": bool(record.get("activate")),
+                                           "configure_started": any(event.get("product") == product
+                                               and event.get("operation") == "configure" and event.get("state") == "starting"
+                                               for event in self.data["events"]),
+                                           "activation_started": any(event.get("product") == product
+                                               and event.get("operation") == "activate" and event.get("state") == "starting"
+                                               for event in self.data["events"]),
                                            "any_apply_started": bool(self.data.get("apply_started") or any(
                                                event.get("operation") == "apply" and event.get("state") == "starting"
                                                for event in self.data["events"]))}
+        self.save()
+        # Release or activation can succeed without its reply. Stop admission
+        # again before repairing configuration, retaining the original intent.
+        if self.data.get("lifecycle_version", 1) >= 3 and any(event.get("operation") in ("release", "activate") and event.get("state") == "starting"
+               for event in self.data["events"]):
+            self.quiesce()
+
+        def recover_product(product: str) -> None:
+            record = self.record(product)
             response = self.adapter(product, "recover")
             if response["data"].get("safe_to_release") is not True:
                 raise DeploymentError(f"{product} recovery did not prove release of maintenance is safe")
             if response["data"].get("installed") not in ("candidate", "prior"):
                 raise DeploymentError(f"{product} recovery did not identify a coherent installed generation")
             record["recover"] = response
+            record["recovery_context"]["installed"] = response["data"]["installed"]
             self.save()
         for product in affected:
             recover_product(product)
@@ -754,9 +1037,28 @@ class Run:
         if "nucleus" in affected:
             release_order.append("nucleus")
         self.phase("release", release_order)
+        if self.data.get("lifecycle_version", 1) >= 2:
+            self.phase("activate", affected)
         self.data["state"] = "recovered"
         self.data["detail"] = "Products proved coherent recovery; run-owned holds released. Deployment is not reported as succeeded."
         self.event("recovered")
+
+
+def recover_worker(path: Path, lock_fd: int) -> int:
+    run = Run(path, lock_fd)
+    run.check_source()
+    try:
+        run.data["recovery"] = {"state": "running"}
+        run.save()
+        run.recover()
+        run.data["recovery"] = {"state": "succeeded"}
+        run.save()
+        return 0
+    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
+        run.data.update(state="stopped", recovery={"state": "failed", "detail": bounded_text(error, MAX_DETAIL)})
+        capture_diagnostics(path, run.data, "recovery")
+        run.save()
+        return 1
 
 
 def run_worker(path: Path, lock_fd: int | None = None) -> int:
@@ -832,6 +1134,7 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
             data["recovery"] = {"state": "uncertain"}
         elif data.get("mutation_started") and data.get("recovery", {}).get("state") == "not_needed":
             data["recovery"] = {"state": "not_attempted"}
+        durable_json(path / "run.json", data)
     return {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
             "products": data["products"], "source_commit": data["source_commit"],
             "detail": bounded_text(data.get("detail", ""), MAX_DETAIL), "exit_code": 1 if returncode else 0,
@@ -842,15 +1145,16 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
 
 
 def start(root: Path, products: Sequence[str], storage: Path | None = None,
-          *, verbose: bool = False) -> dict[str, Any]:
+          *, verbose: bool = False, settings: dict[str, Any] | None = None) -> dict[str, Any]:
     storage = storage or state_root()
     admitted = False
     result = None
     try:
         with deployment_lock(storage) as lock_fd:
             admitted = True
+            reconcile_active(storage, lock_fd)
             cleanup_active(storage)
-            path = create_run(root, products, storage, verbose=verbose)
+            path = create_run(root, products, storage, verbose=verbose, settings=settings)
             result = launch(path, lock_fd)
     finally:
         if admitted:
@@ -858,9 +1162,12 @@ def start(root: Path, products: Sequence[str], storage: Path | None = None,
             # then prevents reacquisition and therefore prevents deletion.
             try:
                 with deployment_lock(storage):
-                    cleanup_active(storage)
+                    active = storage / "active" / "run.json"
+                    retained = active.exists() and unresolved(read_json(active))
+                    if not retained:
+                        cleanup_active(storage)
                 if result is not None:
-                    result["cleanup"]["workspace"] = "removed"
+                    result["cleanup"]["workspace"] = "retained_for_recovery" if retained else "removed"
             except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
                 if result is None:
                     raise
@@ -895,6 +1202,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         except (DeploymentError, OSError, ValueError) as error:
             print(f"cell-deploy: {bounded_text(error, MAX_DETAIL)}", file=sys.stderr)
             return 1
+    if arguments[:1] == ["_recover"]:
+        try:
+            return recover_worker(Path(arguments[1]), int(arguments[2]))
+        except (DeploymentError, OSError, ValueError) as error:
+            print(f"cell-deploy: {bounded_text(error, MAX_DETAIL)}", file=sys.stderr)
+            return 1
     if arguments[:1] == ["--verbose"] and arguments[1:2] in (["start"], ["plan"]):
         arguments[0], arguments[1] = arguments[1], arguments[0]
     if arguments and arguments[0] not in ("start", "plan", "-h", "--help"):
@@ -905,16 +1218,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         command = commands.add_parser(name)
         command.add_argument("products", nargs="+")
         command.add_argument("--verbose", action="store_true", help="show deployment operation progress on stderr")
+        command.add_argument("--settings", type=Path, help="private JSON file of product setup choices; credential file references only")
     parsed = parser.parse_args(arguments)
     try:
         root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
+        settings = setup_settings(parsed.settings)
         if parsed.command == "plan":
             result = plan(root, parsed.products)
+            if set(settings) - result["catalog"].keys():
+                raise DeploymentError("settings name a product outside the committed inventory")
+            result["settings_products"] = sorted(settings)
             result.pop("catalog")
         else:
             if sys.platform != "darwin":
                 raise DeploymentError("live deployment is supported only for the current macOS user")
-            result = start(root, parsed.products, verbose=parsed.verbose)
+            result = start(root, parsed.products, verbose=parsed.verbose, settings=settings)
         print_result(result)
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:

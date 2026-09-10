@@ -209,3 +209,36 @@ availability, and terminal reason and message.
 does not cancel the job. Status reads mailbox and job state in sequence, without
 an atomic snapshot. Initial read errors remain errors. `jobs list` defaults to
 20 and retains its continuation behavior.
+
+## Coordinated first installation and interrupted cutover
+
+A fresh coordinated installation accepts `codex_bin` and `codex_home` in
+Nucleus's deployment settings. Both paths are absolute. `codex_bin` must be the
+exact supported Codex version. `codex_home` identifies an existing authenticated
+home; settings never contain credential bytes. If Nucleus already owns valid
+authentication, installation preserves it. Existing deployments retain their
+captured harness and do not import another credential home.
+
+The installer persists the run's local admission hold before a fresh daemon
+exists. It starts the service under that hold so dependent products can finish
+configuration. The configure phase proves the live harness, authentication,
+protocol and drained capacity. Admission opens only at group release.
+
+Before selector or service replacement, the installer writes private
+`service-cutover.json` with its owner, prior package, candidate and harness.
+Recovery uses this journal to select and reinstall the exact candidate through
+`nucleus service recover --daemon ABS --codex ABS` with the recorded
+`CELL_DEPLOYMENT_RUN_ID`. This controlled restart establishes which executable
+is resident; matching files and a health response alone are insufficient.
+The service must have its sole drained hold. If it is stopped, recovery reads
+the database without migration and requires every retained job and attempt to
+be terminal. It does not cancel or retry requester work.
+
+Recovery can import the recorded authentication source only if Nucleus's owned
+authentication file is absent. It never rolls back a credential or database.
+A schema or service failure keeps the candidate and journal for recovery.
+Unknown ownership or unfinished jobs keep admission held. Successful recovery
+removes the cutover journal after held live health and exact program-copy checks.
+
+Deployment settings accept only `codex_bin` and `codex_home`, both strings.
+Unknown keys or values of another type fail inspection before admission holds.

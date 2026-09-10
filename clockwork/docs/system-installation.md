@@ -1,9 +1,19 @@
 # macOS user installation
 
 Clockwork installs one short-lived CLI/broker and one product-owned Chancery
-provider. Program deployment does not initialize its database, register a
+provider. Direct program installation does not initialize its database, register a
 product definition, create a binding, install a product LaunchAgent, or run a
 product job.
+
+Coordinated `./deploy.sh clockwork` also captures the complete Clockwork binding
+inventory before maintenance. It disables those bindings while retaining their
+selections and failure halts. Product adapters prepare their new definitions
+under their own holds. After all holds are released, Clockwork restores each
+previously enabled binding through the selected broker. This rewrites every
+enabled generated plist with the current immutable Clockwork executable.
+Previously disabled bindings stay disabled. This phase precedes EMT activation.
+An interrupted deployment retains its original inventory and re-establishes
+suspension before recovery; it does not infer intent from temporary disablement.
 
 Build and validate first, then deploy under separate authority:
 
@@ -22,7 +32,7 @@ supplied candidate Chancery reader must validate the provider copy in that
 staged release. Before commit, the same reader must find all three Clockwork
 entries through the installed provider registry and selected provider path.
 
-Deployment retains the prior valid selector for rollback. It neither calls
+Direct installation retains the prior valid selector for rollback. It neither calls
 `clockwork binding switch` nor scans another product for jobs. Missing
 current-user `.local/bin` and Chancery parent directories may be created;
 existing shared parents are validated without changing their modes.

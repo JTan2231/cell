@@ -293,7 +293,7 @@ pub(super) fn inspect(home: &HomeArgs) -> Result<Value> {
         cell_install::transaction::inspect_installation(&layout(), &paths.home, &legacy)?;
     let current = current(&paths)?;
     let binding = binding(&paths, current.as_deref())?;
-    let controls = if current.is_some() {
+    let controls = if current.is_some() || binding.exists {
         json!({KEY:binding})
     } else {
         json!({})
@@ -636,6 +636,8 @@ fn worker_lock(paths: &Paths) -> Result<File> {
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Binding {
+    #[serde(default)]
+    pub exists: bool,
     pub enabled: bool,
     pub definition_digest: Option<String>,
 }
@@ -655,6 +657,8 @@ struct Hold {
 #[allow(clippy::struct_excessive_bools)]
 struct Transaction {
     version: u32,
+    #[serde(default)]
+    deployment_owner: Option<String>,
     committed: bool,
     baseline: cell_install::transaction::InstallSnapshot,
     backup_files: BTreeMap<String, String>,
@@ -752,6 +756,7 @@ pub(super) fn binding(paths: &Paths, current: Option<&str>) -> Result<Binding> {
         }
     }
     Ok(Binding {
+        exists: true,
         enabled,
         definition_digest: digest,
     })
@@ -923,7 +928,7 @@ fn rollback(
     }
     if transaction.scheduler_changed {
         if let Some(digest) = &transaction.binding.definition_digest {
-            if transaction.binding.enabled {
+            if transaction.binding.enabled && std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_none() {
                 paths.clock(&["binding", "switch", KEY, digest])?;
             } else {
                 paths.clock(&["binding", "disable", KEY, "--select", digest])?;
@@ -1040,6 +1045,9 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
     tx.recheck(&installed)?;
     let mut transaction = Transaction {
         version: 1,
+        deployment_owner: std::env::var("CELL_DEPLOYMENT_RUN_ID")
+            .ok()
+            .filter(|owner| !owner.is_empty()),
         committed: false,
         baseline: installed.clone(),
         backup_files: BTreeMap::new(),
@@ -1176,7 +1184,11 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         transaction.publication = Some(tx.publish(&prepared, &suspended.after, |_| Ok(()))?);
         transaction.candidate_selected = true;
         save(&transaction, &backup)?;
-        paths.clock(&["binding", "switch", KEY, &digest])?;
+        if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
+            paths.clock(&["binding", "disable", KEY, "--select", &digest])?;
+        } else {
+            paths.clock(&["binding", "switch", KEY, &digest])?;
+        }
         private_file(&paths.marker(), paths.uid, true)?;
         let receipt = json!({"version":1,"release_id":prepared.info.release_id,"previous":installed,"clockwork_definition":digest,"maintenance_retained":args.keep_maintenance || !transaction.hold_owned,"rollback_snapshot":retained_backup});
         write_private(
@@ -1228,7 +1240,12 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
     private_file(&backup.join("transaction.json"), paths.uid, true)?;
     let mut transaction: Transaction =
         serde_json::from_slice(&fs::read(backup.join("transaction.json"))?)?;
-    if transaction.version != 1 || transaction.home != paths.home {
+    if transaction.version != 1
+        || transaction.home != paths.home
+        || std::env::var("CELL_DEPLOYMENT_RUN_ID")
+            .ok()
+            .is_some_and(|owner| transaction.deployment_owner.as_ref() != Some(&owner))
+    {
         return fail("recovery transaction belongs to another installation");
     }
     let mut tx = cell_install::transaction::lock_installation(&layout(), &paths.home, &legacy)?;
@@ -1285,7 +1302,12 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
         }
         paths.doctor(&prepared.root.join("libexec/semantics"), None, None)?;
         tx.recover(&transaction.baseline, &prepared, true, |_| Ok(()))?;
-        if let Err(error) = paths.clock(&["binding", "switch", KEY, digest]) {
+        let selection = if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
+            paths.clock(&["binding", "disable", KEY, "--select", digest])
+        } else {
+            paths.clock(&["binding", "switch", KEY, digest])
+        };
+        if let Err(error) = selection {
             retain_failure(&paths, &transaction, &mut tx);
             return Err(error);
         }
@@ -1361,6 +1383,13 @@ pub(super) fn uninstall(home: &HomeArgs) -> Result<()> {
     Ok(())
 }
 
+pub(super) fn recover_lock(home: &HomeArgs) -> Result<()> {
+    let paths = Paths::new(home)?;
+    let layout = layout();
+    let _lock = cell_install::transaction::lock_installation(&layout, &paths.home, &legacy)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1393,12 +1422,14 @@ mod tests {
         }
         let transaction = Transaction {
             version: 1,
+            deployment_owner: None,
             committed: false,
             baseline: serde_json::from_value(json!({"current":null,"previous":null,"entries":{}}))?,
             backup_files,
             home: paths.home.clone(),
             selectors: BTreeMap::new(),
             binding: Binding {
+                exists: false,
                 enabled: false,
                 definition_digest: None,
             },

@@ -12,23 +12,30 @@ use clockwork::api::{
 pub(super) const KEY: &str = "todo/daily-email";
 
 fn invoke<T: serde::de::DeserializeOwned>(home: &Path, args: &[OsString]) -> Result<T> {
+    invoke_with(home, &home.join(".local/bin/clockwork"), args)
+}
+
+fn invoke_with<T: serde::de::DeserializeOwned>(
+    home: &Path,
+    binary: &Path,
+    args: &[OsString],
+) -> Result<T> {
     let mut arguments = vec!["--json".into()];
     arguments.extend_from_slice(args);
-    let output = call(
-        &home.join(".local/bin/clockwork"),
-        &arguments,
-        home,
-        None,
-        180,
-    )?;
+    let output = call(binary, &arguments, home, None, 180)?;
     clockwork::api::decode(&output.stdout).map_err(|error| Error::new(error.to_string()))
 }
 
 pub(super) fn binding(home: &Path) -> Result<Option<BindingRecord>> {
+    binding_with(home, &home.join(".local/bin/clockwork"))
+}
+
+pub(super) fn binding_with(home: &Path, binary: &Path) -> Result<Option<BindingRecord>> {
     let mut limit = 100_usize;
     loop {
-        let page: SelectionPage<BindingRecord> = invoke(
+        let page: SelectionPage<BindingRecord> = invoke_with(
             home,
+            binary,
             &strings(&["binding", "list", "--limit", &limit.to_string()]),
         )?;
         if !page.has_more {

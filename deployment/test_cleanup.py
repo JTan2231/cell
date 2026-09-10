@@ -72,6 +72,8 @@ class ReleaseCleanupTests(unittest.TestCase):
             return "n" + str(self.running_pin / "bin/clockwork") + "\n"
         if argv[0] == "/bin/ps":
             return ""
+        if argv[0] == str(self.home / ".local/bin/platter") and argv[1:] == ["--json", "config"]:
+            return json.dumps({"ok": True, "data": {"config": {}}})
         if argv[-2:] == ["binding", "list"]:
             return json.dumps({"ok": True, "data": [{"key": "decisions/observer", "enabled": False,
                                                        "definition_digest": "1" * 64}]})
@@ -373,6 +375,32 @@ class ReleaseCleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(cleanup.CleanupError, "did not prove its identity"):
             self.run_cleanup(inspect=inspect)
         self.assertTrue(self.history.exists())
+
+    def test_configured_conatus_pin_protects_a_release_without_a_schedule(self):
+        current = self.release("Conatus", self.current)
+        (current.parent.parent / "current").symlink_to("releases/" + self.current)
+        pinned = self.base / "Annals/install/releases" / self.old
+
+        def inspect(argv):
+            if argv == [self.home / ".local/bin/conatus", "--json", "config"]:
+                return json.dumps({"ok": True, "data": {"config": {"annals": str(pinned / "bin/annals")}}})
+            return self.inspect(argv)
+
+        self.run_cleanup(inspect=inspect)
+        self.assertTrue(pinned.is_dir())
+
+    def test_unreadable_product_configuration_prevents_every_deletion(self):
+        current = self.release("Conatus", self.current)
+        (current.parent.parent / "current").symlink_to("releases/" + self.current)
+
+        def inspect(argv):
+            if argv == [self.home / ".local/bin/conatus", "--json", "config"]:
+                return json.dumps({"ok": False, "data": {}})
+            return self.inspect(argv)
+
+        with self.assertRaisesRegex(cleanup.CleanupError, "configuration pin inventory is incomplete"):
+            self.run_cleanup(inspect=inspect)
+        self.assertTrue((self.base / "Annals/install/releases" / self.old).is_dir())
         for application in ("Annals", "Decisions", "Clockwork"):
             self.assertTrue((self.base / application / "install/previous").is_symlink())
             self.assertTrue((self.base / application / "install/releases" / self.old).is_dir())

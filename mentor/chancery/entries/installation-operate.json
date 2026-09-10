@@ -12,7 +12,7 @@
   "do_not_use_when": [
     "The task is desktop Mentor operation, direct database repair, provider credential or DNS changes, or an unapproved live practice run."
   ],
-  "outcome": "The selected Mentor program, state and worker binding have explicit product-owned configuration and maintenance boundaries without importing desktop state or creating an implicit live schedule.",
+  "outcome": "The selected Mentor program, state and worker binding have explicit product-owned configuration and maintenance boundaries without importing desktop state or clearing a failure halt.",
   "interfaces": [
     {
       "label": "Initialize paused state",
@@ -57,8 +57,9 @@
   ],
   "effects": [
     "Initialization creates private schema-one state with the bundled corpus and paused configuration. Configure/import/pause/resume modify only Mentor-owned records.",
-    "Explicit schedule enable registers and selects the exact installed worker; disable affects only mentor/worker. Installation selects product/provider artifacts without enabling practice.",
-    "Maintenance owns one hold; a drain pass can finish already admitted grading and send work and perform expiry. Migration copies only drained metadata/corpus state to a private backup."
+    "Explicit schedule enable registers and selects the exact installed worker; disable affects only mentor/worker. Direct installation selects product/provider artifacts without enabling practice; coordinated deployment activates according to captured or supplied intent after verification.",
+    "Maintenance owns one hold; a drain pass can finish already admitted grading and send work and perform expiry. Migration copies only drained metadata/corpus state to a private backup.",
+    "Coordinated setup resolves missing receiving settings through Email before maintenance, records original pause and binding intent, migrates or initializes state, prepares an exact disabled definition, and activates only after every hold is released. It preserves an initialized absent binding unless setup explicitly requests activation."
   ],
   "authority": [
     "Mentor owns its private state, admission, configuration, corpus import and exact worker definition. Clockwork owns binding mechanics, LaunchAgent/runtime records, durable scheduling halts and incident email. Mentor declares halt-until-approved and retains domain pauses separately.",
@@ -70,8 +71,9 @@
   ],
   "failure_and_recovery": [
     "Reject unsupported state or unsafe paths without creating a second database. Preserve owned holds when drain, backup, dependency readiness or rollback cannot be established.",
-    "Direct first installation is limited to uninitialized state. Disable mentor/worker before initialized coordinated deployment, then explicitly enable the desired current release afterward. Direct selector recovery is unsupported.",
-    "A retained schema-one owned binding can be replaced by the product schema-two definition. Definition changes, enable/disable and deployment preserve Clockwork incident state. Explicit binding resume requires the exact incident ID. cleanup can expire content and cancel expired jobs while halted without sending mail or admitting grading."
+    "Direct first installation is limited to uninitialized state. Coordinated deployment suspends mentor/worker and restores its intended state after every hold is released. Direct selector recovery is unsupported.",
+    "A retained schema-one owned binding can be replaced by the product schema-two definition. Definition changes, enable/disable and deployment preserve Clockwork incident state. Explicit binding resume requires the exact incident ID. cleanup can expire content and cancel expired jobs while halted without sending mail or admitting grading.",
+    "Interrupted setup retains its original baseline and fsynced migration receipt. Recovery restores suspension, checks original backup digests, repairs configuration and its disabled definition, then applies the captured pause and enabled settings. A fresh generated pause does not become operator intent."
   ],
   "privacy": [
     "State is separate from desktop Mentor under Application Support/MentorMail. Neither configuration nor Clockwork definitions contain provider credentials, answers or critiques.",
@@ -102,10 +104,15 @@
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.account.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
-    "Sending new practice mail merely because installation or initialization was requested, enabling an unrequested schedule, overriding another owner hold, publishing a release, or changing Email/Nucleus credentials."
+    "Sending new practice mail merely because installation or initialization was requested, enabling a schedule outside explicit scheduling authority or coordinated deployment default policy, overriding another owner hold, publishing a release, or changing Email/Nucleus credentials."
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -115,9 +122,10 @@
   "automation": "none",
   "steps": [
     "Read Mentor practice and installation contracts and affected installed provider contracts.",
-    "Use the product initialization/configuration commands; keep program installation, pause/resume and schedule enable separate.",
-    "For initialized updates, disable the exact worker, use maintained Cell deployment, drain existing work and require a content-free private backup.",
-    "Inspect the resulting program, state and binding under the operation authority; resume or enable only the intended admission/binding."
+    "Use Cell deployment for coordinated setup and updates, or invoke the separately supported initialization, configuration, pause and scheduling commands.",
+    "For initialized updates, use Cell deployment to suspend the exact worker, drain existing work, back up, install, configure, verify and restore worker intent.",
+    "Inspect the resulting program, state and binding under the operation authority; resume or enable only the intended admission/binding.",
+    "Coordinated deployment preserves existing configuration, pauses and incident halts. A fresh valid installation uses product default activation after verification."
   ],
   "checkpoints": [
     "State root remains MentorMail, not the desktop Mentor state.",
@@ -130,7 +138,7 @@
     "Preserve other owner holds and existing admission pauses across coordinated updates."
   ],
   "stop_when": [
-    "An initialized state update attempts direct selector recovery or occurs with an enabled worker.",
+    "An initialized state update attempts direct selector recovery or the worker cannot be suspended by its owned deployment phase.",
     "Private-state, ownership, drain, dependency capability or backup requirements cannot be established."
   ],
   "promise": {
@@ -189,7 +197,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Initialization is separate from install. Schedule enable selects current exact release and leaves admission pause unchanged. Initialized deployment requires the supported maintained coordinator and disabled worker; direct recovery is rejected. Backup requires drained work and no pending text. Holds persist until the same owner releases them."
+        "statement": "Initialization is separate from install. Schedule enable selects current exact release and leaves admission pause unchanged. Initialized deployment requires the supported maintained coordinator, which suspends the worker and restores its intent; direct recovery is rejected. Backup requires drained work and no pending text. Holds persist until the same owner releases them."
       }
     ],
     "operational_limits": [

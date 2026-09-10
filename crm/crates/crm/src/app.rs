@@ -124,7 +124,10 @@ fn run(cli: Cli) -> CommandResult<Option<Output>> {
     );
     let _admission = mutation
         .then(|| {
-            crate::maintenance::enter(&database, matches!(&cli.command, Command::Migrate { .. }))
+            crate::maintenance::enter(
+                &database,
+                matches!(&cli.command, Command::Init | Command::Migrate { .. }),
+            )
         })
         .transpose()?;
     match cli.command {

@@ -16,14 +16,11 @@ import sys
 import tomllib
 
 
-PRODUCTS = {
-    "annals": "Annals", "decisions": "Decisions", "semantics": "Semantics",
-    "crm": "CRM", "todo": "Todo", "nucleus": "Nucleus",
-    "chancery": "Chancery", "clockwork": "Clockwork", "conversations": "Conversations",
-    "email": "Email", "usher": "Usher", "cast": "Cast",
-    "platter": "Platter", "paperboy": "Paperboy", "conatus": "Conatus",
-    "mentor": "MentorMail", "emt": "EMT",
-}
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from deployment.inventory import applications
+
+PRODUCTS = applications(Path(__file__).resolve().parent.parent)
 HEX = re.compile(r"[0-9a-f]{64}")
 
 
@@ -178,6 +175,23 @@ def live_pins(home, installs, currents):
         require(receipt.get("release_id") == currents["Decisions"].name,
                 "Krisis dependency receipt is not current")
         retain(receipt)
+    source = Path(__file__).resolve().parents[1]
+    for product, application in PRODUCTS.items():
+        if application not in currents:
+            continue
+        metadata = json.loads((source / product / "deployment/adapter.json").read_text())
+        arguments = metadata.get("pin_inventory")
+        if arguments is None:
+            continue
+        require(isinstance(arguments, list) and arguments
+                and all(isinstance(value, str) and value for value in arguments),
+                "product pin inventory command is invalid")
+        binary = metadata["product"]
+        result = json.loads(inspect_command([home / ".local/bin" / binary, *arguments]))
+        require(isinstance(result, dict) and result.get("ok") is True
+                and isinstance(result.get("data"), dict),
+                "product configuration pin inventory is incomplete")
+        retain(result["data"])
     # Protect a directly running old binary, mapped executable, or script even
     # when its public selector has since moved to the new release.
     retain(inspect_command(["/usr/sbin/lsof", "-n", "-a", "-u", str(os.getuid()), "-d", "txt", "-Fn"]))

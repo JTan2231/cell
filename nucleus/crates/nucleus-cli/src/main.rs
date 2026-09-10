@@ -239,6 +239,15 @@ enum ServiceCommand {
         #[arg(long, value_name = "DIRECTORY")]
         codex_home: Option<PathBuf>,
     },
+    /// Reinstall the exact retained generation under a drained deployment hold.
+    Recover {
+        #[arg(long)]
+        daemon: PathBuf,
+        #[arg(long)]
+        codex: PathBuf,
+        #[arg(long)]
+        codex_home: Option<PathBuf>,
+    },
     /// Print launchd state and daemon health.
     Status,
     /// Terminate the current daemon and ask launchd to start it again.
@@ -635,12 +644,29 @@ async fn deployment_service_guard(
 ) -> Result<Option<cell_maintenance::Admission>, CliError> {
     let admission = if matches!(
         command,
-        ServiceCommand::Install { .. } | ServiceCommand::Restart
+        ServiceCommand::Install { .. } | ServiceCommand::Recover { .. } | ServiceCommand::Restart
     ) && let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID")
     {
         let client = NucleusClient::new(&paths.socket)?;
-        let status = client.maintenance_status().await?;
-        if status.holds != [owner.as_str()] || !status.drained {
+        let gate = cell_maintenance::Gate::new(paths.state_dir.join("deployment-maintenance"));
+        let drained = match client.maintenance_status().await {
+            Ok(status) => status.holds == [owner.as_str()] && status.drained,
+            Err(_)
+                if matches!(
+                    command,
+                    ServiceCommand::Install { .. } | ServiceCommand::Recover { .. }
+                ) =>
+            {
+                let status = gate
+                    .status()
+                    .map_err(|error| CliError::ServiceUnhealthy(error.to_string()))?;
+                status.holds == [owner.as_str()]
+                    && status.drained
+                    && service::offline_deployment_ready(paths)?
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if !drained {
             return Err(CliError::ServiceUnhealthy(
                 "deployment requires its sole drained admission hold".into(),
             ));
@@ -656,10 +682,38 @@ async fn deployment_service_guard(
     Ok(admission)
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep guarded service installation and health recovery in one dispatch"
+)]
 async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliError> {
     let paths = ServicePaths::for_current_user()?;
+    if matches!(command, ServiceCommand::Recover { .. })
+        && std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_none()
+    {
+        return Err(CliError::ServiceUnhealthy(
+            "service recovery requires its recorded deployment owner".into(),
+        ));
+    }
     let deployment_guard = deployment_service_guard(&paths, &command).await?;
+    let command = match command {
+        ServiceCommand::Recover {
+            daemon,
+            codex,
+            codex_home,
+        } => ServiceCommand::Install {
+            daemon: Some(daemon),
+            codex: Some(codex),
+            codex_home: if paths.codex_home.join("auth.json").exists() {
+                None
+            } else {
+                codex_home
+            },
+        },
+        command => command,
+    };
     match command {
+        ServiceCommand::Recover { .. } => unreachable!("recovery normalized to installation"),
         ServiceCommand::Install {
             daemon,
             codex,

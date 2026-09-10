@@ -44,10 +44,11 @@
   "privacy": [
     "The exact subject, body, and any attachment filenames and bytes leave the machine for Resend and Gmail when the command sends.",
     "A caller-supplied idempotency key also leaves the machine for Resend and must not contain secrets or message content.",
-    "Email does not retain the subject, body, attachments, API key, or a delivery history in local product state.",
+    "Email does not retain the subject, body, attachments, or a delivery history in local product state.",
     "The installed wrapper sources `~/.zshrc`, extracts only `RESEND_API_KEY`, and scrubs unrelated caller environment variables before starting the payload.",
     "Only attachment basenames and captured contents are transmitted; local source paths are not included in the provider payload or error diagnostics.",
-    "Reply addresses and RFC thread IDs are disclosed to Resend and Gmail and remain part of the exact idempotent payload. Email retains no thread state."
+    "Reply addresses and RFC thread IDs are disclosed to Resend and Gmail and remain part of the exact idempotent payload. Email retains no thread state.",
+    "Explicit local account setup can retain a private credential outside message history; email.account.operate owns that effect."
   ],
   "interfaces": [
     {

@@ -136,8 +136,9 @@ hold, drain, apply, verify, release and recover. Apply requires exact run-owned
 maintenance. Candidate and source material are verified; affected-only products
 are not upgraded. Interrupted or unsafe recovery retains its owner hold.
 
-No installation operation initializes a resume, prepares packets, sends email,
-creates a Clockwork binding or enables recurring delivery. Domain artifacts
+Deployment initializes a missing resume only from an explicit setup path and
+creates or enables a missing binding only from explicit activation settings. It
+prepares no packets and sends no email. Domain artifacts
 and accepted editions have no automatic pruning. Candidate workspaces and
 installation release history remain under Cell's separate retention rules.
 
@@ -149,7 +150,7 @@ installed `clockwork.schedule.operate` contract for definition registration,
 binding changes and recovery. The `platter/daily` binding uses a daily local
 calendar trigger at 18:00, run-at-load false, and skip-on-overlap. The Platter
 configuration time zone determines the edition date; Clockwork's trigger
-follows the machine zone. Installation does not create or update this binding.
+follows the machine zone. Cell deployment updates an existing binding and preserves its activation intent.
 
 `platter schedule-definition` prints the product-owned schema-two TOML from
 the verified selected executable and configuration. It declares the default
@@ -168,16 +169,11 @@ Review and register that definition through Clockwork, preserving any intended
 existing timer, environment and output-path configuration. Clockwork retains
 the failure halt independently of definition selection and enabled state.
 
-Before replacing a scheduled release, capture its binding digest and enabled
-state, then disable the binding for cutover. Deploy through Cell, verify the
-candidate release, and register a new definition pinned to its exact release
-root, executable and manifest SHA-256. Preserve the prior schedule, environment,
-working directory and private output paths. Under a Platter maintenance hold
-with drained local work, switch only a previously enabled binding; retain a
-previously disabled binding as disabled with its selected new definition.
-Release the hold after the binding result is coherent. If deployment fails,
-restore only the verified prior binding and its captured enabled state. Do not
-restore a definition whose command is absent from the selected release.
+Cell deployment captures the prior digest and enabled state, disables the
+binding under maintenance, and selects an updated exact definition disabled.
+It preserves timer, environment, working directory and private output paths.
+Activation restores the intended state after all holds release. Recovery
+retains the prior evidence and selects only a coherent installed release.
 
 Inspect `clockwork binding show platter/daily` and its selected definition for
 the actual schedule. `clockwork history platter/daily --limit 20` reports
@@ -189,3 +185,22 @@ Inspect `clockwork incident list platter/daily` after a failure. Once the cause
 is resolved, `clockwork binding resume platter/daily INCIDENT_ID` explicitly
 permits future scheduling. It creates no preparation attempt and does not
 reconcile an uncertain edition. No deployment step clears this incident.
+
+## Deployment setup and retained schedule intent
+
+Cell deployment captures and disables `platter/daily`. During configuration it
+migrates supported state, initializes a missing template from the supplied
+`resume` absolute path, and updates Cast, CRM and Email executable references
+to the final installed releases. An initialized template cannot be replaced
+through deployment settings. `platter --json config` reads retained settings
+without loading dependency data or preparing packets.
+
+The optional `enabled` setting selects intended activation. An absent binding
+stays absent when no activation setting is supplied. Existing definitions keep
+their schedule, arguments, renderer environment and output paths and select
+the new exact Platter program disabled. Final activation restores intent after
+all holds release. It never clears a Clockwork halt or reconciles a send.
+
+Each deployment retains its own migration backup. A new backup is selected
+only after any prior import cleanup completes and its retained backup digest
+remains valid. Repeating an interrupted run reuses its validated backup.

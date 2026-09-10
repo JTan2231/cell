@@ -13,9 +13,37 @@ Select systems from the Cell checkout:
 run selects the exact **local `main` commit**. It ignores uncommitted edits,
 other branches, and later commits. It never fetches, changes versions, commits,
 tags, or pushes. Selecting Annals also selects Annals Usage. `decisions` is an
-alias for `krisis`. Dependency declarations set the order of selected products.
-Each product checks its required installed dependencies. It does not install
-unselected products.
+alias for `krisis`. Dependency declarations set the installation order. The plan
+adds missing dependencies and dependencies outside the consumer's declared
+`runtime_versions` interval. An unproved installed version selects the committed
+dependency candidate. Incompatible committed candidates stop before maintenance.
+Installed companions receive matching candidates, including consumers that embed
+the provider's Rust libraries. The plan reports each addition's reason.
+
+Retained dependencies receive a read-only inspection from their sealed owning
+installer before maintenance and after configuration. Installation remnants,
+including broken selectors, are inspected rather than treated as absence.
+Version compatibility does not establish product readiness; adapters also check
+their supported runtime interfaces and configuration.
+Consumers can also require an explicitly indexed installed interface contract.
+For example, Mentor and EMT require Email's account setup and discovery operation.
+An older Email release with the same release number but without that operation
+is selected for replacement. These explicit requirements do not turn Chancery's
+documentation dependency graph into runtime or deployment edges.
+
+Supply initial choices through a private JSON file keyed by canonical product
+name. Subsequent runs reuse product configuration:
+
+```sh
+./deploy.sh mentor --settings /absolute/setup.json
+```
+
+For example, `{"mentor":{"receiving_domain":"reply.example.com","enabled":false}}`
+prepares Mentor without enabling its worker. Product installation manuals define
+their accepted keys. Supply credential file references, never credential bytes.
+Inspection gathers missing choices before maintenance. Email owns credential
+installation and receiving-account discovery. A `plan` lists settings owners
+without printing their values.
 
 The command runs in the foreground until deployment ends. By default, it prints
 one final JSON result to standard output. `--verbose` adds progress on standard
@@ -37,8 +65,8 @@ shell frontends are runtime assets for credential loading and scheduled jobs.
 ## Preparation and cutover
 
 Each run creates a detached worktree at the selected commit. It calls the shared
-release builder once for selected products and the declared maintenance closure.
-Preparing an affected product does not select it for upgrade.
+release builder once for selected products, the maintenance closure, and retained
+dependencies. Preparing an inspector does not select its product for upgrade.
 
 Complete the relevant CI checks during development. Deployment does not run CI
 or require a CI receipt. Preparation builds production binaries and checks
@@ -78,21 +106,32 @@ All candidates are prepared before maintenance begins. The coordinator then:
 
 1. Inspects selected products and every additional product whose admission must
    be held. It retains each product-owned baseline, prerequisites and ordering.
-2. Establishes requester holds and drains their work before holding and draining
-   Nucleus, so continuations can finish. An unselected requester may be held
+2. Holds and drains each consumer before its providers, with Nucleus last, so
+   admitted work can finish using its dependencies. An unselected requester may be held
    without changing its installed release.
-3. Applies selected product adapters in their declared order.
+3. Applies selected product adapters in their declared order, then configures
+   affected products in dependency order. Products with atomic state-and-file
+   transactions stage releases during apply and commit that transaction during
+   configure. Nucleus starts its replacement service under its existing hold so
+   requester configuration can use it.
 4. Checks installed candidate identity and service readiness while every
    affected product remains held. No model jobs or synthetic records are created.
 5. Releases requester holds only after all readiness checks pass, then releases
-   Nucleus last.
+   Nucleus last. Activation follows release of all holds.
 
-Stateful adapters use a conservative impact closure. Selecting a requester
-includes Nucleus in that closure. Nucleus includes all its registered requesters.
-A stateful run can therefore hold and verify unselected requesters. Those
-installations must already provide compatible maintenance operations; the run
-does not upgrade them to meet this requirement. Stateless products do not need
-this maintenance closure.
+Replacing Nucleus holds its installed requesters, as declared by each product's
+`requester_service`. Replacing one requester leaves Nucleus admission open.
+Affected-only installations must provide compatible maintenance operations.
+Mentor and EMT capture worker intent during inspection, suspend their bindings,
+select disabled definitions during configuration, and restore enabled state
+after verification and hold release. Existing pauses and incidents remain.
+An uninitialized Mentor installation uses its product default activation policy.
+Mentor and EMT resolve receiving configuration before maintenance. Conatus
+preserves library identities and its cursor while rebinding Annals. Paperboy and
+Platter reselect existing schedules with the installed program's exact pins.
+Clockwork suspends every captured enabled binding. During activation, product
+adapters restore their declared exact keys; Clockwork restores other captured
+bindings through its current broker. Custom bindings and incident halts survive.
 
 The coordinator owns the operation sequence and temporary execution state.
 Product adapters own configuration discovery, admission, quiescence, migration,
@@ -130,14 +169,22 @@ owner's hold. Successful recovery does not change a failed deployment result.
 If recovery cannot safely release a hold, it retains that hold and reports its
 owner and error for product recovery.
 
-After the worker exits, the parent closes its inherited lock descriptor and
-reacquires the host lock before unregistering the worktree and removing all
-temporary run files. A surviving descendant blocks this cleanup. The next
-deployment removes stale inactive workspace only after obtaining that same lock;
-it does not resume or recover an interrupted deployment. Both original failure
-and recovery evidence are collected before cleanup and emitted once afterward.
-Capture terminal output externally if a deployment report is needed. The
-coordinator's logs and workspace remain temporary. Completed build bundles and
+If any release or activation was attempted, recovery first holds and drains the
+affected products again. It preserves the original inspection baseline. Product
+recovery then repairs the transaction and configuration before a new release and
+activation attempt. A lost activation reply does not authorize configuration
+changes while work is running.
+
+After the worker exits, the parent reacquires the host lock. A surviving
+descendant blocks cleanup. A resolved transaction is removed. An unresolved
+transaction remains private with its source, candidates, baselines and logs.
+The next ordinary deployment first invokes recovery using that retained
+transaction. It starts the requested deployment only after recovery succeeds.
+No caller-supplied run ID or separate recovery command is required. A failed
+recovery retains evidence and holds. Original failure and recovery excerpts
+share the final diagnostic budget.
+
+Completed build bundles and
 the release Cargo target live outside that workspace and survive cleanup. The
 default cache is `cell-release-cache` under the repository's Git common
 directory, shared by linked worktrees; `CELL_RELEASE_CACHE_DIR` overrides it.
@@ -170,9 +217,10 @@ The cleanup reader accepts complete legacy Clockwork binding arrays. For
 version-two selections, it reads pages until the inventory is complete. An
 unknown or incomplete inventory stops cleanup before deletion.
 
-An uncertain Nucleus apply retains its hold and requires the supported Nucleus
-service recovery procedure. Matching files, declared versions, and health alone
-cannot prove that an old resident daemon was replaced.
+Nucleus retains its cutover journal and uses its service-owned recovery procedure
+to establish the resident generation. Matching files, declared versions, and
+health alone cannot prove that an old resident daemon was replaced. An unproved
+cutover retains the hold and recovery evidence.
 
 ## Product adapter protocol, version 1
 
@@ -183,13 +231,28 @@ Each declaration names its sealed installer executable in literal JSON:
 {"schema":1,"product":"usher","dependencies":[],"application":"Usher","adapter_binary":"usher-install","description":"Install Usher"}
 ```
 
-`dependencies` sets ordering prerequisites among selected systems, separately
-from Chancery dependencies. The adapter accepts one fixed operation argument:
-`inspect`, `hold`, `drain`, `apply`, `verify`, `release`, or `recover`. It accepts
+`dependencies` declares installation prerequisites, separately from Chancery
+documentation dependencies. `runtime_versions` maps each dependency to inclusive
+`minimum` and exclusive `before` release versions. Maintain these bounds with the
+product's supported interfaces. Optional `runtime_contracts` maps a dependency
+to required installed entry IDs and inclusive `minimum`/exclusive `before`
+contract versions. Only explicitly indexed, supported entries satisfy it.
+`companions` selects installed consumers that need matching artifacts or pins.
+`requester_service` names the service whose
+replacement requires this installed requester to drain. `activation_bindings`
+lists the exact Clockwork keys whose final intent the adapter owns. Optional
+`pin_inventory` names read-only product CLI arguments that return its complete
+configured executable references. Build, deployment and cleanup read the same
+literal product inventory. The adapter accepts one fixed operation argument:
+`inspect`, `hold`, `drain`, `apply`, `configure`, `verify`, `release`, `activate`,
+or `recover`. It accepts
 no caller-supplied command or workflow body. Standard input is one JSON object:
 
 - `schema`, `product`, `run_id`, `run_dir` and immutable `source_root`;
 - `selected_products`, `candidate_dir`, and the candidate manifest;
+- `affected_products` and their exact `activation_bindings`;
+- optional product `settings`, direct `dependency_settings`, and sealed
+  `dependency_candidates` for read-only discovery before a first installation;
 - `prior`, the opaque data captured by that product's inspection;
 - `recovery`, the captured operation and hold/application/verification progress
   during recovery within the active invocation.
@@ -210,7 +273,9 @@ standard error:
 ```
 
 The expected statuses, respectively, are `ready`, `held`, `drained`, `applied`,
-`verified`, `released` and `recovered`. Nonzero exits, `stopped`, invalid replies,
+`configured`, `verified`, `released`, `activated` and `recovered`. A drain may
+return `waiting`; the coordinator waits and retries that phase in the same run.
+Waiting has no deployment-duration cutoff. Nonzero exits, `stopped`, invalid replies,
 unknown statuses and outputs above 1 MiB stop the run. `inspect` data may declare
 `maintenance_products` and `after` as lists of canonical system names.
 Inspection must be read-only with respect to the installation.
@@ -222,6 +287,9 @@ proof, including when a hold's effect happened but its reply was lost. Each
 mutation must retain enough product-owned evidence for recovery. The coordinator
 records `any_apply_started` before permitting any product apply; an unchanged
 prior installation may recover pre-cutover holds using its inspected baseline.
+Recovery context also records configure, release and activation progress,
+including attempts whose reply was lost. Each product determines its actual
+cutover from its own transaction evidence.
 Successful recovery additionally returns
 `{"safe_to_release":true,"installed":"candidate"}` or `"installed":"prior"`
 inside `data`. Missing proof retains maintenance. Recovering a product is never

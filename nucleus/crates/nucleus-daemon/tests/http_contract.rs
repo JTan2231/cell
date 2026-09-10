@@ -517,6 +517,11 @@ async fn maintenance_fences_new_jobs_but_preserves_replay_cancellation_and_owned
         .submit_job(&fresh)
         .await
         .or_panic("admit after release");
+    fixture
+        .client
+        .health_for_deployment("requester-only")
+        .await
+        .or_panic("requester deployment with open Nucleus admission");
     wait_for_state(&fixture, &fresh.id, JobState::Completed).await;
     fixture.shutdown().await;
 }

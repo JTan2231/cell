@@ -4,5 +4,10 @@
   "application": "Conversations",
   "dependencies": [],
   "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "conversations-install"
+  "adapter_binary": "conversations-install",
+  "companions": [
+    "krisis",
+    "paperboy",
+    "semantics"
+  ]
 }

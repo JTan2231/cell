@@ -289,6 +289,14 @@ async fn maintenance(root: &Path, operation: MaintenanceOperation) -> Result<Val
             if gate.status()?.holds.is_empty() {
                 return Err(fail("maintenance drain requires a hold"));
             }
+            // A held idle product needs no worker pass. A busy admitted pass
+            // remains a waiting drain observation, including an unknown count.
+            let status = maintenance_status(root)?;
+            if status["maintenance"]["drained"] == true
+                || status["maintenance"]["outstanding_work_record_count"].is_null()
+            {
+                return Ok(status);
+            }
             if root.join("emt.sqlite3").exists() {
                 emt::runner::tick(root, true).await?;
             }

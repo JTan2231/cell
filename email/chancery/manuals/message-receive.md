@@ -94,3 +94,7 @@ Resend source references: [list API](https://resend.com/docs/api-reference/email
 [retrieve API](https://resend.com/docs/api-reference/emails/retrieve-received-email),
 [pagination](https://resend.com/docs/api-reference/pagination), and
 [reply headers](https://resend.com/docs/dashboard/receiving/reply-to-emails).
+
+Email selects its explicitly configured private credential first, then the
+existing `RESEND_API_KEY` environment fallback. Local setup and domain discovery
+use the separate [account operation](account-operate.md).

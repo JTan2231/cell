@@ -5,15 +5,16 @@
   "dependencies": [],
   "description": "Product-owned Rust packaging around the guarded Nucleus service installer.",
   "adapter_binary": "nucleus-install",
-  "maintenance_products": [
+  "maintenance_products": [],
+  "companions": [
     "annals",
-    "krisis",
-    "semantics",
     "crm",
-    "todo",
-    "platter",
-    "paperboy",
+    "emt",
+    "krisis",
     "mentor",
-    "emt"
+    "paperboy",
+    "platter",
+    "semantics",
+    "todo"
   ]
 }

@@ -279,3 +279,40 @@ Deployment admission resolves the configured database to its canonical path and
 uses that database parent for `deployment-maintenance/`. Symbolic aliases share
 the same gate. Databases with multiple hard links are rejected because their
 state root cannot identify one authoritative admission gate.
+
+## Coordinated configuration and activation
+
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
+For a fresh coordinated installation, provide `email_from` and `email_to` in
+Todo's deployment settings. An update preserves complete existing addresses
+when both are omitted. Configuration must contain both nonblank addresses.
+The adapter records the product transaction before it suspends public access.
+Recovery checks the same owner and candidate, restores a migration backup for
+a pre-commit failure, or proves the committed candidate's storage readiness.
+It keeps the selected schedule disabled until group activation. Recovery
+artifacts remain private under `backups/deployments/`.
+
+Deployment settings accept only `email_from`, `email_to`, and `enabled`.
+Addresses must be strings and `enabled` must be a boolean. For example,
+`{"todo":{"enabled":false}}` keeps an updated candidate schedule disabled
+after group activation. Fresh installation also requires both email addresses.
+An omitted `enabled` preserves captured intent; a new schedule defaults to
+enabled. Recovery to the prior configuration ignores this override.
+
+When recovery restores an owned legacy LaunchAgent, it leaves that service
+unloaded while admission is held. Final activation restores its captured load
+state only after checking the original release, exact plist digest, complete
+schedule definition, and absence of an enabled Clockwork binding. An altered
+legacy plist retains the recovery failure instead of loading a foreign service.

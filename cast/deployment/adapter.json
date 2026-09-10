@@ -3,6 +3,9 @@
   "product": "cast",
   "application": "Cast",
   "dependencies": [],
-  "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "cast-install"
+  "description": "Install Cast and initialize private discovery configuration without collecting.",
+  "adapter_binary": "cast-install",
+  "companions": [
+    "platter"
+  ]
 }

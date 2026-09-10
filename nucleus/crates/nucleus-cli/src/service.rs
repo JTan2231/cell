@@ -224,6 +224,32 @@ fn database_schema_version(path: &Path) -> Result<Option<i64>, ServiceError> {
         })
 }
 
+/// A stopped service can be installed under an existing deployment hold only
+/// when its retained jobs and attempts have already settled. This read never
+/// creates a database, migrates state, or changes an attempt.
+pub fn offline_deployment_ready(paths: &ServicePaths) -> Result<bool, ServiceError> {
+    if status()?.loaded {
+        return Ok(false);
+    }
+    settled_database(&paths.database)
+}
+
+fn settled_database(database: &Path) -> Result<bool, ServiceError> {
+    if !database.exists() {
+        return Ok(true);
+    }
+    let connection =
+        rusqlite::Connection::open_with_flags(database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|source| ServiceError::Database {
+                path: database.to_owned(),
+                source,
+            })?;
+    let unfinished: i64 = connection.query_row(
+        "SELECT (SELECT COUNT(*) FROM jobs WHERE state NOT IN ('completed','failed','cancelled')) + (SELECT COUNT(*) FROM attempts WHERE completed_at IS NULL OR state NOT IN ('completed','failed','cancelled','timed_out','lost'))", [], |row| row.get(0))
+        .map_err(|source| ServiceError::Database { path: database.to_owned(), source })?;
+    Ok(unfinished == 0)
+}
+
 #[derive(Debug)]
 pub struct ServiceStatus {
     pub loaded: bool,
@@ -872,6 +898,34 @@ mod tests {
                 None => panic!("{context}"),
             }
         }
+    }
+
+    #[test]
+    fn offline_recovery_does_not_create_or_migrate_a_database() {
+        let temporary = tempfile::tempdir().or_panic("create fixture");
+        let path = temporary.path().join("nucleus.db");
+        assert!(settled_database(&path).or_panic("inspect absent state"));
+        assert!(!path.exists());
+        let database = rusqlite::Connection::open(&path).or_panic("create fixture database");
+        database.execute_batch("PRAGMA user_version=987; CREATE TABLE jobs (state TEXT); CREATE TABLE attempts (state TEXT, completed_at TEXT); INSERT INTO jobs VALUES ('completed'); INSERT INTO attempts VALUES ('completed', 'retained');").or_panic("prepare fixture");
+        assert!(settled_database(&path).or_panic("inspect terminal records"));
+        database
+            .execute("INSERT INTO attempts VALUES ('pending', NULL)", [])
+            .or_panic("queue attempt");
+        assert!(!settled_database(&path).or_panic("inspect pending attempt"));
+        database
+            .execute("DELETE FROM attempts WHERE state = 'pending'", [])
+            .or_panic("remove fixture attempt");
+        database
+            .execute("INSERT INTO jobs VALUES ('waiting_on_requester')", [])
+            .or_panic("retain waiting job");
+        assert!(!settled_database(&path).or_panic("inspect waiting job"));
+        assert_eq!(
+            database
+                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                .or_panic("read version"),
+            987
+        );
     }
 
     #[test]

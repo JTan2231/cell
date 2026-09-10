@@ -2,8 +2,44 @@
   "schema": 1,
   "product": "platter",
   "application": "Platter",
-  "dependencies": ["cast", "crm", "email", "nucleus"],
-  "maintenance_products": ["nucleus"],
-  "description": "Verified Platter installation through coordinated requester maintenance.",
-  "adapter_binary": "platter-install"
+  "dependencies": [
+    "cast",
+    "crm",
+    "email",
+    "nucleus",
+    "clockwork"
+  ],
+  "maintenance_products": [],
+  "description": "Migrate and configure Platter under held admission; update its disabled daily definition and restore saved intent.",
+  "adapter_binary": "platter-install",
+  "requester_service": "nucleus",
+  "runtime_versions": {
+    "cast": {
+      "minimum": "0.4.0",
+      "before": "0.5.0"
+    },
+    "crm": {
+      "minimum": "0.5.0",
+      "before": "0.6.0"
+    },
+    "email": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    },
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "platter/daily"
+  ],
+  "pin_inventory": [
+    "--json",
+    "config"
+  ]
 }

@@ -19,6 +19,21 @@ pub struct Client {
 }
 
 impl Client {
+    /// Discover local receiving selection or verified provider receiving domains.
+    ///
+    /// # Errors
+    /// Returns command failure, malformed settings or invalid domains.
+    pub async fn receiving_settings(&self) -> AppResult<crate::api::ReceivingSettings> {
+        let output = self
+            .invoke(&["receive".into(), "settings".into()], None, 65536)
+            .await?;
+        let result: crate::api::ReceivingSettings = serde_json::from_slice(&output)
+            .map_err(|_| AppError::new("Email returned invalid receiving settings"))?;
+        for domain in &result.domains {
+            crate::settings::validate_domain(domain)?;
+        }
+        Ok(result)
+    }
     /// Select an absolute installed wrapper path. Validation occurs before use.
     pub fn new(executable: impl Into<PathBuf>) -> Self {
         Self {

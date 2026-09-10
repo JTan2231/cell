@@ -129,10 +129,10 @@ activation below remains a separate documented operation; the adapter never
 manufactures or chooses its watermark. It keeps product ownership and
 commit boundaries intact rather than promising an aggregate database rollback.
 
-Group release removes only this run's hold after verification. A retained
-product-installer maintenance marker, unfinished transaction, or unproved
-installation stops adapter recovery and retains admission for the existing
-product recovery procedure. Clearing the outer hold cannot authorize clearing
+Group release removes only this run's hold after verification. Adapter recovery
+first invokes the exact retained product transaction. Pre-commit recovery
+restores the captured state; committed recovery finishes the candidate with
+its schedule disabled. An unproved installation retains admission. Clearing the outer hold cannot authorize clearing
 another owner's marker or a project pause.
 
 ## Paths
@@ -332,3 +332,25 @@ retry preserve it. The last two operations remain Semantics-owned domain control
 Scheduling continuation creates no retry and cannot authorize a new request
 while a prior Nucleus job remains uncertain. Schema-one definitions acquire the
 new policy only when a schema-two definition is explicitly selected.
+
+## Coordinated configuration and activation
+
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
+Deployment settings accept only `enabled`. `enabled` must be a boolean.
+For example, `{"semantics":{"enabled":false}}` keeps the candidate schedule
+disabled after group activation. An omitted value preserves
+captured intent; a new schedule defaults to enabled. Recovery to the prior
+configuration preserves captured intent and ignores this override. Incident
+halts and operator pauses remain in force.

@@ -44,7 +44,8 @@
     }
   ],
   "effects": [
-    "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects."
+    "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects.",
+    "Coordinated setup resolves missing receiving settings through Email before maintenance, initializes state if absent, records a durable migration receipt, prepares a disabled exact definition, and activates after every hold is released. It preserves original absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent."
   ],
   "authority": [
     "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."
@@ -78,6 +79,11 @@
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.account.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -205,8 +211,9 @@
   "steps": [
     "Read the EMT installation and incident-response contracts.",
     "Install matched program and provider bytes. Initialize and configure paused state through EMT commands.",
-    "For initialized updates, disable emt/worker and use coordinated maintenance to drain, back up, install and verify.",
-    "Refresh active Clockwork brokers before explicitly resuming EMT and enabling its worker."
+    "For initialized updates, use Cell deployment to suspend the worker, drain, back up, install, configure, verify and restore worker intent.",
+    "Coordinated activation runs after broker refresh and all hold releases. It configures EMT routing and restores saved or requested worker and pause intent.",
+    "Coordinated deployment preserves existing configuration, pauses and incident halts. A fresh valid installation uses product default activation after verification."
   ],
   "checkpoints": [
     "The selected EMT binary and provider versions match.",

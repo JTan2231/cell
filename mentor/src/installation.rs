@@ -314,14 +314,6 @@ fn installer_preflight(
         ));
     }
     if operation == "adapter" {
-        if arguments.get(1).is_some_and(|operation| {
-            matches!(
-                operation.as_str(),
-                "inspect" | "apply" | "verify" | "recover" | "release"
-            )
-        }) {
-            require_schedule_disabled(&crate::home()?)?;
-        }
         return Ok(None);
     }
     if operation != "install" {
@@ -353,7 +345,7 @@ pub fn installer_main() -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "mentor-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nDisable mentor/worker before deployment; explicitly enable it after deployment.",
+            "mentor-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nCoordinated deployment preserves worker intent and activates after verification.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::SUCCESS;
@@ -371,5 +363,342 @@ pub fn installer_main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    cell_install::simple::main(&specification(), env!("CARGO_PKG_VERSION"))
+    cell_install::simple::main_with_lifecycle(
+        &specification(),
+        env!("CARGO_PKG_VERSION"),
+        deployment_lifecycle,
+    )
+}
+
+fn deployment_lifecycle(
+    context: &cell_install::adapter::Context,
+    operation: cell_install::adapter::Operation,
+) -> cell_install::Result<Value> {
+    deployment_operation(context, operation)
+        .map_err(|error| cell_install::Error::new(error.to_string()))
+}
+
+#[allow(clippy::too_many_lines)] // Keep captured intent and its ordered recovery together.
+fn deployment_operation(
+    context: &cell_install::adapter::Context,
+    operation: cell_install::adapter::Operation,
+) -> Result<Value> {
+    use cell_install::adapter::Operation;
+    let root = context.home.join("Library/Application Support/MentorMail");
+    let client = client(&context.home);
+    if operation == Operation::Inspect {
+        let initialized = root.join("mentor.sqlite3").try_exists()?;
+        let mut config = if initialized {
+            crate::store::Store::open(&root)?.config()?
+        } else {
+            crate::store::Config::defaults()?
+        };
+        if !initialized {
+            config.receiving_domain.clear();
+            config.paused = false;
+        }
+        let mut activate = None;
+        if let Some(settings) = &context.request.settings {
+            let mut settings = settings
+                .as_object()
+                .ok_or_else(|| fail("deployment settings must be an object"))?
+                .clone();
+            if let Some(enabled) = settings.remove("enabled") {
+                activate = Some(
+                    enabled
+                        .as_bool()
+                        .ok_or_else(|| fail("enabled must be a boolean"))?,
+                );
+            }
+            if settings.contains_key("poll_after") {
+                return Err(fail(
+                    "deployment settings cannot change incoming-mail progress",
+                ));
+            }
+            let mut merged = serde_json::to_value(&config)?;
+            merged
+                .as_object_mut()
+                .ok_or_else(|| fail("invalid saved configuration"))?
+                .extend(settings);
+            config = serde_json::from_value(merged)?;
+        }
+        if config.receiving_domain.is_empty()
+            && let Some(domain) = context
+                .request
+                .dependency_settings
+                .get("email")
+                .and_then(|settings| settings.get("receiving_domain"))
+                .and_then(Value::as_str)
+        {
+            domain.clone_into(&mut config.receiving_domain);
+        }
+        if config.receiving_domain.is_empty() {
+            let email = if config.email_executable == context.home.join(".local/bin/email") {
+                context.dependency_inspection_binary("email")?
+            } else {
+                config.email_executable.clone()
+            };
+            let settings = tokio::runtime::Runtime::new()?
+                .block_on(email::api::Client::new(&email).receiving_settings())?;
+            if settings.domains.len() != 1 {
+                return Err(fail(
+                    "configure one receiving domain through Email before deployment",
+                ));
+            }
+            config.receiving_domain.clone_from(&settings.domains[0]);
+        }
+        config.validate()?;
+        let observed = if context
+            .home
+            .join("Library/Application Support/Clockwork/clockwork.db")
+            .try_exists()?
+            || context.home.join(".local/bin/clockwork").try_exists()?
+        {
+            binding(&Client::new(context.dependency_binary("clockwork")?))?
+        } else {
+            None
+        };
+        if let Some(value) = &observed {
+            require_owned_binding(&root, &client, value)?;
+        }
+        return Ok(
+            json!({"binding":observed,"config":config,"initialized":initialized,
+            "activate":activate.unwrap_or_else(|| observed.as_ref().map_or(!initialized, |value| value.enabled))}),
+        );
+    }
+    let prior = &context.prior()?["lifecycle"];
+    let before: Option<BindingRecord> = serde_json::from_value(prior["binding"].clone())?;
+    let forward = context.request.recovery.as_ref().is_none_or(|recovery| {
+        recovery["any_apply_started"] == true && context.home.join(".local/bin/mentor").is_file()
+    });
+    if operation == Operation::Hold {
+        let observed =
+            if before.is_none() && !context.home.join(".local/bin/clockwork").try_exists()? {
+                None
+            } else {
+                binding(&client)?
+            };
+        if context.request.recovery.is_none() {
+            require_prior_selection(before.as_ref(), observed.as_ref())?;
+        }
+
+        if observed.is_some() {
+            client.disable(WORKER_KEY, None)?;
+        }
+        if context.request.recovery.is_some() && forward && prior["initialized"] == false {
+            // Repair only initialization authorized by the original absent-state
+            // baseline before the coordinator asks this product to drain again.
+            let gate = crate::gate(&root);
+            gate.hold(&context.request.run_id)?;
+            let _admission = gate.enter_for(&context.request.run_id)?;
+            let _runner = crate::store::runner_lock(&root)?;
+            crate::store::Store::initialize(&root)?;
+        }
+    }
+    if operation == Operation::Configure || operation == Operation::Recover && forward {
+        configure_worker(&root, &client, context, prior, before.as_ref())?;
+    }
+    if operation == Operation::Recover && !forward {
+        // No publication began. Keep the original generation inactive until release.
+        if let Some(before) = &before {
+            client.disable(WORKER_KEY, before.definition_digest.as_deref())?;
+        }
+    }
+    if operation == Operation::Activate {
+        let activate = if forward {
+            prior["activate"] == true
+        } else {
+            before.as_ref().is_some_and(|value| value.enabled)
+        };
+        if forward {
+            let _admission = crate::gate(&root).enter()?;
+            let _runner = crate::store::runner_lock(&root)?;
+            let store = crate::store::Store::open(&root)?;
+            let mut config = store.config()?;
+            config.paused = prior["config"]["paused"]
+                .as_bool()
+                .ok_or_else(|| fail("saved pause intent is missing"))?;
+            config.validate()?;
+            store.set_config(&config)?;
+        }
+        if activate {
+            let observed =
+                binding(&client)?.ok_or_else(|| fail("worker activation has no binding"))?;
+            let digest = observed
+                .definition_digest
+                .as_deref()
+                .ok_or_else(|| fail("worker activation has no selected definition"))?;
+            let selected = client.switch(WORKER_KEY, digest)?;
+            if !selected.enabled || selected.definition_digest.as_deref() != Some(digest) {
+                return Err(fail("Clockwork did not confirm worker activation"));
+            }
+        }
+    }
+    if matches!(
+        operation,
+        Operation::Verify | Operation::Recover | Operation::Activate
+    ) {
+        let observed = if context.home.join(".local/bin/clockwork").is_file() {
+            binding(&client)?
+        } else {
+            None
+        };
+        if forward
+            && (before.is_some() || prior["initialized"] == false || prior["activate"] == true)
+            && observed.is_none()
+        {
+            return Err(fail("configured worker binding is absent"));
+        }
+        if let Some(observed) = observed {
+            require_owned_binding(&root, &client, &observed)?;
+            if before.as_ref().is_some_and(|before| {
+                before.halted_incident.is_some()
+                    && observed.halted_incident != before.halted_incident
+            }) {
+                return Err(fail("deployment changed the worker failure halt"));
+            }
+            if operation != Operation::Activate && observed.enabled {
+                return Err(fail("worker became enabled before deployment activation"));
+            }
+        }
+    }
+    Ok(json!({}))
+}
+
+fn require_prior_selection(
+    before: Option<&BindingRecord>,
+    observed: Option<&BindingRecord>,
+) -> Result<()> {
+    let unchanged = match (before, observed) {
+        (None, None) => true,
+        (Some(before), Some(observed)) => {
+            before.definition_digest == observed.definition_digest
+                && before.halted_incident == observed.halted_incident
+                && (before.enabled || !observed.enabled)
+        }
+        _ => false,
+    };
+    if !unchanged {
+        return Err(fail("worker binding changed since deployment inspection"));
+    }
+    Ok(())
+}
+
+fn configure_worker(
+    root: &Path,
+    client: &Client,
+    context: &cell_install::adapter::Context,
+    prior: &Value,
+    before: Option<&BindingRecord>,
+) -> Result<()> {
+    migrate_for_configuration(root, context)?;
+    let gate = crate::gate(root);
+    let _admission = gate.enter_for(&context.request.run_id)?;
+    let _runner = crate::store::runner_lock(root)?;
+    let mut config: crate::store::Config = serde_json::from_value(prior["config"].clone())?;
+    config.validate()?;
+    if prior["initialized"] == false {
+        config.paused = true;
+    }
+    crate::store::Store::open(root)?.set_config(&config)?;
+    // Preserve an existing installation's absent binding as operator intent.
+    if before.is_none() && prior["initialized"] == true && prior["activate"] != true {
+        return Ok(());
+    }
+    let selected = selected_release(root)?;
+    let definition = manifest(root, &selected)?;
+    let digest = definition.digest()?;
+    crate::store::private_directory(&root.join("logs"))?;
+    private_log(&root.join("logs/worker.stdout.log"))?;
+    private_log(&root.join("logs/worker.stderr.log"))?;
+    let path = stage_manifest(root, &digest, &definition.to_toml()?)?;
+    let registered = client.register(&path)?;
+    if registered.digest != digest || registered.manifest != definition {
+        return Err(fail("registered worker differs from its owned definition"));
+    }
+    let selected = client.disable(WORKER_KEY, Some(&digest))?;
+    if selected.enabled || selected.definition_digest.as_deref() != Some(&digest) {
+        return Err(fail("Clockwork did not confirm disabled worker selection"));
+    }
+    Ok(())
+}
+
+fn migrate_for_configuration(root: &Path, context: &cell_install::adapter::Context) -> Result<()> {
+    let directory = &context.request.run_dir;
+    crate::store::private_directory(directory)?;
+    let marker = directory.join("mentor-migration.json");
+    let backup = root.join(format!(
+        "mentor-pre-migration-{}.sqlite",
+        context.request.run_id
+    ));
+    if marker.try_exists()? {
+        let metadata = fs::symlink_metadata(&marker)?;
+        if !metadata.is_file()
+            || metadata.file_type().is_symlink()
+            || metadata.nlink() != 1
+            || metadata.mode() & 0o077 != 0
+        {
+            return Err(fail("migration receipt must be a private regular file"));
+        }
+        let receipt: Value = serde_json::from_slice(&fs::read(&marker)?)?;
+        if receipt["run_id"] != context.request.run_id || receipt["schema_version"] != 1 {
+            return Err(fail("migration receipt does not match this deployment"));
+        }
+        for (path, hash) in receipt["backups"]
+            .as_object()
+            .ok_or_else(|| fail("migration backup evidence is missing"))?
+        {
+            if cell_install::file_digest(Path::new(path))?
+                != hash
+                    .as_str()
+                    .ok_or_else(|| fail("migration backup digest is invalid"))?
+            {
+                return Err(fail("retained migration backup changed"));
+            }
+        }
+        return Ok(());
+    }
+    let receipt = if context.prior()?["lifecycle"]["initialized"] == false {
+        let gate = crate::gate(root);
+        let _admission = gate.enter_for(&context.request.run_id)?;
+        let _runner = crate::store::runner_lock(root)?;
+        crate::store::Store::initialize(root)?;
+        json!({"data":{"schema_version":1,"backup":null}})
+    } else {
+        cell_install::command::json(
+            &context.home.join(".local/bin/mentor"),
+            &[
+                "--json".into(),
+                "migrate".into(),
+                "--backup".into(),
+                backup.clone().into_os_string(),
+            ],
+            &BTreeMap::from([(
+                "CELL_DEPLOYMENT_RUN_ID".into(),
+                context.request.run_id.clone().into(),
+            )]),
+            std::time::Duration::from_secs(600),
+        )?
+    };
+    let mut backups = serde_json::Map::new();
+    for name in ["backup", "config_backup"] {
+        if let Some(path) = receipt["data"][name].as_str() {
+            backups.insert(
+                path.to_owned(),
+                json!(cell_install::file_digest(Path::new(path))?),
+            );
+        }
+    }
+    let receipt = json!({"run_id":context.request.run_id,"schema_version":1,"backups":backups});
+    let pending = directory.join(format!(".mentor-migration-{}", crate::random_token()?));
+    let mut file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&pending)?;
+    file.write_all(&serde_json::to_vec(&receipt)?)?;
+    file.sync_all()?;
+    fs::rename(&pending, &marker)?;
+    File::open(directory)?.sync_all()?;
+    Ok(())
 }

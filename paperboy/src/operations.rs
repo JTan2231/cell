@@ -251,7 +251,28 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
         return Ok(serde_json::to_value(clockwork.disable(KEY, None)?)?);
     }
     ensure!(operation == "enable", "unsupported schedule operation");
-    let executable = fs::canonicalize(std::env::current_exe()?)?;
+    let definition = schedule_definition(root)?;
+    let manifest = root.join("daily.toml");
+    if manifest.exists() {
+        crate::store::regular(&manifest)?;
+    }
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&manifest)?;
+    file.write_all(toml::to_string(&definition)?.as_bytes())?;
+    file.sync_all()?;
+    let registered = clockwork.register(&manifest)?;
+    Ok(serde_json::to_value(
+        clockwork.switch(KEY, &registered.digest)?,
+    )?)
+}
+
+/// Prepare the exact selected release without changing schedule activation.
+pub fn schedule_definition(root: &Path) -> Result<clockwork::api::Manifest> {
+    let executable = fs::canonicalize(crate::home()?.join(".local/bin/paperboy"))?;
     let release = executable
         .parent()
         .and_then(Path::parent)
@@ -270,24 +291,9 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
     let home = crate::home()?;
     let codex = crate::agent::source_config()?.codex_path;
     let definition: clockwork::api::Manifest = serde_json::from_value(
-        json!({"schema_version":2,"key":KEY,"release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","failure":{"on_abend":"halt-until-approved"},"arguments":["run","--scheduled"],"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin","CONVERSATIONS_CODEX":codex},"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
+        json!({"schema_version":2,"key":"paperboy/daily","release_id":info.release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","failure":{"on_abend":"halt-until-approved"},"arguments":["run","--scheduled"],"cwd":root,"timeout_seconds":2100,"schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},"launch":{"kind":"direct","program":executable,"sha256":cell_install::file_digest(&executable)?},"environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin","CONVERSATIONS_CODEX":codex},"output":{"stdout":logs.join("daily.stdout.log"),"stderr":logs.join("daily.stderr.log")}}),
     )?;
-    let manifest = root.join("daily.toml");
-    if manifest.exists() {
-        crate::store::regular(&manifest)?;
-    }
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create(true)
-        .truncate(true)
-        .mode(0o600)
-        .open(&manifest)?;
-    file.write_all(toml::to_string(&definition)?.as_bytes())?;
-    file.sync_all()?;
-    let registered = clockwork.register(&manifest)?;
-    Ok(serde_json::to_value(
-        clockwork.switch(KEY, &registered.digest)?,
-    )?)
+    Ok(definition)
 }
 
 pub fn show(root: &Path, id: &str) -> Result<Value> {

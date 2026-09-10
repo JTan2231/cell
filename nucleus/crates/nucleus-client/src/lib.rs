@@ -108,10 +108,11 @@ impl NucleusClient {
         self.get("/v1/health").await
     }
 
-    /// Prove deployment readiness under one exact owner's sole hold.
+    /// Prove requester deployment readiness with open service admission, or
+    /// service replacement readiness under one exact owner's sole hold.
     /// The returned health remains unchanged: `accepting_jobs` is false while
     /// held. Callers must use this result only for installation readiness, never
-    /// ordinary research admission. Every admission activity must be drained.
+    /// ordinary research admission. A held service must have drained all work.
     ///
     /// # Errors
     /// Returns a [`ClientError`] unless owner, runtime drain, authentication,
@@ -122,19 +123,26 @@ impl NucleusClient {
     ) -> Result<HealthResponseV1, ClientError> {
         let health = self.health().await?;
         let status = self.maintenance_status().await?;
+        let admission_ready = if status.holds.is_empty() {
+            health.status == "ok" && health.accepting_jobs
+        } else {
+            status.holds == [run_id]
+                && status.nonterminal_jobs == 0
+                && status.drained
+                && health
+                    .execution
+                    .as_ref()
+                    .is_some_and(|capacity| capacity.active_jobs == 0)
+        };
         if status.protocol_version != 1
-            || status.holds != [run_id]
-            || status.nonterminal_jobs != 0
-            || !status.drained
+            || !admission_ready
             || health.harness.is_none()
             || health.harness_executable.is_none()
             || !health.authentication.configured
             || !health.authentication.authenticated
             || health.detail.is_some()
             || !health.supported_protocol_versions.contains(&1)
-            || health
-                .execution
-                .is_none_or(|capacity| capacity.active_jobs != 0)
+            || health.execution.is_none()
         {
             return Err(ClientError::DeploymentNotReady);
         }

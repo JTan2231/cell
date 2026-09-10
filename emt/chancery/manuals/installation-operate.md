@@ -62,9 +62,13 @@ Before initialization, emt-install install accepts --binary ABS --bundle ABS
 and shared --home and --expected-current options. It installs bytes without
 initializing state, running agents, sending mail or enabling a schedule.
 
-Initialized updates use Cell's maintained coordinator. Disable emt/worker,
-hold and drain EMT before Nucleus is held, install the matched release and
-provider, verify readiness and explicitly re-enable the schedule.
+Initialized updates use `./deploy.sh emt`. The coordinator captures configuration
+and worker intent, disables the worker, holds and drains EMT, installs the matched
+release and provider, selects a disabled exact worker definition, and verifies
+readiness. It releases admission and restores enabled state. Existing pauses
+and failure halts remain. Configuration must be valid before maintenance.
+A requester-only update leaves Nucleus admission open. Nucleus replacement
+waits for EMT's existing exchanges before holding the service.
 
 ~~~sh
 emt maintenance hold OWNER
@@ -94,3 +98,33 @@ EMT declares Email, Nucleus and Clockwork dependencies. Nucleus maintenance
 includes EMT. Shared cleanup recognizes EMT's root and preserves active pins.
 See emt.incident.respond for standing authority, agent policy, record meaning,
 notification ownership, deadlines and recovery.
+
+## Deployment setup and recovery
+
+Product setup accepts the existing configuration fields and an `enabled` boolean.
+It does not accept incoming-mail progress changes. Omitted settings preserve the
+saved values. A fresh deployment uses the default daily/worker schedule, with
+activation enabled and domain pause removed after verification. An explicit
+`paused` or `enabled` value overrides that default.
+
+Before maintenance, resolve a missing receiving domain through Email's
+`receive settings` interface. A domain supplied with this product or the selected
+Email setup takes precedence. An empty or ambiguous result requires a supplied
+domain; deployment does not inspect received mail to infer account settings.
+An initialized product's absent binding remains absent unless activation is
+explicitly requested.
+
+Recovery uses the original captured configuration and worker intent. It restores
+a disabled exact definition before release and then applies the captured pause
+and enabled settings. Fresh initialization's temporary pause is not operator
+intent. Existing pause and failure halt evidence survives every phase.
+
+The retained coordinator directory holds this product's migration receipt. It
+records the completed schema and original backup digests before configuration
+changes. Recovery checks that evidence and reuses the backup; it does not
+replace the original backup with already configured state.
+EMT initialization can finish an interrupted empty schema or missing empty-state
+configuration. It refuses missing configuration when incident or exchange
+records exist. Set `cell_root` to an existing stable checkout when the default
+`~/rust/cell` does not apply. Deployment worktree paths are not retained as Cell
+configuration.

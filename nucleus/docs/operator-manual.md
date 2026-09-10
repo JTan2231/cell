@@ -104,10 +104,8 @@ and cursors. Krisis refuses the document cutover while old handoffs or
 classification jobs are in flight.
 
 Conatus pins its Annals executable and its Clockwork definition pins Conatus.
-After replacing these releases, repeat `conatus init` with the existing library
-selections to verify their identities and replace only the Annals executable
-pin. Then register and select a definition from the new Conatus release.
-Preserve the existing pause and schedule activation states during this cutover.
+Coordinated deployment rebinds those pins, verifies both existing library
+identities, and preserves its cursor, operator pause and schedule intent.
 
 Each product owns its data and success rules. Nucleus owns execution. A completed
 model turn does not establish a product result. A later runtime failure does
@@ -182,8 +180,9 @@ compatible, authenticated, and accepting jobs. Its execution fields report
 
 `authentication_busy` identifies credential-operation contention. An active
 job alone does not make an account read busy or prove a bad credential.
-A held deployment uses the exact owner's `maintenance health RUN_ID` interface;
-ordinary health remains strict.
+The deployment health client accepts a healthy service with open admission for
+a requester-only update. When a hold exists, it requires that exact owner's sole
+hold and complete drain. Ordinary health remains strict.
 
 Do not maintain a dated installed-version table here. A source checkout or
 catalog entry does not establish the currently running release.
@@ -232,7 +231,7 @@ changes versions, commits, tags, and pushes. CI does not publish. Release and
 deployment preparation build and seal production artifacts; they do not rerun
 CI or turn a build receipt into test evidence.
 
-### Selection-only Cell deployment
+### Cell deployment
 
 Preview the selected systems, then use the coordinator when deployment is authorized:
 
@@ -243,17 +242,26 @@ Preview the selected systems, then use the coordinator when deployment is author
 
 The coordinator selects a local `main` commit and prepares immutable candidates.
 Product declarations order selected releases and identify affected installations
-to hold. Dependencies do not silently upgrade unselected products. Annals includes
-Usage; `decisions` aliases `krisis`.
+to hold. The plan adds missing or incompatible runtime dependencies and declared
+installed companions, and reports each selection reason. Consumer-owned release
+bounds select compatible candidates; sealed product inspectors prove retained
+dependencies and their runtime prerequisites before maintenance.
+Annals includes Usage; `decisions` aliases `krisis`.
 
 The shared sequence is:
 
 1. Prepare and verify all selected candidates before maintenance.
-2. Hold affected requester admission and settle domain work.
-3. Hold and drain Nucleus after requester continuation work has finished.
-4. Apply selected candidates in dependency order.
+2. Hold and drain each affected consumer before its providers, so admitted work
+   can finish using its dependencies.
+3. When replacing Nucleus, hold it after requester continuation work has finished.
+   A requester-only deployment leaves Nucleus admission open.
+4. Prepare selected releases, then configure affected products in dependency order.
+   Products retain their atomic state-and-file transactions. Nucleus starts its
+   replacement service under its hold before requesters configure against it.
 5. Verify selected candidate identity and affected-only installed readiness.
-6. Release requester holds, then release Nucleus last.
+6. Release requester holds, then release Nucleus last when it is held.
+7. Activate product schedules according to captured intent. Preserve existing
+   pauses, disabled bindings and incident halts.
 
 A hold belongs to one run, survives process exit, and does not expire. Releasing
 it preserves other holds, operator pauses, and disabled schedules. Drain must
@@ -264,15 +272,26 @@ establish a coherent prior or candidate installation before releasing admission.
 An uncertain apply is not repeated blindly. Matching files and health alone do
 not prove replacement of a resident Nucleus daemon.
 
+Setup settings supply missing choices once through `--settings ABSOLUTE_JSON`.
+Product adapters reuse existing configuration, initialize missing state, update
+pins and prepare disabled schedules. Email owns local credential installation
+and receiving-account discovery; settings contain credential file references.
+Clockwork refreshes enabled generated brokers during final activation while
+preserving product intent, custom bindings and failure halts.
+
 Unproved recovery retains the product hold and identifies its owner. A successful
 recovery still reports the original deployment failure. Cleanup failure does not
 erase installation success. The coordinator's final result distinguishes these
 outcomes.
 
 The coordinator retains no public deployment history or resume interface.
+It retains an unresolved active transaction and uses it for recovery at the next
+ordinary deployment command. It removes the workspace only after resolution.
 Product holds and recovery backups remain until resolved. Release cleanup
 preserves current releases and exact pins held by configuration, schedules, or
 processes. Unknown or incomplete pin inventories stop deletion.
+After an attempted release or activation, recovery holds and drains work again
+before repairing product configuration. It uses the original captured intent.
 
 See [Cell deployment](/Users/joey/rust/cell/deployment/README.md) for candidate,
 locking, cleanup, and interrupted-operation details. Each product's installation
@@ -286,9 +305,10 @@ Capture enabled schedules and operator pauses before stopping admission.
 Settle domain work and Nucleus jobs, install the compatible release, and verify
 its maintenance interface. Restore only the captured enabled state after readiness.
 
-New databases, credential provisioning, schedule policy, and domain imports use
-their explicit product operations. A temporary maintenance pause does not replace
-the operator's original intent.
+Adapters invoke product-owned initialization and local credential setup from
+supplied settings. External authentication still requires a valid supplied
+account session. Domain imports use their explicit product operations. A
+temporary maintenance pause does not replace the operator's original intent.
 
 ## Quiesce before work that cannot tolerate a lost attempt
 
@@ -502,4 +522,5 @@ Clockwork and EMT installed contracts before cutover or rollback.
 Hold and drain EMT before holding Nucleus during coordinated deployment.
 Already admitted exchanges retain their job and email identities; installers
 do not retry product work or clear halts. Disable emt/worker for program
-replacement and explicitly restore its previously enabled selection afterward.
+replacement. Coordinated deployment restores its intended enabled selection
+only after all holds are released and its broker uses the selected Clockwork.

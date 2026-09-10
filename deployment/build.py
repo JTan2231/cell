@@ -11,7 +11,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -26,6 +25,7 @@ if __package__ in (None, ""):
 from ci_broker.client import bootstrap_cargo_path, common_git_directory, git
 from ci_broker.broker import MINIMAL_ENVIRONMENT
 from deployment import candidate
+from deployment.inventory import descriptor
 
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 CONFIG_ENV = ("AR", "CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "SDKROOT",
@@ -43,12 +43,7 @@ def read_descriptor(source: Path, product: str) -> dict[str, str]:
         raise BuildError("invalid product identity")
     path = source / "pipeline" / "products" / f"{product}.sh"
     candidate.regular(path)
-    values: dict[str, str] = {}
-    for token in shlex.split(path.read_text(), comments=True):
-        name, separator, value = token.partition("=")
-        if not separator or not re.fullmatch(r"[A-Z][A-Z0-9_]*", name) or name in values:
-            raise BuildError(f"invalid literal product descriptor: {product}")
-        values[name] = value
+    values = descriptor(path.read_text())
     if values.get("PRODUCT_ID") != product:
         raise BuildError(f"product descriptor identity mismatch: {product}")
     return values

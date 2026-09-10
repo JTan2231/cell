@@ -43,6 +43,8 @@ enum Command {
     Update,
     /// Inspect intake, latest update results, and Annals processing state.
     Status,
+    /// Read persistent dependency and library selections without probing Annals.
+    Config,
     /// Read the bounded concept graph with completeness information.
     Graph,
     /// Read corpus revision history; the limit selects revisions.
@@ -65,6 +67,12 @@ enum Command {
     Pause,
     /// Allow subsequent update activations; this does not start or schedule one.
     Resume,
+    /// Inspect or control one deployment owner's admission hold.
+    Maintenance {
+        #[arg(value_parser = ["status", "hold", "drain", "release"])]
+        operation: String,
+        owner: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -120,7 +128,45 @@ fn execute(cli: Cli) -> Result<Value> {
         None => conatus::state_root()?,
     };
     ensure!(root.is_absolute(), "state directory must be absolute");
+    let mutation = matches!(
+        &cli.command,
+        Command::Init { .. }
+            | Command::Want(WantCommand::Add(_))
+            | Command::Update
+            | Command::Instructions(InstructionsCommand::Set { .. })
+            | Command::Retry { .. }
+            | Command::Reexamine { .. }
+            | Command::Pause
+            | Command::Resume
+    );
+    let _admission = if mutation {
+        let gate = conatus::gate(&root);
+        Some(if matches!(&cli.command, Command::Init { .. }) {
+            if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+                gate.enter_for(&owner)?
+            } else {
+                gate.enter()?
+            }
+        } else {
+            gate.enter()?
+        })
+    } else {
+        None
+    };
     match cli.command {
+        Command::Maintenance { operation, owner } => {
+            let gate = conatus::gate(&root);
+            let status = match operation.as_str() {
+                "hold" => gate.hold(owner.as_deref().context("hold requires an owner")?)?,
+                "release" => {
+                    gate.release(owner.as_deref().context("release requires an owner")?)?
+                }
+                _ => gate.status()?,
+            };
+            Ok(
+                json!({"maintenance":{"protocol_version":1,"holds":status.holds,"drained":status.drained && conatus::store::runner_idle(&root)?}}),
+            )
+        }
         Command::Init {
             annals,
             decisions_config,
@@ -154,6 +200,7 @@ fn execute(cli: Cli) -> Result<Value> {
         Command::Decision(ReadCommand::Show { id }) => operations::show(&root, &id, "decision"),
         Command::Update => operations::update(&root),
         Command::Status => operations::status(&root),
+        Command::Config => Ok(json!({"config":Store::open(&root)?.config()?})),
         Command::Graph => Store::open(&root)?.config()?.library().graph(),
         Command::History { limit } => Store::open(&root)?.config()?.library().history(limit),
         Command::Instructions(InstructionsCommand::Show) => operations::instructions(&root, None),

@@ -84,9 +84,8 @@ The runner reports exactly 86,400 seconds ending at the most recent local
 09:00. It does not replay older missed mornings. Local timezone changes affect
 future triggers; daylight-saving changes can produce gaps or overlaps.
 
-Program installation preserves existing selected digests, enabled states and
-Clockwork failure incidents. Enable or disable does not clear an incident.
-After an upgrade, explicitly enable the schedule to select the new release.
+Coordinated deployment updates the selected digest and preserves enabled
+intent and Clockwork failure incidents. Enable or disable does not clear an incident.
 Retain releases pinned by schedules, including disabled selections.
 
 ## Failure and recovery
@@ -126,3 +125,17 @@ History pages contain at most 100 records. Final bodies contain at most 64,000
 UTF-8 bytes. There is no automatic local pruning, unlimited retry guarantee,
 source-completeness promise, or language certification. Keep database backups
 private; Nucleus and mail-provider retention are separate.
+
+## Deployment configuration and activation
+
+Deployment captures and suspends `paperboy/daily`, initializes absent state or
+backs up supported state during configuration, then selects a disabled
+definition for the final installed program. It preserves existing schedule,
+arguments, environment and output paths. The optional `enabled` deployment
+setting overrides saved enabled intent. With no setting, an absent binding
+remains absent and a disabled binding stays disabled. Activation follows all
+maintenance releases. Existing Clockwork incidents survive every phase.
+
+Recovery repeats configuration under its retained owner. A repeated backup
+path is accepted only if its integrity and all retained report, agent and
+email-attempt rows match the held Paperboy state.

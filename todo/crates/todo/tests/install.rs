@@ -121,6 +121,10 @@ esac
     }
 
     fn install(&self, fresh: bool) -> Result<Output> {
+        Ok(self.install_command(fresh)?.output()?)
+    }
+
+    fn install_command(&self, fresh: bool) -> Result<Command> {
         let product = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()?;
@@ -148,7 +152,7 @@ esac
                 "sender@example.com",
             ]);
         }
-        Ok(command.output()?)
+        Ok(command)
     }
 
     fn binding(&self) -> Result<serde_json::Value> {
@@ -378,5 +382,37 @@ fn failed_handoff_restores_legacy_without_dual_activation() -> Result {
             .join("Library/LaunchAgents/org.todo.daily-email.plist")
             .exists()
     );
+    Ok(())
+}
+
+#[test]
+fn coordinated_install_and_release_keep_schedule_disabled() -> Result {
+    let fixture = Fixture::new()?;
+    assert!(fixture.install(true)?.status.success());
+    let owner = "todo-coordinated-fixture";
+    let database = fixture.state().join("todo.db");
+    let invoke = |operation: &str| -> Result<Output> {
+        Ok(Command::new(env!("CARGO_BIN_EXE_todo"))
+            .arg("--database")
+            .arg(&database)
+            .args(["--json", "maintenance", operation, owner])
+            .env("HOME", &fixture.home)
+            .env("NUCLEUS_SOCKET", &fixture.socket)
+            .output()?)
+    };
+    assert!(invoke("hold")?.status.success());
+    let result = fixture
+        .install_command(false)?
+        .env("CELL_DEPLOYMENT_RUN_ID", owner)
+        .output()?;
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert_eq!(fixture.binding()?["enabled"], false);
+    assert!(invoke("release")?.status.success());
+    assert_eq!(fixture.binding()?["enabled"], false);
+    assert!(!fixture.home.join("clockwork-loaded").exists());
     Ok(())
 }

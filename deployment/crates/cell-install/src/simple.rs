@@ -13,7 +13,24 @@ use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+/// Product-owned configuration and scheduling around the shared file transaction.
+/// Inspect returns a durable baseline in `prior.lifecycle`. Other operations
+/// must be idempotent: the coordinator can retry them after interruption.
+pub type Lifecycle = fn(&Context, Operation) -> Result<Value>;
+
+fn no_lifecycle(context: &Context, _: Operation) -> Result<Value> {
+    if context
+        .request
+        .settings
+        .as_ref()
+        .is_some_and(|value| value != &json!({}))
+    {
+        return Err(Error::new("this product has no deployment settings"));
+    }
+    Ok(json!({}))
+}
 
 pub struct Spec {
     pub product: &'static str,
@@ -440,7 +457,12 @@ fn maintained_at(
 }
 
 #[allow(clippy::too_many_lines)] // Keep fixed protocol operations and their shared baseline together.
-fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Result<Value> {
+fn adapter_run(
+    spec: &Spec,
+    release_version: &str,
+    operation: Operation,
+    lifecycle: Lifecycle,
+) -> Result<Value> {
     let context = Context::read(
         spec.product,
         spec.source_directory,
@@ -457,10 +479,11 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
     };
     if spec.product == "clockwork" {
         args.reader = Some(std::fs::canonicalize(
-            context.home.join(".local/bin/chancery"),
+            context.dependency_binary("chancery")?,
         )?);
     }
     if operation == Operation::Inspect {
+        let lifecycle = lifecycle(&context, operation)?;
         let scratch = tempfile::tempdir()?;
         plan(spec, release_version, &args, scratch.path())?;
         let snapshot = current(spec, &context.home)?;
@@ -476,7 +499,7 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
         return Ok(adapter::reply(
             "ready",
             "owned installation inspected",
-            json!({"installation":snapshot,"runtime":runtime,"maintenance_products":if spec.maintained {vec!["nucleus"]} else {vec![]}}),
+            json!({"installation":snapshot,"runtime":runtime,"lifecycle":lifecycle}),
         ));
     }
     let prior: InstallSnapshot = serde_json::from_value(
@@ -506,15 +529,6 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                         "partial installation recovery requires drained run-owned hold",
                     ));
                 }
-                command::json(
-                    &binary,
-                    &["--json".into(), "doctor".into()],
-                    &BTreeMap::from([(
-                        "CELL_DEPLOYMENT_RUN_ID".into(),
-                        context.request.run_id.clone().into(),
-                    )]),
-                    Duration::from_secs(180),
-                )?;
             }
             let layout = spec.layout();
             let legacy = |root: &Path| spec.legacy(root);
@@ -531,26 +545,32 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
         operation,
         Operation::Hold | Operation::Drain | Operation::Apply
     );
-    if before_apply && observed != prior {
+    if before_apply && context.request.recovery.is_none() && observed != prior {
         return Err(Error::new("installation changed since inspection"));
+    }
+    let product_data = lifecycle(&context, operation)?;
+    if operation == Operation::Drain && product_data.get("waiting") == Some(&json!(true)) {
+        return Ok(adapter::reply(
+            "waiting",
+            "product work is still settling",
+            product_data,
+        ));
     }
     let data = match operation {
         Operation::Hold if spec.maintained => maintained(spec, &context, "hold", true)?,
         Operation::Drain if spec.maintained => {
-            let start = Instant::now();
-            loop {
-                let status = maintained(spec, &context, "drain", false)?;
-                if status["holds"] != json!([context.request.run_id]) {
-                    return Err(Error::new("drain requires sole run-owned hold"));
-                }
-                if status["drained"] == true {
-                    break status;
-                }
-                if start.elapsed() > Duration::from_secs(600) {
-                    return Err(Error::new("product work did not drain; hold retained"));
-                }
-                std::thread::sleep(Duration::from_secs(1));
+            let status = maintained(spec, &context, "drain", false)?;
+            if status["holds"] != json!([context.request.run_id]) {
+                return Err(Error::new("drain requires sole run-owned hold"));
             }
+            if status["drained"] != true {
+                return Ok(adapter::reply(
+                    "waiting",
+                    "admitted product work is still settling",
+                    status,
+                ));
+            }
+            status
         }
         Operation::Apply => {
             if !context.selected() {
@@ -561,39 +581,6 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                 if status["holds"] != json!([context.request.run_id]) || status["drained"] != true {
                     return Err(Error::new("installation requires drained run-owned hold"));
                 }
-                command::json(
-                    &context.binary(spec.product)?,
-                    &[
-                        "--json".into(),
-                        "migrate".into(),
-                        "--backup".into(),
-                        if spec.product == "platter" {
-                            let current = context.home.join(".local/share/platter");
-                            let legacy = context.home.join(".local/share/job-packets");
-                            if current.exists() && legacy.exists() {
-                                return Err(Error::new("ambiguous Platter runtime roots"));
-                            }
-                            let root = if legacy.exists() { legacy } else { current };
-                            root.join("backups")
-                                .join(format!("migration-{}.sqlite", context.request.run_id))
-                                .into_os_string()
-                        } else {
-                            spec.install_root(&context.home)
-                                .parent()
-                                .ok_or_else(|| Error::new("invalid state root"))?
-                                .join(format!(
-                                    "{}-pre-migration-{}.sqlite",
-                                    spec.product, context.request.run_id
-                                ))
-                                .into_os_string()
-                        },
-                    ],
-                    &BTreeMap::from([(
-                        "CELL_DEPLOYMENT_RUN_ID".into(),
-                        context.request.run_id.clone().into(),
-                    )]),
-                    Duration::from_secs(600),
-                )?;
             }
             args.expected = Some(prior.current.as_ref().map_or_else(
                 || "absent".to_owned(),
@@ -639,7 +626,9 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
                         "maintained recovery needs exact run hold or captured verification",
                     ));
                 }
-                if !(is_prior && before) {
+                if !(is_prior
+                    && (before || operation == Operation::Recover && observed.current.is_none()))
+                {
                     let binary = if observed.current.is_none() {
                         context.binary(spec.product)?
                     } else {
@@ -671,6 +660,7 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
         }
         Operation::Release if spec.maintained => maintained(spec, &context, "release", true)?,
         Operation::Hold | Operation::Drain | Operation::Release => json!({"drained":true}),
+        Operation::Configure | Operation::Activate => product_data,
         Operation::Inspect => return Err(Error::new("invalid adapter dispatch")),
     };
     let status = match operation {
@@ -678,9 +668,11 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
         Operation::Hold => "held",
         Operation::Drain => "drained",
         Operation::Apply => "applied",
+        Operation::Configure => "configured",
         Operation::Verify => "verified",
         Operation::Recover => "recovered",
         Operation::Release => "released",
+        Operation::Activate => "activated",
     };
     Ok(adapter::reply(
         status,
@@ -689,7 +681,12 @@ fn adapter_run(spec: &Spec, release_version: &str, operation: Operation) -> Resu
     ))
 }
 
-fn execute(spec: &Spec, release_version: &str, arguments: &[String]) -> Result<Value> {
+fn execute(
+    spec: &Spec,
+    release_version: &str,
+    arguments: &[String],
+    lifecycle: Lifecycle,
+) -> Result<Value> {
     let (operation, remaining) = arguments
         .split_first()
         .ok_or_else(|| Error::new("installer operation is required"))?;
@@ -697,7 +694,7 @@ fn execute(spec: &Spec, release_version: &str, arguments: &[String]) -> Result<V
         if remaining.len() != 1 {
             return Err(Error::new("adapter requires one operation"));
         }
-        return adapter_run(spec, release_version, remaining[0].parse()?);
+        return adapter_run(spec, release_version, remaining[0].parse()?, lifecycle);
     }
     if operation == "verify-release" {
         if remaining.len() != 1 {
@@ -796,6 +793,12 @@ fn execute(spec: &Spec, release_version: &str, arguments: &[String]) -> Result<V
 /// outside this entry point. The maintained coordinator route is explicit.
 #[must_use]
 pub fn main(spec: &Spec, version: &str) -> ExitCode {
+    main_with_lifecycle(spec, version, no_lifecycle)
+}
+
+/// Run a product installer with its owned deployment lifecycle.
+#[must_use]
+pub fn main_with_lifecycle(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments == ["--version"] || arguments == ["-V"] {
         println!("{}-install {version}", spec.product);
@@ -809,7 +812,7 @@ pub fn main(spec: &Spec, version: &str) -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let adapter = arguments.first().is_some_and(|value| value == "adapter");
-    let result = execute(spec, version, &arguments);
+    let result = execute(spec, version, &arguments, lifecycle);
     if adapter {
         return adapter::finish(result);
     }

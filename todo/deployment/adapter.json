@@ -8,7 +8,19 @@
   ],
   "description": "Product-owned database and program installation with an attributed Clockwork daily-email handoff that preserves scheduling intent and failure halts.",
   "adapter_binary": "todo-install",
-  "maintenance_products": [
-    "nucleus"
+  "maintenance_products": [],
+  "requester_service": "nucleus",
+  "runtime_versions": {
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "todo/daily-email"
   ]
 }

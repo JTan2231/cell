@@ -67,6 +67,7 @@ impl Fixture {
             &source.join("platter/chancery"),
         );
         fs::create_dir(root.join("run")).unwrap();
+        fs::set_permissions(root.join("run"), fs::Permissions::from_mode(0o700)).unwrap();
         let mut value = Self {
             _temporary: temporary,
             root,
@@ -163,8 +164,53 @@ esac
             json!(format!("sha256:{:x}", Sha256::digest(bytes.as_bytes())));
     }
 
+    fn initialize_state(&self) {
+        let root = platter::default_state_dir(&self.home).unwrap();
+        let store = platter::store::Store::open(&root).unwrap();
+        let template = platter::resume::ResumeTemplate::from_source(
+            "fixture-original.tex".into(),
+            "Fixed heading\n{Jackson National Life}\n\\resumeItemListStart\n\\resumeItem{Supported work}\n\\resumeItemListEnd\nFixed footer\n".into(),
+        ).unwrap();
+        let settings = platter::Config {
+            daily_count: 3,
+            delivery_hour: 9,
+            delivery_minute: 0,
+            timezone: "America/Chicago".into(),
+            cast_executable: self.home.join(".local/bin/cast"),
+            crm_executable: self.home.join(".local/bin/crm"),
+            email_executable: self.home.join(".local/bin/email"),
+            original_resume: root.join("fixture-original.tex"),
+        };
+        if store.setting::<Value>("config").unwrap().is_none() {
+            store.initialize(&settings, &template).unwrap();
+        }
+        fs::create_dir_all(self.home.join(".local/bin")).unwrap();
+        for name in ["cast", "crm", "email"] {
+            let executable = self.home.join(".local/bin").join(name);
+            fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
+            fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    fn synchronize_hold(&self) {
+        let gate = platter::maintenance::gate(&self.home);
+        let owner = fs::read_to_string(self.home.join("hold")).ok();
+        for held in gate.status().unwrap().holds {
+            if Some(&held) != owner.as_ref() {
+                gate.release(&held).unwrap();
+            }
+        }
+        if let Some(owner) = owner {
+            gate.hold(&owner).unwrap();
+        }
+    }
+
     #[allow(clippy::needless_pass_by_value)] // Fixture requests own inline JSON values.
     fn adapter(&self, operation: &str, prior: Option<&Value>, recovery: Value) -> Output {
+        if self.selected && operation == "inspect" {
+            self.initialize_state();
+        }
+        self.synchronize_hold();
         let request = json!({
             "schema":1,"product":"platter","run_id":"fixture-run",
             "run_dir":self.root.join("run"),"source_root":self.source,
@@ -211,8 +257,10 @@ esac
     fn install(&self) -> String {
         let prior = self.begin();
         let applied = self.success("apply", Some(&prior), Value::Null);
+        self.success("configure", Some(&prior), Value::Null);
         self.success("verify", Some(&prior), Value::Null);
         self.success("release", Some(&prior), Value::Null);
+        self.success("activate", Some(&prior), Value::Null);
         applied["release_id"].as_str().unwrap().to_owned()
     }
 
@@ -361,13 +409,14 @@ fn apply_requires_drained_sole_hold_and_compatible_state() {
     );
     fs::remove_file(fixture.home.join("busy")).unwrap();
     fs::write(fixture.home.join("incompatible"), b"unsupported schema").unwrap();
+    fixture.success("apply", Some(&prior), Value::Null);
     assert!(
         !fixture
-            .adapter("apply", Some(&prior), Value::Null)
+            .adapter("configure", Some(&prior), Value::Null)
             .status
             .success()
     );
-    assert!(!fixture.install_root().join("current").exists());
+    assert!(fixture.install_root().join("current").exists());
     assert_eq!(
         fs::read_to_string(fixture.home.join("hold")).unwrap(),
         "fixture-run"
@@ -506,14 +555,14 @@ fn failed_prerequisites_recover_compatible_absent_and_installed_prior() {
         .unwrap();
         assert!(
             !fixture
-                .adapter("apply", Some(&prior), Value::Null)
+                .adapter("verify", Some(&prior), Value::Null)
                 .status
                 .success()
         );
         let recovered = fixture.success(
             "recover",
             Some(&prior),
-            json!({"any_apply_started":true,"verified":false}),
+            json!({"any_apply_started":false,"verified":false}),
         );
         assert_eq!(recovered["installed"], "prior");
         assert_eq!(recovered["safe_to_release"], true);

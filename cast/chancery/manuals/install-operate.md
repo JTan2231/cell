@@ -129,3 +129,12 @@ The Cast database, exports and any external diagnostic capture remain private.
 Cast has no Nucleus, CRM, Email or computer-use runtime dependency. Chancery
 provides installed documentation only and its catalog presence grants neither
 execution authority nor proof of provider readiness.
+
+## Cell deployment setup
+
+The Cell coordinator configures Cast after selecting the release. Configuration
+runs `cast init`, which preserves existing discovery state and initializes
+missing state without collecting. Optional settings are `state_dir` and
+`config_file`, both absolute paths. `config_file` supplies the complete Cast
+configuration through `config set --file`; omitted settings retain current
+values and consumed budgets. Deployment creates no collection schedule.

@@ -3,6 +3,7 @@
 pub mod api;
 mod client;
 mod receiving;
+pub mod settings;
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -77,6 +78,8 @@ struct ReceiveCli {
 
 #[derive(Debug, Subcommand)]
 enum ReceiveCommand {
+    /// Read locally selected or provider-advertised receiving domains.
+    Settings,
     /// Read one metadata page, ordered from newer to older records.
     List {
         #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u16).range(1..=100))]
@@ -148,11 +151,19 @@ pub async fn main_entry() {
 
 async fn run() -> AppResult<()> {
     let arguments: Vec<_> = std::env::args_os().collect();
+    if arguments.get(1).is_some_and(|value| value == "setup") {
+        let setup = settings::Setup::parse_from(
+            std::iter::once(arguments[0].clone()).chain(arguments.into_iter().skip(2)),
+        );
+        settings::configure(&setup)?;
+        println!("{{\"configured\":true}}");
+        return Ok(());
+    }
     if arguments.get(1).is_some_and(|value| value == "receive")
         && arguments.get(2).is_some_and(|value| {
             matches!(
                 value.to_str(),
-                Some("list" | "get" | "--help" | "-h" | "--version" | "-V")
+                Some("list" | "get" | "settings" | "--help" | "-h" | "--version" | "-V")
             )
         })
     {
@@ -160,6 +171,7 @@ async fn run() -> AppResult<()> {
             std::iter::once(arguments[0].clone()).chain(arguments.into_iter().skip(2)),
         );
         let output = match receive.command {
+            ReceiveCommand::Settings => serde_json::to_string(&api::receiving_settings().await?),
             ReceiveCommand::List { limit, after } => {
                 let page = api::list_received(&api::ReceivedPageRequest { limit, after }).await?;
                 serde_json::to_string(&page)
@@ -290,6 +302,9 @@ fn read_attachment(path: &Path) -> AppResult<api::Attachment> {
 }
 
 fn resend_api_key() -> AppResult<String> {
+    if let Some(key) = settings::configured_credential()? {
+        return validate_api_key(key);
+    }
     let api_key = std::env::var("RESEND_API_KEY")
         .map_err(|_| AppError::new("RESEND_API_KEY must be set to use Email transport"))?;
     validate_api_key(api_key)

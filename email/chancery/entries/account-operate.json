@@ -1,0 +1,152 @@
+{
+  "id": "email.account.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Configure Email account access and discover receiving domains",
+  "summary": "Install a supplied private credential or receiving-domain selection, and read receiving-domain settings without reading account mail.",
+  "use_when": [
+    "Email needs a supplied account credential installed locally or a receiving-domain selection for a product.",
+    "A product needs receiving-domain discovery without reading messages."
+  ],
+  "do_not_use_when": [
+    "The task needs remote key creation, account login, DNS changes, mail reading or sending."
+  ],
+  "outcome": "Retain supplied local Email settings or return configured/provider-verified receiving domain names.",
+  "interfaces": [
+    {
+      "label": "Install supplied local settings",
+      "invocation": "email setup --credential-file ABS_PRIVATE_FILE --receiving-domain DOMAIN"
+    },
+    {
+      "label": "Discover receiving domains",
+      "invocation": "email receive settings"
+    }
+  ],
+  "effects": [
+    "Setup reads an explicitly supplied private regular credential file and atomically selects a private Email-owned credential file. It may persist one receiving-domain name.",
+    "Settings reads the explicit local receiving selection, or lists at most 1000 Resend account domains and checks enabled receiving MX records. It reads no mail."
+  ],
+  "authority": [
+    "Email owns local credential loading and settings. Resend owns key permission, domain verification and account records.",
+    "The caller owns setup authority and the choice among multiple receiving domains."
+  ],
+  "success": [
+    "Setup returns configured:true after its supplied file selections complete. A retry safely reapplies the same settings.",
+    "Receiving settings returns domains, a complete sorted deduplicated selection or an error; an explicit local domain is operator selection, not proof of remote readiness."
+  ],
+  "failure_and_recovery": [
+    "Reject malformed names, symbolic or linked credential files, group/world-readable credentials, malformed provider data, incomplete pages and unavailable account access.",
+    "Each setting file is atomic; if a later file selection fails, keep earlier selected settings and retry the same supplied inputs. Never infer that a remote key or DNS change happened."
+  ],
+  "privacy": [
+    "Credentials remain in private mode-0600 files beneath the private Email settings directory and are omitted from stdout and errors. The supplied source stays caller-owned.",
+    "Domain names are returned; no email metadata or content is read. Domain API requests reveal account selection to Resend."
+  ],
+  "dependencies": [],
+  "does_not_authorize": [
+    "Remote account login, key creation, key permission changes, DNS changes, receiving mail or sending a message.",
+    "A setup or settings-read success does not grant another product account access or recurring-send authority."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and product deployment adapters with setup or account-settings-read authority."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Setup needs absolute private regular credential input when supplied. Discovery needs an explicit local domain or a credential with domain-list/read access and network availability."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "setup accepts optional credential-file and receiving-domain. Deployment accepts credential_file and receiving_domain only. receive settings takes no mailbox selector."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Setup returns configured:true. ReceivingSettings contains domains: an array of DNS names. Empty or multiple domains require caller selection; they do not trigger implicit account changes."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "domains contains DNS routing names only. An explicit local name expresses operator selection; provider discovery includes only enabled receiving with a verified Receiving MX record. Neither establishes recipient authenticity or future delivery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "DNS domain names are case-normalized. Credential inputs are at most 4096 bytes. Domain discovery covers at most 1000 domains in pages of at most 100."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Local selection returns the selected names. Provider discovery returns all qualifying names across at most 1000 listed domains or fails without partial output. List pages are observations, not an atomic account snapshot."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The operator authorizes local setup and account-domain inspection separately from reading mail or sending. Saved mode-0600 credential files take precedence over RESEND_API_KEY; credentials and provider error bodies never enter output."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Each local file replacement is atomic and synced. Omitted fields preserve selection. Two-file setup is not transactional: earlier selected files survive a later failure, and repeat invocation applies the supplied inputs again. Domain reads create no provider state."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One credential or domain file is locally selected per supplied field. Each provider request has the existing 30-second timeout, at most two transient retries and 8 MiB response bound. Settings discovery caps 1000 domains; installed Client invocation is bounded by 120 seconds."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "This additive setup and settings-read interface preserves existing send and receiving-message interfaces. Managed resend.app domains need explicit local selection because no supported discovery endpoint is documented."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Account-domain observations and authenticated network access depend on Resend public domain APIs; no installed Resend contract is declared.",
+        "target": "resend",
+        "kind": "data"
+      }
+    ]
+  },
+  "manual": "manuals/account-operate.md",
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Supply a private credential file or receiving-domain selection when required.",
+    "Run setup directly or supply the same fields in Cell deployment settings for Email.",
+    "Read email receive settings; select exactly one domain in the requester configuration before activation."
+  ],
+  "checkpoints": [
+    "No credential bytes appear in arguments, receipts or deployment settings JSON.",
+    "Configured local domains and verified provider domains remain distinct from live receiving readiness."
+  ],
+  "adaptation": [
+    "Preserve unspecified settings. Reuse the installed credential unless a new credential_file is supplied.",
+    "Use explicit receiving_domain for managed resend.app domains or ambiguous custom domains."
+  ],
+  "stop_when": [
+    "Required account access or a domain choice is missing.",
+    "A supplied credential file or owned settings path has unsafe ownership shape or permissions."
+  ]
+}

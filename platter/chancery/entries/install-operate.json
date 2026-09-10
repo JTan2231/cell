@@ -74,7 +74,8 @@
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
     "An explicit transaction imports legacy records and files into schema two, writes a complete schema-two backup, then removes only the hashed legacy files on its retained cleanup manifest.",
-    "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email."
+    "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
+    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, CRM and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -149,6 +150,10 @@
       {
         "status": "declared",
         "statement": "Cell selects exact committed source and supplies sealed adapter JSON. migrate requires the sole CELL_DEPLOYMENT_RUN_ID hold, drained requester work and an absolute backup path. Coordinated Platter backups use the canonical runtime root/backups directory. Renderer overrides remain absolute."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment accepts resume and enabled only. An initialized original template cannot be replaced. With no enabled setting, absence and disabled intent remain. config returns retained settings without dependency reads or domain work."
       }
     ],
     "outputs": [
@@ -196,7 +201,11 @@
       },
       {
         "status": "declared",
-        "statement": "Installation does not update an operator-managed platter/daily binding. Capture and disable it for scheduled-runner cutover, deploy and verify Platter through Cell, then register the exact new runner definition and restore the prior enabled state under drained Platter maintenance. Preserve prior binding and verified release evidence for recovery."
+        "statement": "Cell deployment captures and disables an existing platter/daily binding, registers the exact new runner definition while disabled, and restores intended enabled state only after all maintenance releases. It retains timer, environment, paths and incidents. Prior binding and verified release evidence remain the recovery basis."
+      },
+      {
+        "status": "declared",
+        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, CRM and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
       }
     ],
     "operational_limits": [

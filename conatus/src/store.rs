@@ -38,6 +38,24 @@ pub fn private_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
+pub fn runner_idle(root: &Path) -> Result<bool> {
+    let path = root.join("runner.lock");
+    match std::fs::symlink_metadata(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(error.into()),
+        Ok(metadata) => ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink(),
+            "Conatus runner lock must be a regular file"
+        ),
+    }
+    let file = OpenOptions::new().read(true).write(true).open(path)?;
+    match file.try_lock_exclusive() {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
+        Err(error) => Err(error.into()),
+    }
+}
+
 pub fn runner_lock(root: &Path) -> Result<File> {
     private_directory(root)?;
     let file = OpenOptions::new()

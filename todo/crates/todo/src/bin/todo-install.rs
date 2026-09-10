@@ -317,6 +317,18 @@ fn configuration(args: &InstallArgs, prior: Option<&[u8]>) -> Result<Vec<u8>> {
                 .insert("email".into(), email);
         }
         (None, None) if prior.is_some() && config.get("email").is_some() => {
+            for name in ["to", "from"] {
+                if !config
+                    .get("email")
+                    .and_then(|email| email.get(name))
+                    .and_then(toml::Value::as_str)
+                    .is_some_and(|value| !value.trim().is_empty() && !value.contains(['\r', '\n']))
+                {
+                    return Err(Error::new(
+                        "Todo requires complete configured email addresses",
+                    ));
+                }
+            }
             return prior
                 .map(<[u8]>::to_vec)
                 .ok_or_else(|| Error::new("missing config"));
@@ -359,6 +371,31 @@ fn maintenance(
     operation: &str,
     named: bool,
 ) -> Result<Value> {
+    if operation != "ready"
+        && !database.exists()
+        && !home.join(".local/bin/nucleus").exists()
+        && !home
+            .join("Library/Application Support/Nucleus/nucleus.db")
+            .exists()
+    {
+        let database = cell_maintenance::canonical_database_path(database)
+            .map_err(|error| Error::new(error.to_string()))?;
+        let gate = cell_maintenance::Gate::new(
+            database
+                .parent()
+                .ok_or_else(|| Error::new("invalid Todo database parent"))?
+                .join("deployment-maintenance"),
+        );
+        let status = match operation {
+            "hold" => gate.hold(owner),
+            "release" => gate.release(owner),
+            _ => gate.status(),
+        }
+        .map_err(|error| Error::new(error.to_string()))?;
+        return Ok(
+            json!({"protocol_version":1,"holds":status.holds,"drained":status.drained,"nonterminal_jobs":0}),
+        );
+    }
     let mut args = strings(&["--database"]);
     args.push(database.as_os_str().to_owned());
     args.extend(strings(&["--json", "maintenance", operation]));
@@ -473,6 +510,70 @@ fn legacy_schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Re
 }
 
 fn schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Schedule> {
+    schedule_with(
+        home,
+        launchctl,
+        template,
+        &home.join(".local/bin/clockwork"),
+    )
+}
+
+fn restore_legacy_activation(
+    home: &Path,
+    launchctl: &Path,
+    template: &Path,
+    captured_digest: &str,
+    captured: &Schedule,
+) -> Result<Schedule> {
+    let plist = home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
+    owned(&plist, home)?.ok_or_else(|| Error::new("captured Todo legacy schedule is absent"))?;
+    if cell_install::file_digest(&plist)? != captured_digest {
+        return Err(Error::new(
+            "Todo legacy schedule differs from captured recovery proof",
+        ));
+    }
+    let observed = legacy_schedule(home, launchctl, Some(template))?;
+    if observed.disabled != captured.disabled || (observed.loaded && !captured.loaded) {
+        return Err(Error::new(
+            "Todo legacy scheduling intent changed outside recovery",
+        ));
+    }
+    if let Some(binding) = clockwork_schedule::binding(home)? {
+        clockwork_schedule::verify(home, &binding, None)?;
+        if binding.enabled {
+            return Err(Error::new(
+                "Todo legacy activation conflicts with Clockwork",
+            ));
+        }
+    }
+    if captured.loaded && !observed.loaded {
+        call(
+            launchctl,
+            &[
+                "bootstrap".into(),
+                format!("gui/{}", fs::metadata(home)?.uid()).into(),
+                plist.into_os_string(),
+            ],
+            home,
+            None,
+            180,
+        )?;
+    }
+    let restored = legacy_schedule(home, launchctl, Some(template))?;
+    if &restored != captured {
+        return Err(Error::new(
+            "Todo legacy activation did not restore captured intent",
+        ));
+    }
+    Ok(restored)
+}
+
+fn schedule_with(
+    home: &Path,
+    launchctl: &Path,
+    template: Option<&Path>,
+    clockwork: &Path,
+) -> Result<Schedule> {
     let plist = home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
     let legacy_present = owned(&plist, home)?.is_some();
     let legacy = legacy_schedule(home, launchctl, template.filter(|_| legacy_present))?;
@@ -481,7 +582,7 @@ fn schedule(home: &Path, launchctl: &Path, template: Option<&Path>) -> Result<Sc
             "Todo legacy service is loaded without its owned plist",
         ));
     }
-    let selected = clockwork_schedule::binding(home)?;
+    let selected = clockwork_schedule::binding_with(home, clockwork)?;
     if let Some(binding) = selected
         .as_ref()
         .filter(|binding| binding.definition_digest.is_some())
@@ -832,6 +933,12 @@ fn install(
         .iter()
         .map(|entry| entry.path.clone())
         .collect();
+    let journal = json!({"version":1,"home":home,"owner":owner,"before":before,"candidate":prepared.info,"database":database,"database_existed":database_existed,"prior_schedule":prior_schedule,"legacy_loaded":legacy_loaded,"prior_clockwork":prior_clockwork});
+    write_atomic(
+        &transaction.path().join("recovery.json"),
+        &serde_json::to_vec(&journal)?,
+        0o600,
+    )?;
     let suspension = tx.suspend(&before, &suspended_paths)?;
     let mut service_changed = false;
     let mut state_changed = false;
@@ -867,6 +974,7 @@ fn install(
             let _guard = gate
                 .enter_for(&owner)
                 .map_err(|_| Error::new("Todo migration requires exclusive drained admission"))?;
+            write_atomic(&transaction.path().join("state-changing"), b"1", 0o600)?;
             state_changed = true;
             write_atomic(&config_path, &next_config, 0o600)?;
             if !database_existed {
@@ -921,11 +1029,12 @@ fn install(
         })?;
         let result = selected.after.clone();
         publication = Some(selected);
-        let should_load = prior_schedule.loaded
-            || (before.current.is_none()
-                && prior_plist.is_none()
-                && prior_clockwork.is_none()
-                && !prior_schedule.disabled);
+        let should_load = own_hold
+            && (prior_schedule.loaded
+                || (before.current.is_none()
+                    && prior_plist.is_none()
+                    && prior_clockwork.is_none()
+                    && !prior_schedule.disabled));
         service_changed = true;
         clockwork_schedule::select(home, &registered.digest, should_load)?;
         if schedule(
@@ -938,6 +1047,7 @@ fn install(
         }) {
             return Err(Error::new("Todo schedule did not preserve operator state"));
         }
+        write_atomic(&transaction.path().join("committed"), b"1", 0o600)?;
         Ok(result)
     })();
     match result {
@@ -949,6 +1059,15 @@ fn install(
         }
         Err(mut error) => {
             let rollback = (|| -> Result<()> {
+                if !own_hold
+                    && prior_clockwork.is_none()
+                    && clockwork_schedule::binding(home)?
+                        .is_some_and(|binding| binding.definition_digest.is_some())
+                {
+                    return Err(Error::new(
+                        "fresh Todo selection requires owned forward recovery",
+                    ));
+                }
                 let observed_config = owned(&config_path, home)?;
                 if observed_config != prior_config
                     && observed_config.as_deref() != Some(next_config.as_slice())
@@ -1009,9 +1128,9 @@ fn install(
                 if let Some(binding) = &prior_clockwork
                     && let Some(digest) = &binding.definition_digest
                 {
-                    clockwork_schedule::select(home, digest, binding.enabled)?;
+                    clockwork_schedule::select(home, digest, own_hold && binding.enabled)?;
                 }
-                if legacy_loaded {
+                if own_hold && legacy_loaded {
                     call(
                         &args.launchctl,
                         &[
@@ -1024,7 +1143,12 @@ fn install(
                         180,
                     )?;
                 }
-                if schedule(home, &args.launchctl, prior_template.as_deref())? != prior_schedule {
+                if schedule(home, &args.launchctl, prior_template.as_deref())?
+                    != (Schedule {
+                        loaded: own_hold && prior_schedule.loaded,
+                        disabled: prior_schedule.disabled,
+                    })
+                {
                     return Err(Error::new("Todo schedule recovery is incomplete"));
                 }
                 if own_hold {
@@ -1045,38 +1169,60 @@ fn install(
     }
 }
 
+fn adapter_args(ctx: &Context, expected: Option<String>) -> Result<InstallArgs> {
+    let settings = ctx.request.settings.as_ref().unwrap_or(&Value::Null);
+    Ok(InstallArgs {
+        binary: ctx.binary("todo")?,
+        bundle: ctx.request.source_root.join("todo/chancery"),
+        package: ctx.request.source_root.join("todo/packaging/macos"),
+        home: HomeArgs {
+            home: Some(ctx.home.clone()),
+        },
+        expected_current: expected,
+        launchctl: "/bin/launchctl".into(),
+        email_to: settings["email_to"].as_str().map(str::to_owned),
+        email_from: settings["email_from"].as_str().map(str::to_owned),
+    })
+}
+
 fn installed_state(ctx: &Context) -> Result<(InstallSnapshot, PathBuf, PathBuf, Schedule)> {
     if fs::symlink_metadata(install_root(&ctx.home).join(".update-lock")).is_ok() {
         return Err(Error::new(
             "Todo installation transaction is active or retained",
         ));
     }
-    for entry in fs::read_dir(install_root(&ctx.home))? {
-        if entry?
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".transaction.")
-        {
-            return Err(Error::new(
-                "Todo has retained installation recovery artifacts",
-            ));
+    if install_root(&ctx.home).exists() {
+        for entry in fs::read_dir(install_root(&ctx.home))? {
+            if entry?
+                .file_name()
+                .to_string_lossy()
+                .starts_with(".transaction.")
+            {
+                return Err(Error::new(
+                    "Todo has retained installation recovery artifacts",
+                ));
+            }
         }
     }
     let snapshot = cell_install::transaction::inspect_installation(&layout(), &ctx.home, &legacy)?;
-    let info = snapshot
+    let root = snapshot
         .current
         .as_ref()
-        .ok_or_else(|| Error::new("existing configured Todo installation required"))?;
-    let root = release_root(&ctx.home, info);
-    let config = owned(&state(&ctx.home).join("config.toml"), &ctx.home)?
-        .ok_or_else(|| Error::new("Todo config is absent"))?;
-    let database = database(&ctx.home, &config)?;
-    let schedule = schedule(
+        .map(|info| release_root(&ctx.home, info));
+    let config = owned(&state(&ctx.home).join("config.toml"), &ctx.home)?;
+    let next = configuration(&adapter_args(ctx, None)?, config.as_deref())?;
+    let database = database(&ctx.home, &next)?;
+    let template = root
+        .as_ref()
+        .map(|root| root.join("package/org.todo.daily-email.plist"));
+    let schedule = schedule_with(
         &ctx.home,
         Path::new("/bin/launchctl"),
-        Some(&root.join("package/org.todo.daily-email.plist")),
+        template.as_deref(),
+        &ctx.dependency_binary("clockwork")?,
     )?;
-    Ok((snapshot, root.join("libexec/todo"), database, schedule))
+    let raw = root.map_or_else(|| ctx.binary("todo"), |root| Ok(root.join("libexec/todo")))?;
+    Ok((snapshot, raw, database, schedule))
 }
 
 #[allow(
@@ -1085,6 +1231,12 @@ fn installed_state(ctx: &Context) -> Result<(InstallSnapshot, PathBuf, PathBuf, 
 )]
 fn adapter(operation: Operation) -> Result<Value> {
     let ctx = Context::read("todo", "todo", "todo-install", VERSION)?;
+    ctx.validate_settings(&["email_from", "email_to"], &["enabled"])?;
+    let recovered_candidate = if matches!(operation, Operation::Recover) {
+        recover_transactions(&ctx)?
+    } else {
+        None
+    };
     let (snapshot, raw, database, schedule_state) = installed_state(&ctx)?;
     let prior = || -> Result<InstallSnapshot> {
         Ok(serde_json::from_value(ctx.prior()?["installed"].clone())?)
@@ -1092,27 +1244,16 @@ fn adapter(operation: Operation) -> Result<Value> {
     let prior_schedule =
         || -> Result<Schedule> { Ok(serde_json::from_value(ctx.prior()?["schedule"].clone())?) };
     let check_schedule = || -> Result<()> {
-        if schedule_state != prior_schedule()? {
+        if schedule_state.disabled != prior_schedule()?.disabled
+            || (schedule_state.loaded && !prior_schedule()?.loaded)
+        {
             return Err(Error::new(
                 "Todo schedule differs from captured operator state; hold retained",
             ));
         }
         Ok(())
     };
-    let args = || -> Result<InstallArgs> {
-        Ok(InstallArgs {
-            binary: ctx.binary("todo")?,
-            bundle: ctx.request.source_root.join("todo/chancery"),
-            package: ctx.request.source_root.join("todo/packaging/macos"),
-            home: HomeArgs {
-                home: Some(ctx.home.clone()),
-            },
-            expected_current: Some(selection(&prior()?)),
-            launchctl: "/bin/launchctl".into(),
-            email_to: None,
-            email_from: None,
-        })
-    };
+    let args = || adapter_args(&ctx, Some(selection(&prior()?)));
     let prove = || -> Result<()> {
         if ctx.selected() {
             verify_plan(
@@ -1139,6 +1280,72 @@ fn adapter(operation: Operation) -> Result<Value> {
         )
     };
     match operation {
+        Operation::Apply => {
+            check_schedule()?;
+            let prepared = cell_install::transaction::prepare_release(
+                &layout(),
+                &ctx.home,
+                &plan(&args()?, &ctx.home)?,
+            )?;
+            Ok(reply(
+                "applied",
+                "Todo immutable release staged; configuration and publication pending",
+                json!({"staged":prepared.info}),
+            ))
+        }
+        Operation::Activate => {
+            if snapshot.current.is_none() {
+                return Ok(reply("activated", "Todo remains absent", json!({})));
+            }
+            if status("status", false)?["holds"] != json!([]) {
+                return Err(Error::new("Todo activation requires released admission"));
+            }
+            if snapshot == prior()?
+                && let Some(digest) = ctx.prior()?["legacy_plist_digest"].as_str()
+                && owned(
+                    &ctx.home.join(format!("Library/LaunchAgents/{LABEL}.plist")),
+                    &ctx.home,
+                )?
+                .is_some()
+            {
+                let info = snapshot
+                    .current
+                    .as_ref()
+                    .ok_or_else(|| Error::new("Todo prior release is absent"))?;
+                let restored = restore_legacy_activation(
+                    &ctx.home,
+                    Path::new("/bin/launchctl"),
+                    &release_root(&ctx.home, info).join("package/org.todo.daily-email.plist"),
+                    digest,
+                    &prior_schedule()?,
+                )?;
+                return Ok(reply(
+                    "activated",
+                    "Todo captured legacy scheduling intent restored",
+                    json!({"schedule":restored}),
+                ));
+            }
+            let binding = clockwork_schedule::binding(&ctx.home)?
+                .ok_or_else(|| Error::new("Todo schedule is absent"))?;
+            clockwork_schedule::verify(&ctx.home, &binding, None)?;
+            let fresh = prior()?.current.is_none();
+            let enabled = ctx.activation_enabled(
+                prior_schedule()?.loaded
+                    || (fresh
+                        && ctx.prior()?["clockwork_present"] == false
+                        && !prior_schedule()?.disabled),
+            )?;
+            let digest = binding
+                .definition_digest
+                .as_deref()
+                .ok_or_else(|| Error::new("Todo definition is absent"))?;
+            let selected = clockwork_schedule::select(&ctx.home, digest, enabled)?;
+            Ok(reply(
+                "activated",
+                "Todo captured scheduling intent restored",
+                json!({"binding":selected}),
+            ))
+        }
         Operation::Inspect => {
             if ctx.selected() {
                 plan(
@@ -1164,7 +1371,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Todo installation and schedule inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"schedule":schedule_state,"runtime":current,"maintenance_products":["nucleus"],"after":["nucleus","clockwork"]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"schedule":schedule_state,"clockwork_present":clockwork_schedule::binding_with(&ctx.home,&ctx.dependency_binary("clockwork")?)?.is_some(),"legacy_plist_digest":owned(&ctx.home.join(format!("Library/LaunchAgents/{LABEL}.plist")),&ctx.home)?.map(|_| cell_install::file_digest(&ctx.home.join(format!("Library/LaunchAgents/{LABEL}.plist")))).transpose()?,"runtime":current,"maintenance_products":[],"after":["nucleus","clockwork"]}),
             ))
         }
         Operation::Hold => {
@@ -1175,46 +1382,67 @@ fn adapter(operation: Operation) -> Result<Value> {
             {
                 return Err(Error::new("Todo did not retain deployment hold"));
             }
+            if let Some(binding) =
+                clockwork_schedule::binding_with(&ctx.home, &ctx.dependency_binary("clockwork")?)?
+            {
+                clockwork_schedule::verify(&ctx.home, &binding, None)?;
+                if binding.enabled {
+                    clockwork_schedule::disable(&ctx.home, None)?;
+                }
+            }
             Ok(reply("held", "Todo admission held", current))
         }
         Operation::Drain => {
-            let deadline = Instant::now() + DRAIN_TIMEOUT;
-            loop {
-                let current = status("status", false)?;
-                if current["holds"] != json!([ctx.request.run_id]) {
-                    return Err(Error::new("Todo drain requires sole owner"));
-                }
-                if current["drained"] == true {
-                    return Ok(reply("drained", "Todo admitted work settled", current));
-                }
-                if Instant::now() >= deadline {
-                    return Err(Error::new("Todo did not drain; hold retained"));
-                }
-                std::thread::sleep(Duration::from_secs(1));
+            let current = status("status", false)?;
+            if current["holds"] != json!([ctx.request.run_id]) {
+                return Err(Error::new("drain requires the sole deployment owner"));
             }
+            Ok(reply(
+                if current["drained"] == true {
+                    "drained"
+                } else {
+                    "waiting"
+                },
+                "Todo admitted work",
+                current,
+            ))
         }
-        Operation::Apply => {
+        Operation::Configure => {
+            if !ctx.selected() {
+                prove()?;
+                sole(&status("ready", true)?, &ctx.request.run_id)?;
+                return Ok(reply(
+                    "configured",
+                    "Todo retained configuration verified",
+                    json!({}),
+                ));
+            }
             if !ctx.selected() {
                 return Err(Error::new("affected Todo cannot be upgraded"));
             }
             check_schedule()?;
-            sole(&status("ready", true)?, &ctx.request.run_id)?;
+            sole(&status("status", false)?, &ctx.request.run_id)?;
             let installed = install(
                 &args()?,
                 &ctx.home,
                 Some(&ctx.request.run_id),
                 Some(&prior()?),
-                Some(&prior_schedule()?),
+                Some(&schedule_state),
             )?;
             Ok(reply(
-                "applied",
-                "Todo program, migration and schedule completed",
+                "configured",
+                "Todo database and email configured and published with scheduling disabled",
                 json!({"current":selection(&installed),"installed":installed}),
             ))
         }
         Operation::Verify => {
             prove()?;
             check_schedule()?;
+            if schedule_state.loaded {
+                return Err(Error::new(
+                    "Todo schedule activated before final activation",
+                ));
+            }
             sole(&status("ready", true)?, &ctx.request.run_id)?;
             call(
                 &raw,
@@ -1258,7 +1486,13 @@ fn adapter(operation: Operation) -> Result<Value> {
                 prove()?;
             }
             let recovery = ctx.request.recovery.clone().unwrap_or_default();
-            if !(unchanged && recovery["any_apply_started"] == false) {
+            let candidate = recovered_candidate.unwrap_or(
+                !unchanged
+                    || recovery["configured"] == true
+                    || recovery["installed"] == "candidate",
+            );
+            if !(unchanged && (recovery["configure_started"] != true || snapshot.current.is_none()))
+            {
                 let current = status("status", false)?;
                 if current["holds"] == json!([ctx.request.run_id]) {
                     sole(&status("ready", true)?, &ctx.request.run_id)?;
@@ -1271,7 +1505,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "recovered",
                 "coherent Todo program, schema and schedule verified",
-                json!({"safe_to_release":true,"installed":if unchanged {"prior"}else{"candidate"}}),
+                json!({"safe_to_release":true,"installed":if candidate {"candidate"}else{"prior"}}),
             ))
         }
     }
@@ -1363,4 +1597,234 @@ fn main() -> ExitCode {
         };
     }
     cell_install::adapter::finish(run(Cli::parse().command))
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep each transaction's identity proof and ordered restoration together"
+)]
+fn recover_transactions(ctx: &Context) -> Result<Option<bool>> {
+    {
+        let layout = layout();
+        let _lock = cell_install::transaction::lock_installation(&layout, &ctx.home, &legacy)?;
+    }
+    let root = install_root(&ctx.home);
+    if !root.exists() {
+        return Ok(None);
+    }
+    let mut candidate = None;
+    let entries = fs::read_dir(&root)?.collect::<std::io::Result<Vec<_>>>()?;
+    for entry in entries {
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".transaction.")
+        {
+            continue;
+        }
+        let path = entry.path();
+        directory(&path, &ctx.home, 0o700)?;
+        let bytes = owned(&path.join("recovery.json"), &ctx.home)?
+            .ok_or_else(|| Error::new("Todo transaction lacks recovery evidence"))?;
+        let saved: Value = serde_json::from_slice(&bytes)?;
+        if saved["version"] != 1
+            || saved["owner"] != ctx.request.run_id
+            || saved["home"] != json!(ctx.home)
+            || saved["before"] != ctx.prior()?["installed"]
+        {
+            return Err(Error::new(
+                "Todo transaction does not match the recorded deployment",
+            ));
+        }
+        let before: InstallSnapshot = serde_json::from_value(saved["before"].clone())?;
+        let info: ReleaseInfo = serde_json::from_value(saved["candidate"].clone())?;
+        verify_plan(&info, &plan(&adapter_args(ctx, None)?, &ctx.home)?)?;
+        let prepared = cell_install::transaction::PreparedRelease {
+            root: release_root(&ctx.home, &info),
+            info,
+        };
+        let next = owned(&path.join("config.next.toml"), &ctx.home)?
+            .ok_or_else(|| Error::new("Todo candidate configuration is missing"))?;
+        let database = database(&ctx.home, &next)?;
+        if json!(database) != saved["database"] {
+            return Err(Error::new(
+                "Todo recovery database differs from saved configuration",
+            ));
+        }
+        let prior_config = owned(&path.join("config.before.toml"), &ctx.home)?;
+        let prior_plist = owned(&path.join("schedule.before.plist"), &ctx.home)?;
+        let config = state(&ctx.home).join("config.toml");
+        let actual_config = owned(&config, &ctx.home)?;
+        if actual_config != prior_config && actual_config.as_deref() != Some(next.as_slice()) {
+            return Err(Error::new("Todo configuration changed outside recovery"));
+        }
+        let layout = layout();
+        let mut tx = cell_install::transaction::lock_installation(&layout, &ctx.home, &legacy)?;
+        let actual =
+            cell_install::transaction::inspect_detached_installation(&layout, &ctx.home, &legacy)?;
+        if actual.current != before.current && actual.current.as_ref() != Some(&prepared.info) {
+            return Err(Error::new("Todo recovery found a foreign generation"));
+        }
+        let binding = clockwork_schedule::binding(&ctx.home)?;
+        if let Some(binding) = &binding {
+            clockwork_schedule::verify(&ctx.home, binding, None)?;
+            let prior_binding: Option<clockwork::api::BindingRecord> =
+                serde_json::from_value(saved["prior_clockwork"].clone())?;
+            let candidate = clockwork_schedule::register(&ctx.home, &prepared.root, &path)?;
+            if binding.definition_digest != prior_binding.and_then(|prior| prior.definition_digest)
+                && binding.definition_digest.as_deref() != Some(&candidate.digest)
+            {
+                return Err(Error::new("Todo recovery found a foreign binding"));
+            }
+            clockwork_schedule::disable(&ctx.home, None)?;
+        }
+        let raw = prepared.root.join("libexec/todo");
+        sole(
+            &maintenance(
+                &raw,
+                &database,
+                &ctx.home,
+                &ctx.request.run_id,
+                "status",
+                false,
+            )?,
+            &ctx.request.run_id,
+        )?;
+        if owned(&path.join("committed"), &ctx.home)?.is_some()
+            || (before.current.is_none()
+                && actual.current.as_ref() == Some(&prepared.info)
+                && actual_config.as_deref() == Some(next.as_slice()))
+        {
+            sole(
+                &maintenance(
+                    &raw,
+                    &database,
+                    &ctx.home,
+                    &ctx.request.run_id,
+                    "ready",
+                    true,
+                )?,
+                &ctx.request.run_id,
+            )?;
+            tx.recover(&before, &prepared, true, |_| Ok(()))?;
+            candidate = Some(candidate.unwrap_or(true));
+        } else {
+            let public: Vec<_> = layout
+                .public
+                .iter()
+                .map(|entry| entry.path.clone())
+                .collect();
+            tx.suspend(&actual, &public)?;
+            let gate = cell_maintenance::Gate::new(
+                database
+                    .parent()
+                    .ok_or_else(|| Error::new("invalid Todo database path"))?
+                    .join("deployment-maintenance"),
+            );
+            let _guard = gate
+                .enter_for(&ctx.request.run_id)
+                .map_err(|error| Error::new(error.to_string()))?;
+            if owned(&path.join("state-changing"), &ctx.home)?.is_some() {
+                let backup = path.join("database.before.db");
+                if owned(&backup, &ctx.home)?.is_some() {
+                    restore_database(&backup, &database)?;
+                } else if saved["database_existed"] == false {
+                    for suffix in ["", "-wal", "-shm", "-journal"] {
+                        restore_file(
+                            &PathBuf::from(format!("{}{suffix}", database.display())),
+                            None,
+                            0o600,
+                        )?;
+                    }
+                }
+                restore_file(&config, prior_config.as_deref(), 0o600)?;
+            }
+            let plist = ctx.home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
+            let actual_plist = owned(&plist, &ctx.home)?;
+            if actual_plist.is_some() && actual_plist != prior_plist {
+                return Err(Error::new(
+                    "Todo recovery found foreign legacy configuration",
+                ));
+            }
+            restore_file(&plist, prior_plist.as_deref(), 0o644)?;
+            tx.recover(&before, &prepared, false, |_| Ok(()))?;
+            let binding: Option<clockwork::api::BindingRecord> =
+                serde_json::from_value(saved["prior_clockwork"].clone())?;
+            if let Some(digest) = binding.and_then(|binding| binding.definition_digest) {
+                clockwork_schedule::select(&ctx.home, &digest, false)?;
+            }
+            candidate = Some(false);
+        }
+        let retained = state(&ctx.home).join("backups/deployments");
+        directory(&retained, &ctx.home, 0o700)?;
+        fs::rename(&path, retained.join(entry.file_name()))?;
+    }
+    Ok(candidate)
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recovered_legacy_schedule_restores_only_captured_loaded_intent() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let home = root.path();
+        directory(&home.join(".local/bin"), home, 0o755)?;
+        directory(&home.join("Library/LaunchAgents"), home, 0o755)?;
+        let launchctl = home.join("launchctl");
+        write_atomic(
+            &launchctl,
+            br#"#!/bin/sh
+case "$1" in
+ print) [ -f "$HOME/loaded" ] && exit 0; exit 113;;
+ print-disabled) echo 'disabled services = {'; echo '}';;
+ bootstrap) : >"$HOME/loaded";;
+ *) exit 64;;
+esac
+"#,
+            0o755,
+        )?;
+        write_atomic(
+            &home.join(".local/bin/clockwork"),
+            b"#!/bin/sh\necho '{\"ok\":true,\"data\":{\"output_version\":2,\"items\":[],\"has_more\":false}}'\n",
+            0o755,
+        )?;
+        let template = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packaging/macos/org.todo.daily-email.plist");
+        let plist = home.join(format!("Library/LaunchAgents/{LABEL}.plist"));
+        write_atomic(
+            &plist,
+            &serde_json::to_vec(&rendered_plist(&template, home)?)?,
+            0o644,
+        )?;
+        let digest = cell_install::file_digest(&plist)?;
+        let stopped = Schedule {
+            loaded: false,
+            disabled: false,
+        };
+        assert_eq!(
+            restore_legacy_activation(home, &launchctl, &template, &digest, &stopped)?,
+            stopped
+        );
+        assert!(!home.join("loaded").exists());
+        let loaded = Schedule {
+            loaded: true,
+            disabled: false,
+        };
+        assert_eq!(
+            restore_legacy_activation(home, &launchctl, &template, &digest, &loaded)?,
+            loaded
+        );
+        assert!(home.join("loaded").exists());
+        assert_eq!(
+            restore_legacy_activation(home, &launchctl, &template, &digest, &loaded)?,
+            loaded
+        );
+        fs::remove_file(home.join("loaded"))?;
+        write_atomic(&plist, b"foreign", 0o644)?;
+        assert!(restore_legacy_activation(home, &launchctl, &template, &digest, &loaded).is_err());
+        assert!(!home.join("loaded").exists());
+        Ok(())
+    }
 }

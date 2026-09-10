@@ -11,6 +11,7 @@ anyhow = "1"
 annals = { path = "../annals/crates/annals" }
 annals-api.workspace = true
 cell-install.workspace = true
+cell-maintenance.workspace = true
 clockwork = { path = "../clockwork/crates/clockwork" }
 clap.workspace = true
 fs2.workspace = true

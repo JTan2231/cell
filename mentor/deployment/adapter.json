@@ -2,8 +2,38 @@
   "schema": 1,
   "product": "mentor",
   "application": "MentorMail",
-  "dependencies": ["email", "nucleus", "clockwork"],
-  "maintenance_products": ["nucleus"],
+  "dependencies": [
+    "email",
+    "nucleus",
+    "clockwork"
+  ],
+  "maintenance_products": [],
   "description": "Install Mentor under requester maintenance with its worker disabled.",
-  "adapter_binary": "mentor-install"
+  "adapter_binary": "mentor-install",
+  "requester_service": "nucleus",
+  "runtime_versions": {
+    "email": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    },
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "mentor/worker"
+  ],
+  "runtime_contracts": {
+    "email": {
+      "email.account.operate": {
+        "minimum": 1,
+        "before": 2
+      }
+    }
+  }
 }

@@ -3,21 +3,21 @@ use cell_install::adapter::{Context, Operation, reply};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-fn home(context: &Context) -> HomeArgs {
-    HomeArgs {
+fn home(context: &Context) -> Result<HomeArgs> {
+    Ok(HomeArgs {
         home: context.home.clone(),
-        clockwork: None,
+        clockwork: Some(context.dependency_binary("clockwork")?),
         launchctl: "/bin/launchctl".into(),
-    }
+    })
 }
 
 fn candidate(context: &Context) -> Result<Candidate> {
     Ok(Candidate {
         binary: context.binary("semantics")?,
         bundle: context.request.source_root.join("semantics/chancery"),
-        home: home(context),
+        home: home(context)?,
         expected_current: context
             .prior()?
             .get("current")
@@ -53,7 +53,7 @@ fn no_installer_hold(paths: &lifecycle::Paths) -> Result<()> {
 }
 
 fn maintenance(context: &Context, operation: &str) -> Result<Value> {
-    let paths = lifecycle::Paths::new(&home(context))?;
+    let paths = lifecycle::Paths::new(&home(context)?)?;
     let cli = context.home.join(".local/bin/semantics");
     let binary = if cli.exists() {
         cli
@@ -97,7 +97,7 @@ fn maintenance(context: &Context, operation: &str) -> Result<Value> {
 }
 
 fn same_prior(context: &Context) -> Result<()> {
-    let observed = lifecycle::inspect(&home(context))?;
+    let observed = lifecycle::inspect(&home(context)?)?;
     let prior = context.prior()?;
     if observed["installed"] != prior["installed"] || observed["current"] != prior["current"] {
         return fail("Semantics installation changed since inspection");
@@ -105,64 +105,89 @@ fn same_prior(context: &Context) -> Result<()> {
     Ok(())
 }
 
-fn drain(context: &Context) -> Result<()> {
-    let deadline = Instant::now() + Duration::from_secs(45);
-    loop {
+fn drain(context: &Context) -> Result<bool> {
+    {
         let status = maintenance(context, "status")?;
         if status["holds"] != json!([context.request.run_id]) {
             return fail("Semantics drain requires the sole run-owned hold");
         }
-        if status["drained"] == true {
-            break;
+        if status["drained"] != true {
+            return Ok(false);
         }
-        if Instant::now() >= deadline {
-            return fail("Semantics commands did not drain; hold remains");
-        }
-        std::thread::sleep(Duration::from_millis(200));
     }
-    for state in ["accepted", "running", "waiting-on-requester"] {
-        let args: Vec<OsString> = [
+    if !context.home.join(".local/bin/nucleus").exists()
+        && !context
+            .home
+            .join("Library/Application Support/Nucleus/nucleus.db")
+            .exists()
+    {
+        return Ok(true);
+    }
+    let mut after: Option<nucleus_core::JobId> = None;
+    loop {
+        let mut args: Vec<OsString> = [
             "--compact",
             "jobs",
             "list",
             "--requester",
             "semantics",
-            "--state",
-            state,
             "--limit",
-            "1",
+            "1000",
         ]
         .into_iter()
         .map(Into::into)
         .collect();
+        if let Some(cursor) = &after {
+            args.extend(["--after".into(), cursor.to_string().into()]);
+        }
         let value = cell_install::command::json(
             &context.home.join(".local/bin/nucleus"),
             &args,
             &BTreeMap::new(),
             Duration::from_secs(60),
         )?;
-        if value["version"] != 1 || !value["jobs"].as_array().is_some_and(Vec::is_empty) {
-            return fail("Semantics durable requester work is not drained; hold remains");
+        let page: nucleus_core::ListJobsResponseV1 = serde_json::from_value(value)?;
+        if page.version != 1 {
+            return fail("unsupported Semantics Nucleus job response");
         }
+        if page.jobs.iter().any(|job| !job.state.is_terminal()) {
+            return Ok(false);
+        }
+        let Some(next) = page.next else {
+            break;
+        };
+        if after.as_ref() == Some(&next) {
+            return fail("Semantics Nucleus job cursor did not advance");
+        }
+        after = Some(next);
     }
-    Ok(())
+    Ok(true)
 }
 
-fn controls(context: &Context) -> Result<Value> {
-    let paths = lifecycle::Paths::new(&home(context))?;
-    let observed = lifecycle::inspect(&home(context))?;
+fn controls(context: &Context, activate: bool) -> Result<Value> {
+    let paths = lifecycle::Paths::new(&home(context)?)?;
+    let observed = lifecycle::inspect(&home(context)?)?;
+    let selected = &observed["controls"][lifecycle::KEY];
     let prior = &context.prior()?["controls"][lifecycle::KEY];
-    if prior.is_object() && observed["controls"][lifecycle::KEY]["enabled"] != prior["enabled"] {
-        if prior["enabled"] != false {
-            return fail("previously enabled Semantics worker is unexpectedly disabled");
+    let enabled = activate
+        && context.activation_enabled(
+            prior
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        )?;
+    if let Some(digest) = selected["definition_digest"].as_str() {
+        if enabled {
+            paths.clock(&["binding", "switch", lifecycle::KEY, digest])?;
+        } else {
+            paths.clock(&["binding", "disable", lifecycle::KEY, "--select", digest])?;
         }
-        paths.clock(&["binding", "disable", lifecycle::KEY])?;
     }
-    Ok(lifecycle::inspect(&home(context))?["controls"].clone())
+    Ok(lifecycle::inspect(&home(context)?)?["controls"].clone())
 }
 
 fn readiness(context: &Context) -> Result<()> {
-    let paths = lifecycle::Paths::new(&home(context))?;
+    let paths = lifecycle::Paths::new(&home(context)?)?;
     paths.doctor(&paths.payload(), None, Some(&context.request.run_id))?;
     Ok(())
 }
@@ -175,23 +200,42 @@ pub(super) fn run(operation: &str) -> Result<Value> {
         "semantics-install",
         env!("CARGO_PKG_VERSION"),
     )?;
-    let paths = lifecycle::Paths::new(&home(&context))?;
+    context.validate_settings(&[], &["enabled"])?;
+    let paths = lifecycle::Paths::new(&home(&context)?)?;
+    let recovered_candidate = if matches!(operation, Operation::Recover) {
+        recover_transactions(&context)?
+    } else {
+        None
+    };
     no_installer_hold(&paths)?;
     let (status, data) = match operation {
+        Operation::Apply => {
+            same_prior(&context)?;
+            let prepared = lifecycle::prepare(&candidate(&context)?)?;
+            (
+                "applied",
+                json!({"staged":prepared.info,"configuration_pending":true}),
+            )
+        }
+        Operation::Activate => {
+            if maintenance(&context, "status")?["holds"] != json!([]) {
+                return fail("Semantics activation requires released admission");
+            }
+            ("activated", controls(&context, true)?)
+        }
         Operation::Inspect => {
-            let mut installed = lifecycle::inspect(&home(&context))?;
+            let mut installed = lifecycle::inspect(&home(&context)?)?;
             let maintenance = maintenance(&context, "status")?;
             if maintenance["holds"] != json!([])
                 && maintenance["holds"] != json!([context.request.run_id])
             {
                 return fail("another owner holds Semantics admission");
             }
-            installed["maintenance_products"] = json!(["nucleus"]);
-            installed["after"] = json!(["annals", "nucleus", "clockwork", "conversations"]);
+            installed["maintenance_products"] = json!([]);
+            installed["after"] = json!(["annals", "nucleus", "clockwork"]);
             ("ready", installed)
         }
         Operation::Hold => {
-            same_prior(&context)?;
             let held = maintenance(&context, "hold")?;
             if !held["holds"]
                 .as_array()
@@ -199,15 +243,30 @@ pub(super) fn run(operation: &str) -> Result<Value> {
             {
                 return fail("Semantics did not retain the requested hold");
             }
+            controls(&context, false)?;
             ("held", held)
         }
         Operation::Drain => {
-            drain(&context)?;
-            ("drained", json!({"drained":true}))
+            let settled = drain(&context)?;
+            (
+                if settled { "drained" } else { "waiting" },
+                json!({"drained":settled}),
+            )
         }
-        Operation::Apply => {
+        Operation::Configure => {
+            if !context.selected() {
+                same_prior(&context)?;
+                readiness(&context)?;
+                return Ok(reply(
+                    "configured",
+                    "Semantics retained configuration verified",
+                    json!({}),
+                ));
+            }
             same_prior(&context)?;
-            drain(&context)?;
+            if !drain(&context)? {
+                return fail("Semantics apply requires settled durable work");
+            }
             let args = candidate(&context)?;
             let command_line: Vec<OsString> = vec![
                 "install".into(),
@@ -233,12 +292,12 @@ pub(super) fn run(operation: &str) -> Result<Value> {
                 &env,
                 Duration::from_secs(1200),
             )?;
-            controls(&context)?;
-            ("applied", lifecycle::inspect(&home(&context))?)
+            controls(&context, false)?;
+            ("configured", lifecycle::inspect(&home(&context)?)?)
         }
         Operation::Verify => {
             let args = candidate(&context)?;
-            let installed = lifecycle::inspect(&home(&context))?;
+            let installed = lifecycle::inspect(&home(&context)?)?;
             if context.selected()
                 && installed["installed"]["current"]["release_id"]
                     != lifecycle::prepare(&args)?.info.release_id
@@ -248,22 +307,25 @@ pub(super) fn run(operation: &str) -> Result<Value> {
             if !context.selected() {
                 same_prior(&context)?;
             }
-            controls(&context)?;
+            require_disabled(&context)?;
             readiness(&context)?;
             ("verified", installed)
         }
         Operation::Release => {
-            controls(&context)?;
+            require_disabled(&context)?;
             ("released", maintenance(&context, "release")?)
         }
         Operation::Recover => {
-            let observed = lifecycle::inspect(&home(&context))?;
+            let observed = lifecycle::inspect(&home(&context)?)?;
             let prior = observed["installed"] == context.prior()?["installed"];
             let evidence = context
                 .request
                 .recovery
                 .as_ref()
                 .ok_or("recovery evidence is missing")?;
+            let kept_candidate = recovered_candidate.unwrap_or(
+                !prior || evidence["configured"] == true || evidence["installed"] == "candidate",
+            );
             if !prior {
                 let prepared = lifecycle::prepare(&candidate(&context)?)?;
                 if observed["installed"]["current"]["release_id"] != prepared.info.release_id {
@@ -272,8 +334,8 @@ pub(super) fn run(operation: &str) -> Result<Value> {
                     );
                 }
             }
-            controls(&context)?;
-            if !(prior && evidence["any_apply_started"] == false) {
+            controls(&context, false)?;
+            if !(prior && evidence["configure_started"] != true) {
                 let maintenance = maintenance(&context, "status")?;
                 if evidence["verified"] != true
                     && (maintenance["holds"] != json!([context.request.run_id])
@@ -285,7 +347,7 @@ pub(super) fn run(operation: &str) -> Result<Value> {
             }
             (
                 "recovered",
-                json!({"safe_to_release":true,"installed":if prior {"prior"} else {"candidate"}}),
+                json!({"safe_to_release":true,"installed":if kept_candidate {"candidate"} else {"prior"}}),
             )
         }
     };
@@ -294,4 +356,57 @@ pub(super) fn run(operation: &str) -> Result<Value> {
         "Semantics product-owned operation completed",
         data,
     ))
+}
+
+fn recover_transactions(context: &Context) -> Result<Option<bool>> {
+    lifecycle::recover_lock(&home(context)?)?;
+    let paths = lifecycle::Paths::new(&home(context)?)?;
+    if !paths.install.exists() {
+        return Ok(None);
+    }
+    let mut candidate = None;
+    for entry in std::fs::read_dir(&paths.install)? {
+        let entry = entry?;
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".transaction.")
+        {
+            continue;
+        }
+        let transaction: Value =
+            serde_json::from_slice(&std::fs::read(entry.path().join("transaction.json"))?)?;
+        let mut arguments: Vec<OsString> = vec![
+            "recover".into(),
+            "--transaction".into(),
+            entry.path().into_os_string(),
+            "--home".into(),
+            context.home.clone().into_os_string(),
+        ];
+        let forward = transaction["candidate_selected"] == true
+            && transaction["binding"]["definition_digest"].is_null();
+        if forward {
+            arguments.push("--forward".into());
+        }
+        let environment = BTreeMap::from([(
+            OsString::from("CELL_DEPLOYMENT_RUN_ID"),
+            OsString::from(&context.request.run_id),
+        )]);
+        cell_install::command::json(
+            &std::env::current_exe()?,
+            &arguments,
+            &environment,
+            Duration::from_secs(1200),
+        )?;
+        candidate = Some(candidate.unwrap_or(true) && forward);
+    }
+    Ok(candidate)
+}
+
+fn require_disabled(context: &Context) -> Result<()> {
+    let controls = lifecycle::inspect(&home(context)?)?["controls"].clone();
+    if controls[lifecycle::KEY]["enabled"] == true {
+        return fail("Semantics worker activated before final activation");
+    }
+    Ok(())
 }

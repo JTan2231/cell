@@ -16,7 +16,7 @@
   ],
   "outcome": "Return one provider-observed receiving page or one selected received email as JSON or typed Rust data, without altering the account email or retaining it in Email state.",
   "effects": [
-    "The installed wrapper obtains RESEND_API_KEY from ~/.zshrc and starts Email with a scrubbed environment. A direct Rust free function reads that key from the caller environment.",
+    "Email selects its explicitly configured private credential first, then RESEND_API_KEY. The installed wrapper loads the fallback from ~/.zshrc with a scrubbed environment; direct callers supply their environment.",
     "One bounded authenticated GET selection is sent to Resend, with at most two transient retries. Account metadata or selected message content is returned to the caller.",
     "No email is sent, acknowledged, marked processed or deleted. Email downloads no receiving attachment bytes, raw email link, or remote HTML resource."
   ],

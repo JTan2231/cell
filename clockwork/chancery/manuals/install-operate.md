@@ -1,9 +1,19 @@
 # Install or diagnose Clockwork
 
 Clockwork installs a short-lived CLI/broker and a Chancery provider for the
-current user. Program deployment does not create or open the runtime database,
+current user. Direct program installation does not create or open the runtime database,
 register a definition, switch or disable a binding, write an `org.clockwork.*`
 product plist, or run a product job.
+
+Coordinated `./deploy.sh clockwork` also captures the complete Clockwork binding
+inventory before maintenance. It disables those bindings while retaining their
+selections and failure halts. Product adapters prepare their new definitions
+under their own holds. After all holds are released, Clockwork restores each
+previously enabled binding through the selected broker. This rewrites every
+enabled generated plist with the current immutable Clockwork executable.
+Previously disabled bindings stay disabled. This phase precedes EMT activation.
+An interrupted deployment retains its original inventory and re-establishes
+suspension before recovery; it does not infer intent from temporary disablement.
 
 Build and validate the candidate first. Deployment is a separate authorized
 effect:

@@ -131,14 +131,29 @@ impl Store {
     pub fn initialize(root: &Path) -> Result<Self> {
         private_directory(root)?;
         let path = root.join("emt.sqlite3");
-        if path.exists() {
-            return Self::open(root);
-        }
         private_file(&path, true)?;
         let connection = Connection::open(&path)?;
-        connection.execute_batch(include_str!("schema.sql"))?;
-        let config = Config::defaults()?;
-        config.save(root)?;
+        let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+        if version == 0 {
+            let tables: i64 = connection.query_row("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", [], |row|row.get(0))?;
+            if tables != 0 {
+                return Err(fail("unversioned nonempty database is not EMT state"));
+            }
+            connection.execute_batch(include_str!("schema.sql"))?;
+        } else if version != 1 {
+            return Err(fail("unsupported EMT database schema"));
+        }
+        if !root.join("config.json").try_exists()? {
+            let records: i64 = connection.query_row(
+                "SELECT (SELECT count(*) FROM incidents) + (SELECT count(*) FROM exchanges)",
+                [],
+                |row| row.get(0),
+            )?;
+            if records != 0 {
+                return Err(fail("EMT configuration is missing from nonempty state"));
+            }
+            Config::defaults()?.save(root)?;
+        }
         drop(connection);
         Self::open(root)
     }

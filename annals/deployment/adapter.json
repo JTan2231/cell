@@ -7,8 +7,26 @@
     "clockwork"
   ],
   "description": "Deploy Annals and its dedicated decisions-library provisioner under independent owned admission holds while preserving operator pause.",
-  "maintenance_products": [
-    "nucleus"
+  "maintenance_products": [],
+  "adapter_binary": "annals-install",
+  "requester_service": "nucleus",
+  "companions": [
+    "conatus",
+    "krisis",
+    "semantics"
   ],
-  "adapter_binary": "annals-install"
+  "runtime_versions": {
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "annals/inbox",
+    "annals/decisions-inbox"
+  ]
 }

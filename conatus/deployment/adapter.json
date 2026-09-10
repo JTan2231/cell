@@ -2,7 +2,27 @@
   "schema": 1,
   "product": "conatus",
   "application": "Conatus",
-  "dependencies": ["annals"],
-  "description": "Select Conatus programs and their matching provider without changing runtime state or schedules.",
-  "adapter_binary": "conatus-install"
+  "dependencies": [
+    "annals",
+    "clockwork"
+  ],
+  "description": "Initialize and rebind Conatus libraries under held admission; prepare its disabled runner and restore saved intent.",
+  "adapter_binary": "conatus-install",
+  "runtime_versions": {
+    "annals": {
+      "minimum": "0.20.0",
+      "before": "0.21.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "conatus/update"
+  ],
+  "pin_inventory": [
+    "--json",
+    "config"
+  ]
 }

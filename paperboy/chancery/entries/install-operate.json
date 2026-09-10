@@ -52,7 +52,8 @@
     }
   ],
   "effects": [
-    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state; backup preserves existing records."
+    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state; backup preserves existing records.",
+    "Cell configuration initializes or backs up supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
   ],
   "authority": [
     "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
@@ -109,6 +110,10 @@
       {
         "status": "declared",
         "statement": "Brief identity or occurrence, absolute requested timeframe, source pointers, and versioned fixed agent instructions. The initial task contains no preloaded conversation content."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. Backups at the same run path must match every held retained row."
       }
     ],
     "outputs": [
@@ -149,6 +154,10 @@
       {
         "status": "declared",
         "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The shared installer takes a supported database backup, selects immutable program/provider bytes, checks held readiness, then releases maintenance. Existing Clockwork selections remain unchanged until explicit schedule enable; disabled selections remain preserved."
+      },
+      {
+        "status": "declared",
+        "statement": "Cell configuration initializes or backs up supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
       }
     ],
     "operational_limits": [

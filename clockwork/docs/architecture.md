@@ -24,7 +24,10 @@ Program deployment is a separate packaging boundary. It stages Clockwork's
 binary, Rust installer, and provider as one content-addressed release, then
 requires an explicitly supplied candidate Chancery reader to validate the
 exact staged provider copy before changing either public selector. That
-deployment does not open runtime state or mutate a product binding.
+direct installation does not open runtime state or mutate a product binding.
+The coordinated adapter separately suspends the complete binding inventory and
+refreshes enabled broker plists after all product holds are released. It keeps
+disabled intent, immutable product selection, and recorded failure halts.
 
 ## Authority
 

@@ -355,6 +355,13 @@ fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
     )
     .unwrap();
 
+    Fixture::success(
+        &Command::new(fixture.root.join("clockwork"))
+            .args(["--json", "binding", "disable", "krisis/observer"])
+            .env("HOME", &fixture.home)
+            .output()
+            .unwrap(),
+    );
     let owner = "fixture-json-owned-deployment";
     write(&fixture.home.join("expected-owner"), owner, 0o600);
     let source = fs::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")).unwrap();

@@ -24,7 +24,8 @@
     "Deployment writes ~/.local/bin/crm, ~/.local/bin/crm-install, and exactly one Chancery provider selector but starts no daemon, worker, schedule, or database operation.",
     "A separate crm init creates schema two or idempotently accepts an existing supported schema; doctor checks storage/readiness and idempotently registers the immutable Nucleus schemas/toolset; resume processes one queued, running, or applied-but-runtime-unsettled update synchronously and retry queues a successor before launching a hidden child.",
     "A separate crm migrate --backup PATH adds the profile table and advances schema markers from one to two transactionally after a private SQLite-aware backup; deployment never performs this effect.",
-    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work."
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment verification checks installation and dependency readiness without starting model jobs or synthetic domain work.",
+    "The CRM adapter initializes an absent database through its own init command under the sole drained deployment hold, then runs supported backed-up migration. The shared file installer does not access domain state. Existing cases, profiles, queue and execution identities remain."
   ],
   "authority": [
     "CRM's Rust installer owns its content-addressed releases, current and previous selectors, command and installer selectors, and only providers/crm.",
@@ -150,6 +151,10 @@
       {
         "status": "declared",
         "statement": "Deployment consumes the tested Rust installer, an absolute candidate binary and provider bundle matching its version, and an optional expected-current selector; init consumes the selected database path, absolute or resolved against cwd; recovery consumes one exact update identity and its durable state. Migration consumes the selected schema-one database and a new backup path. A relative backup path resolves from cwd; its parent must be an existing private regular directory, and the destination must be separate from source/sidecar paths with no existing SQLite sidecars."
+      },
+      {
+        "status": "declared",
+        "statement": "CRM accepts no deployment setup fields. Coordinated init and migration require exact owner admission; ordinary initialization remains held."
       }
     ],
     "outputs": [
@@ -198,6 +203,10 @@
       {
         "status": "declared",
         "statement": "Deployment maintenance protocol version 1 durably owns each hold by run ID, prevents new admission atomically, permits already-admitted work to settle, reports product-owned durable work in drain status, and releases only the named owner; independent operator pauses remain intact."
+      },
+      {
+        "status": "declared",
+        "statement": "The CRM adapter initializes an absent database through its own init command under the sole drained deployment hold, then runs supported backed-up migration. The shared file installer does not access domain state. Existing cases, profiles, queue and execution identities remain."
       }
     ],
     "operational_limits": [

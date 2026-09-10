@@ -125,15 +125,21 @@ fn add_bundle(files: &mut BTreeMap<String, SourceFile>, source: &Path, prefix: &
     Ok(())
 }
 
-// Keep the complete release inventory and its source/recovery selection in one place.
-#[allow(clippy::too_many_lines)]
 pub fn plan(options: &Install) -> Result<ReleasePlan> {
+    source_plan(&options.binary, options.source_root.as_deref())
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the complete release inventory and its source/recovery selection in one place"
+)]
+fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan> {
     let installer = std::env::current_exe()?;
-    let source = options
-        .source_root
-        .clone()
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
-    let (package, providers) = if options.source_root.is_none()
+    let source = source_root.map_or_else(
+        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
+        Path::to_path_buf,
+    );
+    let (package, providers) = if source_root.is_none()
         && installer
             .parent()
             .is_some_and(|parent| parent.file_name().is_some_and(|name| name == "package"))
@@ -158,15 +164,12 @@ pub fn plan(options: &Install) -> Result<ReleasePlan> {
             ],
         )
     };
-    require(
-        options.binary.is_absolute(),
-        "candidate binary must be absolute",
-    )?;
+    require(binary.is_absolute(), "candidate binary must be absolute")?;
     let mut files = BTreeMap::from([
         (
             "libexec/krisis".into(),
             SourceFile {
-                source: options.binary.clone(),
+                source: binary.to_path_buf(),
                 mode: 0o755,
             },
         ),
@@ -271,4 +274,23 @@ pub fn matches_candidate(paths: &Paths, info: &ReleaseInfo, options: &Install) -
     }
     verify(&root(paths, info), paths.uid)?;
     Ok(())
+}
+
+pub fn stage(paths: &Paths, binary: &Path, source_root: &Path) -> Result<PreparedRelease> {
+    let output = super::support::checked(
+        paths,
+        binary,
+        &super::support::args(&["--version"]),
+        &BTreeMap::new(),
+        30,
+    )?;
+    require(
+        String::from_utf8_lossy(&output).trim() == format!("krisis {}", env!("CARGO_PKG_VERSION")),
+        "candidate and installer versions differ",
+    )?;
+    transaction::prepare_release(
+        &layout(),
+        &paths.home,
+        &source_plan(binary, Some(source_root))?,
+    )
 }

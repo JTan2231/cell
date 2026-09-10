@@ -2,6 +2,19 @@
 
 ## Readiness
 
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
 Before installation or maintenance, verify Annals decision-account exchange
 contract 2 and Nucleus execution contract 3, and Clockwork schedule contract 3. Chancery documents these
 contracts. The Semantics worker does not call Chancery.
@@ -114,9 +127,11 @@ Ordinary updates omit the legacy watermark operation below. It requires
 maintenance support from currently installed public binaries before effects;
 unsupported old binaries need a compatibility release through the documented
 deployer and quiescence procedure. A candidate gate cannot fence old commands.
-Recovery stops on retained product-installer maintenance, unfinished
-transactions, or unproved installation state and retains the outer hold for
-the existing product recovery procedure.
+Recovery invokes the retained transaction for this exact owner. It restores
+pre-commit state or completes a committed candidate with scheduling disabled.
+A candidate whose prior null schedule cannot be restored is proved forward
+through its authenticated receipt. Unknown ownership, changed evidence, or
+unproved readiness keeps the outer hold.
 
 ## Activate a migrated database
 
@@ -291,3 +306,10 @@ retry preserve it. The last two operations remain Semantics-owned domain control
 Scheduling continuation creates no retry and cannot authorize a new request
 while a prior Nucleus job remains uncertain. Schema-one definitions acquire the
 new policy only when a schema-two definition is explicitly selected.
+
+Deployment settings accept only `enabled`. `enabled` must be a boolean.
+For example, `{"semantics":{"enabled":false}}` keeps the candidate schedule
+disabled after group activation. An omitted value preserves
+captured intent; a new schedule defaults to enabled. Recovery to the prior
+configuration preserves captured intent and ignores this override. Incident
+halts and operator pauses remain in force.

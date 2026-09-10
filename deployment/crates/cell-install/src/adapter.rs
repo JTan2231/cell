@@ -19,9 +19,11 @@ pub enum Operation {
     Hold,
     Drain,
     Apply,
+    Configure,
     Verify,
     Recover,
     Release,
+    Activate,
 }
 
 impl FromStr for Operation {
@@ -32,9 +34,11 @@ impl FromStr for Operation {
             "hold" => Ok(Self::Hold),
             "drain" => Ok(Self::Drain),
             "apply" => Ok(Self::Apply),
+            "configure" => Ok(Self::Configure),
             "verify" => Ok(Self::Verify),
             "recover" => Ok(Self::Recover),
             "release" => Ok(Self::Release),
+            "activate" => Ok(Self::Activate),
             _ => Err(Error::new("unsupported adapter operation")),
         }
     }
@@ -52,7 +56,24 @@ pub struct Request {
     pub candidate: Option<Value>,
     pub prior: Option<Value>,
     pub selected_products: Vec<String>,
+    #[serde(default)]
+    pub affected_products: Vec<String>,
+    #[serde(default)]
+    pub activation_bindings: Vec<String>,
+    #[serde(default)]
+    pub settings: Option<Value>,
+    #[serde(default)]
+    pub dependency_settings: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub dependency_candidates: BTreeMap<String, DependencyCandidate>,
     pub recovery: Option<Value>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct DependencyCandidate {
+    pub candidate_dir: PathBuf,
+    pub candidate: Value,
 }
 
 #[derive(Deserialize)]
@@ -113,6 +134,124 @@ fn canonical(value: &Value) -> Result<Vec<u8>> {
 }
 
 impl Context {
+    /// Validate the product's supported deployment settings before maintenance.
+    ///
+    /// # Errors
+    /// Rejects unknown keys and values with the wrong type.
+    pub fn validate_settings(&self, string_keys: &[&str], boolean_keys: &[&str]) -> Result<()> {
+        let Some(settings) = &self.request.settings else {
+            return Ok(());
+        };
+        let settings = settings
+            .as_object()
+            .ok_or_else(|| Error::new("deployment settings must be an object"))?;
+        for (key, value) in settings {
+            if !(string_keys.contains(&key.as_str()) && value.is_string()
+                || boolean_keys.contains(&key.as_str()) && value.is_boolean())
+            {
+                return Err(Error::new(format!(
+                    "unsupported deployment setting or type: {key}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Apply requested activation only to the selected, configured generation.
+    ///
+    /// # Errors
+    /// Rejects an activation setting that is not a boolean.
+    pub fn activation_enabled(&self, captured: bool) -> Result<bool> {
+        if !self.selected()
+            || self
+                .request
+                .recovery
+                .as_ref()
+                .is_some_and(|value| value["installed"] != "candidate")
+        {
+            return Ok(captured);
+        }
+        self.request
+            .settings
+            .as_ref()
+            .and_then(|value| value.get("enabled"))
+            .map_or(Ok(captured), |value| {
+                value
+                    .as_bool()
+                    .ok_or_else(|| Error::new("enabled must be a boolean"))
+            })
+    }
+
+    /// Select the installed dependency command or, only when it is absent, a
+    /// proved dependency candidate for read-only first-install discovery.
+    ///
+    /// # Errors
+    /// Rejects a missing, changed or differently sourced dependency candidate.
+    pub fn dependency_binary(&self, product: &str) -> Result<PathBuf> {
+        self.resolve_dependency_binary(product, false)
+    }
+
+    /// Use a selected dependency's sealed candidate for read-only inspection,
+    /// including when its installed predecessor lacks a required interface.
+    /// Never use this selection for product mutations or schedule activation.
+    ///
+    /// # Errors
+    /// Rejects a missing, changed or differently sourced dependency candidate.
+    pub fn dependency_inspection_binary(&self, product: &str) -> Result<PathBuf> {
+        self.resolve_dependency_binary(
+            product,
+            self.request
+                .selected_products
+                .iter()
+                .any(|name| name == product),
+        )
+    }
+
+    fn resolve_dependency_binary(
+        &self,
+        product: &str,
+        selected_candidate: bool,
+    ) -> Result<PathBuf> {
+        relative(product)?;
+        let installed = self.home.join(".local/bin").join(product);
+        if !selected_candidate && (installed.exists() || installed.is_symlink()) {
+            return Ok(installed);
+        }
+        let supplied = self
+            .request
+            .dependency_candidates
+            .get(product)
+            .ok_or_else(|| Error::new("dependency candidate is unavailable"))?;
+        let manifest: Candidate = serde_json::from_value(supplied.candidate.clone())?;
+        let mut content = supplied.candidate.clone();
+        content
+            .as_object_mut()
+            .ok_or_else(|| Error::new("invalid dependency candidate"))?
+            .remove("candidate_id");
+        if manifest.schema != 1
+            || manifest.product != product
+            || !supplied.candidate_dir.is_absolute()
+            || self
+                .request
+                .candidate
+                .as_ref()
+                .and_then(|value| value.get("source_key"))
+                != Some(&json!(manifest.source_key))
+            || manifest.id != format!("sha256:{:x}", Sha256::digest(canonical(&content)?))
+        {
+            return Err(Error::new("dependency candidate identity does not match"));
+        }
+        let binary = manifest
+            .binaries
+            .get(product)
+            .ok_or_else(|| Error::new("dependency candidate command is missing"))?;
+        let path = supplied.candidate_dir.join(relative(&binary.path)?);
+        if binary.path != format!("bin/{product}") || file_digest(&path)? != binary.sha256 {
+            return Err(Error::new("dependency candidate command changed"));
+        }
+        Ok(path)
+    }
+
     /// Read and verify one bounded coordinator request and its sealed installer.
     ///
     /// # Errors

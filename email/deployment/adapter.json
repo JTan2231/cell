@@ -4,5 +4,10 @@
   "application": "Email",
   "dependencies": [],
   "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "email-install"
+  "adapter_binary": "email-install",
+  "companions": [
+    "emt",
+    "mentor",
+    "paperboy"
+  ]
 }

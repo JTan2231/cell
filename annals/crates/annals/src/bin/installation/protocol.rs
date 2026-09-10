@@ -110,8 +110,8 @@ fn pauses(home: &Path) -> Result<BTreeMap<String, bool>> {
 fn controls(
     home: &Path,
     snapshot: &InstallSnapshot,
+    clockwork: &Path,
 ) -> Result<BTreeMap<String, schedule::Control>> {
-    let clockwork = home.join(".local/bin/clockwork");
     let mut result = BTreeMap::new();
     for library in scheduled_libraries(home)? {
         let key = if library == state(home) {
@@ -119,13 +119,13 @@ fn controls(
         } else {
             "annals/decisions-inbox"
         };
-        let control = schedule::inspect(home, &clockwork, key)?;
+        let control = schedule::inspect(home, clockwork, key)?;
         let selected = if key == "annals/decisions-inbox" {
-            schedule::selected_release(home, &clockwork, &control)?
+            schedule::selected_release(home, clockwork, &control)?
         } else {
             snapshot.current.clone()
         };
-        schedule::prove(home, &clockwork, key, &library, &control, selected.as_ref())?;
+        schedule::prove(home, clockwork, key, &library, &control, selected.as_ref())?;
         result.insert(key.into(), control);
     }
     Ok(result)
@@ -153,16 +153,10 @@ pub(super) fn inspect(home: &Path, context: Option<&Context>) -> Result<Value> {
             runtime.push(status);
         }
     }
-    let mut affected = vec!["nucleus"];
-    for name in ["krisis", "semantics"] {
-        if home.join(".local/bin").join(name).exists() {
-            affected.push(name);
-        }
-    }
     Ok(reply(
         "ready",
         "Annals programs, independent library controls and admission inspected",
-        json!({"current":selection(&snapshot),"installed":snapshot,"controls":controls(home,&snapshot)?,"operator_pauses":pauses(home)?,"runtime":runtime,"maintenance_products":affected,"after":["nucleus","clockwork"]}),
+        json!({"current":selection(&snapshot),"installed":snapshot,"controls":controls(home,&snapshot,&context.map(|ctx| ctx.dependency_binary("clockwork")).transpose()?.unwrap_or_else(|| home.join(".local/bin/clockwork")))?,"operator_pauses":pauses(home)?,"runtime":runtime,"maintenance_products":[],"after":["nucleus","clockwork"]}),
     ))
 }
 
@@ -170,39 +164,79 @@ fn prior(context: &Context) -> Result<InstallSnapshot> {
     serde_json::from_value(context.prior()?["installed"].clone()).map_err(Into::into)
 }
 
-fn drain(context: &Context, snapshot: &InstallSnapshot) -> Result<()> {
+fn drain(context: &Context, snapshot: &InstallSnapshot) -> Result<bool> {
     let payload = payload(&context.home, snapshot, Some(&context.binary("annals")?))?;
     let catalog = catalog_hold(&payload, &context.home, &context.request.run_id, "status")?;
-    if catalog["holds"] != json!([context.request.run_id]) || catalog["drained"] != true {
+    if catalog["holds"] != json!([context.request.run_id]) {
         return Err(Error::new(
             "Annals catalog admission has not drained under this owner",
         ));
     }
-    for library in libraries(&context.home)? {
-        lifecycle::drained(&payload, &library, &context.home, &context.request.run_id)?;
+    if catalog["drained"] != true {
+        return Ok(false);
     }
-    for state in ["accepted", "running", "waiting-on-requester"] {
+    for library in libraries(&context.home)? {
+        let status = lifecycle::hold(
+            &payload,
+            &library,
+            &context.home,
+            &context.request.run_id,
+            "hold",
+        )?;
+        if status["holds"] != json!([context.request.run_id]) {
+            return Err(Error::new("another owner holds an Annals library"));
+        }
+        if status["drained"] != true {
+            return Ok(false);
+        }
+    }
+    if !context.home.join(".local/bin/nucleus").exists()
+        && !context
+            .home
+            .join("Library/Application Support/Nucleus/nucleus.db")
+            .exists()
+    {
+        return Ok(true);
+    }
+    let mut after: Option<nucleus_core::JobId> = None;
+    loop {
+        let mut args: Vec<std::ffi::OsString> = [
+            "--compact",
+            "jobs",
+            "list",
+            "--requester",
+            "annals",
+            "--limit",
+            "1000",
+        ]
+        .into_iter()
+        .map(Into::into)
+        .collect();
+        if let Some(cursor) = &after {
+            args.extend(["--after".into(), cursor.to_string().into()]);
+        }
         let value = call(
             &context.home.join(".local/bin/nucleus"),
-            &[
-                "--compact".into(),
-                "jobs".into(),
-                "list".into(),
-                "--requester".into(),
-                "annals".into(),
-                "--state".into(),
-                state.into(),
-                "--limit".into(),
-                "1".into(),
-            ],
+            &args,
             &context.home,
             Some(&context.request.run_id),
         )?;
-        if value["version"] != 1 || value["jobs"] != json!([]) {
-            return Err(Error::new("Annals durable Nucleus jobs have not settled"));
+        let page: nucleus_core::ListJobsResponseV1 = serde_json::from_value(value)?;
+        if page.version != 1 {
+            return Err(Error::new("unsupported Annals Nucleus job response"));
         }
+        if page.jobs.iter().any(|job| !job.state.is_terminal()) {
+            return Ok(false);
+        }
+        let Some(next) = page.next else {
+            break;
+        };
+        if after.as_ref() == Some(&next) {
+            return Err(Error::new("Annals Nucleus job cursor did not advance"));
+        }
+        after = Some(next);
     }
-    Ok(())
+    Ok(true)
 }
 
 fn verify(context: &Context, snapshot: &InstallSnapshot, candidate: bool) -> Result<()> {
@@ -262,17 +296,15 @@ fn verify(context: &Context, snapshot: &InstallSnapshot, candidate: bool) -> Res
             return Err(Error::new("Annals candidate exact file inventory differs"));
         }
     }
-    let observed = controls(&context.home, snapshot)?;
-    let before: BTreeMap<String, schedule::Control> =
-        serde_json::from_value(context.prior()?["controls"].clone())?;
-    for (key, prior) in &before {
-        if prior.present
-            && observed
-                .get(key)
-                .is_none_or(|now| now.enabled != prior.enabled)
-        {
-            return Err(Error::new("Annals operator schedule state changed"));
-        }
+    let observed = controls(
+        &context.home,
+        snapshot,
+        &context.dependency_binary("clockwork")?,
+    )?;
+    if observed.values().any(|control| control.enabled) {
+        return Err(Error::new(
+            "Annals schedule activated before final activation",
+        ));
     }
     let prior_pauses: BTreeMap<String, bool> =
         serde_json::from_value(context.prior()?["operator_pauses"].clone())?;
@@ -327,13 +359,71 @@ fn socket(home: &Path) -> Result<PathBuf> {
 #[allow(clippy::too_many_lines)]
 pub(super) fn run(operation: Operation) -> Result<Value> {
     let context = Context::read("annals", "annals", "annals-install", VERSION)?;
+    context.validate_settings(&[], &["enabled"])?;
     if matches!(operation, Operation::Inspect) {
         return inspect(&context.home, Some(&context));
     }
+    let recovered_candidate = if matches!(operation, Operation::Recover) {
+        recover_transactions(&context)?
+    } else {
+        None
+    };
     let snapshot =
         cell_install::inspect_installation(&release::layout(), &context.home, &release::legacy)?;
     let payload = payload(&context.home, &snapshot, Some(&context.binary("annals")?))?;
     match operation {
+        Operation::Apply => {
+            if !context.selected() || snapshot != prior(&context)? {
+                return Err(Error::new("Annals staging lacks matching prior proof"));
+            }
+            let prepared = release::prepare(&install_args(&context, &snapshot)?, &context.home)?;
+            Ok(reply(
+                "applied",
+                "Annals immutable release staged; configuration and publication pending",
+                json!({"staged":prepared.info}),
+            ))
+        }
+        Operation::Activate => {
+            if snapshot.current.is_none() {
+                return Ok(reply("activated", "Annals remains absent", json!({})));
+            }
+            no_installer_hold(&context.home)?;
+            for library in libraries(&context.home)? {
+                if lifecycle::hold(
+                    &payload,
+                    &library,
+                    &context.home,
+                    &context.request.run_id,
+                    "status",
+                )?["holds"]
+                    != json!([])
+                {
+                    return Err(Error::new("Annals activation requires released admission"));
+                }
+            }
+            let before: BTreeMap<String, schedule::Control> =
+                serde_json::from_value(context.prior()?["controls"].clone())?;
+            let clockwork = context.home.join(".local/bin/clockwork");
+            for (key, control) in controls(
+                &context.home,
+                &snapshot,
+                &context.dependency_binary("clockwork")?,
+            )? {
+                let enabled = context.activation_enabled(
+                    before
+                        .get(&key)
+                        .is_none_or(|prior| !prior.present || prior.enabled),
+                )?;
+                if let Some(digest) = &control.digest {
+                    schedule::select(&context.home, &clockwork, &key, &control, digest, enabled)?;
+                }
+            }
+            Ok(reply(
+                "activated",
+                "Annals captured scheduling intent restored",
+                json!({"controls":controls(&context.home,&snapshot,&context.dependency_binary("clockwork")?)?}),
+            ))
+        }
         Operation::Inspect => unreachable!(),
         Operation::Hold | Operation::Release => {
             if matches!(operation, Operation::Release) {
@@ -344,8 +434,10 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                 let catalog =
                     catalog_hold(&payload, &context.home, &context.request.run_id, "hold")?;
                 if catalog["drained"] != true {
-                    return Err(Error::new(
-                        "Annals library creation is still active; catalog hold retained",
+                    return Ok(reply(
+                        "held",
+                        "Annals catalog held while admitted library creation finishes",
+                        json!({"targets":[catalog]}),
                     ));
                 }
                 values.push(catalog);
@@ -371,6 +463,18 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                     "release",
                 )?);
             }
+            if matches!(operation, Operation::Hold) {
+                let clockwork = context.home.join(".local/bin/clockwork");
+                for (key, control) in controls(
+                    &context.home,
+                    &snapshot,
+                    &context.dependency_binary("clockwork")?,
+                )? {
+                    if control.enabled {
+                        schedule::disable(&context.home, &clockwork, &key, &control)?;
+                    }
+                }
+            }
             Ok(reply(
                 if matches!(operation, Operation::Hold) {
                     "held"
@@ -382,42 +486,33 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
             ))
         }
         Operation::Drain => {
-            drain(&context, &snapshot)?;
+            let settled = drain(&context, &snapshot)?;
             Ok(reply(
-                "drained",
+                if settled { "drained" } else { "waiting" },
                 "Annals admitted commands and durable jobs settled",
-                json!({"drained":true}),
+                json!({"drained":settled}),
             ))
         }
-        Operation::Apply => {
-            if !context.selected() || snapshot != prior(&context)? {
+        Operation::Configure => {
+            if !context.selected() {
+                verify(&context, &snapshot, false)?;
+                return Ok(reply(
+                    "configured",
+                    "Annals retained configuration verified",
+                    json!({}),
+                ));
+            }
+            if snapshot != prior(&context)? {
                 return Err(Error::new(
                     "Annals apply lacks matching selected prior proof",
                 ));
             }
-            drain(&context, &snapshot)?;
+            if !drain(&context, &snapshot)? {
+                return Err(Error::new("Annals apply requires settled durable work"));
+            }
             let socket = socket(&context.home)?;
             let clockwork = context.home.join(".local/bin/clockwork");
-            let args = InstallArgs {
-                binary: context.binary("annals")?,
-                usage_binary: context.binary("annals-usage")?,
-                bundle: context.request.source_root.join("annals/chancery/annals"),
-                usage_bundle: context
-                    .request
-                    .source_root
-                    .join("annals/chancery/annals-usage"),
-                nucleus: context.home.join(".local/bin/nucleus"),
-                nucleus_socket: socket.clone(),
-                clockwork: clockwork.clone(),
-                home: HomeArgs {
-                    home: Some(context.home.clone()),
-                },
-                expected_current: Some(selection(&snapshot)),
-                fresh_state: false,
-                no_start: false,
-                migration_clockwork_handoff: false,
-                launchctl: "/bin/launchctl".into(),
-            };
+            let args = install_args(&context, &snapshot)?;
             lifecycle::install_owned(&args, &context.request.run_id, true)?;
             let installed = cell_install::inspect_installation(
                 &release::layout(),
@@ -448,8 +543,8 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                 lifecycle::drained(&payload, &library, &context.home, &context.request.run_id)?;
             }
             Ok(reply(
-                "applied",
-                "Annals primary and decisions installations completed",
+                "configured",
+                "Annals primary and decisions configured and published with scheduling disabled",
                 json!({"installed":installed,"current":selection(&installed)}),
             ))
         }
@@ -472,7 +567,10 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
             let before = prior(&context)?;
             let is_prior = snapshot == before;
             let recovery = context.request.recovery.clone().unwrap_or_default();
-            if !(is_prior && recovery["any_apply_started"] == false) {
+            let candidate = recovered_candidate.unwrap_or(
+                !is_prior || recovery["configured"] == true || recovery["installed"] == "candidate",
+            );
+            if !(is_prior && (recovery["configure_started"] != true || before.current.is_none())) {
                 for library in libraries(&context.home)? {
                     let held = lifecycle::hold(
                         &payload,
@@ -499,8 +597,68 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "recovered",
                 "Coherent Annals programs and domain state proved without inferred database rollback",
-                json!({"safe_to_release":true,"installed":if is_prior {"prior"}else{"candidate"}}),
+                json!({"safe_to_release":true,"installed":if candidate {"candidate"}else{"prior"}}),
             ))
         }
     }
+}
+
+fn recover_transactions(context: &Context) -> Result<Option<bool>> {
+    {
+        let layout = release::layout();
+        let _lock = cell_install::lock_installation(&layout, &context.home, &release::legacy)?;
+    }
+    let root = install_root(&context.home);
+    if !root.exists() {
+        return Ok(None);
+    }
+    let mut transactions = Vec::new();
+    for entry in fs::read_dir(&root)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("transaction.")
+        {
+            transactions.push(entry.path());
+        }
+    }
+    transactions.sort();
+    let mut candidate = None;
+    for path in transactions {
+        let journal: Value = serde_json::from_slice(&fs::read(path.join("journal.json"))?)?;
+        if journal["owner"] != context.request.run_id || journal["outer_hold"] != true {
+            return Err(Error::new(
+                "Annals recovery transaction belongs to another owner",
+            ));
+        }
+        let recovered = lifecycle::recover(&context.home, &path)?;
+        candidate = Some(candidate.unwrap_or(true) && recovered["data"]["committed"] == true);
+    }
+    Ok(candidate)
+}
+
+fn install_args(context: &Context, snapshot: &InstallSnapshot) -> Result<InstallArgs> {
+    let socket = socket(&context.home)?;
+    let clockwork = context.home.join(".local/bin/clockwork");
+    Ok(InstallArgs {
+        binary: context.binary("annals")?,
+        usage_binary: context.binary("annals-usage")?,
+        bundle: context.request.source_root.join("annals/chancery/annals"),
+        usage_bundle: context
+            .request
+            .source_root
+            .join("annals/chancery/annals-usage"),
+        nucleus: context.home.join(".local/bin/nucleus"),
+        nucleus_socket: socket.clone(),
+        clockwork: clockwork.clone(),
+        home: HomeArgs {
+            home: Some(context.home.clone()),
+        },
+        expected_current: Some(selection(snapshot)),
+        fresh_state: false,
+        no_start: false,
+        migration_clockwork_handoff: false,
+        launchctl: "/bin/launchctl".into(),
+    })
 }

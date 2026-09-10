@@ -34,15 +34,19 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
     // its backup leaves all originals and the durable cleanup manifest intact.
     let retained_backup: Option<(PathBuf, String)> = store.setting("migration_backup")?;
     if let Some((retained, expected)) = retained_backup {
-        ensure!(
-            retained == backup,
-            "migration already selected a different backup"
-        );
         regular_file(&retained)?;
         ensure!(
             digest(&std::fs::read(&retained)?) == expected,
             "migration backup changed; cleanup remains held"
         );
+        if retained != backup {
+            cleanup(&store)?;
+            store.backup(backup)?;
+            store.set_setting(
+                "migration_backup",
+                &(backup, digest(&std::fs::read(backup)?)),
+            )?;
+        }
     } else {
         store.backup(backup)?;
         store.set_setting(

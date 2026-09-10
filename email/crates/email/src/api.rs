@@ -2,6 +2,7 @@
 
 pub use crate::AppError as Error;
 pub use crate::client::Client;
+pub use crate::settings::ReceivingSettings;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -190,4 +191,12 @@ pub async fn list_received(page: &ReceivedPageRequest) -> Result<ReceivedPage, E
 /// Returns invalid ID, credential, response-limit, provider or transport errors.
 pub async fn get_received(id: &str) -> Result<ReceivedMessage, Error> {
     crate::receiving::get_received(id).await
+}
+
+/// Read configured receiving domains without reading or retaining any email.
+///
+/// # Errors
+/// Rejects malformed local settings, incomplete provider pages or unavailable access.
+pub async fn receiving_settings() -> Result<ReceivingSettings, Error> {
+    crate::settings::receiving_settings().await
 }

@@ -170,3 +170,7 @@ leave send acceptance unknown. The HTTP transport does not follow redirects.
 
 The new `receive list/get` CLI forms are reserved. Use `--` before literal send
 positionals to avoid a collision, for example `email -- receive list`.
+
+Email selects its explicitly configured private credential first, then the
+existing `RESEND_API_KEY` environment fallback. Local setup and domain discovery
+use the separate [account operation](account-operate.md).

@@ -19,9 +19,11 @@ pub(super) enum Operation {
     Hold,
     Drain,
     Apply,
+    Configure,
     Verify,
     Recover,
     Release,
+    Activate,
 }
 
 #[derive(Deserialize)]
@@ -36,6 +38,14 @@ struct Request {
     candidate: Option<Value>,
     prior: Option<Prior>,
     selected_products: Vec<String>,
+    #[serde(default, rename = "affected_products")]
+    _affected_products: Vec<String>,
+    #[serde(default, rename = "activation_bindings")]
+    _activation_bindings: Vec<String>,
+    #[serde(default)]
+    settings: Option<Value>,
+    #[serde(default)]
+    dependency_settings: BTreeMap<String, Value>,
     recovery: Option<Value>,
 }
 
@@ -74,7 +84,12 @@ fn request() -> Result<Request> {
     }
     let request: Request = serde_json::from_slice(&bytes)?;
     let owner = request.run_id.as_bytes();
-    if request.schema != 1
+    if request
+        .settings
+        .as_ref()
+        .is_some_and(|value| value != &json!({}))
+        || !request.dependency_settings.is_empty()
+        || request.schema != 1
         || request.product != "usher"
         || !request
             .selected_products
@@ -242,6 +257,8 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
     let home = home_path(None)?;
     let input = verified_candidate(&request)?;
     let (status, data) = match operation {
+        Operation::Configure => ("configured", json!({})),
+        Operation::Activate => ("activated", json!({})),
         Operation::Inspect => (
             "ready",
             json!({"installed": cell_install::inspect(&SPEC, &home)?}),

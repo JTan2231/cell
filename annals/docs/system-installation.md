@@ -235,6 +235,19 @@ Do not move failed envelopes back into the queue or edit their receipts.
 
 ## Coordinated maintenance
 
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
 `annals-install adapter` provides the Cell coordinator interface. Each database
 has a separate `<canonical-database>.cell-maintenance` gate. Holds block new
 mutation while existing work settles. Controlled commands require the sole
@@ -283,3 +296,10 @@ not an abend. A storage-probe or authentication error is an abend. Annals retain
 operator pauses, bounded retry-event halts, exact attempts, and domain recovery.
 Scheduling continuation neither retries a failed delivery nor clears these
 product controls. Existing failed archives are history, not new incidents.
+
+Deployment settings accept only `enabled`. `enabled` must be a boolean.
+For example, `{"annals":{"enabled":false}}` keeps the candidate schedule
+disabled after group activation. This setting applies to both installer-owned inbox bindings. An omitted value preserves
+captured intent; a new schedule defaults to enabled. Recovery to the prior
+configuration preserves captured intent and ignores this override. Incident
+halts and operator pauses remain in force.

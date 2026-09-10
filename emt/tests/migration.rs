@@ -93,3 +93,27 @@ fn coordinator_can_backup_drained_state_inside_emt_root() -> Result<(), Box<dyn 
     fixture.success(&["maintenance", "release", owner], None)?;
     Ok(())
 }
+
+#[test]
+fn interrupted_empty_initialization_recovers_without_resetting_nonempty_state()
+-> Result<(), Box<dyn std::error::Error>> {
+    let fixture = Fixture::new()?;
+    let root = fixture.home.join("Library/Application Support/EMT");
+    emt::store::private_directory(&root).map_err(|error| error.to_string())?;
+    let database = root.join("emt.sqlite3");
+    fs::write(&database, [])?;
+    fs::set_permissions(&database, fs::Permissions::from_mode(0o600))?;
+    fixture.success(&["init"], None)?;
+    fs::remove_file(root.join("config.json"))?;
+    fixture.success(&["init"], None)?;
+    assert!(root.join("config.json").is_file());
+    let store = emt::store::Store::open(&root).map_err(|error| error.to_string())?;
+    store.connection.execute("INSERT INTO incidents(id,binding_key,feed_cursor,reply_to,clockwork_json,basic_email_json) VALUES('fixture','fixture/key',1,'fixture@example.com','{}','{}')",[])?;
+    drop(store);
+    fs::remove_file(root.join("config.json"))?;
+    let before = fs::read(&database)?;
+    assert!(!fixture.command(&["init"], None)?.status.success());
+    assert_eq!(fs::read(&database)?, before);
+    assert!(!root.join("config.json").exists());
+    Ok(())
+}

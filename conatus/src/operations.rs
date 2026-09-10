@@ -384,6 +384,67 @@ mod tests {
     use std::os::unix::fs::PermissionsExt as _;
 
     #[test]
+    fn rebind_preserves_both_libraries_cursor_pause_and_captured_wording() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path().canonicalize()?;
+        let old = root.join("old-annals");
+        let new = root.join("new-annals");
+        let decisions = root.join("decisions.toml");
+        std::fs::write(&old, "#!/bin/sh\nexit 1\n")?;
+        std::fs::write(&decisions, "fixture")?;
+        std::fs::write(
+            &new,
+            r#"#!/bin/sh
+case "$*" in
+  *decision-feed*) printf '%s\n' '{"ok":true,"data":{"contract_version":2,"library_id":"fedcba9876543210fedcba9876543210","watermark":"new-watermark"}}' ;;
+  *instructions*) printf '%s\n' '{"ok":true,"data":{"library_id":"0123456789abcdef0123456789abcdef","revision":1,"content":"fixture","sha256":"fixture","recorded_at":"2026-09-09T00:00:00Z"}}' ;;
+  *) exit 1 ;;
+esac
+"#,
+        )?;
+        std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o700))?;
+        let mut store = Store::create(&root)?;
+        let config = Config {
+            annals: old,
+            annals_state_dir: Some(root.join("annals-state")),
+            library: "conatus".into(),
+            library_id: "0123456789abcdef0123456789abcdef".into(),
+            decisions_config: decisions.clone(),
+            decisions_library_id: "fedcba9876543210fedcba9876543210".into(),
+        };
+        store.configure(&config, "retained-cursor")?;
+        capture_want(&root, "Keep these exact words.\n", "synthetic")?;
+        pause(&root, true)?;
+        let output = initialize(
+            &root,
+            &new,
+            &decisions,
+            config.annals_state_dir.as_deref(),
+            "conatus",
+        )?;
+        assert_eq!(output["rebound"], true);
+        assert_eq!(store.setting("cursor")?.as_deref(), Some("retained-cursor"));
+        assert_eq!(store.setting("paused")?.as_deref(), Some("true"));
+        assert_eq!(store.config()?.library_id, config.library_id);
+        assert_eq!(
+            store.config()?.decisions_library_id,
+            config.decisions_library_id
+        );
+        assert_eq!(store.pending()?[0].wording, "Keep these exact words.\n");
+        assert_eq!(
+            initialize(
+                &root,
+                &new,
+                &decisions,
+                config.annals_state_dir.as_deref(),
+                "conatus"
+            )?["rebound"],
+            false
+        );
+        Ok(())
+    }
+
+    #[test]
     fn feed_failure_retains_intake_without_starting_handoffs_or_processing() -> Result<()> {
         let temporary = tempfile::tempdir()?;
         let root = temporary.path();

@@ -12,12 +12,15 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
 sys.dont_write_bytecode = True
 
 from deployment import candidate, cli
+from deployment.inventory import descriptor
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,7 +59,12 @@ if op == "recover":
 if fault.get("invalid") == [name, op]:
     print("uncertain output")
     sys.exit(1)
-status = {"inspect":"ready","hold":"held","drain":"drained","apply":"applied","verify":"verified","release":"released","recover":"recovered"}[op]
+status = {"inspect":"ready","hold":"held","drain":"drained","apply":"applied","verify":"verified","release":"released","recover":"recovered","configure":"configured","activate":"activated"}[op]
+if op == "drain" and fault.get("wait") == name:
+    marker = run / ("waited-" + name)
+    if not marker.exists():
+        marker.touch()
+        status = "waiting"
 if fault.get("fail") == [name, op]:
     status = "stopped"
 print(json.dumps({"schema":1,"status":status,"data":data,"detail":fault.get("detail", "isolated fixture")}))
@@ -108,7 +116,7 @@ class Fixture:
         self.git("config", "user.name", "Offline deployment fixture")
         self.git("config", "user.email", "fixture@example.invalid")
         self.write(".gitignore", "target/\n__pycache__/\n")
-        for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py",
+        for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py", "deployment/inventory.py",
                          "ci_broker/__init__.py", "ci_broker/client.py", "ci_broker/broker.py"):
             self.write(relative, (ROOT / relative).read_text())
         # The pinned cleanup subprocess never touches actual installations in
@@ -190,6 +198,162 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(result["products"], ["alpha"])
         self.assertEqual(self.fixture.git("status", "--porcelain"), "M alpha/deployment/adapter.json")
 
+    def declare_dependency(self, *, bounded=False) -> None:
+        metadata = {"schema": 1, "product": "alpha", "dependencies": ["beta"]}
+        if bounded:
+            metadata["runtime_versions"] = {"beta": {"minimum": "1.2.0", "before": "2.0.0"}}
+        self.fixture.write("alpha/deployment/adapter.json", json.dumps(metadata))
+        self.fixture.write("pipeline/products/beta.sh", "PRODUCT_ID=beta\nPRODUCT_DIR=beta\nDEPLOY_PROFILE=selector-only-v1\nRELEASE_UNITS='beta|Beta|package|beta/Cargo.toml|beta-|1'\n")
+        self.fixture.write("beta/Cargo.toml", '[package]\nname="beta"\nversion="1.3.0"\n')
+        self.fixture.commit()
+
+    def test_plan_installs_missing_runtime_dependency(self):
+        self.declare_dependency()
+        with mock.patch.object(cli, "installed_product", return_value=False):
+            plan = cli.plan(self.fixture.repo, ["alpha"])
+        self.assertEqual(plan["products"], ["beta", "alpha"])
+        self.assertEqual(plan["selection_reasons"]["beta"], "missing runtime dependency of alpha")
+
+    def test_plan_reuses_compatible_dependency_and_replaces_unproved_or_incompatible_one(self):
+        self.declare_dependency(bounded=True)
+        with mock.patch.object(cli, "installed_product", return_value=True):
+            for version, expected in [("1.2.0", ["alpha"]), ("1.9.2", ["alpha"]),
+                                      ("1.1.9", ["beta", "alpha"]), ("2.0.0", ["beta", "alpha"]),
+                                      (None, ["beta", "alpha"])]:
+                with self.subTest(version=version), mock.patch.object(cli, "installed_version", return_value=version):
+                    self.assertEqual(cli.plan(self.fixture.repo, ["alpha"])["products"], expected)
+
+    def test_same_version_dependency_needs_its_explicitly_indexed_interface(self):
+        self.declare_dependency(bounded=True)
+        path = self.fixture.repo / "alpha/deployment/adapter.json"
+        metadata = json.loads(path.read_text())
+        metadata["runtime_contracts"] = {"beta": {"beta.setup": {"minimum": 1, "before": 2}}}
+        path.write_text(json.dumps(metadata))
+        path = self.fixture.repo / "pipeline/products/beta.sh"
+        path.write_text(path.read_text() + "PROVIDERS='beta|beta|beta/chancery|3'\n")
+        bundle = {"schema_version": 3, "provider": {"id": "beta", "release": "1.3.0"},
+                  "entries": ["entries/setup.json"]}
+        entry = {"id": "beta.setup", "contract_version": 1, "support": "supported"}
+        self.fixture.write("beta/chancery/provider.json", json.dumps(bundle))
+        self.fixture.write("beta/chancery/entries/setup.json", json.dumps(entry))
+        self.fixture.commit()
+        home = self.base / "home"
+        installed = home / "Library/Application Support/Chancery/providers/beta"
+        (installed / "entries").mkdir(parents=True)
+        (installed / "entries/setup.json").write_text(json.dumps(entry))
+        with mock.patch.object(cli, "installed_product", return_value=True), \
+                mock.patch.object(cli, "installed_version", return_value="1.3.0"), \
+                mock.patch.object(cli.pwd, "getpwuid", return_value=SimpleNamespace(pw_dir=str(home))):
+            # A loose draft is not a supported installed interface.
+            (installed / "provider.json").write_text(json.dumps({**bundle, "entries": []}))
+            self.assertEqual(cli.plan(self.fixture.repo, ["alpha"])["products"], ["beta", "alpha"])
+            (installed / "provider.json").write_text(json.dumps(bundle))
+            self.assertEqual(cli.plan(self.fixture.repo, ["alpha"])["products"], ["alpha"])
+            (installed / "entries/setup.json").write_text(json.dumps({**entry, "support": "unsupported"}))
+            self.assertEqual(cli.plan(self.fixture.repo, ["alpha"])["products"], ["beta", "alpha"])
+
+    def test_plan_rejects_incompatible_committed_candidates_before_maintenance(self):
+        self.declare_dependency(bounded=True)
+        self.fixture.write("beta/Cargo.toml", '[package]\nname="beta"\nversion="2.0.0"\n')
+        self.fixture.commit()
+        with mock.patch.object(cli, "installed_product", return_value=False):
+            with self.assertRaisesRegex(cli.DeploymentError, "runtime releases are incompatible"):
+                self.fixture.create()
+        self.assertFalse((self.fixture.storage / "active").exists())
+
+    def test_retained_dependency_is_proved_without_holds_or_configuration(self):
+        self.declare_dependency(bounded=True)
+        adapter = FAKE_ADAPTER.replace('["beta"] if name == "alpha" else []', '[]')
+        self.fixture.write("alpha/deployment/adapter.py", adapter)
+        self.fixture.write("beta/deployment/adapter.py", adapter.replace(
+            'else:\n    data = {}',
+            '    data["installation"] = {"current":{"versions":{"beta":"1.3.0"},"release_id":"retained"}}\nelse:\n    data = {}'))
+        self.fixture.commit()
+        with mock.patch.object(cli, "installed_product", return_value=True), \
+                mock.patch.object(cli, "installed_version", return_value="1.3.0"):
+            path = self.fixture.create()
+        self.assertEqual(cli.run_worker(path), 0)
+        self.assertEqual([item for item in self.observed(path) if item[0] == "beta"],
+                         [["beta", "inspect"], ["beta", "inspect"]])
+        state = cli.read_json(path / "run.json")
+        self.assertEqual(state["products"], ["alpha"])
+        self.assertEqual(state["affected"], ["alpha"])
+
+    def test_installation_remnants_are_not_treated_as_absent(self):
+        home = self.base / "home"
+        install = home / "Library/Application Support/Beta/install"
+        install.mkdir(parents=True)
+        (install / "transaction.json").write_text("{}")
+        with mock.patch.object(cli.pwd, "getpwuid", return_value=SimpleNamespace(pw_dir=str(home))):
+            self.assertTrue(cli.installed_product("beta", {"application": "Beta"}))
+            self.assertFalse(cli.installed_product("alpha", {"application": "Alpha"}))
+            path = home / ".local/bin/alpha"
+            path.parent.mkdir(parents=True)
+            path.symlink_to("missing-release")
+            self.assertTrue(cli.installed_product("alpha", {"application": "Alpha"}))
+
+    def test_settings_reach_only_the_owning_adapter_and_its_declared_consumer(self):
+        self.declare_dependency()
+        settings = {"alpha": {"enabled": False}, "beta": {"credential_file": "/private/key"}}
+        with mock.patch.object(cli, "installed_product", return_value=False):
+            path = cli.create_run(self.fixture.repo, ["alpha"], self.fixture.storage, settings=settings)
+        self.assertEqual(cli.run_worker(path), 0)
+        requests = [cli.read_json(item) for item in (path / "steps").glob("*-inspect.request.json")]
+        alpha = next(item for item in requests if item["product"] == "alpha")
+        beta = next(item for item in requests if item["product"] == "beta")
+        self.assertEqual(alpha["settings"], {"enabled": False})
+        self.assertEqual(alpha["dependency_settings"], {"beta": settings["beta"]})
+        self.assertEqual(beta["settings"], settings["beta"])
+        self.assertEqual(beta["dependency_settings"], {})
+        self.assertIn("beta", alpha["dependency_candidates"])
+
+    def test_activation_failure_reholds_and_drains_before_configuration_recovery(self):
+        path = self.fixture.create()
+        cli.durable_json(path / "fault.json", {"fail": ["alpha", "activate"]})
+        self.assertEqual(cli.run_worker(path), 1)
+        operations = self.observed(path)
+        first_activation = operations.index(["alpha", "activate"])
+        recovery = operations.index(["alpha", "recover"])
+        self.assertEqual(operations[first_activation + 1:recovery],
+                         [["beta", "hold"], ["beta", "drain"], ["alpha", "hold"], ["alpha", "drain"]])
+        state = cli.read_json(path / "run.json")
+        self.assertTrue(state["records"]["alpha"]["recovery_context"]["activation_started"])
+
+    def test_admitted_consumer_can_finish_using_provider_before_provider_is_held(self):
+        self.declare_dependency()
+        adapter = FAKE_ADAPTER.replace('print(json.dumps({"schema":1,"status":status',
+            'if name == "alpha" and op == "drain" and (run / "held-beta").exists():\n'
+            '    status = "stopped"\n'
+            'print(json.dumps({"schema":1,"status":status')
+        self.fixture.write("alpha/deployment/adapter.py", adapter)
+        self.fixture.commit()
+        with mock.patch.object(cli, "installed_product", return_value=False):
+            path = self.fixture.create()
+        self.assertEqual(cli.run_worker(path), 0)
+        observed = self.observed(path)
+        self.assertLess(observed.index(["alpha", "drain"]), observed.index(["beta", "hold"]))
+
+    def test_declarations_cover_every_embedded_product_library(self):
+        crate_products = {}
+        metadata = {}
+        for path in (ROOT / "pipeline/products").glob("*.sh"):
+            values = descriptor(path.read_text())
+            name = "krisis" if values["PRODUCT_ID"] == "decisions" else values["PRODUCT_ID"]
+            metadata[name] = json.loads((ROOT / values["PRODUCT_DIR"] / "deployment/adapter.json").read_text())
+            for crate in values["CARGO_PACKAGES"].split():
+                crate_products[crate] = name
+        workspace = tomllib.loads((ROOT / "Cargo.toml").read_text())
+        for member in workspace["workspace"]["members"]:
+            manifest = tomllib.loads((ROOT / member / "Cargo.toml").read_text())
+            consumer = crate_products.get(manifest["package"]["name"])
+            if consumer is None:
+                continue
+            for key, dependency in manifest.get("dependencies", {}).items():
+                provider = crate_products.get(dependency.get("package", key) if isinstance(dependency, dict) else key)
+                if provider is not None and provider != consumer:
+                    self.assertIn(consumer, metadata[provider].get("companions", []),
+                                  f"{provider} must rebuild its embedded consumer {consumer}")
+
     def test_binary_adapter_uses_only_the_admitted_candidate_and_supplies_cleanup_verifier(self):
         self.fixture.add_binary_adapter()
         planned = cli.plan(self.fixture.repo, ["usher"])
@@ -198,7 +362,7 @@ class DeploymentTests(unittest.TestCase):
         path = self.fixture.create(("usher",))
         self.assertEqual(cli.run_worker(path), 0)
         self.assertEqual(self.observed(path), [["usher", operation] for operation in
-                                             ("inspect", "hold", "drain", "apply", "verify", "release")])
+                                             ("inspect", "hold", "drain", "apply", "configure", "verify", "release", "activate")])
         state = cli.read_json(path / "run.json")
         self.assertEqual(state["release_history_cleanup"]["arguments"], [
             "--installer", "usher=" + str(path / "preparation/candidates/usher/bin/usher-install")])
@@ -225,7 +389,7 @@ class DeploymentTests(unittest.TestCase):
         observed = self.observed(path)
         self.assertNotIn(["nucleus", "apply"], observed)
         self.assertLess(observed.index(["requester", "drain"]), observed.index(["nucleus", "hold"]))
-        self.assertEqual(observed[-1], ["nucleus", "release"])
+        self.assertEqual([event for event in observed if event[1] == "release"][-1], ["nucleus", "release"])
 
     def test_binary_adapter_rejects_candidate_without_declared_installer(self):
         self.fixture.add_binary_adapter(stage_installer=False)
@@ -257,7 +421,7 @@ class DeploymentTests(unittest.TestCase):
         cli.durable_json(path / "fault.json", {"invalid": ["usher", "apply"]})
         self.assertEqual(cli.run_worker(path), 1)
         self.assertEqual(self.observed(path).count(["usher", "apply"]), 1)
-        self.assertEqual(self.observed(path)[-2:], [["usher", "recover"], ["usher", "release"]])
+        self.assertEqual(self.observed(path)[-3:], [["usher", "recover"], ["usher", "release"], ["usher", "activate"]])
         self.assertEqual(cli.read_json(path / "run.json")["recovery"]["state"], "succeeded")
 
     def test_binary_adapter_replies_keep_the_existing_protocol_bound(self):
@@ -330,10 +494,12 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(cli.run_worker(path), 0)
         observed = self.observed(path)
         self.assertEqual(observed, [["alpha", "inspect"], ["beta", "inspect"],
-                                    ["alpha", "hold"], ["beta", "hold"],
-                                    ["alpha", "drain"], ["beta", "drain"],
-                                    ["alpha", "apply"], ["alpha", "verify"], ["beta", "verify"],
-                                    ["alpha", "release"], ["beta", "release"]])
+                                    ["beta", "hold"], ["beta", "drain"],
+                                    ["alpha", "hold"], ["alpha", "drain"],
+                                    ["alpha", "apply"], ["alpha", "configure"], ["beta", "configure"],
+                                    ["alpha", "verify"], ["beta", "verify"],
+                                    ["alpha", "release"], ["beta", "release"],
+                                    ["alpha", "activate"], ["beta", "activate"]])
         data = cli.read_json(path / "run.json")
         self.assertEqual(data["state"], "succeeded")
         self.assertNotIn("candidate_dir", data["records"]["beta"])
@@ -464,9 +630,9 @@ class DeploymentTests(unittest.TestCase):
         final = json.loads(result.stdout)
         self.assertEqual(final["recovery"]["state"], "failed")
         self.assertEqual(final["maintenance"]["products"], {"alpha": "retained", "beta": "retained"})
-        self.assertEqual(final["cleanup"]["workspace"], "removed")
+        self.assertEqual(final["cleanup"]["workspace"], "retained_for_recovery")
         self.assertNotIn("DDDD", result.stderr)
-        self.assertFalse((self.fixture.storage / "active").exists())
+        self.assertTrue((self.fixture.storage / "active").exists())
 
     def test_lost_hold_and_release_outcomes_are_uncertain_until_a_proved_release(self):
         for operation in ("hold", "release"):
@@ -516,7 +682,7 @@ class DeploymentTests(unittest.TestCase):
         observed = self.observed(path)
         first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
         self.assertTrue(all(index < first_release for index, event in enumerate(observed) if event[1] == "verify"))
-        self.assertEqual(observed[-1], ["nucleus", "release"])
+        self.assertEqual([event for event in observed if event[1] == "release"][-1], ["nucleus", "release"])
         self.assertEqual(observed.count(["nucleus", "release"]), 1)
 
     def add_nucleus(self) -> None:
@@ -535,7 +701,43 @@ class DeploymentTests(unittest.TestCase):
         observed = self.observed(path)
         first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
         self.assertTrue(all(index < first_release for index, event in enumerate(observed) if event[1] == "recover"))
-        self.assertEqual(observed[-1], ["nucleus", "release"])
+        self.assertEqual([event for event in observed if event[1] == "release"][-1], ["nucleus", "release"])
+
+    def test_waiting_drain_stays_in_the_same_deployment(self):
+        path = self.fixture.create()
+        cli.durable_json(path / "fault.json", {"wait": "alpha"})
+        self.assertEqual(cli.run_worker(path), 0)
+        observed = self.observed(path)
+        self.assertEqual(observed.count(["alpha", "drain"]), 2)
+        self.assertEqual(observed.count(["alpha", "hold"]), 1)
+        self.assertEqual(observed.count(["alpha", "apply"]), 1)
+        self.assertNotIn(["alpha", "recover"], observed)
+
+    def test_unfinished_transaction_is_retained_and_reconciled_before_next_start(self):
+        path = self.fixture.create()
+        cli.durable_json(path / "fault.json", {"fail": ["alpha", "verify"], "recovery_safe": False})
+        self.assertEqual(cli.run_worker(path), 1)
+        with self.assertRaisesRegex(cli.DeploymentError, "retained"):
+            cli.cleanup_active(self.fixture.storage)
+        (path / "fault.json").unlink()
+        with cli.deployment_lock(self.fixture.storage) as lock_fd:
+            cli.reconcile_active(self.fixture.storage, lock_fd)
+        state = cli.read_json(path / "run.json")
+        self.assertEqual(state["recovery"]["state"], "succeeded")
+        self.assertEqual(self.observed(path).count(["alpha", "apply"]), 1)
+        cli.cleanup_active(self.fixture.storage)
+        self.assertFalse(path.exists())
+
+    def test_activation_failure_is_recovered_after_all_products_are_verified(self):
+        path = self.fixture.create()
+        cli.durable_json(path / "fault.json", {"fail": ["alpha", "activate"]})
+        self.assertEqual(cli.run_worker(path), 1)
+        state = cli.read_json(path / "run.json")
+        self.assertEqual(state["recovery"]["state"], "failed")
+        self.assertTrue(cli.unresolved(state))
+        observed = self.observed(path)
+        first_activation = observed.index(["alpha", "activate"])
+        self.assertTrue(all(index < first_activation for index, event in enumerate(observed) if event[1] == "verify"))
 
     def test_competing_start_cannot_create_or_delete_an_active_workspace(self) -> None:
         path = self.fixture.create()

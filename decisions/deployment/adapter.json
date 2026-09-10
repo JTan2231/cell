@@ -10,7 +10,33 @@
   ],
   "description": "Deploy Krisis with owned observation admission, transactional exact Annals pin updates and retained observer control.",
   "adapter_binary": "krisis-install",
-  "maintenance_products": [
-    "nucleus"
+  "maintenance_products": [],
+  "requester_service": "nucleus",
+  "companions": [
+    "annals",
+    "semantics"
+  ],
+  "runtime_versions": {
+    "annals": {
+      "minimum": "0.20.0",
+      "before": "0.21.0"
+    },
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    },
+    "conversations": {
+      "minimum": "0.5.1",
+      "before": "0.6.0"
+    }
+  },
+  "activation_bindings": [
+    "krisis/observer",
+    "decisions/observer",
+    "decisions/daily-email"
   ]
 }

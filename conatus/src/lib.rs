@@ -6,6 +6,11 @@ pub mod installation;
 pub mod operations;
 pub mod store;
 
+#[must_use]
+pub fn gate(root: &std::path::Path) -> cell_maintenance::Gate {
+    cell_maintenance::Gate::new(root.join("deployment-maintenance"))
+}
+
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

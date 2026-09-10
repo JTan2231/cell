@@ -412,3 +412,15 @@ routes and claims. These operations never resume a schedule.
 
 See the installed schedule-operation manual for grace timing, transport
 ownership, cursor recovery and the required broker cutover.
+
+## Coordinated broker deployment
+
+Coordinated `./deploy.sh clockwork` also captures the complete Clockwork binding
+inventory before maintenance. It disables those bindings while retaining their
+selections and failure halts. Product adapters prepare their new definitions
+under their own holds. After all holds are released, Clockwork restores each
+previously enabled binding through the selected broker. This rewrites every
+enabled generated plist with the current immutable Clockwork executable.
+Previously disabled bindings stay disabled. This phase precedes EMT activation.
+An interrupted deployment retains its original inventory and re-establishes
+suspension before recovery; it does not infer intent from temporary disablement.

@@ -55,7 +55,8 @@
     "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
-    "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints."
+    "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints.",
+    "The Cell configure phase initializes missing Cast state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
   ],
   "authority": [
     "Cast owns its installation, state schema, configuration validation and local allowance accounting.",
@@ -96,6 +97,10 @@
       {
         "status": "declared",
         "statement": "The Rust installer install command accepts --binary and --bundle at absolute paths, plus optional --home and --expected-current. Its recover command accepts --release at a canonical owned release directory. The CLI accepts --state-dir and explicit init, configuration, diagnostic or state reconcile-ownership commands. Ordinary website source controls accept an optional company ID; supported ATS sources reject that override and use their canonical tenant owner."
+      },
+      {
+        "status": "declared",
+        "statement": "Deployment accepts optional state_dir and config_file absolute paths. A supplied config file is applied through Cast config set; omitted configuration is preserved."
       }
     ],
     "outputs": [
@@ -136,6 +141,10 @@
       {
         "status": "declared",
         "statement": "Deployment uses product and catalog locks. It switches current atomically and restores the matching program and provider after a failed switch. Initialization, collection and ownership reconciliation are separate operations. Reconciliation holds one mutation lock and uses one transaction. Repeated repair leaves material records unchanged, but each invocation advances the snapshot revision."
+      },
+      {
+        "status": "declared",
+        "statement": "The Cell configure phase initializes missing Cast state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
       }
     ],
     "operational_limits": [

@@ -69,7 +69,10 @@ pub(crate) async fn get_received(id: &str) -> AppResult<ReceivedMessage> {
     Ok(result)
 }
 
-async fn get_json<T: DeserializeOwned>(endpoint: &str, query: &[(&str, String)]) -> AppResult<T> {
+pub(crate) async fn get_json<T: DeserializeOwned>(
+    endpoint: &str,
+    query: &[(&str, String)],
+) -> AppResult<T> {
     let api_key = resend_api_key()?;
     let client = resend_client(&api_key)?;
     for attempt in 0..=RETRY_DELAYS.len() {

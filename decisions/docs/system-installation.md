@@ -102,6 +102,19 @@ Interactive `krisis` diagnostics remain detailed.
 
 ## Coordinated deployment maintenance
 
+The coordinator's `apply` phase stages and verifies immutable release files.
+`configure` runs the product-owned configuration, migration and selector
+transaction with its schedule disabled. `verify` checks the installed result
+without starting product work. `release` removes only the named admission hold.
+After every affected hold is released, `activate` restores the captured enabled
+state of the current selected definition. An originally disabled binding stays
+disabled. Clockwork incident halts and product pauses remain in force.
+
+Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
+It neither cancels nor retries those jobs. A completely absent Nucleus
+installation with no Nucleus database has no durable jobs to drain. An
+unavailable existing runtime is not treated as an empty job inventory.
+
 `krisis-install adapter OP` is the sealed Rust product boundary used by Cell's
 deployment coordinator. It composes the product-owned prepare and final-cutover
 lifecycle, retains product-owned maintenance through group verification, and
@@ -136,10 +149,9 @@ library ID, foreign receipt, or unproved prior definition stops the update;
 this transition does not rebind durable account identity to another library.
 
 Group release removes only the coordinator's named hold after product
-verification. Recovery stops on a retained installer maintenance marker or
-unfinished product transaction and requires the existing product recovery
-procedure; it never removes such evidence to force progress. An unproved
-installation remains held.
+verification. Recovery invokes this owner's retained product transaction before checking
+readiness. It keeps scheduling disabled and retains restored evidence under
+`backups/deployments/`. Unknown ownership or incomplete recovery keeps admission held.
 
 ## Verification
 
@@ -239,3 +251,18 @@ Definition switches and deployment preserve the Clockwork incident. Existing
 failed observations remain terminal history; cutover does not re-alert or retry
 them. The retired Decisions schedules remain disabled. Schema-one definitions
 keep their old policy until a schema-two definition is explicitly selected.
+
+Coordinated recovery restores the exact recorded product transaction before it
+checks readiness. Its private journal binds the deployment owner, home, prior
+selection and candidate release to captured database, hook and schedule state.
+It does not reclassify observations or run `observe activate` again. Evidence
+from another owner or an older journal without that identity stays retained
+for explicit recovery. Normal deployment preserves the existing Annals library
+ID while updating its executable pin.
+
+Deployment settings accept only `codex_bin` and `enabled`. `enabled` must be a boolean.
+For example, `{"krisis":{"enabled":false}}` keeps the candidate schedule
+disabled after group activation. An omitted value preserves
+captured intent; a new schedule defaults to enabled. Recovery to the prior
+configuration preserves captured intent and ignores this override. Incident
+halts and operator pauses remain in force.

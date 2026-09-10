@@ -5,9 +5,17 @@
   "dependencies": [
     "nucleus"
   ],
-  "maintenance_products": [
-    "nucleus"
-  ],
+  "maintenance_products": [],
   "description": "Installation through the shared Rust transaction library.",
-  "adapter_binary": "crm-install"
+  "adapter_binary": "crm-install",
+  "requester_service": "nucleus",
+  "companions": [
+    "platter"
+  ],
+  "runtime_versions": {
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    }
+  }
 }

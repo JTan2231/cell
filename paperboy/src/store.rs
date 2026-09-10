@@ -147,6 +147,35 @@ impl Store {
     }
 
     pub fn backup(&self, target: &Path) -> Result<()> {
+        if target.exists() {
+            regular(target)?;
+            self.connection.execute(
+                "ATTACH DATABASE ?1 AS deployment_backup",
+                [target.to_str().context("backup path must be UTF-8")?],
+            )?;
+            let result = (|| -> Result<()> {
+                let integrity: String = self.connection.query_row(
+                    "PRAGMA deployment_backup.quick_check",
+                    [],
+                    |row| row.get(0),
+                )?;
+                ensure!(
+                    integrity == "ok",
+                    "retained deployment backup failed integrity"
+                );
+                for table in ["briefs", "agent_attempts", "email_attempts"] {
+                    let difference: bool = self.connection.query_row(&format!("SELECT EXISTS(SELECT * FROM main.{table} EXCEPT SELECT * FROM deployment_backup.{table}) OR EXISTS(SELECT * FROM deployment_backup.{table} EXCEPT SELECT * FROM main.{table})"), [], |row| row.get(0))?;
+                    ensure!(
+                        !difference,
+                        "retained deployment backup differs from held Paperboy state"
+                    );
+                }
+                Ok(())
+            })();
+            self.connection
+                .execute_batch("DETACH DATABASE deployment_backup")?;
+            return result;
+        }
         ensure!(
             target.is_absolute() && !target.exists(),
             "backup must be an absent absolute path"
@@ -206,5 +235,26 @@ impl Store {
     #[must_use]
     pub fn path(root: &Path) -> PathBuf {
         root.join(DATABASE)
+    }
+}
+
+#[cfg(test)]
+mod deployment_backup_tests {
+    use super::*;
+
+    #[test]
+    fn an_interrupted_backup_reuses_only_matching_retained_records() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let store = Store::initialize(temporary.path())?;
+        store.create("fixture-one", 200_000, "UTC")?;
+        let backup = temporary.path().join("deployment.sqlite");
+        store.backup(&backup)?;
+        let bytes = fs::read(&backup)?;
+        store.backup(&backup)?;
+        assert_eq!(fs::read(&backup)?, bytes);
+        store.create("fixture-two", 300_000, "UTC")?;
+        assert!(store.backup(&backup).is_err());
+        assert_eq!(fs::read(&backup)?, bytes);
+        Ok(())
     }
 }

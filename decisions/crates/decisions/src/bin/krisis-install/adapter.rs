@@ -2,8 +2,8 @@
 use super::{
     Install, lifecycle, package,
     support::{
-        ACTIVE, Paths, Pins, args, binding, binding_receipt, checked, disable, doctor, exists,
-        inspect_result, maintenance, require,
+        ACTIVE, Paths, Pins, args, binding, binding_receipt, checked, doctor, exists,
+        inspect_result, maintenance, require, switch,
     },
 };
 use cell_install::adapter::{Context, Operation, reply};
@@ -12,7 +12,6 @@ use cell_install::{Error, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 struct Adapter {
     context: Context,
@@ -56,6 +55,28 @@ impl Adapter {
     fn codex(&self) -> Result<PathBuf> {
         if let Some(info) = &self.snapshot()?.current {
             return Ok(lifecycle::pins_from_receipt(&self.paths, &self.clockwork, info)?.codex);
+        }
+        if let Some(value) = self
+            .context
+            .request
+            .settings
+            .as_ref()
+            .and_then(|settings| settings.get("codex_bin"))
+            .or_else(|| {
+                self.context
+                    .request
+                    .dependency_settings
+                    .get("nucleus")
+                    .and_then(|settings| settings.get("codex_bin"))
+            })
+        {
+            let path = value
+                .as_str()
+                .map(PathBuf::from)
+                .ok_or_else(|| Error::new("Krisis codex_bin must be an absolute path"))?;
+            require(path.is_absolute(), "Krisis codex_bin must be absolute")?;
+            cell_install::file_digest(&path)?;
+            return Ok(path);
         }
         for path in [
             PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
@@ -125,7 +146,16 @@ impl Adapter {
     }
     fn controls(&self) -> Result<Value> {
         let Some(current) = &self.snapshot()?.current else {
-            return Ok(json!({}));
+            let active = binding(&self.paths, &self.clockwork, ACTIVE)?;
+            require(
+                !active.enabled && active.definition_digest.is_none(),
+                "Krisis binding has no owned installation",
+            )?;
+            return Ok(if active.exists {
+                json!({ACTIVE:active})
+            } else {
+                json!({})
+            });
         };
         lifecycle::pins_from_receipt(&self.paths, &self.clockwork, current)?;
         let owned = binding_receipt(&self.paths)?;
@@ -153,12 +183,16 @@ impl Adapter {
             status["holds"] == json!([]) || status["holds"] == json!([self.context.request.run_id]),
             "another operation owns admission maintenance",
         )?;
-        self.candidate_pins()?;
+        if snapshot.current.is_some() {
+            self.candidate_pins()?;
+        } else {
+            self.codex()?;
+        }
         let mut result = inspect_result(snapshot.current.as_ref());
         result["selection"] = serde_json::to_value(&snapshot)?;
         result["controls"] = self.controls()?;
-        result["dependencies"] = json!(["annals", "nucleus", "clockwork", "conversations"]);
-        result["maintenance_products"] = json!(["nucleus"]);
+        result["dependencies"] = json!(["annals", "nucleus", "clockwork"]);
+        result["maintenance_products"] = json!([]);
         if let Some(current) = &snapshot.current {
             result["annals_library_id"] = json!(
                 lifecycle::pins_from_receipt(&self.paths, &self.clockwork, current)?
@@ -176,76 +210,90 @@ impl Adapter {
         )
     }
     fn drain(&self) -> Result<Value> {
-        let start = Instant::now();
-        loop {
+        {
             let value = self.status("status")?;
             require(
                 value["holds"] == json!([self.context.request.run_id]),
                 "drain requires this run's sole recorded admission hold",
             )?;
-            if value["drained"] == true {
-                break;
+            if value["drained"] != true {
+                return Ok(json!({"drained":false}));
             }
-            require(
-                start.elapsed() < Duration::from_secs(45),
-                "admitted Krisis commands have not drained; holds remain",
-            )?;
-            std::thread::sleep(Duration::from_millis(200));
+        }
+        if !self.paths.home.join(".local/bin/nucleus").exists()
+            && !self
+                .paths
+                .home
+                .join("Library/Application Support/Nucleus/nucleus.db")
+                .exists()
+        {
+            return Ok(json!({"drained":true}));
         }
         for requester in ["krisis", "decisions"] {
-            for state in ["accepted", "running", "waiting-on-requester"] {
+            let mut after: Option<nucleus_core::JobId> = None;
+            loop {
+                let mut arguments = args(&[
+                    "--compact",
+                    "jobs",
+                    "list",
+                    "--requester",
+                    requester,
+                    "--limit",
+                    "1000",
+                ]);
+                if let Some(cursor) = &after {
+                    arguments.extend(["--after".into(), cursor.to_string().into()]);
+                }
                 let bytes = checked(
                     &self.paths,
                     &self.paths.home.join(".local/bin/nucleus"),
-                    &args(&[
-                        "--compact",
-                        "jobs",
-                        "list",
-                        "--requester",
-                        requester,
-                        "--state",
-                        state,
-                        "--limit",
-                        "1",
-                    ]),
+                    &arguments,
                     &BTreeMap::new(),
                     60,
                 )?;
-                let value: Value = serde_json::from_slice(&bytes)?;
+                let page: nucleus_core::ListJobsResponseV1 = serde_json::from_slice(&bytes)?;
+                require(page.version == 1, "unsupported Krisis Nucleus job response")?;
+                if page.jobs.iter().any(|job| !job.state.is_terminal()) {
+                    return Ok(json!({"drained":false}));
+                }
+                let Some(next) = page.next else {
+                    break;
+                };
                 require(
-                    value["version"] == 1 && value["jobs"] == json!([]),
-                    "durable Krisis requester work has not drained; holds remain",
+                    after.as_ref() != Some(&next),
+                    "Krisis Nucleus job cursor did not advance",
                 )?;
+                after = Some(next);
             }
         }
         Ok(json!({"drained":true}))
     }
-    fn restore_controls(&self) -> Result<Value> {
+    fn restore_controls(&self, activate: bool) -> Result<Value> {
         let observed = self.controls()?;
-        if let Some(controls) = self
-            .context
-            .prior()?
-            .get("controls")
-            .and_then(Value::as_object)
+        for (key, actual) in observed
+            .as_object()
+            .ok_or_else(|| Error::new("invalid Krisis controls"))?
         {
-            for (key, prior) in controls {
-                let before = prior["enabled"]
-                    .as_bool()
-                    .ok_or_else(|| Error::new("invalid captured schedule state"))?;
-                let actual = observed[key]["enabled"]
-                    .as_bool()
-                    .ok_or_else(|| Error::new("owned schedule disappeared during deployment"))?;
-                if before != actual {
-                    require(
-                        !before,
-                        "previously enabled observer is unexpectedly disabled",
-                    )?;
-                    let selected = binding(&self.paths, &self.clockwork, key)?;
-                    disable(&self.paths, &self.clockwork, key, &selected)?;
-                }
+            let prior = &self.context.prior()?["controls"][key];
+            let enabled = activate
+                && self
+                    .context
+                    .activation_enabled(prior["enabled"].as_bool().unwrap_or(true))?;
+            if let Some(digest) = actual["definition_digest"].as_str() {
+                switch(&self.paths, &self.clockwork, key, digest, enabled)?;
             }
         }
         self.controls()
+    }
+    fn require_disabled(&self) -> Result<Value> {
+        let value = self.controls()?;
+        require(
+            value.as_object().is_some_and(|controls| {
+                controls.values().all(|control| control["enabled"] != true)
+            }),
+            "Krisis observer activated before final activation",
+        )?;
+        Ok(value)
     }
     fn readiness(&self, candidate: bool) -> Result<()> {
         let info = self
@@ -288,11 +336,17 @@ impl Adapter {
             )?;
         }
         let mut result = inspect_result(Some(&info));
-        result["controls"] = self.restore_controls()?;
+        result["controls"] = self.require_disabled()?;
         self.readiness(selected)?;
         Ok(result)
     }
     fn recover(&self) -> Result<Value> {
+        lifecycle::recover_lock(&self.paths)?;
+        let recovered_candidate = if lifecycle::no_unfinished_transaction(&self.paths).is_err() {
+            lifecycle::recover_owned(&self.options()?, &self.context.request.run_id)?
+        } else {
+            None
+        };
         self.clean()?;
         let observed = inspect_result(self.snapshot()?.current.as_ref());
         let prior = observed["current"] == self.context.prior()?["current"];
@@ -305,14 +359,17 @@ impl Adapter {
                 .ok_or_else(|| Error::new("candidate installation is absent"))?;
             package::matches_candidate(&self.paths, &info, &self.options()?)?;
         }
-        self.restore_controls()?;
+        self.restore_controls(false)?;
         let recovery = self
             .context
             .request
             .recovery
             .as_ref()
             .unwrap_or(&Value::Null);
-        if prior && recovery["any_apply_started"] == false {
+        let candidate = recovered_candidate.unwrap_or(
+            !prior || recovery["configured"] == true || recovery["installed"] == "candidate",
+        );
+        if prior && recovery["configure_started"] != true {
             return Ok(json!({"safe_to_release":true,"installed":"prior"}));
         }
         let status = self.status("status")?;
@@ -323,10 +380,14 @@ impl Adapter {
             self.owned_status()?;
         }
         self.readiness(!prior)?;
-        Ok(json!({"safe_to_release":true,"installed":if prior {"prior"}else{"candidate"}}))
+        Ok(json!({"safe_to_release":true,"installed":if candidate {"candidate"}else{"prior"}}))
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the fixed protocol phases beside their admission and recovery evidence"
+)]
 pub fn execute(operation: Operation) -> Result<Value> {
     let context = Context::read(
         "krisis",
@@ -334,40 +395,88 @@ pub fn execute(operation: Operation) -> Result<Value> {
         "krisis-install",
         env!("CARGO_PKG_VERSION"),
     )?;
+    context.validate_settings(&["codex_bin"], &["enabled"])?;
     let mut paths = Paths::new(context.home.clone())?;
     paths.deployment_run_id = Some(context.request.run_id.clone().into());
     let adapter = Adapter {
-        clockwork: paths.home.join(".local/bin/clockwork"),
+        clockwork: context.dependency_binary("clockwork")?,
         context,
         paths,
     };
     let (status, detail, data) = match operation {
+        Operation::Apply => {
+            adapter.check_prior()?;
+            let prepared = package::stage(
+                &adapter.paths,
+                &adapter.context.binary("krisis")?,
+                &adapter.context.request.source_root.join("decisions"),
+            )?;
+            (
+                "applied",
+                "Krisis immutable release staged; configuration and publication pending",
+                json!({"staged":prepared.info}),
+            )
+        }
+        Operation::Activate => {
+            require(
+                adapter.status("status")?["holds"] == json!([]),
+                "Krisis activation requires released admission",
+            )?;
+            (
+                "activated",
+                "Krisis captured scheduling intent restored",
+                adapter.restore_controls(true)?,
+            )
+        }
         Operation::Inspect => (
             "ready",
             "Krisis installation and admission inspected",
             adapter.inspect()?,
         ),
-        Operation::Hold => (
-            "held",
-            "run-owned Krisis admission hold persisted",
-            json!({"targets":[adapter.status("hold")?]}),
-        ),
-        Operation::Drain => (
-            "drained",
-            "Krisis admission and durable requester work drained",
-            adapter.drain()?,
-        ),
-        Operation::Apply => {
+        Operation::Hold => {
+            let status = adapter.status("hold")?;
+            adapter.restore_controls(false)?;
+            (
+                "held",
+                "run-owned Krisis admission hold persisted",
+                json!({"targets":[status]}),
+            )
+        }
+        Operation::Drain => {
+            let data = adapter.drain()?;
+            (
+                if data["drained"] == true {
+                    "drained"
+                } else {
+                    "waiting"
+                },
+                "Krisis admission and durable requester work",
+                data,
+            )
+        }
+        Operation::Configure => {
+            if !adapter.context.selected() {
+                adapter.check_prior()?;
+                adapter.readiness(false)?;
+                return Ok(reply(
+                    "configured",
+                    "Krisis retained configuration verified",
+                    json!({}),
+                ));
+            }
             adapter.clean()?;
             adapter.check_prior()?;
-            adapter.drain()?;
+            require(
+                adapter.drain()?["drained"] == true,
+                "Krisis apply requires settled durable work",
+            )?;
             let mut options = adapter.options()?;
             options.final_cutover = true;
             lifecycle::install(&options, Some(&adapter.context.request.run_id))?;
-            adapter.restore_controls()?;
+            adapter.restore_controls(false)?;
             (
-                "applied",
-                "Krisis installation and operator controls restored",
+                "configured",
+                "Krisis pins configured and candidate published with scheduling disabled",
                 inspect_result(adapter.snapshot()?.current.as_ref()),
             )
         }
@@ -378,7 +487,7 @@ pub fn execute(operation: Operation) -> Result<Value> {
         ),
         Operation::Release => {
             adapter.clean()?;
-            adapter.restore_controls()?;
+            adapter.require_disabled()?;
             (
                 "released",
                 "only this run's admission hold released",

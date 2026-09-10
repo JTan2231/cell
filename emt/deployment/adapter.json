@@ -2,8 +2,38 @@
   "schema": 1,
   "product": "emt",
   "application": "EMT",
-  "dependencies": ["email", "nucleus", "clockwork"],
-  "maintenance_products": ["nucleus"],
+  "dependencies": [
+    "email",
+    "nucleus",
+    "clockwork"
+  ],
+  "maintenance_products": [],
   "description": "Install EMT with its worker disabled and admitted exchanges drained.",
-  "adapter_binary": "emt-install"
+  "adapter_binary": "emt-install",
+  "requester_service": "nucleus",
+  "runtime_versions": {
+    "email": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    },
+    "nucleus": {
+      "minimum": "0.5.4",
+      "before": "0.6.0"
+    },
+    "clockwork": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
+    }
+  },
+  "activation_bindings": [
+    "emt/worker"
+  ],
+  "runtime_contracts": {
+    "email": {
+      "email.account.operate": {
+        "minimum": 1,
+        "before": 2
+      }
+    }
+  }
 }

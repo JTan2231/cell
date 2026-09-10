@@ -160,3 +160,13 @@ Deployment verification checks the installed release, database integrity,
 Nucleus readiness, and settled maintenance status. It creates no case, update,
 or model job. Ordinary CRM success remains the guarded revision commit; a
 later runtime failure does not reverse that commit.
+
+## Coordinated setup
+
+The Cell adapter initializes an absent CRM database during configuration under
+its sole drained deployment hold. It then runs CRM's supported migration and
+verification operations. Existing cases, profiles, queued work and execution
+identities remain. Initialization and migration accept the deployment owner
+only under that exact hold; ordinary use remains fenced. This initialization
+is owned by CRM's adapter and does not occur inside the shared file installer.
+CRM accepts no deployment setup fields and installs no scheduler.

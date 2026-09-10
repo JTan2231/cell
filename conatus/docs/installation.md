@@ -73,9 +73,11 @@ Use `clockwork binding disable conatus/update` to disable activation. Conatus
 Do not run a second Annals inbox schedule for the Conatus library alongside this
 runner.
 
-An installed release upgrade does not retarget an existing immutable schedule.
-Generate, register, and select a new definition when the scheduled runner should
-use the new release. Preserve the previous selection for explicit recovery.
+Direct installation does not retarget an existing immutable schedule. Cell
+deployment captures and suspends the existing runner, rebinds Annals and
+registers a disabled definition for the new release, then restores saved intent
+after maintenance release. See the [complete operation](../chancery/manuals/update-operate.md#coordinated-deployment-setup)
+for setup fields, fresh initialization and recovery.
 
 ## Scheduled failure policy
 

@@ -1,7 +1,7 @@
 # User-owned macOS installation
 
 Email sends during each invocation. Its only retained state is immutable
-install releases and their selectors. It has no daemon, configuration, or
+install releases and their selectors. It has no daemon or
 delivery database.
 
 An upstream product may own scheduling, occurrence state, message rendering,
@@ -101,3 +101,13 @@ email --idempotency-key 'product/event/2026-09-01' 'Subject' - < body.txt
 Command success confirms Resend acceptance. Check Gmail separately for receipt.
 Sending discloses the subject, body, and attachment names and bytes to Resend
 and Gmail. It also discloses a caller key to Resend. Email retains none of them locally.
+
+## Supplied account settings
+
+Use `email setup --credential-file ABS_PRIVATE_FILE --receiving-domain DOMAIN`,
+or supply `credential_file` and `receiving_domain` in Email's Cell deployment
+settings. Omitted fields remain unchanged. The credential is retained privately
+by Email and takes precedence over the wrapper's environment fallback. Neither
+path creates a remote key, changes DNS, reads mail or sends a message. See the
+[complete account operation](../chancery/manuals/account-operate.md) for private
+file requirements, repeatable failure recovery and receiving-domain discovery.

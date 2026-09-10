@@ -166,3 +166,8 @@ history. Save a page cursor after its items are retained. Restore routing
 metadata with the database: losing a claim can duplicate an already submitted
 EMT notification. Incident notification_status still describes Clockwork
 transport; EMT records its own email acceptance.
+
+Coordinated broker deployment retains its original binding inventory in the
+Cell deployment transaction. Disabled state during that transaction is temporary;
+activation uses the captured enabled intent. Product definitions and Clockwork
+failure incidents remain in their existing stores.
