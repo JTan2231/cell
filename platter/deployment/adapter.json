@@ -15,7 +15,7 @@
   "requester_service": "nucleus",
   "runtime_versions": {
     "cast": {
-      "minimum": "0.4.1",
+      "minimum": "0.4.2",
       "before": "0.5.0"
     },
     "crm": {
