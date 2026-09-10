@@ -165,7 +165,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Database schema 2 holds all durable Platter content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete retained library. Nucleus history and credentials remain separately owned."
+        "statement": "Database schema 2 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
       }
     ],
     "identity_and_units": [

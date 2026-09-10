@@ -203,9 +203,10 @@ pub fn eligible(job: &Job) -> bool {
     })
 }
 
-pub async fn posting(job: &Job) -> Result<Posting> {
+pub async fn posting(root: &Path, job: &Job) -> Result<Posting> {
     let parsed = url::Url::parse(&job.url)?;
     validate_public_url(&parsed)?;
+    let mut retrieved_at = None;
     let value = if let Some(ats) = ats(job)? {
         let endpoint = match ats.provider.as_str() {
             "greenhouse" => format!(
@@ -224,22 +225,22 @@ pub async fn posting(job: &Job) -> Result<Posting> {
             ),
             _ => unreachable!(),
         };
-        let body = fetch(&url::Url::parse(&endpoint)?).await?;
-        let value: Value = serde_json::from_slice(&body).context("invalid ATS JSON response")?;
+        let endpoint = url::Url::parse(&endpoint)?;
+        let value: Value = if ats.provider == "ashby" {
+            let cached = ashby_board(root, &ats, &endpoint).await?;
+            retrieved_at = Some(cached.retrieved_at);
+            cached.response
+        } else {
+            let body = fetch(&endpoint, Some(4_000_000)).await?;
+            serde_json::from_slice(&body).context("invalid ATS JSON response")?
+        };
         let found = if ats.provider == "ashby" {
             let matches: Vec<_> = value
                 .get("jobs")
                 .and_then(Value::as_array)
                 .context("invalid Ashby board")?
                 .iter()
-                .filter(|row| {
-                    row.get("jobUrl")
-                        .and_then(Value::as_str)
-                        .and_then(|value| url::Url::parse(value).ok())
-                        .and_then(|url| AtsPosting::from_url(&url))
-                        .as_ref()
-                        == Some(&ats)
-                })
+                .filter(|row| ashby_job_matches(row, &ats))
                 .collect();
             ensure!(
                 matches.len() == 1,
@@ -276,7 +277,7 @@ pub async fn posting(job: &Job) -> Result<Posting> {
         validate_description(content)?;
         found
     } else {
-        let bytes = fetch(&parsed).await?;
+        let bytes = fetch(&parsed, Some(4_000_000)).await?;
         let html = std::str::from_utf8(&bytes).context("employer posting is not UTF-8")?;
         select_jsonld(html, &parsed, &job.title)?
     };
@@ -287,9 +288,59 @@ pub async fn posting(job: &Job) -> Result<Posting> {
     );
     Ok(Posting {
         url: job.url.clone(),
-        retrieved_at: cast::now(),
+        retrieved_at: retrieved_at.unwrap_or_else(cast::now),
         text,
     })
+}
+
+#[derive(Serialize, Deserialize)]
+struct AshbyBoard {
+    retrieved_at: String,
+    response: Value,
+}
+
+fn ashby_job_matches(row: &Value, ats: &AtsPosting) -> bool {
+    row.get("jobUrl")
+        .and_then(Value::as_str)
+        .and_then(|value| url::Url::parse(value).ok())
+        .and_then(|url| AtsPosting::from_url(&url))
+        .as_ref()
+        == Some(ats)
+}
+
+fn read_ashby_cache(
+    path: &Path,
+    ats: &AtsPosting,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Option<AshbyBoard> {
+    let cached: AshbyBoard = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let retrieved_at = chrono::DateTime::parse_from_rfc3339(&cached.retrieved_at).ok()?;
+    let age = now.signed_duration_since(retrieved_at);
+    let jobs = cached.response.get("jobs")?.as_array()?;
+    (age >= chrono::Duration::zero()
+        && age < chrono::Duration::days(14)
+        && jobs.iter().any(|row| ashby_job_matches(row, ats)))
+    .then_some(cached)
+}
+
+async fn ashby_board(root: &Path, ats: &AtsPosting, endpoint: &url::Url) -> Result<AshbyBoard> {
+    let path = root.join("ashby-cache").join(format!("{}.json", ats.board));
+    if let Some(cached) = read_ashby_cache(&path, ats, chrono::Utc::now()) {
+        return Ok(cached);
+    }
+    // Ashby returns the whole board. Share it across packets without a byte cap.
+    let bytes = fetch(endpoint, None).await?;
+    let response: Value = serde_json::from_slice(&bytes).context("invalid Ashby JSON response")?;
+    ensure!(
+        response.get("jobs").and_then(Value::as_array).is_some(),
+        "invalid Ashby board"
+    );
+    let cached = AshbyBoard {
+        retrieved_at: cast::now(),
+        response,
+    };
+    crate::write_json(&path, &cached).context("write Ashby board cache")?;
+    Ok(cached)
 }
 
 fn validate_public_url(url: &url::Url) -> Result<()> {
@@ -315,8 +366,7 @@ fn validate_public_url(url: &url::Url) -> Result<()> {
     Ok(())
 }
 
-async fn fetch(url: &url::Url) -> Result<Vec<u8>> {
-    const MAX: usize = 4_000_000;
+async fn fetch(url: &url::Url, max_bytes: Option<usize>) -> Result<Vec<u8>> {
     validate_public_url(url)?;
     let host = url.host_str().context("posting has no host")?;
     let addresses: Vec<_> = tokio::net::lookup_host((host, 443)).await?.collect();
@@ -340,15 +390,15 @@ async fn fetch(url: &url::Url) -> Result<Vec<u8>> {
         "posting redirects require a new supported source URL"
     );
     ensure!(
-        response
+        max_bytes.is_none_or(|max| response
             .content_length()
-            .is_none_or(|length| length <= MAX as u64),
+            .is_none_or(|length| length <= max as u64)),
         "posting response exceeds supported size"
     );
     let mut bytes = Vec::new();
     while let Some(chunk) = response.chunk().await? {
         ensure!(
-            bytes.len() + chunk.len() <= MAX,
+            max_bytes.is_none_or(|max| bytes.len() + chunk.len() <= max),
             "posting response exceeds supported size"
         );
         bytes.extend_from_slice(&chunk);
@@ -499,6 +549,59 @@ mod tests {
     }
     fn role(url: &str) -> Value {
         json!({"@type":"JobPosting", "title":"Engineer", "url":url,"description":"Complete role requirements and responsibilities. ".repeat(10)})
+    }
+
+    #[tokio::test]
+    async fn ashby_cache_shares_large_boards_and_preserves_timestamps() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ashby-cache/employer.json");
+        let cached = AshbyBoard {
+            retrieved_at: cast::now(),
+            response: json!({"jobs":[
+                {"jobUrl":"https://jobs.ashbyhq.com/employer/one"},
+                {"jobUrl":"https://jobs.ashbyhq.com/employer/two", "descriptionHtml":"x".repeat(4_000_001)}
+            ]}),
+        };
+        crate::write_json(&path, &cached).unwrap();
+        // Any attempted fetch fails URL validation, without making a request.
+        let endpoint = url::Url::parse("http://example.com").unwrap();
+        for id in ["one", "two"] {
+            let ats = AtsPosting::from_key(&format!("ashby:employer:{id}")).unwrap();
+            let found = ashby_board(root.path(), &ats, &endpoint).await.unwrap();
+            assert_eq!(found.retrieved_at, cached.retrieved_at);
+            assert_eq!(found.response, cached.response);
+        }
+
+        let original = std::fs::read(&path).unwrap();
+        let missing = AtsPosting::from_key("ashby:employer:new").unwrap();
+        assert!(ashby_board(root.path(), &missing, &endpoint).await.is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+
+    #[test]
+    fn ashby_cache_expires_and_rejects_invalid_or_missing_entries() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("employer.json");
+        let ats = AtsPosting::from_key("ashby:employer:one").unwrap();
+        let now = chrono::Utc::now();
+        assert!(read_ashby_cache(&path, &ats, now).is_none());
+        let mut cached = AshbyBoard {
+            retrieved_at: now.to_rfc3339(),
+            response: json!({"jobs":[{"jobUrl":"https://jobs.ashbyhq.com/employer/one"}]}),
+        };
+        crate::write_json(&path, &cached).unwrap();
+        assert!(read_ashby_cache(&path, &ats, now + chrono::Duration::days(13)).is_some());
+        assert!(read_ashby_cache(&path, &ats, now + chrono::Duration::days(14)).is_none());
+        assert!(read_ashby_cache(&path, &ats, now - chrono::Duration::seconds(1)).is_none());
+
+        cached.response = json!({"jobs":[{"jobUrl":"https://jobs.ashbyhq.com/other/one"}]});
+        crate::write_json(&path, &cached).unwrap();
+        assert!(read_ashby_cache(&path, &ats, now).is_none());
+        cached.response = json!({"jobs":null});
+        crate::write_json(&path, &cached).unwrap();
+        assert!(read_ashby_cache(&path, &ats, now).is_none());
+        std::fs::write(&path, b"incomplete JSON").unwrap();
+        assert!(read_ashby_cache(&path, &ats, now).is_none());
     }
 
     #[test]

@@ -60,6 +60,21 @@ unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
 
+Ashby boards are cached as private `ashby-cache/BOARD.json` files under the
+canonical runtime root. Each file contains the complete board response and its
+`retrieved_at` download time. Preparation and preview reuse that board for less
+than 14 days. A missing or invalid cache, an expired or future-dated download,
+or a requested posting absent from the cached board triggers one download. Only a successful
+download with a valid jobs array replaces the file. A refresh failure leaves
+the old file intact but fails that retrieval; it does not use expired data.
+
+Ashby board downloads have no byte cap. The 30-second HTTP timeout and the
+1,000,000-byte limit on the selected posting remain. Other posting responses
+retain their 4,000,000-byte cap. Cached posting timestamps report the board's
+download time, not the time it was read from disk. The cache is disposable and
+is excluded from SQLite backups. Remove a board's cache file to force its next
+retrieval to download again. This does not change existing captured packets.
+
 CRM capture rejects incomplete lists and detected timestamp changes. Separate
 list/read calls are not a transactional CRM snapshot, but both stages receive
 the same captured library. Models can list/read captured entries and submit
@@ -89,6 +104,7 @@ remain eligible. This operation captures the posting, career entries and
 template again. It creates a new run and new model jobs without copying prior
 outputs, requests, transcripts or error feedback. Older runs and accepted
 artifacts remain retained. Ordinary preparation still resumes retained work.
+Fresh preparation uses the same Ashby cache policy.
 
 Rendering uses Tectonic and Python 3 with pypdf. Absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON` overrides are supported; otherwise resolution checks
@@ -157,9 +173,11 @@ to inspect it. After repair, explicitly approve future scheduling with
 preparation, reconcile uncertainty, or replace an edition or send key. Binding
 changes, deployment and maintenance release preserve the halt.
 
-Normal preview fetches posting text again, defers unavailable sources and marks
-changed packets stale. These readiness decisions remain Platter's expected
-outcomes; a declined or stale packet and an empty ready pool are not an abend.
+Normal preview retrieves posting text again, defers unavailable sources and
+marks changed packets stale. Ashby uses the shared cache, so changes and
+closures can remain undetected until its next download, up to 14 days later.
+These readiness decisions remain Platter's expected outcomes; a declined or
+stale packet and an empty ready pool are not an abend.
 Existing frozen editions return stored contents without
 another fetch. An edition stores exact subject and body, a stable idempotency
 key, delivery status and receipt. Its ordered attachments reference immutable

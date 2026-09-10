@@ -61,6 +61,15 @@ receipts and hold owners are covered by a consistent SQLite backup. Platter
 retains no second tool-call ledger. Nucleus's evidence and credentials remain
 separate and are not part of a Platter backup.
 
+Disposable Ashby board files live in `ashby-cache/BOARD.json` under the same
+runtime root, outside SQLite. Preparation and preview share each download for
+less than 14 days and refresh it when the selected posting is absent. Invalid
+or expired caches are also refreshed on demand. A failed refresh preserves the
+old file but fails retrieval. Cache files are private, can be removed to force
+the next download, and are not required to restore packet history. They have
+no byte cap and are not included in database backups. The selected posting and
+its original download time remain captured in each preparation run.
+
 ## Maintenance and schema migration
 
 ```sh

@@ -19,6 +19,12 @@ A packet is a run with its content. Brief and resume-content artifacts contain
 the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
+Ashby board responses are separately cached in `ashby-cache/BOARD.json` under
+the runtime root. Each file holds `response` and its `retrieved_at` download
+time. It is reused for less than 14 days, unless the requested posting is
+absent. A valid new download atomically replaces it. These disposable files
+are excluded from SQLite backups; captured run inputs remain self-contained.
+
 Run executions contain exact Nucleus requests, input fingerprints, compact
 runtime state and attempt correlation; they contain no copied tool-call log or
 accepted output payload. Successful tool submissions are idempotent by run and

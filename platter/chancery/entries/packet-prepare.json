@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -78,10 +78,11 @@
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
     "Preparation captures Cast posting and CRM career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run.",
-    "Ordinary preview fetches the posting again. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
+    "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
-    "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email."
+    "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
+    "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -95,7 +96,7 @@
     "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents."
   ],
   "failure_and_recovery": [
-    "A consistent schema-two SQLite backup contains the complete retained Platter library. Schema-one file-backed state requires maintained migration.",
+    "A consistent schema-two SQLite backup contains the complete packet history. Disposable Ashby board caches are excluded and can be downloaded again. Schema-one file-backed state requires maintained migration.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
@@ -182,6 +183,10 @@
       {
         "status": "declared",
         "statement": "run-daily returns a compact edition date, status and selected packet count, or a no-edition result. It writes no message or PDF bytes to stdout. Status and doctor identify scheduling as external without checking the Clockwork binding."
+      },
+      {
+        "status": "declared",
+        "statement": "Ashby board caches are private ashby-cache/BOARD.json files under the runtime root, containing response and retrieved_at. Successful downloads with a valid jobs array replace the file atomically. Captured packets retain their own selected posting bytes and the original board download time."
       }
     ],
     "data_semantics": [
@@ -207,7 +212,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview fetches the posting again and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
+        "statement": "Both stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
@@ -216,6 +221,10 @@
       {
         "status": "declared",
         "statement": "Ad hoc preview reads existing accepted artifacts, consuming no Cast API budget and making no source-fetch, discovery-export, profile, model or rendering calls."
+      },
+      {
+        "status": "declared",
+        "statement": "Preparation, including --fresh, and preview reuse an Ashby board downloaded less than 14 days ago if it contains the selected posting. Missing, invalid, expired or future-dated caches and a posting absent from the cache trigger one download. Cached timestamps remain the original download time. Changes and closures can remain undetected until the next download. A failed refresh leaves the old file intact but fails retrieval; expired data is not a fallback. Remove a board cache file to force its next download."
       }
     ],
     "access": [
@@ -254,12 +263,16 @@
       {
         "status": "declared",
         "statement": "PDF inspection keeps the same Python user-package lookup as doctor and disables bytecode writes. Tectonic uses a temporary home. Renderer executable or execution failures stop daily preparation and request exact-job cancellation; content and layout errors remain model revision feedback."
+      },
+      {
+        "status": "declared",
+        "statement": "Ashby board downloads and cache files have no byte cap. The HTTP timeout remains 30 seconds. Other posting responses retain the 4,000,000-byte cap; each selected posting retains the 1,000,000-byte input limit."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 3 and private schema 2 require explicit migration from schema-one files. Packet IDs, exact Nucleus requests, frozen payloads and receipts are preserved. Older binaries cannot use schema two. Email attachment contract 4 additionally needs the advertised --payload-stdin extension. Historical brief toolsets and original accepted content remain decodable. Release 0.2.3 adds run-daily without a schema, toolset or model change; earlier preparation and send commands retain their behavior."
+        "statement": "Preparation contract 5 adds a shared Ashby disk cache and changes Ashby preview freshness to the 14-day source cache policy. Private schema 2 and retained packet inputs remain unchanged. Schema-one files require explicit migration. Packet IDs, exact Nucleus requests and frozen deliveries remain readable; older binaries cannot use schema two."
       },
       {
         "status": "unspecified",

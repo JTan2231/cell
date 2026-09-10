@@ -133,7 +133,7 @@ async fn prepare_job(
         let captured = Captured {
             job: job.clone(),
             company: company.into(),
-            posting: source::posting(job).await?,
+            posting: source::posting(store.root(), job).await?,
             career: source::career_library(&settings.crm_executable)?,
             template_artifact: store
                 .setting("template")?
@@ -291,7 +291,7 @@ async fn refresh_ready(store: &Store) -> Result<()> {
             continue;
         }
         let captured: Captured = store.inputs(&record.id)?;
-        match source::posting(&captured.job).await {
+        match source::posting(store.root(), &captured.job).await {
             Ok(current) if current.text == captured.posting.text => {
                 store.status(&record.id, "ready")?;
             }

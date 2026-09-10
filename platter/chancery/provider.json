@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Platter owns its canonical SQLite library: captured inputs, preparation runs, immutable content artifacts, explicit job eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation.",
+      "Platter owns its canonical SQLite library: captured inputs, preparation runs, immutable content artifacts, explicit job eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation. Platter also owns disposable Ashby board files under the runtime root, shared by preparation and preview for less than 14 days.",
       "The product owns its schema-two Clockwork schedule definition and declares halt-until-approved. Clockwork owns failure-policy enforcement and retained scheduling incidents; product domain recovery remains separate."
     ],
     "not_authoritative_for": [
@@ -30,7 +30,7 @@
       "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
     ],
     "compatibility_and_retirement": [
-      "Preparation contract 4 and installation contract 3 require Clockwork schedule contract 3 for schema-two halt policy; private schema 2 remains unchanged. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."
+      "Preparation contract 5 and installation contract 3 require Clockwork schedule contract 3 for schema-two halt policy; private schema 2 remains unchanged. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."
     ],
     "operational_limits": [
       "Each edition contains up to three new ready packets. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. run-daily needs applicable send authorization; it neither backfills dates nor resends accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."
