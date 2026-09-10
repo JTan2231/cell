@@ -81,13 +81,29 @@ A forced run still respects budgets. Configuration changes do not reset
 consumed allowance, purchase credits or configure provider billing. New
 schedules, billing and downstream workflows remain separate operations.
 
+`automatic_excluded_ats` is an array of distinct supported ATS names: `ashby`,
+`greenhouse` or `lever`. It defaults to `["ashby"]`, including for existing
+configuration that omits the field. Ordinary runs skip those boards and do not
+insert or update postings whose job or application URL identifies an excluded
+ATS. Source URLs and existing jobs remain retained. This includes forced runs
+and `job refresh`. An explicit empty array permits all supported ATS providers
+subject to each source's enabled setting. Set this field through the complete
+`config set --file` input; inspect `config show` first to preserve other values.
+
+`job collect JOB_URL` bypasses ordinary source selection policy for that exact
+posting. It preserves existing source enrollment and creates new sources
+disabled. It retains only the selected job and uses ordinary request budgets.
+The new configuration field keeps schema version 1. Older Cast programs that
+reject unknown fields cannot read configuration written with this field.
+
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
 with an existing company. For a supported ATS URL, omit `--company-id`: Cast
 assigns its canonical provider/tenant company identity and rejects an explicit
 company override. Without `--company-id`, an ordinary website URL creates or
 reuses a company candidate from its hostname.
 `source disable SOURCE_ID` removes the source from ordinary collection while
-retaining the source, its jobs and its collected data.
+retaining the source, its jobs and its collected data. It does not block
+explicit `job collect` requests.
 
 ## Recovery
 

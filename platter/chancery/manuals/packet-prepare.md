@@ -64,8 +64,11 @@ identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
 
 For `run-ad-hoc`, Platter first asks Cast to resolve or collect the exact public
-job URL. Cast retains its normal source, run and job records. Platter then uses
-that job through the same export and preparation path as scheduled work. A URL
+job URL. Cast collection contract 5 permits this explicit selection from a
+disabled source or an ATS excluded from ordinary collection. Cast retains only
+the requested posting and preserves source enrollment and board-scan state.
+Platter then uses that normal job through the same export and preparation path
+as scheduled work. A URL
 that names only an ATS board, an unsupported page or no unique owned
 `JobPosting` fails before packet preparation.
 

@@ -43,8 +43,10 @@ available from external sources. Consumers choose jobs by title, seniority,
 location or other preferences.
 
 Job records retain Cast observation dates, source-supplied posting dates and a
-recorded availability status. Collection records retain the latest attempt and
-last successful observation separately. Third-party discovery records `unknown`.
+recorded availability status. Collection records retain the latest ordinary source attempt and
+last successful source observation separately. Targeted job collection updates
+the selected job and run record while preserving board-scan state. Its run note
+identifies scope `job`, the selected source and URL, and its outcome. Third-party discovery records `unknown`.
 The adapter assigns `employer_ats` or `employer_jsonld_owned` attribution using
 its provider/tenant and employer-root URL matching rules. Shared recruiting
 hosts require their own adapter. Ownership reconciliation applies these rules

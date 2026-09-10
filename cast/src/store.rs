@@ -171,13 +171,7 @@ impl Store {
     }
 
     pub fn config(&self) -> Result<Config> {
-        self.read(|c| {
-            let body: String =
-                c.query_row("SELECT value FROM meta WHERE key='config'", [], |r| {
-                    r.get(0)
-                })?;
-            Ok(serde_json::from_str(&body)?)
-        })
+        self.read(read_config)
     }
 
     pub fn set_config(&self, config: &Config) -> Result<()> {
@@ -186,6 +180,14 @@ impl Store {
             || config.budgets.runtime_seconds > 3600
         {
             return Err("invalid configuration version or runtime bound".into());
+        }
+        let mut providers = std::collections::HashSet::new();
+        for provider in &config.automatic_excluded_ats {
+            if !matches!(provider.as_str(), "ashby" | "greenhouse" | "lever")
+                || !providers.insert(provider)
+            {
+                return Err("invalid or duplicate automatic ATS exclusion".into());
+            }
         }
         let mut ids = std::collections::HashSet::new();
         for query in &config.queries {
@@ -286,6 +288,20 @@ impl Store {
     }
 
     pub fn add_manual_source(&self, input: &str, company_id: Option<&str>) -> Result<Source> {
+        self.manual_source(input, company_id, true)
+    }
+
+    /// Retains the posting's source without enrolling a new source in ordinary collection.
+    pub fn add_target_source(&self, input: &str) -> Result<Source> {
+        self.manual_source(input, None, false)
+    }
+
+    fn manual_source(
+        &self,
+        input: &str,
+        company_id: Option<&str>,
+        enabled: bool,
+    ) -> Result<Source> {
         let url = crate::adapters::canonical_board_url(input).unwrap_or(normalize_url(input)?);
         self.write(|tx| {
             if crate::adapters::board_identity(&url).is_some() {
@@ -294,7 +310,7 @@ impl Store {
                         "ATS ownership is determined by its tenant; omit --company-id".into(),
                     );
                 }
-                return source_inner(tx, "", &url);
+                return source_inner_with_enabled(tx, "", &url, enabled);
             }
             let company_id = if let Some(id) = company_id {
                 get::<Company>(tx, "companies", id)?.ok_or("company not found")?;
@@ -314,8 +330,13 @@ impl Store {
                 };
                 company_inner(tx, &draft)?.id
             };
-            source_inner(tx, &company_id, &url)
+            source_inner_with_enabled(tx, &company_id, &url, enabled)
         })
+    }
+
+    /// Records one observed posting without changing board scan or scheduling state.
+    pub fn record_job_observation(&self, source: &Source, draft: &JobDraft) -> Result<Job> {
+        self.write(|tx| job_inner(tx, &source.company_id, &source.id, draft))
     }
 
     pub fn disable_source(&self, id: &str) -> Result<Source> {
@@ -353,11 +374,14 @@ impl Store {
     ) -> Result<()> {
         self.write(|tx| {
             let mut source=source.clone();
+            let config=read_config(tx)?;
+            if !config.allows_automatic_url(&source.url) { return Ok(()); }
             if crate::adapters::board_identity(&source.url).is_some() {
                 source.company_id=ats_company_inner(tx,&source.url,None)?.id;
             }
             if source.cursor.is_none() { tx.execute("DELETE FROM source_scan_seen WHERE source_id=?1",[&source.id])?; }
             for draft in &result.jobs {
+                if !config.allows_automatic_posting(&draft.url, draft.apply_url.as_deref()) { continue; }
                 let job=job_inner(tx,&source.company_id,&source.id,draft)?;
                 tx.execute("INSERT OR IGNORE INTO source_scan_seen VALUES(?1,?2)",params![source.id,job.id])?;
             }
@@ -384,6 +408,7 @@ impl Store {
             if result.complete && result.outcome=="complete" {
                 for mut job in all::<Job>(tx,"jobs")? {
                     if job.source_id!=source.id { continue; }
+                    if !config.allows_automatic_posting(&job.url, job.apply_url.as_deref()) { continue; }
                     let seen:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM source_scan_seen WHERE source_id=?1 AND job_id=?2)",params![source.id,job.id],|r|r.get(0))?;
                     if !seen {
                         job.missing_complete_snapshots+=1;
@@ -887,11 +912,19 @@ fn company_inner(tx: &Transaction<'_>, draft: &CompanyDraft) -> Result<Company> 
     Ok(company)
 }
 
+fn read_config(c: &Connection) -> Result<Config> {
+    let body: String = c.query_row("SELECT value FROM meta WHERE key='config'", [], |r| {
+        r.get(0)
+    })?;
+    Ok(serde_json::from_str(&body)?)
+}
+
 fn ingest_inner(
     tx: &Transaction<'_>,
     draft: &CompanyDraft,
     discovery_source: &str,
 ) -> Result<Company> {
+    let config = read_config(tx)?;
     let company = company_inner(tx, draft)?;
     for url in &draft.careers_urls {
         if let Ok(url) = normalize_url(url) {
@@ -911,7 +944,9 @@ fn ingest_inner(
         source_inner(tx, &company.id, url)?;
     }
     for job in &draft.jobs {
-        if !job.url.is_empty() {
+        if !job.url.is_empty()
+            && config.allows_automatic_posting(&job.url, job.apply_url.as_deref())
+        {
             job_inner(tx, &company.id, discovery_source, job)?;
         }
     }
@@ -954,6 +989,15 @@ fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> R
 }
 
 fn source_inner(tx: &Transaction<'_>, company_id: &str, url: &str) -> Result<Source> {
+    source_inner_with_enabled(tx, company_id, url, true)
+}
+
+fn source_inner_with_enabled(
+    tx: &Transaction<'_>,
+    company_id: &str,
+    url: &str,
+    enabled: bool,
+) -> Result<Source> {
     let canonical = crate::adapters::canonical_board_url(url);
     let url = canonical.as_deref().unwrap_or(url);
     let owner = canonical
@@ -976,7 +1020,7 @@ fn source_inner(tx: &Transaction<'_>, company_id: &str, url: &str) -> Result<Sou
         id: id.clone(),
         company_id: company_id.into(),
         url: url.into(),
-        enabled: true,
+        enabled,
         status: "never_checked".into(),
         last_attempt_at: None,
         last_success_at: None,
@@ -1343,6 +1387,10 @@ mod tests {
     #[test]
     fn manual_ats_boards_and_job_ids_remain_distinct() -> Result<()> {
         let (_dir, store) = store()?;
+        store.set_config(&Config {
+            automatic_excluded_ats: vec![],
+            ..Config::default()
+        })?;
         let first = store.add_manual_source("https://jobs.ashbyhq.com/alpha/123", None)?;
         let second = store.add_manual_source("https://jobs.ashbyhq.com/beta/123", None)?;
         assert_ne!(first.company_id, second.company_id);
@@ -1648,6 +1696,10 @@ mod tests {
     #[test]
     fn discovery_cannot_override_employer_availability() -> Result<()> {
         let (_dir, store) = store()?;
+        store.set_config(&Config {
+            automatic_excluded_ats: vec![],
+            ..Config::default()
+        })?;
         let job = JobDraft {
             source_key: "theirstack:123".into(),
             url: "https://jobs.ashbyhq.com/acme/123".into(),

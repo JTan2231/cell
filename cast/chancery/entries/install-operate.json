@@ -1,6 +1,6 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -101,6 +101,10 @@
       {
         "status": "declared",
         "statement": "Deployment accepts optional state_dir and config_file absolute paths. A supplied config file is applied through Cast config set; omitted configuration is preserved."
+      },
+      {
+        "status": "declared",
+        "statement": "automatic_excluded_ats accepts distinct ashby, greenhouse or lever names. It defaults to [\"ashby\"] when absent; an explicit empty array removes ATS exclusions. The complete config set input preserves separately supplied budgets and queries."
       }
     ],
     "outputs": [
@@ -113,6 +117,10 @@
       {
         "status": "declared",
         "statement": "Deployment checks program integrity. Provider authentication and collection have separate outcomes. Cast maintains conservative local budget counters; providers manage billing."
+      },
+      {
+        "status": "declared",
+        "statement": "automatic_excluded_ats defaults to [\"ashby\"], including omitted fields in existing configuration. Ordinary collection skips excluded boards and does not insert or update postings whose job or application URL identifies an excluded ATS. Existing jobs remain readable; source URLs may remain retained. Force and job refresh obey this policy."
       }
     ],
     "identity_and_units": [
@@ -160,7 +168,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability version 1 publishes Cast 0.1 installation and state-operation boundaries. Incompatible state changes require an explicit recovery and migration design."
+        "statement": "Installation contract 3 defines ordinary ATS exclusion and explicit-job access to disabled sources. Configuration schema stays at 1; older programs that reject unknown fields cannot read configuration written with automatic_excluded_ats. Program recovery does not restore configuration."
       }
     ],
     "reliances": [

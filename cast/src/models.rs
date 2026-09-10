@@ -133,6 +133,7 @@ pub struct Config {
     pub schema_version: u32,
     pub budgets: Budgets,
     pub queries: Vec<DiscoveryQuery>,
+    pub automatic_excluded_ats: Vec<String>,
     pub careers_interval_seconds: u64,
     pub max_verifications_per_run: u64,
 }
@@ -142,6 +143,7 @@ impl Default for Config {
         Self {
             schema_version: 1,
             budgets: Budgets::default(),
+            automatic_excluded_ats: vec!["ashby".into()],
             careers_interval_seconds: 86400,
             max_verifications_per_run: 50,
             queries: vec![
@@ -182,6 +184,23 @@ impl Default for Config {
                 },
             ],
         }
+    }
+}
+
+impl Config {
+    #[must_use]
+    pub fn allows_automatic_url(&self, url: &str) -> bool {
+        crate::adapters::ats_provider(url).is_none_or(|provider| {
+            !self
+                .automatic_excluded_ats
+                .iter()
+                .any(|item| item == provider)
+        })
+    }
+
+    #[must_use]
+    pub fn allows_automatic_posting(&self, url: &str, apply_url: Option<&str>) -> bool {
+        self.allows_automatic_url(url) && apply_url.is_none_or(|url| self.allows_automatic_url(url))
     }
 }
 

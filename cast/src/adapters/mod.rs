@@ -16,18 +16,31 @@ pub fn board_identity(input: &str) -> Option<String> {
     Board::from_url(&Url::parse(input).ok()?).map(|board| board.identity())
 }
 
+/// Identifies the supported ATS provider of a board, API or posting URL.
+#[must_use]
+pub fn ats_provider(input: &str) -> Option<&'static str> {
+    Some(match Board::from_url(&Url::parse(input).ok()?)? {
+        Board::Ashby(_) => "ashby",
+        Board::Greenhouse(_) => "greenhouse",
+        Board::Lever { .. } => "lever",
+    })
+}
+
 /// Tests whether one stored job is the posting selected by a public job URL.
 ///
 /// # Errors
 /// Returns an error when the URL is not public or names a supported ATS board
 /// without identifying one posting.
 pub fn job_url_matches(job: &Job, input: &str) -> Result<bool, String> {
-    let selected = JobSelector::from_url(input)?;
-    Ok(match selected {
-        JobSelector::SourceKey(key) => job.source_key == key,
-        JobSelector::Url(url) => crate::normalize_url(&job.url)
-            .is_ok_and(|stored| stored.trim_end_matches('/') == url.trim_end_matches('/')),
-    })
+    Ok(JobSelector::from_url(input)?.matches(&job.source_key, &job.url))
+}
+
+/// Matches an extracted posting before it enters the retained library.
+///
+/// # Errors
+/// Returns the same URL validation errors as `job_url_matches`.
+pub fn job_draft_matches(job: &crate::models::JobDraft, input: &str) -> Result<bool, String> {
+    Ok(JobSelector::from_url(input)?.matches(&job.source_key, &job.url))
 }
 
 /// Validates that a public URL can select one job.
@@ -153,6 +166,14 @@ enum JobSelector {
 }
 
 impl JobSelector {
+    fn matches(&self, source_key: &str, job_url: &str) -> bool {
+        match self {
+            Self::SourceKey(key) => source_key == key,
+            Self::Url(url) => crate::normalize_url(job_url)
+                .is_ok_and(|stored| stored.trim_end_matches('/') == url.trim_end_matches('/')),
+        }
+    }
+
     fn from_url(input: &str) -> Result<Self, String> {
         let url = public_url(input)?;
         if let Some(key) = ats_job_source_key(&url) {

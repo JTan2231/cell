@@ -117,6 +117,12 @@ Cast collection stores jobs without a title substring requirement. Configured
 provider queries still limit discovery. Downstream consumers own selection by
 title, seniority, location and other preferences.
 
+Cast's `automatic_excluded_ats` defaults to Ashby for ordinary collection,
+including existing configuration that omits the field. Platter's ad-hoc URL
+path uses Cast collection contract 5 to retrieve one selected job despite that
+exclusion or a disabled source. Cast preserves source enrollment and board-scan
+state and retains only the selected posting within its ordinary budgets.
+
 Platter `run-ad-hoc` uses Cast's exact `job collect` operation, then reuses
 Platter's normal preparation, freshness, edition and send records. URL-selected
 work creates no separate workflow state. Cast still owns the resulting source

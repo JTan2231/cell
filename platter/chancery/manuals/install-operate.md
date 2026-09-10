@@ -28,7 +28,8 @@ Platter. Maintenance includes Nucleus and its registered requesters, whose
 installed maintenance interfaces must already be compatible. Unselected
 products are not upgraded to satisfy a missing prerequisite.
 
-Cast must support `job collect` before Platter can accept a job URL. Email must
+Cast must support collection contract 5 for `job collect`: exact-job retention
+with disabled-source access and preserved ordinary collection policy. Email must
 support `--payload-stdin` before Platter can send database artifacts. Tectonic,
 Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.

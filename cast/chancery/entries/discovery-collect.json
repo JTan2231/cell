@@ -1,6 +1,6 @@
 {
   "id": "cast.discovery.collect",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -44,7 +44,8 @@
   ],
   "effects": [
     "Reads configured or explicitly selected sources over HTTP, may consume TheirStack credits or Brave search allowance, and writes extracted company/job records plus run, source, cursor and budget state. A supplied URL that already matches one retained job returns that job without another collection run.",
-    "Does not retain whole provider responses or invoke another Cell product."
+    "Does not retain whole provider responses or invoke another Cell product.",
+    "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
   ],
   "authority": [
     "Cast owns source admission, extracted retained observations, identity correlation and conservative local accounting.",
@@ -98,6 +99,10 @@
       {
         "status": "declared",
         "statement": "First and last seen are Cast observation times. Provider publication and update dates use separate fields. Failed and partial fetches do not add missing observations. The employer_jsonld_owned adapter requires the hiring organization's root homepage URL, with no query or fragment. Its host must match the page or job host, or that host's parent employer domain. Shared recruiting hosts such as join.com and curriculo.me require a separate adapter. Search and directory results use their own attribution kinds."
+      },
+      {
+        "status": "declared",
+        "statement": "automatic_excluded_ats defaults to [\"ashby\"], including omitted fields in existing configuration. Ordinary collection skips excluded boards and does not insert or update postings whose job or application URL identifies an excluded ATS. Existing jobs remain readable; source URLs may remain retained. Force and job refresh obey this policy."
       }
     ],
     "identity_and_units": [
@@ -114,6 +119,10 @@
       {
         "status": "declared",
         "statement": "Collection stores returned company fields, job fields, source metadata and per-request outcomes. Stored pagination, collection outcomes and request charges describe the selected collection work."
+      },
+      {
+        "status": "declared",
+        "statement": "Targeted collection holds the writer lock and uses normal HTTP, runtime and adapter-page limits. Its run note records scope job, normalized URL and source ID; success adds job ID and verification_pages, and failure records the error. Run timestamps describe that attempt. Selected job timestamps describe its observation. Source scan timestamps, status, cursors, due times and other jobs' missing counters remain unchanged."
       }
     ],
     "access": [
@@ -129,7 +138,7 @@
       },
       {
         "status": "declared",
-        "statement": "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it admits the corresponding ordinary source and runs only that source. Supported ATS input can collect its full board, while the result selects only the supplied posting. A board URL without one posting identity is refused."
+        "statement": "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
       }
     ],
     "operational_limits": [
@@ -145,7 +154,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Collection contract version 4 adds exact public job-URL resolution and targeted collection. It retains contract-three title behavior. Configuration, database and export schema versions remain unchanged and separate."
+        "statement": "Collection contract 5 separates exact-job observation from ordinary source collection and adds automatic_excluded_ats. Missing exclusion fields default to Ashby. Database, configuration and export schema numbers stay unchanged. Older programs can reject the new configuration field."
       },
       {
         "status": "unspecified",

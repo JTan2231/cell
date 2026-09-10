@@ -370,21 +370,16 @@ fn exact_job_url_resolves_the_normal_cast_record_without_an_extra_run() -> Resul
     let state = directory.path().join("state");
     let store = Store::init(&state)?;
     let source = store.add_manual_source("https://jobs.ashbyhq.com/acme/role-one", None)?;
-    store.record_verification(
+    store.disable_source(&source.id)?;
+    store.record_job_observation(
         &source,
-        &VerificationResult {
-            jobs: vec![JobDraft {
-                source_key: "ashby:acme:role-one".into(),
-                title: "Infrastructure Engineer".into(),
-                url: "https://jobs.ashbyhq.com/acme/role-one".into(),
-                is_listed: true,
-                ..JobDraft::default()
-            }],
-            complete: true,
-            outcome: "complete".into(),
-            ..VerificationResult::default()
+        &JobDraft {
+            source_key: "ashby:acme:role-one".into(),
+            title: "Infrastructure Engineer".into(),
+            url: "https://jobs.ashbyhq.com/acme/role-one".into(),
+            is_listed: true,
+            ..JobDraft::default()
         },
-        86400,
     )?;
     let expected = store.snapshot()?.jobs[0].id.clone();
     drop(store);
@@ -409,6 +404,77 @@ fn exact_job_url_resolves_the_normal_cast_record_without_an_extra_run() -> Resul
     assert!(!board.status.success());
     assert!(String::from_utf8_lossy(&board.stderr).contains("must identify one"));
     assert!(Store::open(&state)?.status()?["last_run"].is_null());
+    Ok(())
+}
+
+#[test]
+fn automatic_exclusion_defaults_and_explicit_configuration_survive_restart() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let store = Store::init(directory.path())?;
+    let mut legacy = serde_json::to_value(Config::default())?;
+    legacy
+        .as_object_mut()
+        .ok_or("config object")?
+        .remove("automatic_excluded_ats");
+    let mut config: Config = serde_json::from_value(legacy)?;
+    assert_eq!(config.automatic_excluded_ats, ["ashby"]);
+    assert!(!config.allows_automatic_url("https://api.ashbyhq.com/posting-api/job-board/acme"));
+    assert!(config.allows_automatic_url("https://job-boards.greenhouse.io/acme"));
+    config.automatic_excluded_ats.clear();
+    store.set_config(&config)?;
+    drop(store);
+    let store = Store::open(directory.path())?;
+    assert!(store.config()?.automatic_excluded_ats.is_empty());
+    for excluded in [vec!["unknown".into()], vec!["ashby".into(), "ashby".into()]] {
+        config.automatic_excluded_ats = excluded;
+        assert!(store.set_config(&config).is_err());
+        assert!(store.config()?.automatic_excluded_ats.is_empty());
+    }
+    Ok(())
+}
+
+#[test]
+fn ordinary_website_scan_filters_ashby_without_changing_retained_ashby_jobs() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let store = Store::init(directory.path())?;
+    let source = store.add_manual_source("https://employer.example/careers", None)?;
+    let excluded = JobDraft {
+        source_key: "ashby:acme:existing".into(),
+        url: "https://jobs.ashbyhq.com/acme/existing".into(),
+        ..job(1)
+    };
+    let original = store.record_job_observation(&source, &excluded)?;
+    store.record_verification(
+        &source,
+        &VerificationResult {
+            jobs: vec![
+                job(2),
+                JobDraft {
+                    title: "Excluded update".into(),
+                    ..excluded
+                },
+                JobDraft {
+                    url: "https://jobs.ashbyhq.com/acme/new".into(),
+                    ..job(3)
+                },
+            ],
+            complete: true,
+            outcome: "complete".into(),
+            ..Default::default()
+        },
+        86400,
+    )?;
+    let snapshot = store.snapshot()?;
+    assert_eq!(snapshot.jobs.len(), 2);
+    let retained = snapshot
+        .jobs
+        .iter()
+        .find(|job| job.id == original.id)
+        .ok_or("retained job")?;
+    assert_eq!(
+        serde_json::to_value(retained)?,
+        serde_json::to_value(original)?
+    );
     Ok(())
 }
 

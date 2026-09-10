@@ -131,7 +131,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of the stored companies, jobs and collection records. Source records include successful observation and latest-attempt times."
+        "statement": "Export is one consistent view of stored companies, jobs and collection records. Source timestamps describe ordinary board collection. Targeted job observation updates its selected job and run record while preserving board-scan state; consult the last run note for its scope and outcome."
       },
       {
         "status": "declared",

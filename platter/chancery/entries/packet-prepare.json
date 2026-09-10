@@ -124,8 +124,8 @@
     },
     {
       "id": "cast.discovery.collect",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "crm.profile.maintain",
@@ -274,6 +274,10 @@
       {
         "status": "declared",
         "statement": "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained."
+      },
+      {
+        "status": "declared",
+        "statement": "For a new URL selection, Cast permits targeted observation from disabled or automatically excluded sources, retains only the selected job, and preserves source enrollment and board-scan progress. Platter continues with that normal job through export and preparation."
       }
     ],
     "operational_limits": [
@@ -297,7 +301,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 6 adds URL-selected run-ad-hoc over Cast collection contract 4 and existing Platter records. It retains contract-five Ashby caching and all existing preparation, edition and send meanings. Private schema 2 and retained packet inputs remain unchanged."
+        "statement": "Preparation contract 6 adds URL-selected run-ad-hoc over Cast collection contract 5 and existing Platter records. It retains contract-five Ashby caching and all existing preparation, edition and send meanings. Private schema 2 and retained packet inputs remain unchanged."
       },
       {
         "status": "unspecified",
