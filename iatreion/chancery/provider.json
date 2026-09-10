@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "iatreion",
+    "name": "Iatreion",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Iatreion owns validation, joining, deterministic classification, and presentation of one bounded operational report over a selected Cell checkout."
+    ],
+    "not_authoritative_for": [
+      "Cell declarations identify expected products and units; Usher interprets their form; Chancery owns installed documentation; Clockwork owns schedules and runtime activations; Nucleus owns agent execution; each product owns domain state and success."
+    ],
+    "inventory": {
+      "covers": [
+        "Operational report and unit inspection, stateless installation, and Iatreion development."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Monitoring history, alerting, repairs, retries, canaries, network readiness, model work, and product operation."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Iatreion reads one selected checkout and directly invokes declared selector basenames under one selected installed command directory with fixed status-snapshot arguments."
+    ],
+    "shared_privacy_and_retention": [
+      "Reports contain bounded operational metadata and no probe stderr, logs, prompts, credentials, email bodies, or retained document bodies. Iatreion retains no report."
+    ],
+    "compatibility_and_retirement": [
+      "Product release, status schema, report schema, and capability contract version evolve independently. Unknown versions remain visible and are not interpreted."
+    ],
+    "operational_limits": [
+      "The default report budget is five seconds, each probe budget is two seconds, concurrency is eight, and captured stdout or stderr is limited to one MiB per probe."
+    ]
+  },
+  "entries": [
+    "entries/status-inspect.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

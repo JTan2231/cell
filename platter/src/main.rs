@@ -98,6 +98,21 @@ enum Maintenance {
 
 #[tokio::main]
 async fn main() {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "platter",
+        env!("CARGO_PKG_VERSION"),
+        vec![iatreion_api::declared_unit(
+            "platter",
+            "platter/daily",
+            Some("platter/daily"),
+            iatreion_api::Intent::Active,
+            "platter.install.operate",
+        )],
+        false,
+    ) {
+        println!("{snapshot}");
+        return;
+    }
     if let Err(error) = run().await {
         if std::env::args().any(|argument| argument == "--json") {
             println!(

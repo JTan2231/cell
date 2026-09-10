@@ -1,6 +1,6 @@
 {
   "id": "usher.recognition.inspect",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -17,7 +17,8 @@
   "outcome": "A deterministic membership report with evidence for all inventoried products or one selected product. The check exit status depends only on required declarations.",
   "effects": [
     "Reads the selected checkout inventory, root participation markers, provider manifests, indexed entry identity fields, and indexed manuals.",
-    "Prints the report and exits; writes no file, state, registry, or service record and invokes no shell, agent, service, or network."
+    "Prints the report and exits; writes no file, state, registry, or service record and invokes no shell, agent, service, or network.",
+    "The Rust API can separately project optional Iatreion status declarations without changing membership completeness or invoking their commands."
   ],
   "authority": [
     "Cell owns the membership essentials; each product owns its declarations. Usher owns only interpretation of those declarations and the report/check result.",
@@ -48,6 +49,10 @@
     {
       "label": "JSON report",
       "invocation": "/Users/joey/.local/bin/usher --json report ROOT"
+    },
+    {
+      "label": "Operational declaration projection",
+      "invocation": "usher::api::inspect_operations(ROOT, PRODUCT)"
     }
   ],
   "does_not_authorize": [
@@ -71,7 +76,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "A checkout root and optional exact descriptor ID or declared alias. Inputs are schema-one literal descriptors, root AGENTS.md markers, and Chancery provider schemas one through three."
+        "statement": "A checkout root and optional exact descriptor ID or declared alias. Inputs are schema-one literal descriptors, root AGENTS.md markers, Chancery provider schemas one through three, and optional additive Iatreion status declarations."
       }
     ],
     "outputs": [
@@ -84,6 +89,10 @@
       {
         "status": "declared",
         "statement": "Declared means recognized introduction evidence. Missing, invalid, and unassessed remain distinct. Only identity, Semantics participation, and Chancery presence determine membership; all other relationships are outside the report."
+      },
+      {
+        "status": "declared",
+        "statement": "The separate operational projection validates STATUS_SCHEMA, a selector basename, and explicit unit, intent, optional Clockwork key, and inspection-capability fields. It does not add those fields to the membership CLI or use them as membership evidence."
       }
     ],
     "identity_and_units": [
@@ -123,7 +132,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Usher contract one, JSON schema one, provider schemas one through three, and pipeline schema one are separate. Incompatible recognition or output meaning requires an explicit versioned change."
+        "statement": "Usher recognition contract three, membership JSON schema one, check schema two, Iatreion status declaration schema one, provider schemas one through three, and pipeline schema one are separate. Incompatible recognition or output meaning requires an explicit versioned change."
       }
     ],
     "reliances": [

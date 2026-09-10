@@ -21,6 +21,7 @@ krisis-api.workspace = true
 clap.workspace = true
 conversations = { path = "../../../conversations/crates/conversations" }
 fs2.workspace = true
+iatreion-api.workspace = true
 libc.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true

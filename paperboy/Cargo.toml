@@ -14,6 +14,7 @@ clap.workspace = true
 clockwork = { path = "../clockwork/crates/clockwork" }
 conversations = { path = "../conversations/crates/conversations" }
 fs2.workspace = true
+iatreion-api.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 rusqlite = { workspace = true, features = ["backup"] }

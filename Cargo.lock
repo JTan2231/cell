@@ -31,6 +31,7 @@ dependencies = [
  "clap",
  "clockwork",
  "fs2",
+ "iatreion-api",
  "krisis-api",
  "nucleus-client",
  "nucleus-core",
@@ -268,6 +269,7 @@ dependencies = [
  "clap",
  "fs2",
  "futures-util",
+ "iatreion-api",
  "regex",
  "reqwest",
  "rusqlite",
@@ -344,6 +346,7 @@ version = "0.6.0"
 dependencies = [
  "cell-install",
  "clap",
+ "iatreion-api",
  "serde",
  "serde_json",
  "sha2",
@@ -423,6 +426,7 @@ dependencies = [
  "clap",
  "fs2",
  "hex",
+ "iatreion-api",
  "libc",
  "rusqlite",
  "serde",
@@ -471,6 +475,7 @@ dependencies = [
  "clap",
  "clockwork",
  "fs2",
+ "iatreion-api",
  "rusqlite",
  "serde",
  "serde_json",
@@ -486,6 +491,7 @@ version = "0.5.1"
 dependencies = [
  "cell-install",
  "clap",
+ "iatreion-api",
  "serde",
  "serde_json",
  "sha2",
@@ -534,6 +540,7 @@ dependencies = [
  "cell-install",
  "cell-maintenance",
  "clap",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
@@ -591,6 +598,7 @@ dependencies = [
  "clockwork",
  "conversations",
  "fs2",
+ "iatreion-api",
  "krisis-api",
  "libc",
  "nucleus-client",
@@ -692,6 +700,7 @@ dependencies = [
  "base64",
  "cell-install",
  "clap",
+ "iatreion-api",
  "reqwest",
  "serde",
  "serde_json",
@@ -711,6 +720,7 @@ dependencies = [
  "email",
  "fs2",
  "hex",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
@@ -1127,6 +1137,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "iatreion"
+version = "0.1.0"
+dependencies = [
+ "cell-install",
+ "clap",
+ "iatreion-api",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "usher",
+]
+
+[[package]]
+name = "iatreion-api"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "icu_collections"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1456,6 +1488,7 @@ dependencies = [
  "email",
  "fs2",
  "hex",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
@@ -1525,6 +1558,7 @@ dependencies = [
  "cell-maintenance",
  "clap",
  "fs2",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-codex",
  "nucleus-core",
@@ -1699,6 +1733,7 @@ dependencies = [
  "clockwork",
  "conversations",
  "fs2",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "rusqlite",
@@ -1836,6 +1871,7 @@ dependencies = [
  "clockwork",
  "crm",
  "fs2",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "reqwest",
@@ -2323,6 +2359,7 @@ dependencies = [
  "clockwork",
  "conversations",
  "fs2",
+ "iatreion-api",
  "krisis-api",
  "nucleus-client",
  "nucleus-core",
@@ -2724,6 +2761,7 @@ dependencies = [
  "cell-maintenance",
  "clap",
  "clockwork",
+ "iatreion-api",
  "nucleus-client",
  "nucleus-core",
  "reqwest",
@@ -3005,6 +3043,7 @@ dependencies = [
  "cell-install",
  "chancery",
  "clap",
+ "iatreion-api",
  "serde",
  "serde_json",
  "sha2",

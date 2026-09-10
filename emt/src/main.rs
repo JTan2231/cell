@@ -97,6 +97,21 @@ enum MaintenanceOperation {
 
 #[tokio::main]
 async fn main() -> ExitCode {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "emt",
+        env!("CARGO_PKG_VERSION"),
+        vec![iatreion_api::declared_unit(
+            "emt",
+            "emt/worker",
+            Some("emt/worker"),
+            iatreion_api::Intent::Active,
+            "emt.installation.operate",
+        )],
+        false,
+    ) {
+        println!("{snapshot}");
+        return ExitCode::SUCCESS;
+    }
     let cli = Cli::parse();
     let result = run(cli.command).await;
     let success = result.is_ok();

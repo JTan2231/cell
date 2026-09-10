@@ -9,6 +9,7 @@ mod manifest;
 mod model;
 mod notification;
 mod paths;
+mod status;
 mod store;
 
 use std::io::Read as _;
@@ -43,6 +44,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Emit Iatreion's read-only operational observation.
+    StatusSnapshot,
     /// Register and inspect immutable activation definitions.
     Definition {
         #[command(subcommand)]
@@ -243,6 +246,15 @@ async fn run(cli: Cli) -> Result<()> {
         return result;
     }
     let layout = Layout::discover(cli.state_root)?;
+    if matches!(&cli.command, Command::StatusSnapshot) {
+        let snapshot = status::snapshot(&layout)?;
+        println!(
+            "{}",
+            serde_json::to_string(&snapshot)
+                .context("output_failed", "serialize status snapshot")?
+        );
+        return Ok(());
+    }
     if let Command::Migrate { backup } = &cli.command {
         store::migrate(&layout, backup)?;
         return emit(
@@ -453,6 +465,7 @@ async fn run(cli: Cli) -> Result<()> {
             "activation_gate_invalid",
             "execution gate was not dispatched through its private handshake",
         )),
+        Command::StatusSnapshot => unreachable!("status is dispatched before the ordinary store"),
     }
 }
 

@@ -2,4 +2,5 @@
 pub mod api;
 mod evidence;
 mod inventory;
+mod operations;
 mod report;

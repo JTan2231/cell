@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 cell-install.workspace = true
 clap.workspace = true
+iatreion-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

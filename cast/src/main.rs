@@ -7,6 +7,20 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
+fn emit_iatreion_snapshot() -> bool {
+    if let Some(snapshot) = iatreion_api::requested_on_demand_snapshot_json(
+        "cast",
+        env!("CARGO_PKG_VERSION"),
+        "cast/discovery",
+        "cast.discovery.collect",
+    ) {
+        println!("{snapshot}");
+        true
+    } else {
+        false
+    }
+}
+
 #[derive(Parser)]
 #[command(
     name = "cast",
@@ -131,6 +145,9 @@ enum SourceCommand {
 
 #[tokio::main]
 async fn main() {
+    if emit_iatreion_snapshot() {
+        return;
+    }
     if let Err(error) = execute(Cli::parse()).await {
         eprintln!("cast: {error}");
         std::process::exit(1);

@@ -9,6 +9,7 @@ cell-install.workspace = true
 cell-maintenance.workspace = true
 clockwork = { path = "../../../clockwork/crates/clockwork" }
 clap.workspace = true
+iatreion-api.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 reqwest = { workspace = true, features = ["native-tls"] }

@@ -213,6 +213,12 @@ Inspect current definitions, bindings, and history:
 /Users/joey/.local/bin/clockwork doctor
 ```
 
+Iatreion uses `clockwork status-snapshot --json`. This read opens only an
+existing supported Clockwork database in read-only mode. It reports binding,
+halt, and recorded runtime metadata for joining to explicit Cell units. It does
+not initialize or migrate the database, reconcile running rows, inspect
+launchd, claim notifications, or change a binding.
+
 History states are `running`, `start_failed`, `exited`, `signaled`,
 `timed_out`, `skipped_overlap`, and `lost`. One activation is at most one child
 and has no attempt children. Clockwork stores the direct process result but no

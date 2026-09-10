@@ -242,6 +242,15 @@ struct ExportArgs {
 }
 
 fn main() -> ExitCode {
+    if let Some(snapshot) = iatreion_api::requested_on_demand_snapshot_json(
+        "conversations",
+        env!("CARGO_PKG_VERSION"),
+        "conversations/history",
+        "conversations.history.explore",
+    ) {
+        println!("{snapshot}");
+        return ExitCode::SUCCESS;
+    }
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

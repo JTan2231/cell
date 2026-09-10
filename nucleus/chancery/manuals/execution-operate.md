@@ -39,6 +39,11 @@ Start diagnosis with supported reads:
 /Users/joey/.local/bin/nucleus jobs list --state failed
 ```
 
+Iatreion uses `nucleus status-snapshot --json`. It reads health and attempts a
+maintenance-detail read for at most 250 ms. It reports daemon readiness,
+admission, and execution capacity without reading account usage, job content,
+or logs. Missing maintenance detail remains an explicit incomplete observation.
+
 `health` is strict: it prints the readiness document but exits nonzero unless
 the daemon is compatible, authenticated, and accepting work. It also reports
 the configured `maxActiveJobs=8`, live `activeJobs`, and live `availableSlots`.

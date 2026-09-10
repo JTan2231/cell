@@ -9,6 +9,9 @@ pub(crate) struct Product {
     pub(crate) root: String,
     pub(crate) aliases: Vec<String>,
     pub(crate) providers: String,
+    pub(crate) status_schema: Option<String>,
+    pub(crate) status_command: Option<String>,
+    pub(crate) status_units: Option<String>,
 }
 
 // Read the existing data-only descriptor format, never source it in a shell.
@@ -121,5 +124,8 @@ pub(crate) fn load(root: &Path, descriptor: &str, file_id: &str) -> Result<Produ
         root: product_root,
         aliases,
         providers: fields.get("PROVIDERS").cloned().unwrap_or_default(),
+        status_schema: fields.get("STATUS_SCHEMA").cloned(),
+        status_command: fields.get("STATUS_COMMAND").cloned(),
+        status_units: fields.get("STATUS_UNITS").cloned(),
     })
 }

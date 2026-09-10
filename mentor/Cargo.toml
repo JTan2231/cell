@@ -16,6 +16,7 @@ clockwork = { path = "../clockwork/crates/clockwork" }
 email = { path = "../email/crates/email" }
 fs2.workspace = true
 hex.workspace = true
+iatreion-api.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 rusqlite.workspace = true

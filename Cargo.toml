@@ -21,6 +21,8 @@ members = [
     "clockwork/crates/clockwork",
     "crm/crates/crm",
     "usher/crates/usher",
+    "iatreion/crates/iatreion-api",
+    "iatreion/crates/iatreion",
     "cast",
     "platter",
     "paperboy",
@@ -43,6 +45,7 @@ license = "MIT"
 [workspace.dependencies]
 cell-install = { path = "deployment/crates/cell-install" }
 cell-maintenance = { path = "deployment/crates/cell-maintenance" }
+iatreion-api = { path = "iatreion/crates/iatreion-api" }
 annals-api = { path = "annals/crates/annals-api" }
 krisis-api = { path = "decisions/crates/krisis-api" }
 axum = { version = "0.8.9", features = ["json", "tokio"] }

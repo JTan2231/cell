@@ -2,6 +2,10 @@ PIPELINE_SCHEMA=1
 PRODUCT_ID=annals
 PRODUCT_NAME=Annals
 PRODUCT_DIR=annals
+STATUS_SCHEMA=1
+STATUS_COMMAND=annals
+STATUS_UNITS='annals/inbox|active|annals/inbox|annals.inbox.operate
+annals/decisions-inbox|active|annals/decisions-inbox|annals.inbox.operate'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1

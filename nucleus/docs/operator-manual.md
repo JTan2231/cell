@@ -50,6 +50,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/README.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/decisions/README.md) |
 | Semantics | Registered project terminology and its revision history | [Semantics](/Users/joey/rust/cell/semantics/README.md) |
+| Iatreion | Bounded read-only operational reports across declared Cell units | [Iatreion](/Users/joey/rust/cell/iatreion/README.md) |
 | Usher | Declared Cell membership | [Usher](/Users/joey/rust/cell/usher/README.md) |
 | Clockwork | Scheduled process activation and runtime history | [Clockwork](/Users/joey/rust/cell/clockwork/README.md) |
 | Nucleus | Constrained agent execution, authentication, and job history | [Nucleus](/Users/joey/rust/cell/nucleus/README.md) |
@@ -69,6 +70,7 @@ Krisis --> dedicated Annals decisions library --> Semantics and Conatus
 Cast --> Platter <-- CRM career entries
 Platter, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
+Cell declarations + product status probes --> Iatreion operational report
 ```
 
 Conversations preserves empty message text and turns with no normalized messages.
@@ -163,6 +165,26 @@ Resend path and does not depend on Nucleus execution.
 
 Source colocation and a shared Cargo workspace do not merge product databases,
 credentials, release units, or runtime authority.
+
+## Inspect Cell operational status
+
+Use Iatreion when a question spans expected products, schedule admission,
+current activity, local readiness, and the available evidence:
+
+```sh
+iatreion report /Users/joey/rust/cell
+iatreion show annals/inbox --root /Users/joey/rust/cell --json
+```
+
+Iatreion reads the selected checkout, runs bounded product-owned
+`status-snapshot --json` probes, joins explicit Clockwork binding facts, and
+exits. It retains no report and does not initialize state, repair a product,
+resume a schedule, refresh credentials, send mail, or run model work. Treat
+intent, admission, activity, readiness, runtime outcome, and domain outcome as
+separate fields. Missing or incompatible evidence remains unknown.
+
+Use each row's inspection capability and record ID for deeper diagnosis. The
+row does not authorize the referenced operation.
 
 ## Read supported and installed state separately
 

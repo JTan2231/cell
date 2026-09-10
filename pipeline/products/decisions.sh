@@ -2,6 +2,11 @@ PIPELINE_SCHEMA=1
 PRODUCT_ID=decisions
 PRODUCT_NAME=Krisis
 PRODUCT_DIR=decisions
+STATUS_SCHEMA=1
+STATUS_COMMAND=krisis
+STATUS_UNITS='krisis/observer|active|krisis/observer|krisis.install.operate
+decisions/observer|retired|decisions/observer|decisions.lifecycle.consume
+decisions/daily-email|retired|decisions/daily-email|decisions.lifecycle.consume'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1

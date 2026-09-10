@@ -23,7 +23,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Recognition reads explicitly selected local checkout files. Repository descriptors are parsed as literal data and never executed.",
+      "Recognition reads explicitly selected local checkout files. Repository descriptors are parsed as literal data and never executed. Its Rust API can separately project optional Iatreion status declarations without invoking product commands.",
       "Installation uses the separate local usher-install executable, exact candidate artifacts, and product-owned paths under the current user. It refuses foreign selectors. A supported prior release must pass consistency checks before installation switches selectors or recovery begins."
     ],
     "shared_privacy_and_retention": [

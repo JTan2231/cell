@@ -25,7 +25,8 @@
     "Schema-two runtime or reported abends retain failure evidence and apply the registered response; the default opens one durable incident and blocks future admission until explicit incident-bound approval.",
     "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. Broker visits attempt retained pending notifications independently of product admission, with bounded transport and provider idempotency limits.",
     "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state.",
-    "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds; emt/worker always uses the basic path. A notification view can materialize the incident route under the transport lock."
+    "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds; emt/worker always uses the basic path. A notification view can materialize the incident route under the transport lock.",
+    "The Iatreion status snapshot opens only an existing supported database read-only and reports binding, halt, and recorded runtime metadata. It does not reconcile running rows, inspect launchd, claim notifications, or change state."
   ],
   "authority": [
     "Clockwork owns definition and activation identity, stable selection, generated LaunchAgents, admission, direct-process supervision, runtime history, enforcement of declared failure policy, durable halt incidents, explicit continuation, and pause notification state.",
@@ -97,6 +98,10 @@
     {
       "label": "Inspect runtime history",
       "invocation": "/Users/joey/.local/bin/clockwork history [OWNER/NAME] --limit N"
+    },
+    {
+      "label": "Emit Iatreion status snapshot",
+      "invocation": "/Users/joey/.local/bin/clockwork status-snapshot --json"
     },
     {
       "label": "Diagnose local state",

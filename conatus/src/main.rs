@@ -215,6 +215,21 @@ fn execute(cli: Cli) -> Result<Value> {
 }
 
 fn main() -> ExitCode {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "conatus",
+        env!("CARGO_PKG_VERSION"),
+        vec![iatreion_api::declared_unit(
+            "conatus",
+            "conatus/update",
+            Some("conatus/update"),
+            iatreion_api::Intent::Active,
+            "conatus.update.operate",
+        )],
+        false,
+    ) {
+        println!("{snapshot}");
+        return ExitCode::SUCCESS;
+    }
     match execute(Cli::parse()) {
         Ok(data) => {
             println!("{}", json!({"ok":true,"data":data}));

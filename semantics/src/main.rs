@@ -217,6 +217,21 @@ enum IntakeCommand {
 }
 
 fn main() {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "semantics",
+        env!("CARGO_PKG_VERSION"),
+        vec![iatreion_api::declared_unit(
+            "semantics",
+            "semantics/worker",
+            Some("semantics/worker"),
+            iatreion_api::Intent::Active,
+            "semantics.project.operate",
+        )],
+        false,
+    ) {
+        println!("{snapshot}");
+        return;
+    }
     let cli = Cli::parse();
     let json = cli.json;
     let scheduled_worker = matches!(

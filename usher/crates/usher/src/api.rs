@@ -4,6 +4,9 @@
 use serde::{Deserialize, Serialize};
 
 pub use crate::evidence::{Finding, Issue, Status};
+pub use crate::operations::{
+    OperationalInventory, OperationalProduct, OperationalUnitDeclaration, inspect_operations,
+};
 pub use crate::report::{CheckReport, IncompleteProduct, ProductReport, Report, inspect};
 
 /// Fatal command or inventory failure, rather than a membership finding.

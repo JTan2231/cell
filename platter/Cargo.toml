@@ -17,6 +17,7 @@ nucleus-core.workspace = true
 clap.workspace = true
 clockwork = { path = "../clockwork/crates/clockwork" }
 fs2.workspace = true
+iatreion-api.workspace = true
 reqwest = { workspace = true, features = ["rustls"] }
 rusqlite.workspace = true
 serde.workspace = true

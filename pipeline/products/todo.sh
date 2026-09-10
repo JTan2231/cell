@@ -2,6 +2,10 @@ PIPELINE_SCHEMA=1
 PRODUCT_ID=todo
 PRODUCT_NAME=Todo
 PRODUCT_DIR=todo
+STATUS_SCHEMA=1
+STATUS_COMMAND=todo
+STATUS_UNITS='todo/application|on_demand||todo.umbrella.manage
+todo/daily-email|active|todo/daily-email|todo.install.operate'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1

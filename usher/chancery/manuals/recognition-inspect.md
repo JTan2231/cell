@@ -45,6 +45,13 @@ declarations and dependencies; product packaging checks release alignment.
 Usher applies the membership, path, read-limit, and collision rules described
 here.
 
+Iatreion uses a separate Rust API projection of the optional `STATUS_SCHEMA`,
+`STATUS_COMMAND`, and `STATUS_UNITS` descriptor fields. Each unit line contains
+`unit ID|intent|Clockwork key|inspection capability`. The projection validates
+identities, selector basenames, supported schema one, and global unit
+collisions. It never invokes a command. These fields do not change membership
+CLI output or completeness.
+
 A marker records the declared Semantics project ID. A source bundle records
 the declared Chancery provider and indexed introductions. Recognition reads
 these repository files directly, using the rules above.
@@ -70,7 +77,9 @@ and exits 1 for incomplete selected products.
 Both exit 2 for command or inventory errors; an absent or empty inventory cannot
 produce a successful empty report. Report JSON has `schema_version: 1`; check JSON has `schema_version: 2`. Both have
 `scope: "repository_declarations"`; fatal errors have a schema-versioned
-`error` field. Findings contain no document bodies.
+`error` field. The operational projection is available through
+`usher::api::inspect_operations`; it is not a fourth membership finding.
+Findings contain no document bodies.
 
 Descriptors are parsed as data: uppercase/underscore assignment names, plain
 alphanumeric/path literals, and whole single-quoted values, including multiline

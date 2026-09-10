@@ -19,7 +19,7 @@ use clockwork::api::{AbendPolicy, IncidentRecord};
 pub(crate) struct Store {
     pub(crate) connection: Connection,
     default_email_cli: String,
-    _schema_gate: KeyLock,
+    _schema_gate: Option<KeyLock>,
 }
 
 impl Store {
@@ -56,7 +56,40 @@ impl Store {
         Ok(Self {
             connection,
             default_email_cli: layout.default_email_cli().to_string_lossy().into_owned(),
-            _schema_gate: schema_gate,
+            _schema_gate: Some(schema_gate),
+        })
+    }
+
+    /// Open only an existing supported Clockwork database for observation.
+    ///
+    /// This path does not create directories or files, acquire a schema gate,
+    /// change permissions, migrate state, or reconcile records.
+    pub(crate) fn open_read_only(layout: &Layout) -> Result<Self> {
+        let database = layout.database();
+        verify_existing_database_file(&database)?;
+        let connection =
+            Connection::open_with_flags(&database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .context(
+                    "database_unavailable",
+                    format!("open {} read-only", database.display()),
+                )?;
+        connection
+            .busy_timeout(std::time::Duration::from_millis(250))
+            .context("database_unavailable", "configure SQLite busy timeout")?;
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .context("database_schema_invalid", "read Clockwork schema version")?;
+        if version != 2 {
+            return Err(Error::new(
+                "database_schema_unsupported",
+                format!("Clockwork database schema {version} is unsupported for status"),
+            ));
+        }
+        verify_schema(&connection, 2)?;
+        Ok(Self {
+            connection,
+            default_email_cli: String::new(),
+            _schema_gate: None,
         })
     }
 
@@ -1155,6 +1188,34 @@ fn prepare_database_file(path: &Path) -> Result<()> {
                 format!("inspect {}: {error}", path.display()),
             ));
         }
+    }
+    Ok(())
+}
+
+fn verify_existing_database_file(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path).map_err(|error| {
+        Error::new(
+            if error.kind() == std::io::ErrorKind::NotFound {
+                "database_absent"
+            } else {
+                "database_unavailable"
+            },
+            format!("inspect {}: {error}", path.display()),
+        )
+    })?;
+    if metadata.file_type().is_symlink()
+        || !metadata.is_file()
+        || metadata.nlink() != 1
+        || metadata.permissions().mode() & 0o077 != 0
+        || metadata.uid() != current_uid()?
+    {
+        return Err(Error::new(
+            "database_path_unsafe",
+            format!(
+                "{} must be a current-user-owned private regular, non-symlink, non-hard-linked file",
+                path.display()
+            ),
+        ));
     }
     Ok(())
 }

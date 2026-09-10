@@ -24,6 +24,8 @@ enum Command {
     Report(Selection),
     /// Report introductions and exit 1 if any selected product is incomplete.
     Check(Selection),
+    /// Emit Iatreion's read-only operational observation.
+    StatusSnapshot,
 }
 
 #[derive(Args)]
@@ -37,9 +39,26 @@ struct Selection {
 }
 
 fn run(cli: Cli) -> Result<u8, String> {
+    if matches!(cli.command, Command::StatusSnapshot) {
+        let snapshot = iatreion_api::static_snapshot(
+            "usher",
+            env!("CARGO_PKG_VERSION"),
+            vec![iatreion_api::on_demand_unit(
+                "usher",
+                "usher/report",
+                "usher.recognition.inspect",
+            )],
+        );
+        println!(
+            "{}",
+            serde_json::to_string(&snapshot).map_err(|error| error.to_string())?
+        );
+        return Ok(0);
+    }
     let (selection, checking) = match cli.command {
         Command::Report(selection) => (selection, false),
         Command::Check(selection) => (selection, true),
+        Command::StatusSnapshot => unreachable!(),
     };
     let report = inspect(&selection.root, selection.product.as_deref())?;
     let mut output = io::stdout().lock();

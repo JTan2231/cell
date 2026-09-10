@@ -3,8 +3,8 @@
 # Shared helpers for the checked-in Cell pipeline descriptors. This file is
 # sourced by the CI, release, generator, and self-test entry points.
 
-PIPELINE_EXPECTED_PRODUCT_COUNT=17
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=63
+PIPELINE_EXPECTED_PRODUCT_COUNT=18
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=66
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do
@@ -30,6 +30,7 @@ pipeline_clear_descriptor() {
     unset RELEASE_UNITS RELEASE_ALLOW_EXPLICIT_UNIT RELEASE_USAGE
     unset RELEASE_COMPANION_MANIFESTS
     unset RELEASE_METADATA_NO_DEPS RELEASE_BINARY_CHECKS PROVIDERS
+    unset STATUS_SCHEMA STATUS_COMMAND STATUS_UNITS
 }
 
 pipeline_load_descriptor() {
@@ -72,6 +73,9 @@ pipeline_load_descriptor() {
     RELEASE_BINARY_CHECKS=${RELEASE_BINARY_CHECKS:-}
     RELEASE_COMPANION_MANIFESTS=${RELEASE_COMPANION_MANIFESTS:-}
     PROVIDERS=${PROVIDERS:-}
+    STATUS_SCHEMA=${STATUS_SCHEMA:-}
+    STATUS_COMMAND=${STATUS_COMMAND:-}
+    STATUS_UNITS=${STATUS_UNITS:-}
 }
 
 pipeline_unit_field() {

@@ -259,6 +259,37 @@ enum OutputFormat {
 }
 
 fn main() {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "decisions",
+        env!("CARGO_PKG_VERSION"),
+        vec![
+            iatreion_api::declared_unit(
+                "decisions",
+                "krisis/observer",
+                Some("krisis/observer"),
+                iatreion_api::Intent::Active,
+                "krisis.install.operate",
+            ),
+            iatreion_api::declared_unit(
+                "decisions",
+                "decisions/observer",
+                Some("decisions/observer"),
+                iatreion_api::Intent::Retired,
+                "decisions.lifecycle.consume",
+            ),
+            iatreion_api::declared_unit(
+                "decisions",
+                "decisions/daily-email",
+                Some("decisions/daily-email"),
+                iatreion_api::Intent::Retired,
+                "decisions.lifecycle.consume",
+            ),
+        ],
+        false,
+    ) {
+        println!("{snapshot}");
+        return;
+    }
     if let Err(error) = run(Cli::parse()) {
         eprintln!("krisis: {error}");
         std::process::exit(1);

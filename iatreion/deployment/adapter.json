@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "product": "iatreion",
+  "application": "Iatreion",
+  "dependencies": [],
+  "description": "Iatreion installation through the shared stateless Rust installation library.",
+  "adapter_binary": "iatreion-install"
+}

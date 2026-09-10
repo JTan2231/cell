@@ -10,6 +10,7 @@ license.workspace = true
 cell-install.workspace = true
 chancery = { path = "../../../chancery/crates/chancery" }
 clap.workspace = true
+iatreion-api.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

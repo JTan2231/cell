@@ -1,0 +1,22 @@
+[package]
+name = "iatreion"
+version = "0.1.0"
+default-run = "iatreion"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+cell-install.workspace = true
+clap.workspace = true
+iatreion-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+usher = { path = "../../../usher/crates/usher" }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

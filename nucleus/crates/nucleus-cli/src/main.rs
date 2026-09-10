@@ -7,6 +7,11 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand, ValueEnum};
+use iatreion_api::{
+    Activity, Admission, AdmissionState, Count, Diagnostic, Evidence, InspectionReference, Intent,
+    OperationalUnit, Readiness, ReadinessState, Reason, STATUS_SCHEMA_VERSION, StatusSnapshot,
+    now_unix_seconds,
+};
 use nucleus_client::{ClientError, NucleusClient};
 use nucleus_codex::{CodexError, CodexHarness};
 use nucleus_core::{
@@ -43,6 +48,12 @@ enum Command {
     Manual,
     /// Inspect daemon availability.
     Health,
+    /// Emit the read-only Iatreion status contract.
+    StatusSnapshot {
+        /// Confirm JSON output. The status contract is always JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Own deployment admission holds and inspect runtime readiness.
     #[command(subcommand)]
     Maintenance(MaintenanceCommand),
@@ -370,6 +381,170 @@ async fn run(cli: Cli) -> Result<(), CliError> {
 
 async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Result<(), CliError> {
     match command {
+        Command::StatusSnapshot { json: _ } => {
+            let observed_at_start = now_unix_seconds();
+            let health = client.health().await?;
+            let maintenance =
+                tokio::time::timeout(Duration::from_millis(250), client.maintenance_status())
+                    .await
+                    .ok()
+                    .and_then(Result::ok);
+            let observed_at_end = now_unix_seconds();
+
+            let mut admission_reasons = Vec::new();
+            if !health.accepting_jobs {
+                admission_reasons.push(Reason {
+                    code: "daemon_not_accepting_jobs".to_owned(),
+                    summary: "Nucleus is not accepting new jobs".to_owned(),
+                });
+            }
+            if let Some(maintenance) = &maintenance {
+                admission_reasons.extend(maintenance.holds.iter().map(|run_id| Reason {
+                    code: "maintenance_hold".to_owned(),
+                    summary: format!("deployment admission is held by {run_id}"),
+                }));
+            } else {
+                admission_reasons.push(Reason {
+                    code: "maintenance_observation_unavailable".to_owned(),
+                    summary: "Nucleus maintenance detail was not available within 250 ms"
+                        .to_owned(),
+                });
+            }
+
+            let mut readiness_reasons = Vec::new();
+            if health.status != "ok" {
+                readiness_reasons.push(Reason {
+                    code: "daemon_unhealthy".to_owned(),
+                    summary: health
+                        .detail
+                        .clone()
+                        .unwrap_or_else(|| format!("daemon status is {}", health.status)),
+                });
+            }
+            if health.harness.is_none() || health.harness_executable.is_none() {
+                readiness_reasons.push(Reason {
+                    code: "harness_unavailable".to_owned(),
+                    summary: "the configured execution harness is unavailable".to_owned(),
+                });
+            }
+            if !health.authentication.configured || !health.authentication.authenticated {
+                readiness_reasons.push(Reason {
+                    code: "authentication_unavailable".to_owned(),
+                    summary: health
+                        .authentication
+                        .detail
+                        .clone()
+                        .unwrap_or_else(|| "Nucleus authentication is not ready".to_owned()),
+                });
+            }
+
+            let active_jobs = health
+                .execution
+                .map_or(0, |execution| execution.active_jobs);
+            let mut counts = Vec::new();
+            if let Some(maintenance) = &maintenance {
+                counts.extend([
+                    Count {
+                        name: "maintenance_holds".to_owned(),
+                        value: maintenance.holds.len() as u64,
+                        unit: "holds".to_owned(),
+                        scope: "deployment admission".to_owned(),
+                    },
+                    Count {
+                        name: "nonterminal_jobs".to_owned(),
+                        value: maintenance.nonterminal_jobs as u64,
+                        unit: "jobs".to_owned(),
+                        scope: "Nucleus durable job store".to_owned(),
+                    },
+                ]);
+            }
+            if let Some(execution) = health.execution {
+                counts.extend([
+                    Count {
+                        name: "active_jobs".to_owned(),
+                        value: u64::from(execution.active_jobs),
+                        unit: "jobs".to_owned(),
+                        scope: "live execution slots".to_owned(),
+                    },
+                    Count {
+                        name: "available_slots".to_owned(),
+                        value: u64::from(execution.available_slots),
+                        unit: "slots".to_owned(),
+                        scope: "live execution capacity".to_owned(),
+                    },
+                    Count {
+                        name: "maximum_active_jobs".to_owned(),
+                        value: u64::from(execution.max_active_jobs),
+                        unit: "jobs".to_owned(),
+                        scope: "configured execution capacity".to_owned(),
+                    },
+                ]);
+            }
+
+            let snapshot = StatusSnapshot {
+                schema_version: STATUS_SCHEMA_VERSION,
+                product_id: "nucleus".to_owned(),
+                provider_release: env!("CARGO_PKG_VERSION").to_owned(),
+                observed_at_start,
+                observed_at_end,
+                complete: health.execution.is_some() && maintenance.is_some(),
+                units: vec![OperationalUnit {
+                    id: "nucleus/service".to_owned(),
+                    owning_product_id: "nucleus".to_owned(),
+                    clockwork_key: None,
+                    intent: Intent::Active,
+                    admission: Admission {
+                        state: if health.accepting_jobs {
+                            AdmissionState::Open
+                        } else {
+                            AdmissionState::Closed
+                        },
+                        reasons: admission_reasons,
+                    },
+                    activity: if active_jobs == 0 {
+                        Activity::Idle
+                    } else {
+                        Activity::Running
+                    },
+                    readiness: Readiness {
+                        state: if readiness_reasons.is_empty() {
+                            ReadinessState::Ready
+                        } else {
+                            ReadinessState::Blocked
+                        },
+                        scope: "local Nucleus daemon, harness, and authentication".to_owned(),
+                        reasons: readiness_reasons,
+                    },
+                    evidence: Evidence {
+                        counts,
+                        ..Evidence::default()
+                    },
+                    inspection: vec![InspectionReference {
+                        capability_id: "nucleus.execution.operate".to_owned(),
+                        record_id: None,
+                    }],
+                }],
+                scheduler_observations: Vec::new(),
+                diagnostics: {
+                    let mut diagnostics = Vec::new();
+                    if health.execution.is_none() {
+                        diagnostics.push(Diagnostic {
+                            code: "execution_capacity_unavailable".to_owned(),
+                            summary: "the daemon did not report bounded execution capacity"
+                                .to_owned(),
+                        });
+                    }
+                    if maintenance.is_none() {
+                        diagnostics.push(Diagnostic {
+                            code: "maintenance_observation_unavailable".to_owned(),
+                            summary: "maintenance detail was not available within the bounded observation".to_owned(),
+                        });
+                    }
+                    diagnostics
+                },
+            };
+            print_json(&snapshot, compact)
+        }
         Command::Health => {
             let health = client.health().await?;
             print_json(&health, compact)?;

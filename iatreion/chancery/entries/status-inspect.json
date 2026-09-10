@@ -1,0 +1,66 @@
+{
+  "id": "iatreion.status.inspect",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Report Cell operational status",
+  "summary": "Construct one bounded read-only report of expected Cell products and operational units, preserving authority, freshness, unknown coverage, and separate runtime and domain evidence.",
+  "use_when": [
+    "The caller needs to know what is operating, needs attention, is intentionally inactive, or cannot currently be assessed."
+  ],
+  "do_not_use_when": [
+    "A product should be repaired, resumed, tested with a canary, monitored historically, or operated."
+  ],
+  "outcome": "A human or schema-one JSON operational report for all selected expected products, or one exact unit.",
+  "effects": [
+    "Reads the selected checkout, starts bounded declared read-only probes, validates their snapshots, renders the report, and exits without retaining state.",
+    "Makes no network or model request and performs no repair, retry, alert, schedule change, product work, or credential refresh."
+  ],
+  "authority": [
+    "Iatreion owns report construction and derived groups. Each source retains authority for its observation and domain meanings."
+  ],
+  "success": [
+    "Every expected selected product remains represented. Missing or invalid observations become explicit unknown coverage rather than disappearing.",
+    "Report construction succeeds independently of the health described inside the report."
+  ],
+  "failure_and_recovery": [
+    "Correct an invalid declaration or probe and run a new report. Iatreion retains no result to repair.",
+    "Use the reported Chancery capability and exact record reference to inspect a product. Do not infer or run recovery from the status row alone."
+  ],
+  "privacy": [
+    "The report contains operational IDs, local counts, timestamps, bounded reasons, and inspection references. It omits raw stderr and private content bodies."
+  ],
+  "interfaces": [
+    {
+      "label": "Report status",
+      "invocation": "iatreion report [ROOT] [--json] [--product ID_OR_ALIAS]"
+    },
+    {
+      "label": "Inspect one unit",
+      "invocation": "iatreion show UNIT [--root ROOT] [--json]"
+    }
+  ],
+  "does_not_authorize": [
+    "Product operation, schedule continuation, deployment, publication, semantic registration, network checks, or disclosure of private content."
+  ],
+  "dependencies": [{"id":"usher.recognition.inspect","min_contract":3,"max_contract_exclusive":4}],
+  "manual": "manuals/status-inspect.md",
+  "promise": {
+    "consumers": [{"status":"declared","statement":"The current user and local agents may inspect Cell operational status."}],
+    "preconditions": [{"status":"declared","statement":"The caller selects a stable readable Cell checkout and an absolute installed command directory."}],
+    "inputs": [{"status":"declared","statement":"A checkout root, optional product or exact operational unit, collection bounds, and product-owned schema-one status snapshots."}],
+    "outputs": [{"status":"declared","statement":"Human output and JSON report schema one preserve every expected product, unit dimensions, source product, evidence, diagnostics, and snapshot interval. Unknown values are not zero or empty success."}],
+    "data_semantics": [{"status":"declared","statement":"Intent, admission, activity, and readiness are independent. Runtime outcome and product-owned domain outcome remain separate. Human groups are Iatreion-derived presentation."}],
+    "identity_and_units": [{"status":"declared","statement":"Cell product IDs and aliases select products. Operational unit IDs and Clockwork keys are explicit declarations and are not inferred from directory or string prefixes. Counts name their records, units, and scope; timestamps are Unix seconds."}],
+    "completeness_and_freshness": [{"status":"declared","statement":"Every selected descriptor remains in the report. Each probe records an observation interval. Missing, late, invalid, unsupported, or older-than-allowed observations remain explicit unknown coverage."}],
+    "access": [{"status":"declared","statement":"The reporter reads local declaration files and directly executes only a declared selector basename beneath the selected command directory with fixed status-snapshot --json arguments."}],
+    "lifecycle_and_consistency": [{"status":"declared","statement":"One invocation constructs an in-memory non-atomic snapshot interval and exits. No result is cached, retained, repaired, or reused."}],
+    "operational_limits": [{"status":"declared","statement":"Defaults are a five-second report budget, two seconds per probe, eight concurrent probes, and one MiB each for stdout and stderr. OS process scheduling is not a hard real-time guarantee."}],
+    "compatibility_and_evolution": [{"status":"declared","statement":"Status schema one, report schema one, provider release, and capability contract version are separate. Unsupported probe schemas remain unknown."}],
+    "reliances": [
+      {"status":"declared","statement":"Iatreion uses Usher's data-only interpretation of Cell product descriptors and its additive operational-declaration projection.","target":"usher","kind":"data","contract":"usher.recognition.inspect"},
+      {"status":"unspecified","statement":"Each product-owned probe is a separately installed local interface. Its product contract owns the observed facts and read-only behavior; this entry does not enumerate every product contract."}
+    ]
+  }
+}

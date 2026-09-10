@@ -15,6 +15,7 @@ cell-install.workspace = true
 cell-maintenance.workspace = true
 clap.workspace = true
 fs2.workspace = true
+iatreion-api.workspace = true
 nucleus-codex = { path = "../nucleus-codex" }
 nucleus-client = { path = "../nucleus-client" }
 nucleus-core = { path = "../nucleus-core" }

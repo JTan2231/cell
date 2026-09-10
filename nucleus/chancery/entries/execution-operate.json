@@ -18,7 +18,7 @@
   ],
   "outcome": "An observed or deliberately changed Nucleus runtime condition, reported through its job, account, service, or health state.",
   "effects": [
-    "Read commands expose daemon, execution-capacity, account, job, request, and exact harness-output state.",
+    "Read commands expose daemon, execution-capacity, account, job, request, and exact harness-output state. The Iatreion status snapshot reads health plus maintenance detail under a 250 ms maintenance bound and never reads the account endpoint.",
     "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
     "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
     "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs.",
@@ -51,6 +51,10 @@
     {
       "label": "Strict readiness",
       "invocation": "/Users/joey/.local/bin/nucleus health"
+    },
+    {
+      "label": "Emit Iatreion status snapshot",
+      "invocation": "/Users/joey/.local/bin/nucleus status-snapshot --json"
     },
     {
       "label": "Account probe",

@@ -14,6 +14,7 @@ krisis-api.workspace = true
 clap = { version = "4.5", features = ["derive", "env"] }
 conversations = { path = "../conversations/crates/conversations" }
 fs2 = "0.4"
+iatreion-api.workspace = true
 nucleus-client = { path = "../nucleus/crates/nucleus-client" }
 nucleus-core = { path = "../nucleus/crates/nucleus-core" }
 rusqlite = { version = "0.40.0", features = ["bundled"] }

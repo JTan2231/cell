@@ -10,6 +10,7 @@ license.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clap.workspace = true
+iatreion-api.workspace = true
 nucleus-client.workspace = true
 nucleus-core.workspace = true
 rusqlite.workspace = true

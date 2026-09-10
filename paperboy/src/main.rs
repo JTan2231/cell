@@ -110,6 +110,21 @@ async fn execute(cli: &Cli) -> Result<Value> {
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
+    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
+        "paperboy",
+        env!("CARGO_PKG_VERSION"),
+        vec![iatreion_api::declared_unit(
+            "paperboy",
+            "paperboy/daily",
+            Some("paperboy/daily"),
+            iatreion_api::Intent::Active,
+            "paperboy.install.operate",
+        )],
+        false,
+    ) {
+        println!("{snapshot}");
+        return std::process::ExitCode::SUCCESS;
+    }
     let cli = Cli::parse();
     match execute(&cli).await {
         Ok(value) => {
