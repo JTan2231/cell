@@ -23,6 +23,6 @@
   ],
   "pin_inventory": [
     "--json",
-    "config"
+    "status"
   ]
 }

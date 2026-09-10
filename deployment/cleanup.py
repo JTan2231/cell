@@ -189,9 +189,10 @@ def live_pins(home, installs, currents):
         binary = metadata["product"]
         result = json.loads(inspect_command([home / ".local/bin" / binary, *arguments]))
         require(isinstance(result, dict) and result.get("ok") is True
-                and isinstance(result.get("data"), dict),
+                and isinstance(result.get("data"), dict)
+                and isinstance(result["data"].get("config"), dict),
                 "product configuration pin inventory is incomplete")
-        retain(result["data"])
+        retain(result["data"]["config"])
     # Protect a directly running old binary, mapped executable, or script even
     # when its public selector has since moved to the new release.
     retain(inspect_command(["/usr/sbin/lsof", "-n", "-a", "-u", str(os.getuid()), "-d", "txt", "-Fn"]))

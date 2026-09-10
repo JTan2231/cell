@@ -242,7 +242,10 @@ contract versions. Only explicitly indexed, supported entries satisfy it.
 replacement requires this installed requester to drain. `activation_bindings`
 lists the exact Clockwork keys whose final intent the adapter owns. Optional
 `pin_inventory` names read-only product CLI arguments that return its complete
-configured executable references. Build, deployment and cleanup read the same
+configured executable references in an `ok: true` response with a `data.config`
+object. Cleanup inspects that object, not status history or diagnostics. Use
+commands supported by retained releases; Conatus provides them through `status`.
+Build, deployment and cleanup read the same
 literal product inventory. The adapter accepts one fixed operation argument:
 `inspect`, `hold`, `drain`, `apply`, `configure`, `verify`, `release`, `activate`,
 or `recover`. It accepts

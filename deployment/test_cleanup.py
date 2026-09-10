@@ -382,8 +382,10 @@ class ReleaseCleanupTests(unittest.TestCase):
         pinned = self.base / "Annals/install/releases" / self.old
 
         def inspect(argv):
-            if argv == [self.home / ".local/bin/conatus", "--json", "config"]:
-                return json.dumps({"ok": True, "data": {"config": {"annals": str(pinned / "bin/annals")}}})
+            if argv == [self.home / ".local/bin/conatus", "--json", "status"]:
+                return json.dumps({"ok": True, "data": {
+                    "config": {"annals": str(pinned / "bin/annals")},
+                    "last_error": str(self.base / "Annals/install/previous/bin/annals")}})
             return self.inspect(argv)
 
         self.run_cleanup(inspect=inspect)
@@ -393,13 +395,16 @@ class ReleaseCleanupTests(unittest.TestCase):
         current = self.release("Conatus", self.current)
         (current.parent.parent / "current").symlink_to("releases/" + self.current)
 
-        def inspect(argv):
-            if argv == [self.home / ".local/bin/conatus", "--json", "config"]:
-                return json.dumps({"ok": False, "data": {}})
-            return self.inspect(argv)
+        for response in ({"ok": False, "data": {}}, {"ok": True, "data": {}},
+                         {"ok": True, "data": {"config": None}}):
+            with self.subTest(response=response):
+                def inspect(argv):
+                    if argv == [self.home / ".local/bin/conatus", "--json", "status"]:
+                        return json.dumps(response)
+                    return self.inspect(argv)
 
-        with self.assertRaisesRegex(cleanup.CleanupError, "configuration pin inventory is incomplete"):
-            self.run_cleanup(inspect=inspect)
+                with self.assertRaisesRegex(cleanup.CleanupError, "configuration pin inventory is incomplete"):
+                    self.run_cleanup(inspect=inspect)
         self.assertTrue((self.base / "Annals/install/releases" / self.old).is_dir())
         for application in ("Annals", "Decisions", "Clockwork"):
             self.assertTrue((self.base / application / "install/previous").is_symlink())

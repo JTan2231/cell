@@ -294,6 +294,8 @@ ordinary deployment command. It removes the workspace only after resolution.
 Product holds and recovery backups remain until resolved. Release cleanup
 preserves current releases and exact pins held by configuration, schedules, or
 processes. Unknown or incomplete pin inventories stop deletion.
+Cleanup reads configured pins through commands supported by retained products;
+it uses Conatus `status` and excludes status history and diagnostics.
 After an attempted release or activation, recovery holds and drains work again
 before repairing product configuration. It uses the original captured intent.
 
