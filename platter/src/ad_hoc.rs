@@ -17,7 +17,8 @@ pub fn preview(
     packet_ids: &[String],
     brief_overrides: Option<&Path>,
 ) -> Result<Edition> {
-    let id = identity(day, run_id)?;
+    workflow::validate_day(day)?;
+    let id = occurrence_identity(run_id)?;
     let store = Store::open(root)?;
     let overrides: BTreeMap<String, String> = if let Some(path) = brief_overrides {
         ensure!(path.is_absolute(), "brief overrides path must be absolute");
@@ -76,7 +77,8 @@ pub fn preview(
 }
 
 pub fn send(root: &Path, day: &str, run_id: &str, executable: Option<&Path>) -> Result<Edition> {
-    let id = identity(day, run_id)?;
+    workflow::validate_day(day)?;
+    let id = occurrence_identity(run_id)?;
     let edition = Store::open_read_only(root)?
         .edition(&id)?
         .context("preview the edition before sending")?;
@@ -84,8 +86,7 @@ pub fn send(root: &Path, day: &str, run_id: &str, executable: Option<&Path>) -> 
     workflow::send_edition(root, &id, executable)
 }
 
-fn identity(day: &str, run_id: &str) -> Result<String> {
-    workflow::validate_day(day)?;
+pub(crate) fn occurrence_identity(run_id: &str) -> Result<String> {
     ensure!(
         !run_id.is_empty()
             && run_id.len() <= 80

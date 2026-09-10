@@ -9,6 +9,7 @@ With an initialized, configured installation:
 
 ```sh
 cast run
+cast job collect 'https://jobs.ashbyhq.com/company/job-id'
 cast export --json
 ```
 

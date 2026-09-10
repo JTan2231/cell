@@ -379,6 +379,10 @@ async fn run(cli: Cli) -> Result<(), CliError> {
     }
 }
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep API operations beside their shared response handling"
+)]
 async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Result<(), CliError> {
     match command {
         Command::StatusSnapshot { json: _ } => {

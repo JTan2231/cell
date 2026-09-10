@@ -16,7 +16,7 @@ struct Cli {
     json: bool,
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
-    /// Bound preparation duration and cancel its live Nucleus job (prepare commands only).
+    /// Bound preparation duration and cancel its live Nucleus job.
     #[arg(long, global = true)]
     stop_after_seconds: Option<u64>,
     #[command(subcommand)]
@@ -54,6 +54,13 @@ enum Command {
     PrepareDaily,
     /// Prepare, freeze and send today's edition with applicable send authorization.
     RunDaily,
+    /// Prepare, freeze and send one URL-selected packet with this invocation's authority.
+    RunAdHoc {
+        url: String,
+        /// Stable occurrence identity for safe retries of this exact send.
+        #[arg(long)]
+        id: String,
+    },
     /// Print the selected release's daily Clockwork definition; do not enable it.
     ScheduleDefinition,
     Preview {
@@ -131,8 +138,11 @@ async fn run() -> Result<()> {
     let cli = Cli::parse();
     anyhow::ensure!(
         cli.stop_after_seconds.is_none()
-            || matches!(cli.command, Command::Prepare { .. } | Command::PrepareDaily),
-        "--stop-after-seconds applies only to prepare and prepare-daily"
+            || matches!(
+                cli.command,
+                Command::Prepare { .. } | Command::PrepareDaily | Command::RunAdHoc { .. }
+            ),
+        "--stop-after-seconds applies only to prepare, prepare-daily and run-ad-hoc"
     );
     let home = maintenance::home()?;
     let root = platter::default_state_dir(&home)?;
@@ -202,6 +212,20 @@ async fn run() -> Result<()> {
                 );
             } else {
                 println!("No complete new packets ready; no edition created or sent");
+            }
+        }
+        Command::RunAdHoc { url, id } => {
+            if let Some(edition) =
+                workflow::run_ad_hoc(&root, &url, &id, chrono::Utc::now(), deadline).await?
+            {
+                println!(
+                    "{}: {} ({} packet)",
+                    edition.day,
+                    edition.status,
+                    edition.packet_ids.len()
+                );
+            } else {
+                println!("Selected job produced no ready packet; no edition created or sent");
             }
         }
         Command::Preview {

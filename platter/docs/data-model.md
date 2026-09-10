@@ -36,6 +36,11 @@ leaves eligibility unchanged. Neither a receipt nor the existence of an edition
 derives eligibility. Acceptance records external submission; unresolved sends
 remain held even if eligibility is changed later.
 
+A URL-selected run creates no separate workflow record. Its occurrence ID uses
+the existing ad hoc edition namespace. It resolves a normal Cast job, prepares
+or reuses a normal packet, and freezes one ordinary edition while setting the
+selected job ineligible.
+
 Edition read results project packet IDs and attachment hashes from their
 referenced artifacts for CLI compatibility. These are not extra stored
 edition-item data. Artifact IDs replace path references. Historical attachment

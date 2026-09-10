@@ -128,8 +128,16 @@ enum ShowCommand {
 }
 #[derive(Subcommand)]
 enum JobCommand {
-    Show { id: String },
-    Refresh { id: String },
+    Show {
+        id: String,
+    },
+    Refresh {
+        id: String,
+    },
+    /// Resolve or collect one supplied public job URL.
+    Collect {
+        url: String,
+    },
 }
 #[derive(Subcommand)]
 enum SourceCommand {
@@ -290,6 +298,12 @@ async fn execute(cli: Cli) -> Result<()> {
             )
             .await?
         }
+        Command::Job {
+            command: JobCommand::Collect { url },
+        } => serde_json::to_value(cast::models::JobSelection {
+            schema_version: 1,
+            job: runner::collect_job(&store, &url).await?,
+        })?,
         Command::Source {
             command: SourceCommand::Add { url, company_id },
         } => serde_json::to_value(store.add_manual_source(&url, company_id.as_deref())?)?,

@@ -1,5 +1,5 @@
 use crate::{
-    Config,
+    Config, ad_hoc,
     agent::{self, Brief, CareerEntry, Stage, StageInputs, StageResult},
     resume::ResumeTemplate,
     source::{self, Posting},
@@ -254,8 +254,7 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
 
 /// Run one authorized daily delivery. The CLI holds mutation admission throughout.
 pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Result<Option<Edition>> {
-    let timezone: chrono_tz::Tz = config(root)?.timezone.parse()?;
-    let day = now.with_timezone(&timezone).format("%Y-%m-%d").to_string();
+    let day = local_day(root, now)?;
     // Frozen, accepted and uncertain editions take the existing send path before
     // preparation can consume more resources or change job eligibility.
     if Store::open_read_only(root)?.edition(&day)?.is_some() {
@@ -266,6 +265,69 @@ pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Resul
         return Ok(None);
     }
     send(root, &day).map(Some)
+}
+
+/// Prepare, freeze and send one explicitly selected job URL through the same
+/// packet and edition operations as the daily runner.
+pub async fn run_ad_hoc(
+    root: &Path,
+    url: &str,
+    run_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
+    deadline: Option<Instant>,
+) -> Result<Option<Edition>> {
+    let id = ad_hoc::occurrence_identity(run_id)?;
+    if let Some(edition) = Store::open_read_only(root)?.edition(&id)? {
+        ensure_edition_url(root, &edition, url)?;
+        return send_edition(root, &id, None).map(Some);
+    }
+
+    let day = local_day(root, now)?;
+    let settings = config(root)?;
+    let job = source::collect_job(&settings.cast_executable, url)?;
+    let opportunity = source::identity(&job)?;
+    let store = Store::open(root)?;
+    if store
+        .jobs()?
+        .iter()
+        .any(|retained| retained.opportunity == opportunity)
+        && !store.is_eligible(&opportunity)?
+    {
+        store.set_eligible(&opportunity, true)?;
+    }
+    drop(store);
+
+    let packet = prepare(root, &job.id, deadline).await?;
+    if !matches!(packet.status.as_str(), "ready" | "deferred") {
+        return Ok(None);
+    }
+    let store = Store::open(root)?;
+    refresh_packet(&store, &packet).await?;
+    let packet = store.run(&packet.id)?;
+    if packet.status != "ready" {
+        return Ok(None);
+    }
+    let edition = compose(&store, &day, &[packet], &BTreeMap::new())?;
+    store.freeze_as(&id, &edition, true)?;
+    drop(store);
+    send_edition(root, &id, None).map(Some)
+}
+
+fn local_day(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Result<String> {
+    let timezone: chrono_tz::Tz = config(root)?.timezone.parse()?;
+    Ok(now.with_timezone(&timezone).format("%Y-%m-%d").to_string())
+}
+
+fn ensure_edition_url(root: &Path, edition: &Edition, url: &str) -> Result<()> {
+    let [packet_id] = edition.packet_ids.as_slice() else {
+        anyhow::bail!("occurrence ID belongs to a different edition selection");
+    };
+    let captured: Captured = Store::open_read_only(root)?.inputs(packet_id)?;
+    ensure!(
+        source::job_url_matches(&captured.job, url)?,
+        "occurrence ID belongs to a different job URL"
+    );
+    Ok(())
 }
 
 fn ready(store: &Store) -> Result<Vec<PacketRecord>> {
@@ -285,28 +347,33 @@ fn ready(store: &Store) -> Result<Vec<PacketRecord>> {
 
 async fn refresh_ready(store: &Store) -> Result<()> {
     for record in store.list()? {
-        if !matches!(record.status.as_str(), "ready" | "deferred")
-            || !store.is_eligible(&record.opportunity)?
-        {
-            continue;
+        refresh_packet(store, &record).await?;
+    }
+    Ok(())
+}
+
+async fn refresh_packet(store: &Store, record: &PacketRecord) -> Result<()> {
+    if !matches!(record.status.as_str(), "ready" | "deferred")
+        || !store.is_eligible(&record.opportunity)?
+    {
+        return Ok(());
+    }
+    let captured: Captured = store.inputs(&record.id)?;
+    match source::posting(store.root(), &captured.job).await {
+        Ok(current) if current.text == captured.posting.text => {
+            store.status(&record.id, "ready")?;
         }
-        let captured: Captured = store.inputs(&record.id)?;
-        match source::posting(store.root(), &captured.job).await {
-            Ok(current) if current.text == captured.posting.text => {
-                store.status(&record.id, "ready")?;
-            }
-            Ok(_) => {
-                store.status(&record.id, "stale")?;
-                store.set_eligible(&record.opportunity, false)?;
-                eprintln!(
-                    "deferred {}: fetched posting differs from prepared input",
-                    record.id
-                );
-            }
-            Err(error) => {
-                store.status(&record.id, "deferred")?;
-                eprintln!("deferred {}: {error}", record.id);
-            }
+        Ok(_) => {
+            store.status(&record.id, "stale")?;
+            store.set_eligible(&record.opportunity, false)?;
+            eprintln!(
+                "deferred {}: fetched posting differs from prepared input",
+                record.id
+            );
+        }
+        Err(error) => {
+            store.status(&record.id, "deferred")?;
+            eprintln!("deferred {}: {error}", record.id);
         }
     }
     Ok(())

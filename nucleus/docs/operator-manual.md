@@ -117,6 +117,11 @@ Cast collection stores jobs without a title substring requirement. Configured
 provider queries still limit discovery. Downstream consumers own selection by
 title, seniority, location and other preferences.
 
+Platter `run-ad-hoc` uses Cast's exact `job collect` operation, then reuses
+Platter's normal preparation, freshness, edition and send records. URL-selected
+work creates no separate workflow state. Cast still owns the resulting source
+and job records; Platter owns packet eligibility and delivery.
+
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,
 logs, and domain recovery. A process exit does not establish product success.

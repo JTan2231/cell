@@ -10,12 +10,13 @@ With an initialized library and its dependencies ready:
 
 ```sh
 platter prepare CAST_JOB_ID
+platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' --id OCCURRENCE_ID
 platter status
 platter export ARTIFACT_ID /absolute/chosen/resume.pdf
 ```
 
-Preparing a packet does not send it. Preview freezes an edition; `send` submits
-that edition through Email. Uncertain sends remain held for recovery.
+`prepare` does not send. `run-ad-hoc` prepares one selected URL and sends its
+frozen packet. Uncertain sends remain held for recovery.
 
 ## Check
 

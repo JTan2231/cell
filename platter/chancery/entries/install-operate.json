@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -104,6 +104,11 @@
       "max_contract_exclusive": 3
     },
     {
+      "id": "cast.discovery.collect",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
       "id": "crm.profile.maintain",
       "min_contract": 2,
       "max_contract_exclusive": 3
@@ -139,7 +144,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Email attachment support and local renderer tooling must be available. When selected together, Cast, CRM, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
+        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Cast exact job-URL collection, Email attachment support and local renderer tooling must be available. When selected together, Cast, CRM, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
       },
       {
         "status": "declared",
@@ -177,7 +182,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
+        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Cast job-collect help, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
       },
       {
         "status": "declared",
@@ -221,7 +226,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation uses cell-install-v2, private schema two, preparation contract three and installation contract two. Schema one requires the explicit import. Older binaries cannot read schema two. Recovery requires a compatible candidate or a complete predecessor backup with its matching binary."
+        "statement": "Installation contract 4 verifies Cast collection contract 4 for preparation contract 6. It retains cell-install-v2 and private schema two. Schema one requires the explicit import. Older binaries cannot read schema two. Recovery requires a compatible candidate or a complete predecessor backup with its matching binary."
       }
     ],
     "reliances": [
@@ -234,7 +239,7 @@
       },
       {
         "status": "declared",
-        "statement": "Runtime prerequisite probes rely on supported Cast and CRM commands and Email attachment support; unselected installations are not upgraded implicitly.",
+        "statement": "Runtime prerequisite probes rely on supported Cast export and exact job-URL commands, CRM commands and Email attachment support; unselected installations are not upgraded implicitly.",
         "target": "runtime-dependencies",
         "kind": "readiness"
       },

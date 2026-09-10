@@ -16,6 +16,29 @@ pub fn board_identity(input: &str) -> Option<String> {
     Board::from_url(&Url::parse(input).ok()?).map(|board| board.identity())
 }
 
+/// Tests whether one stored job is the posting selected by a public job URL.
+///
+/// # Errors
+/// Returns an error when the URL is not public or names a supported ATS board
+/// without identifying one posting.
+pub fn job_url_matches(job: &Job, input: &str) -> Result<bool, String> {
+    let selected = JobSelector::from_url(input)?;
+    Ok(match selected {
+        JobSelector::SourceKey(key) => job.source_key == key,
+        JobSelector::Url(url) => crate::normalize_url(&job.url)
+            .is_ok_and(|stored| stored.trim_end_matches('/') == url.trim_end_matches('/')),
+    })
+}
+
+/// Validates that a public URL can select one job.
+///
+/// # Errors
+/// Returns an error for an unsafe URL or a supported ATS board URL without a
+/// posting identity.
+pub fn validate_job_url(input: &str) -> Result<(), String> {
+    JobSelector::from_url(input).map(|_| ())
+}
+
 /// Recognizes known third-party discovery surfaces, whose host is not job ownership.
 #[must_use]
 pub fn is_discovery_directory(input: &str) -> bool {
@@ -48,7 +71,10 @@ fn unsupported_shared_ats(url: &Url) -> bool {
     })
 }
 
-use crate::{http::public_url, models::Evidence};
+use crate::{
+    http::public_url,
+    models::{Evidence, Job},
+};
 use reqwest::Url;
 use scraper::{Html, Selector};
 use serde_json::Value;
@@ -119,6 +145,64 @@ enum Board {
     Greenhouse(String),
     Ashby(String),
     Lever { site: String, eu: bool },
+}
+
+enum JobSelector {
+    SourceKey(String),
+    Url(String),
+}
+
+impl JobSelector {
+    fn from_url(input: &str) -> Result<Self, String> {
+        let url = public_url(input)?;
+        if let Some(key) = ats_job_source_key(&url) {
+            return Ok(Self::SourceKey(key));
+        }
+        if Board::from_url(&url).is_some() {
+            return Err("URL must identify one supported ATS job posting".into());
+        }
+        let normalized = crate::normalize_url(input).map_err(|error| error.to_string())?;
+        Ok(Self::Url(normalized))
+    }
+}
+
+fn ats_job_source_key(url: &Url) -> Option<String> {
+    let path: Vec<_> = url
+        .path_segments()?
+        .filter(|part| !part.is_empty())
+        .collect();
+    let valid = |value: &str| {
+        !value.is_empty()
+            && value.len() <= 128
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+    };
+    match (url.host_str()?, path.as_slice()) {
+        ("boards.greenhouse.io" | "job-boards.greenhouse.io", [board, "jobs", id])
+            if valid(board) && valid(id) =>
+        {
+            Some(format!("greenhouse:{board}:{id}"))
+        }
+        ("jobs.ashbyhq.com", [board, id] | [board, id, "application"])
+            if valid(board) && valid(id) =>
+        {
+            Some(format!("ashby:{board}:{id}"))
+        }
+        (host @ ("jobs.lever.co" | "jobs.eu.lever.co"), [board, id] | [board, id, "apply"])
+            if valid(board) && valid(id) =>
+        {
+            Some(format!(
+                "lever:{}:{board}:{id}",
+                if host == "jobs.eu.lever.co" {
+                    "eu"
+                } else {
+                    "global"
+                }
+            ))
+        }
+        _ => None,
+    }
 }
 
 impl Board {
@@ -310,5 +394,46 @@ mod tests {
                 .unwrap()
                 .identity()
         );
+    }
+
+    #[test]
+    fn exact_job_urls_match_native_ats_identity_or_normalized_url() {
+        let mut job = Job {
+            id: "job-one".into(),
+            revision: 1,
+            company_id: "company-one".into(),
+            source_id: "source-one".into(),
+            source_key: "ashby:acme:role-one".into(),
+            title: "Engineer".into(),
+            url: "https://jobs.ashbyhq.com/acme/role-one".into(),
+            apply_url: None,
+            location: None,
+            remote: None,
+            employment_type: None,
+            source_published_at: None,
+            source_updated_at: None,
+            source_internal_id: None,
+            first_seen_at: "2026-09-10T00:00:00Z".into(),
+            last_seen_at: "2026-09-10T00:00:00Z".into(),
+            availability: "listed".into(),
+            missing_complete_snapshots: 0,
+            first_missing_at: None,
+            description: None,
+            evidence: vec![],
+            compensation: vec![],
+            geographic_eligibility: vec![],
+            published_at_semantics: None,
+            content_fingerprint: None,
+            parser_version: "fixture".into(),
+        };
+        assert!(
+            job_url_matches(&job, "https://jobs.ashbyhq.com/acme/role-one/application").unwrap()
+        );
+        assert!(!job_url_matches(&job, "https://jobs.ashbyhq.com/acme/role-two").unwrap());
+        assert!(job_url_matches(&job, "https://jobs.ashbyhq.com/acme").is_err());
+
+        job.source_key = "jsonld:https://careers.acme.example/jobs/one".into();
+        job.url = "https://careers.acme.example/jobs/one?utm_source=search".into();
+        assert!(job_url_matches(&job, "https://careers.acme.example/jobs/one/").unwrap());
     }
 }

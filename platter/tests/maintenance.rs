@@ -358,6 +358,7 @@ fn fake_prerequisites(home: &Path) -> Result<(PathBuf, PathBuf)> {
     for name in ["cast", "crm", "email", "tectonic", "python3"] {
         let path = bin.join(name);
         let body = match name {
+            "cast" => "case \"$1:${2-}\" in --version:) echo 'cast 0.4.1';; job:--help) echo 'collect';; *) exit 95;; esac".to_owned(),
             "email" => "case \"$1\" in --version) echo 'email 0.5.2';; --help) echo '--payload-stdin';; *) exit 93;; esac".to_owned(),
             "python3" => "test \"$1\" = '-c' || exit 94; echo 'pypdf ready'".to_owned(),
             _ => format!("test \"$1\" = '--version' || exit 95; echo '{name} 0.1.0'"),

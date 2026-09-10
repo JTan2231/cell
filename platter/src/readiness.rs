@@ -96,6 +96,15 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
             "unexpected {name} executable identity"
         );
     }
+    let cast_help = probe(
+        &settings.cast_executable,
+        &["job", "--help"],
+        "Cast job URL collection",
+    )?;
+    ensure!(
+        cast_help.split_whitespace().any(|word| word == "collect"),
+        "Cast must support job collect before Platter installation"
+    );
     let help = probe(&settings.email_executable, &["--help"], "Email attachments")?;
     ensure!(
         help.split_whitespace()
@@ -111,7 +120,7 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
         "Python pypdf",
     )?;
     Ok(
-        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(crate::store::SCHEMA_VERSION)} else {None},"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"external; not checked"}),
+        json!({"initialized":initialized,"state_dir":root,"schema_version":if initialized {Some(crate::store::SCHEMA_VERSION)} else {None},"cast_job_collection":true,"email_attachments":true,"tectonic":tectonic,"python":python,"schedule":"external; not checked"}),
     )
 }
 

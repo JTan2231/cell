@@ -28,8 +28,9 @@ Platter. Maintenance includes Nucleus and its registered requesters, whose
 installed maintenance interfaces must already be compatible. Unselected
 products are not upgraded to satisfy a missing prerequisite.
 
-Email must support `--payload-stdin` before Platter can send database artifacts.
-Tectonic, Python 3 with pypdf, supported source data and compatible
+Cast must support `job collect` before Platter can accept a job URL. Email must
+support `--payload-stdin` before Platter can send database artifacts. Tectonic,
+Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.
 
 ## Owned storage
@@ -120,9 +121,9 @@ migration. Preserve holds after unresolved recovery.
 
 ## Readiness and recovery
 
-`doctor` checks retained state, configured executable identities, Email's
-byte-payload interface, renderer availability and strict authenticated Nucleus
-readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
+`doctor` checks retained state, configured executable identities, Cast's exact
+job-URL command, Email's byte-payload interface, renderer availability and
+strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
 `/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read CRM
 profiles, render a PDF, submit a model job or send mail. Cast/CRM executable

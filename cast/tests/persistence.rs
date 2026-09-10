@@ -365,6 +365,54 @@ fn careers_collection_retains_all_job_titles() -> Result<()> {
 }
 
 #[test]
+fn exact_job_url_resolves_the_normal_cast_record_without_an_extra_run() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let state = directory.path().join("state");
+    let store = Store::init(&state)?;
+    let source = store.add_manual_source("https://jobs.ashbyhq.com/acme/role-one", None)?;
+    store.record_verification(
+        &source,
+        &VerificationResult {
+            jobs: vec![JobDraft {
+                source_key: "ashby:acme:role-one".into(),
+                title: "Infrastructure Engineer".into(),
+                url: "https://jobs.ashbyhq.com/acme/role-one".into(),
+                is_listed: true,
+                ..JobDraft::default()
+            }],
+            complete: true,
+            outcome: "complete".into(),
+            ..VerificationResult::default()
+        },
+        86400,
+    )?;
+    let expected = store.snapshot()?.jobs[0].id.clone();
+    drop(store);
+
+    let selected = output_json(
+        &command(&state)
+            .args([
+                "job",
+                "collect",
+                "https://jobs.ashbyhq.com/acme/role-one/application",
+            ])
+            .output()?,
+    )?;
+    assert_eq!(selected["schema_version"], 1);
+    assert_eq!(selected["job"]["id"], expected);
+    assert!(selected["job"]["title"].is_string());
+    assert!(Store::open(&state)?.status()?["last_run"].is_null());
+
+    let board = command(&state)
+        .args(["job", "collect", "https://jobs.ashbyhq.com/acme"])
+        .output()?;
+    assert!(!board.status.success());
+    assert!(String::from_utf8_lossy(&board.stderr).contains("must identify one"));
+    assert!(Store::open(&state)?.status()?["last_run"].is_null());
+    Ok(())
+}
+
+#[test]
 fn title_changes_update_jobs_and_preserve_scan_presence_across_restart() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let store = Store::init(directory.path())?;

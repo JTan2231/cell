@@ -1,4 +1,11 @@
-use crate::{Result, adapters, http::HttpClient, models::Config, now, store::Store, timestamp};
+use crate::{
+    Result, adapters,
+    http::HttpClient,
+    models::{Config, Job},
+    now,
+    store::Store,
+    timestamp,
+};
 use serde_json::{Value, json};
 use std::{
     collections::{HashSet, VecDeque},
@@ -12,6 +19,51 @@ pub struct RunOptions {
     pub provider: Option<String>,
     pub max_requests: Option<u64>,
     pub only_source: Option<String>,
+}
+
+/// Resolves a retained job or collects the supplied public job URL through the
+/// ordinary source runner.
+///
+/// # Errors
+/// Returns an error when the URL does not identify one supported posting or
+/// collection cannot retain that posting.
+pub async fn collect_job(store: &Store, url: &str) -> Result<Job> {
+    adapters::validate_job_url(url)?;
+    if let Some(job) = selected_job(store, url)? {
+        return Ok(job);
+    }
+    let source = store.add_manual_source(url, None)?;
+    if !source.enabled {
+        return Err("selected job source is disabled".into());
+    }
+    run(
+        store,
+        RunOptions {
+            force: true,
+            only_source: Some(source.id),
+            ..RunOptions::default()
+        },
+    )
+    .await?;
+    selected_job(store, url)?
+        .ok_or_else(|| "selected URL did not resolve to one supported public job posting".into())
+}
+
+fn selected_job(store: &Store, url: &str) -> Result<Option<Job>> {
+    let mut selected = store
+        .snapshot()?
+        .jobs
+        .into_iter()
+        .filter_map(|job| match adapters::job_url_matches(&job, url) {
+            Ok(true) => Some(Ok(job)),
+            Ok(false) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if selected.len() > 1 {
+        return Err("selected URL matches multiple retained jobs".into());
+    }
+    Ok(selected.pop())
 }
 
 /// Runs due discovery and careers collection within persistent request and time budgets.
@@ -230,7 +282,12 @@ async fn collect(
     let pending = store
         .sources()?
         .iter()
-        .filter(|s| s.enabled && s.next_due_at <= started && !checked.contains(&s.id))
+        .filter(|s| {
+            s.enabled
+                && s.next_due_at <= started
+                && !checked.contains(&s.id)
+                && options.only_source.as_ref().is_none_or(|id| id == &s.id)
+        })
         .count();
     if pending > 0 {
         partial = true;

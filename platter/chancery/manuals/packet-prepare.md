@@ -19,6 +19,7 @@ platter init --resume /absolute/original-resume.tex
 platter prepare CAST_JOB_ID
 platter prepare CAST_JOB_ID --fresh
 platter prepare-daily
+platter run-ad-hoc JOB_URL --id OCCURRENCE_ID
 platter preview YYYY-MM-DD
 platter status
 platter eligibility CAST_JOB_ID false
@@ -48,6 +49,8 @@ edition and sets selected jobs ineligible. Declining preparation also sets
 eligibility false. Changed postings become stale and ineligible. The eligibility
 command explicitly changes the field again; enabling a declined or stale job
 allows a new preparation run while retaining its older artifacts.
+`run-ad-hoc` explicitly enables its URL-selected job before normal preparation.
+Its ordinary one-packet freeze sets that job ineligible again.
 Delivery records retain what happened even after eligibility changes.
 
 ## Preparation and readiness
@@ -59,6 +62,12 @@ Lever and supported JobPosting JSON-LD. Preparation can fail when pages require
 unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
+
+For `run-ad-hoc`, Platter first asks Cast to resolve or collect the exact public
+job URL. Cast retains its normal source, run and job records. Platter then uses
+that job through the same export and preparation path as scheduled work. A URL
+that names only an ATS board, an unsupported page or no unique owned
+`JobPosting` fails before packet preparation.
 
 Ashby boards are cached as private `ashby-cache/BOARD.json` files under the
 canonical runtime root. Each file contains the complete board response and its
@@ -116,19 +125,48 @@ SQLite journals stay with its database and query temporary storage uses memory.
 Installed programs, packages and system fonts remain separate dependencies.
 PDF inspection preserves Python's user-package lookup, as in `doctor`, and
 disables bytecode writes. Tectonic uses a temporary home. A renderer executable
-or execution failure stops preparation and the daily run, and requests
+or execution failure stops preparation and either run command, and requests
 cancellation of the exact model job. It is not sent to the model as content
 feedback. Repair the dependency before an explicit fresh preparation. Content
 and layout rejection still allows revision within the current model job.
 
 There is no candidate or token budget. An optional
-`--stop-after-seconds SECONDS` on preparation requests cancellation of the exact
-live Nucleus job at the deadline and retains progress. The normal external
+`--stop-after-seconds SECONDS` on `prepare`, `prepare-daily` or `run-ad-hoc`
+requests cancellation of the exact live Nucleus job at the deadline and
+retains progress. The normal external
 source, rendering and execution timeouts still apply. Three ready packets is
 an edition ceiling, not a quota. The stored 09:00 America/Chicago setting does
 not install or authorize a schedule.
 
 ## Editions and sending
+
+For one explicitly selected job URL and one authorized email:
+
+```sh
+platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' \
+  --id OCCURRENCE_ID
+```
+
+The occurrence ID contains 1 through 80 ASCII letters, digits, underscores or
+hyphens. It uses the existing ad hoc edition namespace. A new occurrence
+captures the configured local date, asks Cast for the normal job record,
+prepares or resumes its normal packet, performs the ordinary freshness check,
+freezes one ordinary edition and sends it. It creates no separate packet,
+edition or workflow type. One mutation admission lock covers the complete
+operation.
+
+The command uses the existing packet when normal preparation already has a
+ready one. It explicitly enables the selected job, and the successful freeze
+sets it ineligible like daily selection. A declined, stale or unavailable
+packet creates no edition and sends no email.
+
+An existing occurrence takes the send path before Cast or preparation work. A
+frozen occurrence sends its retained bytes, an accepted occurrence returns its
+receipt without resending, and an uncertain occurrence remains held. The
+original date stays fixed across retries. Reusing the ID for another URL or an
+existing multi-packet retained-material edition is refused. Invoking
+`run-ad-hoc` is the explicit authority for this one send to Email's fixed
+personal recipient.
 
 For a daily edition with applicable send authorization:
 

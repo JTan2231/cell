@@ -8,6 +8,7 @@ cast run
 cast run --force
 cast run --source brave --max-requests 10
 cast job refresh JOB_ID
+cast job collect JOB_URL
 cast --state-dir /absolute/private/state run
 ```
 
@@ -16,7 +17,14 @@ configured budgets. `--due` explicitly selects the normal due-work behavior.
 `--source` limits discovery queries by provider or query ID; careers-source
 refresh remains part of that run. `--max-requests` can lower the configured HTTP
 cap for one invocation. `job refresh` fetches the posting source again within
-the same budgets. Provider requests require the applicable keys. The selected
+the same budgets. `job collect` returns one normal Cast job for an exact public
+posting URL. It returns an existing URL or native ATS identity without another
+collection run. Otherwise it admits the ordinary source and collects only that
+source within the same budgets. A supported ATS URL can collect its full board,
+but the result selects only the supplied posting. A board URL without a posting
+identity is refused. The schema-one result contains `schema_version` and `job`.
+
+Provider requests require the applicable keys. The selected
 collection step records missing credentials in its outcome. The installed wrapper loads
 `THEIRSTACK_API_KEY` and `BRAVE_SEARCH_API_KEY` from the user's `.zshrc` without
 printing them. The Rust executable reads these keys from its environment.
@@ -38,6 +46,10 @@ or that host's parent employer domain. A tenant path on a shared recruiting
 site fails this adapter rule.
 Known shared hosts such as `join.com` and `curriculo.me` require a separate
 adapter. Directory results are retained as company candidates.
+An exact generic job URL must produce one owned `JobPosting` whose normalized
+URL matches the supplied URL. Unsupported, ambiguous and non-job pages fail
+without inventing a record. Failed targeted collection retains its ordinary
+source, run outcome and conservative request accounting for diagnosis.
 Cast runs no model, computer-use tool, Nucleus job, CRM steward, packet builder,
 email sender or application submitter.
 

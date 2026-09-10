@@ -1,6 +1,6 @@
 use crate::agent::CareerEntry;
 use anyhow::{Context, Result, bail, ensure};
-use cast::models::{Job, Snapshot};
+use cast::models::{Job, JobSelection, Snapshot};
 use crm::api::{Client, Data, Request};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -30,6 +30,30 @@ pub fn discovery(executable: &Path) -> Result<Snapshot> {
         "unsupported Cast export schema"
     );
     Ok(snapshot)
+}
+
+pub fn collect_job(executable: &Path, url: &str) -> Result<Job> {
+    let parsed = url::Url::parse(url)?;
+    validate_public_url(&parsed)?;
+    let output = std::process::Command::new(executable)
+        .args(["job", "collect", url])
+        .output()?;
+    ensure!(
+        output.status.success(),
+        "Cast job collection failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let selected: JobSelection = serde_json::from_slice(&output.stdout)?;
+    ensure!(selected.schema_version == 1, "unsupported Cast job result");
+    ensure!(
+        cast::adapters::job_url_matches(&selected.job, url).map_err(anyhow::Error::msg)?,
+        "Cast returned a different job"
+    );
+    Ok(selected.job)
+}
+
+pub fn job_url_matches(job: &Job, url: &str) -> Result<bool> {
+    cast::adapters::job_url_matches(job, url).map_err(anyhow::Error::msg)
 }
 
 pub fn career_library(executable: &Path) -> Result<Vec<CareerEntry>> {

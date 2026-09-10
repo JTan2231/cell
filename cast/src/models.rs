@@ -229,6 +229,13 @@ pub struct Job {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct JobSelection {
+    pub schema_version: u32,
+    pub job: Job,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Source {
     #[serde(default)]
     pub discovery_depth: u8,

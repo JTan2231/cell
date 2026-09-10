@@ -1,16 +1,17 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
-  "summary": "Prepare private briefs and Jackson-only resumes for eligible Cast jobs. Freeze editions and send retained attachment bytes, including one daily run when recurring email is authorized.",
+  "summary": "Prepare private briefs and Jackson-only resumes for eligible Cast jobs or one supplied job URL. Freeze editions and send retained attachment bytes through authorized daily or ad hoc runs.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
     "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
-    "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition."
+    "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
+    "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient."
   ],
   "do_not_use_when": [
     "The request is job discovery, CRM editing, employer outreach or application submission.",
@@ -37,6 +38,10 @@
     {
       "label": "Prepare, freeze and send the authorized daily edition",
       "invocation": "platter run-daily"
+    },
+    {
+      "label": "Prepare, freeze and send one URL-selected packet",
+      "invocation": "platter run-ad-hoc JOB_URL --id OCCURRENCE_ID"
     },
     {
       "label": "Freeze and preview a dated edition",
@@ -82,18 +87,20 @@
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
     "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
+    "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
     "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
     "Models author only plain Jackson bullets; all other original resume source bytes remain fixed.",
-    "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Preparation, preview, catalog presence and model output grant no send authority."
+    "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
     "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained.",
     "Preview freezes exact message and ordered immutable artifacts without sending.",
     "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
-    "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents."
+    "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents.",
+    "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition."
   ],
   "failure_and_recovery": [
     "A consistent schema-two SQLite backup contains the complete packet history. Disposable Ashby board caches are excluded and can be downloaded again. Schema-one file-backed state requires maintained migration.",
@@ -102,7 +109,8 @@
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
     "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
     "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
-    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
+    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend.",
+    "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -113,6 +121,11 @@
       "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "cast.discovery.collect",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "crm.profile.maintain",
@@ -138,7 +151,7 @@
   "does_not_authorize": [
     "Installing or enabling any scheduled activation.",
     "Sending when the user requested only preparation or preview.",
-    "Changing fixed resume content, modifying CRM or Cast state, applying to a job or contacting an employer."
+    "Changing fixed resume content, modifying CRM or Cast outside run-ad-hoc's exact URL collection, applying to a job or contacting an employer."
   ],
   "promise": {
     "consumers": [
@@ -164,11 +177,15 @@
       },
       {
         "status": "declared",
-        "statement": "Preparation selects a Cast job or eligible daily pool. Optional --stop-after-seconds applies only to prepare and prepare-daily. Default count is three; stored 09:00 fields create no schedule. run-daily captures the current date once in the configured time zone, then prepares, freezes and sends only that date."
+        "statement": "Preparation selects a Cast job, eligible daily pool, or one exact public URL through run-ad-hoc. Optional --stop-after-seconds applies to prepare, prepare-daily and run-ad-hoc. Default count is three; stored 09:00 fields create no schedule. The two run commands capture the current date once in the configured time zone before new preparation."
       },
       {
         "status": "declared",
         "statement": "--ad-hoc RUN_ID selects another retained-material edition identity, not a test type. It accepts up to three --packet selections, optional imported --brief-overrides and an invocation-local absolute --email-executable on send. RUN_ID is 1 through 80 ASCII letters, digits, underscores or hyphens."
+      },
+      {
+        "status": "declared",
+        "statement": "run-ad-hoc accepts one public JOB_URL and a required --id occurrence of 1 through 80 ASCII letters, digits, underscores or hyphens. It uses the same ad-hoc occurrence namespace as retained-material selection. The ID binds one URL and one packet."
       }
     ],
     "outputs": [
@@ -182,7 +199,7 @@
       },
       {
         "status": "declared",
-        "statement": "run-daily returns a compact edition date, status and selected packet count, or a no-edition result. It writes no message or PDF bytes to stdout. Status and doctor identify scheduling as external without checking the Clockwork binding."
+        "statement": "run-daily and run-ad-hoc return a compact edition date, status and selected packet count, or a no-edition result. They write no message or PDF bytes to stdout. Status and doctor identify scheduling as external without checking the Clockwork binding."
       },
       {
         "status": "declared",
@@ -196,7 +213,7 @@
       },
       {
         "status": "declared",
-        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
+        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
       }
     ],
     "identity_and_units": [
@@ -206,7 +223,7 @@
       },
       {
         "status": "declared",
-        "statement": "Ordinary edition identity is its day; --ad-hoc retains a caller-supplied occurrence ID. Frozen date, selection, message, ordered attachment names/bytes and idempotency key are immutable. A deliberately changed payload requires a new identity."
+        "statement": "Ordinary edition identity is its day; --ad-hoc and run-ad-hoc retain a caller-supplied occurrence ID in the same namespace. Frozen date, selection, message, ordered attachment names/bytes and idempotency key are immutable. A deliberately changed payload requires a new identity."
       }
     ],
     "completeness_and_freshness": [
@@ -221,6 +238,10 @@
       {
         "status": "declared",
         "statement": "Ad hoc preview reads existing accepted artifacts, consuming no Cast API budget and making no source-fetch, discovery-export, profile, model or rendering calls."
+      },
+      {
+        "status": "declared",
+        "statement": "A new run-ad-hoc occurrence uses Cast's exact job-URL operation, normal Cast export and the same posting, CRM, model, rendering and pre-freeze freshness reads as daily work. An existing occurrence bypasses those reads and follows its retained send state."
       },
       {
         "status": "declared",
@@ -248,6 +269,10 @@
       },
       {
         "status": "declared",
+        "statement": "The same CLI admission lock spans run-ad-hoc URL selection, preparation, freshness, freeze and send. An existing occurrence bypasses URL collection and preparation, retains its original date across retries, and follows the same frozen, accepted and uncertain send rules. No separate durable workflow state is created."
+      },
+      {
+        "status": "declared",
         "statement": "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained."
       }
     ],
@@ -272,7 +297,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 5 adds a shared Ashby disk cache and changes Ashby preview freshness to the 14-day source cache policy. Private schema 2 and retained packet inputs remain unchanged. Schema-one files require explicit migration. Packet IDs, exact Nucleus requests and frozen deliveries remain readable; older binaries cannot use schema two."
+        "statement": "Preparation contract 6 adds URL-selected run-ad-hoc over Cast collection contract 4 and existing Platter records. It retains contract-five Ashby caching and all existing preparation, edition and send meanings. Private schema 2 and retained packet inputs remain unchanged."
       },
       {
         "status": "unspecified",
@@ -286,6 +311,13 @@
         "target": "cast",
         "kind": "data",
         "contract": "cast.discovery.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "URL-selected runs rely on Cast to resolve or collect one supplied public posting into its normal job records.",
+        "target": "cast",
+        "kind": "control",
+        "contract": "cast.discovery.collect"
       },
       {
         "status": "declared",
