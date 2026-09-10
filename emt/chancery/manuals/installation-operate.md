@@ -81,6 +81,8 @@ Unknown counts are not zero. Nucleus restart cannot resume old agent processes.
 Migration accepts only EMT schema one. Existing drained state is copied into
 the database backup and a companion .config.json file. Backups contain
 correspondence. Existing destinations must match and are never overwritten.
+The coordinator stores these backups in EMT's state directory. The backup
+destination must be absolute and separate from the live database and config.
 With no database, migration initializes paused state and reports backup:null.
 
 Direct selector recovery is unsupported for initialized EMT. Use maintained

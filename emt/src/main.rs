@@ -306,8 +306,11 @@ async fn maintenance(root: &Path, operation: MaintenanceOperation) -> Result<Val
 }
 
 fn migrate(root: &Path, backup: &Path) -> Result<Value> {
-    if !backup.is_absolute() || backup.starts_with(root) {
-        return Err(fail("backup must be an absolute path outside EMT state"));
+    if !backup.is_absolute()
+        || backup == root.join("emt.sqlite3")
+        || backup == root.join("config.json")
+    {
+        return Err(fail("backup must be a separate absolute path"));
     }
     let gate = emt::gate(root);
     let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
