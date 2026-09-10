@@ -47,7 +47,7 @@ pub fn lifecycle(
             && context.home.join(".local/bin/cast").exists()
     {
         let executable = context.home.join(".local/bin/cast");
-        let mut arguments: Vec<std::ffi::OsString> = vec!["--json".into()];
+        let mut arguments: Vec<std::ffi::OsString> = Vec::new();
         if let Some(path) = settings.state_dir {
             arguments.extend(["--state-dir".into(), path.into_os_string()]);
         }
