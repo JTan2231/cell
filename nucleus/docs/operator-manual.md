@@ -111,6 +111,10 @@ Each product owns its data and success rules. Nucleus owns execution. A complete
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.
 
+Cast collection stores jobs without a title substring requirement. Configured
+provider queries still limit discovery. Downstream consumers own selection by
+title, seniority, location and other preferences.
+
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,
 logs, and domain recovery. A process exit does not establish product success.

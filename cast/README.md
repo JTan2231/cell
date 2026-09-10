@@ -1,8 +1,7 @@
 # Cast
 
-Cast discovers employers and collects public job postings. It stores jobs whose
-titles contain `engineer`, ignoring case, and exports a consistent snapshot for
-job selection.
+Cast discovers employers, collects public job postings, and exports a consistent
+snapshot for job selection.
 
 ## Example
 

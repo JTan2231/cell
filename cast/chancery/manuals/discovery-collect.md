@@ -26,15 +26,10 @@ extracts company leads and public careers sources, then collects from supported
 employer/ATS sources. It stores companies, jobs and the outcome of each selected
 collection step, including failed, partial, unsupported and deferred steps.
 
-After external collection and before job inserts or updates, Cast requires the
-incoming title to contain `engineer`. Matching ignores ASCII case and uses a
-substring: `Software Engineer` and `Engineering Manager` qualify. A match in
-the description alone does not qualify. The filter applies to discovery and
-careers collection. Company and source records, pagination, collection outcomes
-and request charges are retained even when every job on a page is excluded.
-The filter does not delete existing jobs. An excluded observation that matches
-an existing job identity counts as present for that source scan, but does not
-update the job's fields, revision or observation times, or add job aliases.
+Cast stores incoming jobs without a title substring requirement. This applies
+to discovery and careers collection, including updates to existing jobs.
+Configured provider queries still determine which postings discovery returns.
+Consumers choose jobs by title, seniority, location or other preferences.
 
 Supported ATS boards use separate provider/tenant company identities. Generic
 JSON-LD collection requires the hiring organization's root homepage URL. The
@@ -83,8 +78,8 @@ These values are stored in each job's availability field.
 Each job includes its recorded status and source collection timestamps.
 
 A run result records each selected step's completed, failed or deferred outcome.
-Its `company_observations` counts company drafts returned by discovery,
-including companies whose jobs were excluded. The `jobs` count in status counts
+Its `company_observations` counts company drafts returned by discovery.
+The `jobs` count in status counts
 stored jobs. Read `cast export --json` and source coverage for the
 actual handoff. Downstream products decide job selection and retain their own
 application and notification histories.

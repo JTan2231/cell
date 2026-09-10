@@ -107,7 +107,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Collection stores incoming job fields only when the title contains engineer as an ASCII case-insensitive substring. Reads and exports include all retained jobs, including older records that the filter does not remove. Job counts describe retained records rather than all externally returned postings. Excluded observations of existing jobs preserve source-scan presence without updating job fields or observation times."
+        "statement": "Reads and exports include all retained jobs. Collection applies no title substring requirement. Job counts describe retained records rather than all postings available from external sources. Consumers choose jobs by title, seniority, location or other preferences."
       },
       {
         "status": "declared",
@@ -163,7 +163,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability version 1 and export schema 1 are independent of the Cast package version."
+        "statement": "Read contract version 2 and export schema 1 are independent of the Cast package version. Reads include all retained jobs without a title constraint."
       },
       {
         "status": "unspecified",

@@ -37,13 +37,10 @@ the same name alone does not merge them. ATS sources are owned by their canonica
 provider/tenant identity. A corrected ownership association may change a job's
 `company_id` and revision while preserving its job ID.
 
-Collection stores incoming job fields only when the title contains `engineer`,
-ignoring ASCII case. This substring rule also admits `Engineering Manager`.
-The filter runs after external collection and does not remove older records.
-Reads and exports include all retained jobs; their job counts describe retained
-records, not all postings returned by external sources. An excluded observation
-of an existing job preserves its scan presence without updating its fields or
-observation times.
+Reads and exports include all retained jobs. Collection applies no title
+substring requirement. Job counts describe retained records, not all postings
+available from external sources. Consumers choose jobs by title, seniority,
+location or other preferences.
 
 Job records retain Cast observation dates, source-supplied posting dates and a
 recorded availability status. Collection records retain the latest attempt and

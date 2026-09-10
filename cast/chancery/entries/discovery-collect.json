@@ -1,11 +1,11 @@
 {
   "id": "cast.discovery.collect",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Discover companies and collect current jobs",
-  "summary": "Discover companies and collect public job postings within configured limits. Retain incoming jobs whose titles contain engineer, ignoring case, plus companies, source metadata, collection outcomes and budget usage.",
+  "summary": "Discover companies and collect public job postings within configured limits. Retain jobs, companies, source metadata, collection outcomes and budget usage without a title substring requirement.",
   "use_when": [
     "New employers and postings should be found through configured recurring query families.",
     "Previously discovered employer careers sources should be refreshed with ordinary HTTP."
@@ -82,13 +82,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Collection emits a run result and retains normalized companies, admitted jobs, source health, query coverage and conservative budget usage. The run's company_observations counts company drafts returned by discovery, including companies whose jobs were excluded; status.jobs counts retained job records."
+        "statement": "Collection emits a run result and retains normalized companies, jobs, source health, query coverage and conservative budget usage. The run's company_observations counts company drafts returned by discovery; status.jobs counts retained job records."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "After external collection and before job inserts or updates, discovery and careers ingestion require the incoming title to contain engineer as an ASCII case-insensitive substring. Engineering Manager qualifies; a description-only match does not. Excluded observations do not write job fields or new job aliases. Existing jobs are not deleted, and excluded observations of known job identities still count as present for source scans without updating job revisions or observation times."
+        "statement": "Discovery and careers collection store incoming jobs without a title substring requirement, including updates to existing jobs. Configured provider queries still determine which postings discovery returns. Consumers choose jobs by title, seniority, location or other preferences."
       },
       {
         "status": "declared",
@@ -108,7 +108,7 @@
       },
       {
         "status": "declared",
-        "statement": "Collection stores returned company fields, admitted job fields, source metadata and per-request outcomes. Title filtering preserves company and source records, pagination, collection outcomes and request charges, including pages where all jobs are excluded."
+        "statement": "Collection stores returned company fields, job fields, source metadata and per-request outcomes. Stored pagination, collection outcomes and request charges describe the selected collection work."
       }
     ],
     "access": [
@@ -136,7 +136,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability version 2 adds the engineer title requirement before job persistence. Configuration and export schema versions remain unchanged and separate. Existing jobs are not pruned."
+        "statement": "Collection contract version 3 applies no title substring requirement. Configuration and export schema versions remain unchanged and separate. Previously excluded postings require another source observation before they can be stored."
       },
       {
         "status": "unspecified",

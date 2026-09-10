@@ -256,8 +256,8 @@ fn collected_jobs() -> Vec<JobDraft> {
         "Engineering Manager",
         "Developer",
         "Designer",
-        "",
-        "   ",
+        "Member of Technical Staff",
+        "Product Manager",
     ]
     .into_iter()
     .zip(1..)
@@ -270,7 +270,7 @@ fn collected_jobs() -> Vec<JobDraft> {
 }
 
 #[test]
-fn discovery_filters_job_titles_before_storage_and_keeps_collection_progress() -> Result<()> {
+fn discovery_retains_all_job_titles_and_collection_progress() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let store = Store::init(directory.path())?;
     let config = Config::default();
@@ -294,29 +294,29 @@ fn discovery_filters_job_titles_before_storage_and_keeps_collection_progress() -
     store.settle_request(&request, Some(8))?;
     store.record_discovery(&[company], "discovery:fixture", &coverage)?;
 
-    let excluded = CompanyDraft {
+    let another = CompanyDraft {
         name: "Another employer".into(),
         domain: Some("another.example".into()),
         jobs: vec![JobDraft {
             title: "Designer".into(),
-            url: "not a URL".into(),
+            url: "https://another.example/jobs/9".into(),
             ..job(9)
         }],
         ..CompanyDraft::default()
     };
-    store.ingest_company(&excluded, "discovery:fixture")?;
+    store.ingest_company(&another, "discovery:fixture")?;
     coverage.status = "complete".into();
     coverage.cursor = None;
     coverage.last_complete_at = Some(cast::now());
-    store.record_discovery(&[excluded], "discovery:fixture", &coverage)?;
+    store.record_discovery(&[another], "discovery:fixture", &coverage)?;
     drop(store);
 
     let store = Store::open(directory.path())?;
     let snapshot = store.snapshot()?;
     assert_eq!(snapshot.companies.len(), 2);
     assert_eq!(snapshot.source_health.len(), 1);
-    assert_eq!(snapshot.jobs.len(), 4);
-    for expected in collected_jobs().iter().take(4) {
+    assert_eq!(snapshot.jobs.len(), collected_jobs().len() + 1);
+    for expected in &collected_jobs() {
         assert!(snapshot.jobs.iter().any(|job| {
             job.title == expected.title
                 && job.source_key == expected.source_key
@@ -334,7 +334,7 @@ fn discovery_filters_job_titles_before_storage_and_keeps_collection_progress() -
 }
 
 #[test]
-fn careers_collection_filters_job_titles_before_storage() -> Result<()> {
+fn careers_collection_retains_all_job_titles() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let store = Store::init(directory.path())?;
     let source = store.add_manual_source("https://employer.example/careers", None)?;
@@ -351,8 +351,8 @@ fn careers_collection_filters_job_titles_before_storage() -> Result<()> {
     drop(store);
 
     let snapshot = Store::open(directory.path())?.snapshot()?;
-    assert_eq!(snapshot.jobs.len(), 4);
-    for expected in collected_jobs().iter().take(4) {
+    assert_eq!(snapshot.jobs.len(), collected_jobs().len());
+    for expected in &collected_jobs() {
         assert!(snapshot.jobs.iter().any(|job| {
             job.title == expected.title
                 && job.source_key == expected.source_key
@@ -365,7 +365,7 @@ fn careers_collection_filters_job_titles_before_storage() -> Result<()> {
 }
 
 #[test]
-fn excluded_title_changes_preserve_jobs_and_scan_presence_across_restart() -> Result<()> {
+fn title_changes_update_jobs_and_preserve_scan_presence_across_restart() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let store = Store::init(directory.path())?;
     let source = store.add_manual_source("https://employer.example/careers", None)?;
@@ -418,9 +418,25 @@ fn excluded_title_changes_preserve_jobs_and_scan_presence_across_restart() -> Re
         },
         86400,
     )?;
-    assert_eq!(
-        serde_json::to_value(store.snapshot()?.jobs)?,
-        serde_json::to_value(before)?
+    let after = store.snapshot()?.jobs;
+    assert_eq!(after.len(), 3);
+    for (key, title) in [("fixture:1", "Developer"), ("fixture:2", "Designer")] {
+        let original = before
+            .iter()
+            .find(|job| job.source_key == key)
+            .ok_or("original job is missing")?;
+        let updated = after
+            .iter()
+            .find(|job| job.id == original.id)
+            .ok_or("updated job lost its identity")?;
+        assert_eq!(updated.title, title);
+        assert_eq!(updated.revision, original.revision + 1);
+    }
+    assert!(after.iter().any(|job| job.title == "Product Manager"));
+    assert!(
+        after
+            .iter()
+            .all(|job| { job.availability == "listed" && job.missing_complete_snapshots == 0 })
     );
     assert_eq!(store.source(&source.id)?.status, "complete");
     assert!(store.source(&source.id)?.cursor.is_none());
