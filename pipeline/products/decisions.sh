@@ -26,7 +26,8 @@ sh|decisions/packaging/macos/test-frontend.sh
 sh|decisions/packaging/macos/test-observer-runner.sh
 sh|decisions/packaging/macos/krisis-observer'
 CI_RUN_CHECKS='always|decisions/packaging/macos/test-frontend.sh
-always|decisions/packaging/macos/test-observer-runner.sh'
+always|decisions/packaging/macos/test-observer-runner.sh
+always|decisions/scripts/test_replay_hooks.py'
 CI_PLIST_CHECKS='always|convert|decisions/packaging/macos/hooks.json'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 CI_EXTRA_BEFORE_RUST=pipeline/extras/decisions-catalog.sh

@@ -4,5 +4,24 @@
   "application": "Iatreion",
   "dependencies": [],
   "description": "Iatreion installation through the shared stateless Rust installation library.",
-  "adapter_binary": "iatreion-install"
+  "adapter_binary": "iatreion-install",
+  "companions": [
+    "annals",
+    "cast",
+    "chancery",
+    "clockwork",
+    "conatus",
+    "conversations",
+    "crm",
+    "email",
+    "emt",
+    "krisis",
+    "mentor",
+    "nucleus",
+    "paperboy",
+    "platter",
+    "semantics",
+    "todo",
+    "usher"
+  ]
 }

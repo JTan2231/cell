@@ -4,5 +4,8 @@
   "application": "Usher",
   "dependencies": [],
   "description": "Usher installation through the shared Rust installation library.",
-  "adapter_binary": "usher-install"
+  "adapter_binary": "usher-install",
+  "companions": [
+    "iatreion"
+  ]
 }

@@ -69,6 +69,9 @@ the next Unix second.
 `krisis observe ingest` reads one Codex Stop-hook JSON object from standard
 input and durably stores only its session/turn correlation.
 
+Use the source-tree [historical hook script](historical-hooks.md) to prepare
+a dated preview and separately replay its correlations through this command.
+
 `krisis observe process` handles one observation or pending document under the
 serial worker lock. It verifies the Annals target for that work. The first
 processing error marks the observation `failed`, retains the error, and removes
