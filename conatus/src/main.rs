@@ -227,10 +227,11 @@ fn main() -> ExitCode {
         )],
         false,
     ) {
+        chancery_usage::observe("conatus", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
-    match execute(Cli::parse()) {
+    match execute(chancery_usage::cli::parse::<Cli>("conatus", "")) {
         Ok(data) => {
             println!("{}", json!({"ok":true,"data":data}));
             ExitCode::SUCCESS

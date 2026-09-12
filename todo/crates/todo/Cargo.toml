@@ -5,6 +5,7 @@ version = "0.7.1"
 edition.workspace = true
 
 [dependencies]
+chancery-usage.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clockwork = { path = "../../../clockwork/crates/clockwork" }

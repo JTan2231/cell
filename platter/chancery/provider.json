@@ -27,7 +27,8 @@
     ],
     "shared_privacy_and_retention": [
       "Original resume, captured CRM entries, posting text, model inputs/results, evidence references, PDFs, editions and send outcomes are private retained data. Nucleus/model processing receives career material; explicit send discloses the brief and resume attachments to Email, Resend and Gmail.",
-      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
+      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Preparation contract 6 adds URL-selected delivery through Cast collection contract 5. Installation contract 4 also requires Clockwork schedule contract 3 for schema-two halt policy; private schema 2 remains unchanged. Explicit one-way import preserves predecessor IDs, exact requests and frozen deliveries. Old binaries cannot read schema two. Historical brief schemas remain supported."

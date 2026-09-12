@@ -12,7 +12,7 @@ The default registry is
 `~/Library/Application Support/Chancery/providers`. `--registry` takes
 precedence over `CHANCERY_REGISTRY`.
 
-Every command is read-only. Chancery does not test runtime readiness, execute
+Catalog and report computation preserve their source records. CLI dispatch separately attempts a command-usage append. Chancery does not test runtime readiness, execute
 a documented interface, call a model, or access the network. Usage errors return
 exit code 2. Unreadable state, a missing entry, or an invalid doctor or validation
 report returns 1. An unresolved dossier also returns 1 and preserves its full

@@ -25,7 +25,8 @@
       "Interfaces are local current-user CLI operations over explicitly selected private state and pinned Annals libraries. Each operation states its own effects; read access is not mutation or disclosure authority."
     ],
     "shared_privacy_and_retention": [
-      "Conatus state retains source wording, complete documents, references and handoff documents. Annals and Nucleus can retain complete sources and model context during interpretation. No automatic pruning, remote sharing or deletion interface is supplied."
+      "Conatus state retains source wording, complete documents, references and handoff documents. Annals and Nucleus can retain complete sources and model context during interpretation. No automatic pruning, remote sharing or deletion interface is supplied.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Conatus provider release and entry versions are distinct from its state schema, Annals schemas and Nucleus/Clockwork contracts. No general deprecation or compatibility window is promised."

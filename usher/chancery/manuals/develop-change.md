@@ -33,3 +33,11 @@ Run `./ci.sh` and inspect the candidate's report. Usher owns its
 release and product installation policy. A release script commits, tags, and
 pushes; deployment changes installed selectors. Neither is a side effect of
 development. No other system operation is authorized by this contract.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

@@ -287,10 +287,11 @@ fn main() {
         ],
         false,
     ) {
+        chancery_usage::observe("decisions", "status-snapshot");
         println!("{snapshot}");
         return;
     }
-    if let Err(error) = run(Cli::parse()) {
+    if let Err(error) = run(chancery_usage::cli::parse::<Cli>("decisions", "")) {
         if matches!(error.code, "quota_deferred" | "quota_exhausted") {
             println!("{}", serde_json::json!({"outcome": error.code}));
             return;

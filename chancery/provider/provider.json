@@ -8,7 +8,8 @@
   "promise_scope": {
     "authoritative_for": [
       "Chancery owns structural validation of installed provider bundles, complete installed catalog presentation, exact-ID promise resolution, and documentation-contract compatibility reporting.",
-      "Each invocation canonicalizes provider selectors once and builds one registry view in memory. It identifies the exact provider, entry, and manual bytes used."
+      "Each invocation canonicalizes provider selectors once and builds one registry view in memory. It identifies the exact provider, entry, and manual bytes used.",
+      "Chancery owns system and command registration, the append-only local usage journal, its Rust writer API, and recorded-invocation reports."
     ],
     "not_authoritative_for": [
       "Owning products remain authoritative for capability semantics, effects, current runtime behavior, live readiness, authorization, and domain success.",
@@ -16,7 +17,7 @@
     ],
     "inventory": {
       "covers": [
-        "All supported public Chancery CLI outcomes for installed catalog discovery, exact contract reading, exact-ID promise resolution, registry validation, and provider publication in this release."
+        "All supported public Chancery CLI outcomes for installed catalog discovery, exact contract reading, exact-ID promise resolution, registry validation, provider publication, and command-usage registration, recording and reports in this release."
       ],
       "completeness": "complete",
       "excludes": [
@@ -24,12 +25,13 @@
       ]
     },
     "shared_access_and_trust": [
-      "Chancery reads only the selected local registry and explicitly indexed regular files beneath fixed provider bundle roots.",
+      "Catalog discovery reads the selected installed registry. Usage APIs read or append to the current user's private Chancery journal through the owning Rust library.",
       "Catalog presence and resolution do not grant access to or authorize any represented interface."
     ],
     "shared_privacy_and_retention": [
-      "Chancery processes documentation locally in memory. It retains no registry, query, dossier, or runtime state.",
-      "Provider bundles must not contain credentials, secrets, private source material, or transient runtime output."
+      "Catalogs and dossiers are calculated in memory. Chancery separately retains registered system/command identities and append-only invocation IDs, Unix-second observation times and optional Codex thread IDs; it retains no command arguments or output.",
+      "Provider bundles must not contain credentials, secrets, private source material, or transient runtime output.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider schema version identifies bundle shape. Provider release identifies the owning release. Entry contract version identifies documented semantic compatibility.",
@@ -37,12 +39,13 @@
     ],
     "operational_limits": [
       "Resolution is bounded by the installed registry, explicitly indexed files, configured file-size and provider-count limits, and one deterministic transitive dependency walk.",
-      "Chancery has no daemon, database, network access, model integration, runtime readiness probe, or execution path for represented interfaces."
+      "Chancery has no daemon, network access, model integration, runtime readiness probe, or execution path for represented interfaces. Usage recording has a 100 ms SQLite busy timeout and no automatic retry."
     ]
   },
   "entries": [
     "entries/directory-discover.json",
     "entries/capability-resolve.json",
-    "entries/provider-publish.json"
+    "entries/provider-publish.json",
+    "entries/usage-record.json"
   ]
 }

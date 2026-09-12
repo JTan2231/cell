@@ -7,10 +7,9 @@ mod error;
 mod model;
 mod registry;
 mod render;
+mod usage;
 
 use std::ffi::OsStr;
-
-use clap::Parser as _;
 
 use crate::cli::Cli;
 
@@ -18,7 +17,7 @@ use crate::cli::Cli;
 #[must_use]
 pub fn run_cli() -> i32 {
     let json_requested = std::env::args_os().any(|argument| argument == OsStr::new("--json"));
-    let cli = match Cli::try_parse() {
+    let cli = match chancery_usage::cli::try_parse::<Cli>("chancery", "") {
         Ok(cli) => cli,
         Err(error) => {
             if matches!(

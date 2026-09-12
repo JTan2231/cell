@@ -89,7 +89,7 @@ integrity manifest. The product installer owns exactly its selector under:
 
 The selector should follow the product's `current` release and roll back with
 it. Chancery upgrades preserve the entire providers directory. Product runtime
-code must not call Chancery, and product installation must remain useful if the
+code must not invoke the Chancery catalog as an execution dependency, and product installation must remain useful if the
 Chancery binary is absent.
 
 Test fresh install, identical redeploy, upgrade, failed upgrade, rollback,
@@ -116,3 +116,11 @@ Confirm that the title and summary distinguish the entry in the catalog.
 render provider scope, normalized facets, reliance gaps, exact basis, and
 dependency closure. No Chancery query may execute a documented command.
 Actual invocation still uses the product's readiness and domain-success rules.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

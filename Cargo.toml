@@ -13,6 +13,7 @@ members = [
     "annals/crates/annals-usage",
     "todo/crates/todo",
     "chancery/crates/chancery",
+    "chancery/crates/chancery-usage",
     "email/crates/email",
     "conversations/crates/conversations",
     "decisions/crates/decisions",
@@ -43,6 +44,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [workspace.dependencies]
+chancery-usage = { path = "chancery/crates/chancery-usage" }
 cell-install = { path = "deployment/crates/cell-install" }
 cell-maintenance = { path = "deployment/crates/cell-maintenance" }
 iatreion-api = { path = "iatreion/crates/iatreion-api" }

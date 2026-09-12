@@ -117,6 +117,7 @@ async fn main() {
         )],
         false,
     ) {
+        chancery_usage::observe("platter", "status-snapshot");
         println!("{snapshot}");
         return;
     }
@@ -139,7 +140,7 @@ async fn main() {
 
 #[allow(clippy::too_many_lines)] // One serial dispatch owns admission and the runner lock.
 async fn run() -> Result<()> {
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("platter", "");
     anyhow::ensure!(
         cli.stop_after_seconds.is_none()
             || matches!(

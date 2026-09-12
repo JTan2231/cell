@@ -109,10 +109,11 @@ async fn main() -> ExitCode {
         )],
         false,
     ) {
+        chancery_usage::observe("emt", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("emt", "");
     let result = run(cli.command).await;
     let success = result.is_ok();
     let value = match result {

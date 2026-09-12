@@ -248,6 +248,7 @@ fn main() -> ExitCode {
         "conversations/history",
         "conversations.history.explore",
     ) {
+        chancery_usage::observe("conversations", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
@@ -262,7 +263,7 @@ fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)] // Keep the small command dispatcher in one readable match.
 fn run() -> Result<(), Box<dyn StdError>> {
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("conversations", "");
     let mut config = ClientConfig {
         codex_path: cli.codex,
         stderr_policy: cli.app_server_stderr.into(),

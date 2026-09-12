@@ -31,7 +31,8 @@
     "shared_privacy_and_retention": [
       "The product keeps no answer/critique archive. Pending content is cleared on accepted response submission or when a worker observes its 24-hour expiry. Ordinary terminal message metadata is eligible for cleanup after 35 days; assignment/corpus records and unresolved cancellation correlation remain.",
       "Nucleus, Resend and the inbox provider retain independent copies. Source and Chancery bundles contain authored problems and rubric, not user answers, critiques or credentials. This is not a zero-retention promise.",
-      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
+      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Product release 0.1.0, private database schema 1, corpus schema 1, grading input mentor.critique-input.v1, and these entry contract versions are distinct identities. Unsupported state, inputs or provider capabilities fail explicitly.",

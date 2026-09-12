@@ -22,6 +22,7 @@ use crate::render::{CommandOutput, terminal_text};
 
 pub(crate) fn run(cli: &Cli) -> Result<CommandOutput, AppError> {
     match &cli.command {
+        Command::Usage(command) => crate::usage::run(command),
         Command::Validate(args) => Ok(validate_bundle(&args.bundle)),
         Command::List(args) => {
             let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;

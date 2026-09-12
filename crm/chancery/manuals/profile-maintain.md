@@ -88,3 +88,11 @@ Profile new and update return `profile_receipt` with ID, title and `updated_at`.
 List returns these compact entries with `has_more`; show returns exact Markdown.
 The default limit is 20. Use `--limit` with a positive integer to change it.
 The `ok`/`data` envelope and schema-two profile content retain their meanings.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

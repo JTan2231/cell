@@ -13,6 +13,7 @@ name = "krisis-install"
 path = "src/bin/krisis-install.rs"
 
 [dependencies]
+chancery-usage.workspace = true
 cell-maintenance.workspace = true
 cell-install.workspace = true
 clockwork = { path = "../../../clockwork/crates/clockwork" }

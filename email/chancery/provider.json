@@ -38,7 +38,8 @@
       "A real send discloses the exact subject, body, and any attachment filenames and bytes to Resend and Gmail and discloses any caller-supplied idempotency key to Resend.",
       "Email retains no subject, body, attachments, idempotency key, queue, or delivery history in local product state.",
       "Receiving reads expose account metadata or full email content to the caller through stdout or typed values. Email holds them only in memory for one command. The caller and Resend have separate retention policies. Optional outgoing reply metadata is disclosed to Resend and Gmail.",
-      "Explicit setup retains a private local credential and receiving-domain selection; supplied credential bytes never enter receipts."
+      "Explicit setup retains a private local credential and receiving-domain selection; supplied credential bytes never enter receipts.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies the installed bundle, while entry contract version identifies the supported send semantics.",

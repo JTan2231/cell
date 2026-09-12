@@ -1,6 +1,6 @@
 # Architecture
 
-Chancery reads installed provider bundles without retaining state. It lists
+Chancery reads installed provider bundles without retaining catalog state. Its separate usage journal records command invocations. It lists
 installed capabilities and operations and presents their contracts. For one
 selected entry, it assembles provider scope, normalized claims, transitive
 dependency contracts, exact source references, and unresolved gaps into a
@@ -17,7 +17,7 @@ Codex -- list/show --> Chancery -- resolve exact ID --> promise dossier
 Codex -- then separately invokes ---------------------> product or UI
 ```
 
-Product runtimes never depend on Chancery. Chancery never submits a Nucleus
+Product CLIs import Chancery's usage library for best-effort invocation recording. Catalog discovery is not an execution dependency. Chancery never submits a Nucleus
 job, calls a model, opens a network connection, executes a documented
 interface, grants authority, or treats runtime readiness as established.
 
@@ -46,7 +46,7 @@ validate`. Packaging copies the unchanged bundle into the release and publishes
 one atomic selector in the Chancery registry. These actions add no runtime
 dependency on Chancery.
 
-At query time Chancery reads provider files only. It does not call Nucleus,
+Catalog queries read provider files. CLI dispatch separately attempts a usage-journal append. It does not call Nucleus,
 Todo, Annals, Codex, a skill, a browser, or computer use. After reading
 a contract, the interactive caller may use an interface named by the contract;
 that is a separate action with its own authorization and failure semantics.

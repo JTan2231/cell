@@ -25,7 +25,8 @@
       "Repository reads and administrative writes use local-user interfaces. The worker receives only published upstream data. It grants Nucleus no project workspace, shell, or web access. Clockwork receives an exact release-local runner definition and retains no semantic bodies."
     ],
     "shared_privacy_and_retention": [
-      "Semantics retains private normalized meanings and provenance but no raw transcript, diff, command, prompt, credential, or project-file body."
+      "Semantics retains private normalized meanings and provenance but no raw transcript, diff, command, prompt, credential, or project-file body.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies the bundle bytes. Entry contracts, SQLite schema, immutable toolsets, and semantic revisions have independent versions."

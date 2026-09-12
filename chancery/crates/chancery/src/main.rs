@@ -5,6 +5,7 @@ fn main() {
         "chancery/catalog",
         "chancery.directory.discover",
     ) {
+        chancery_usage::observe("chancery", "status-snapshot");
         println!("{snapshot}");
         return;
     }

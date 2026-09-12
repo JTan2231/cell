@@ -14,6 +14,7 @@ fn main() {
         ],
         false,
     ) {
+        chancery_usage::observe("todo", "status-snapshot");
         println!("{snapshot}");
         return;
     }

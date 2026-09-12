@@ -8,7 +8,7 @@
   "promise_scope": {
     "authoritative_for": [
       "Annals owns its named-library catalog, authoritative retained works and source deliveries, stored library instruction revisions, producer-accepted decision documents and their bounded feed, the revisioned corpus of concepts, parent edges and evidence, examinations, reconciliations, commits, inbox jobs and retries, and installed library/spool state.",
-      "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library’s stored instructions; the default frame uses broader/narrower scope."
+      "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library\u2019s stored instructions; the default frame uses broader/narrower scope."
     ],
     "not_authoritative_for": [
       "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output. Clockwork owns scheduled activation definitions, bindings, execution history, scheduling failure gates and notifications; Annals owns its failure-policy configuration. Annals owns inbox outcomes. Annals Usage owns its separately versioned consumption projection."
@@ -28,7 +28,8 @@
     ],
     "shared_privacy_and_retention": [
       "Annals catalogs, libraries, instruction histories, spools, backups, logs, and Nucleus requests may retain private paths, complete source material, exact evidence, and model context.",
-      "Model entries invoke Nucleus under their entry-specific disclosure rules. Configured scheduling halts notify the fixed personal recipient through Clockwork and Email using bounded activation metadata. Clockwork retains activation and bounded failure-incident metadata and opens Annals-owned logs without ingesting their bodies."
+      "Model entries invoke Nucleus under their entry-specific disclosure rules. Configured scheduling halts notify the fixed personal recipient through Clockwork and Email using bounded activation metadata. Clockwork retains activation and bounded failure-incident metadata and opens Annals-owned logs without ingesting their bodies.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release, entry contract version, Annals library schema, Nucleus protocol, and installed package generation are distinct compatibility identities.",

@@ -89,3 +89,11 @@ eligibility, recorded availability and `last_seen_at`. Search adds
 Status schema 2 returns counts, budgets, usage, the last run and collection
 summaries for sources and queries. Show and export return full records, source
 metadata and collection outcomes. The export snapshot still uses schema 1.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

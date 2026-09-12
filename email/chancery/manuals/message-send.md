@@ -89,9 +89,8 @@ request and idempotency key. Email retains no queued work to resume. After an
 ambiguous transport failure, inspect Resend before explicitly sending again
 when a duplicate would be harmful.
 
-The Email runtime does not call Chancery. Chancery provides installed,
-version-matched discovery documentation only and does not authorize or execute
-the send.
+Email uses the shared Chancery usage writer for command metadata. Catalog
+discovery remains separate and does not authorize or execute a send.
 
 ## Output selection
 
@@ -174,3 +173,11 @@ positionals to avoid a collision, for example `email -- receive list`.
 Email selects its explicitly configured private credential first, then the
 existing `RESEND_API_KEY` environment fallback. Local setup and domain discovery
 use the separate [account operation](account-operate.md).
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

@@ -28,7 +28,8 @@
     ],
     "shared_privacy_and_retention": [
       "Recognition reports expose product IDs, aliases, semantic project IDs, provider IDs, relative paths, and bounded diagnostics, never document bodies. Recognition retains no state or report and makes no network or model call.",
-      "Installation retains immutable executable and documentation releases with integrity manifests. It creates no domain database or service state, retains no credentials, and sends no network or model request."
+      "Installation retains immutable executable and documentation releases with integrity manifests. It creates no domain database or service state, retains no credentials, and sends no network or model request.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release, capability contract version, and JSON output schema are separate. Recognition rule changes require explicit product contract review.",

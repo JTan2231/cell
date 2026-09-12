@@ -80,7 +80,7 @@ fn run(cli: Cli) -> Result<u8, String> {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("usher", "");
     let json = cli.json;
     match run(cli) {
         Ok(code) => ExitCode::from(code),

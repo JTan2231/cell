@@ -124,3 +124,11 @@ reconciliation and model-run provenance, instruction revisions, and complete cor
 them private. Application, shake confirmation, revert, migration, installed
 fresh-state replacement, and backup placement each require authority
 appropriate to their effects.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

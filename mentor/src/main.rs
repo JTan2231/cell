@@ -104,10 +104,11 @@ async fn main() -> ExitCode {
         )],
         false,
     ) {
+        chancery_usage::observe("mentor", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("mentor", "");
     match run(cli.command).await {
         Ok(data) => {
             let reply = json!({"ok":true,"data":data});

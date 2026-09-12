@@ -5,6 +5,7 @@ fn main() {
         "email/transport",
         "email.message.send",
     ) {
+        chancery_usage::observe("email", "status-snapshot");
         println!("{snapshot}");
         return;
     }

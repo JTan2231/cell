@@ -25,7 +25,8 @@
       "Cast is a local CLI for the current user. It stores its database in the selected private state directory and reads provider credentials from the environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and the documented environment variables."
     ],
     "shared_privacy_and_retention": [
-      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs."
+      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Cast provider release, capability contract version, database schema and export schema are distinct. Collection contract 5 separates exact-job observation from ordinary collection. Installation contract 3 adds automatic_excluded_ats, defaulting to Ashby. Database and export schema numbers are unchanged; older programs may reject the new configuration field. Installed bundles change only through a matching product release."

@@ -6,7 +6,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::api::{Data, Failure, ProfileSummary, RevisionSummary, Success, UpdateData, UpdateView};
-use clap::Parser as _;
 use serde_json::{Value, json};
 
 use crate::cli::{
@@ -52,7 +51,7 @@ impl From<Error> for CommandFailure {
 type CommandResult<T> = std::result::Result<T, CommandFailure>;
 
 pub fn main_entry() -> i32 {
-    let cli = match Cli::try_parse() {
+    let cli = match chancery_usage::cli::try_parse::<Cli>("crm", "") {
         Ok(cli) => cli,
         Err(error) => {
             let exit_code = error.exit_code();

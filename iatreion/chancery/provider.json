@@ -25,7 +25,8 @@
       "Iatreion reads one selected checkout and directly invokes declared selector basenames under one selected installed command directory with fixed status-snapshot arguments."
     ],
     "shared_privacy_and_retention": [
-      "Reports contain bounded operational metadata and no probe stderr, logs, prompts, credentials, email bodies, or retained document bodies. Iatreion retains no report."
+      "Reports contain bounded operational metadata and no probe stderr, logs, prompts, credentials, email bodies, or retained document bodies. Iatreion retains no report.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Product release, status schema, report schema, and capability contract version evolve independently. Unknown versions remain visible and are not interpreted."

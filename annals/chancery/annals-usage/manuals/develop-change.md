@@ -68,3 +68,11 @@ change does not authorize `annals/release.sh`, which commits, tags, and pushes,
 or the installed deployment. Tests and live diagnostics may expose private
 delivery attribution, output metadata, and account activity; keep them inside
 the local security boundary.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

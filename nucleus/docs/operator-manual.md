@@ -54,6 +54,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Usher | Declared Cell membership | [Usher](/Users/joey/rust/cell/usher/README.md) |
 | Clockwork | Scheduled process activation and runtime history | [Clockwork](/Users/joey/rust/cell/clockwork/README.md) |
 | Nucleus | Constrained agent execution, authentication, and job history | [Nucleus](/Users/joey/rust/cell/nucleus/README.md) |
+| Chancery Usage | Registered systems/commands and append-only observed command invocations | [Usage journal](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) |
 | Annals Usage | Live Annals-attributed consumption and account allowance | [Usage reporting](/Users/joey/rust/cell/annals/docs/telemetry.md) |
 
 ## Topology and authority
@@ -78,6 +79,13 @@ Krisis requires nonblank user text in the selected exchange to identify user
 decisions. Empty assistant text and earlier empty turns remain valid context.
 Krisis and Paperboy embed Conversations, so normalization changes require
 rebuilding and deploying those consumers as well as the standalone CLI.
+
+On macOS, Conversations defaults to the ChatGPT app's bundled Codex at
+`/Applications/ChatGPT.app/Contents/Resources/codex`. The CLI `--codex` option,
+`CONVERSATIONS_CODEX`, and explicit library configuration can override that
+selection. Consumer pins remain explicit. The app owns bundled Codex updates;
+Conversations fails if its selected executable cannot start. Rebuild embedded
+consumers to apply a changed library default.
 
 Krisis uses `krisis/decision-document/1` for its sole active observer production
 path. It freezes full normalized conversation through a completed exchange,
@@ -640,3 +648,27 @@ clients tolerate a daemon without the optional quota health fields; EMT also
 tolerates the old quota endpoint's 404. Use coordinated maintenance for cutover.
 Keep the policy, state and EMT notice files with their private product backups.
 No rollout, quota reset, or clearance of existing service halts is implicit.
+
+## Shared command usage
+
+Product CLI dispatches import `chancery-usage` and attempt one append to the
+private Chancery journal. Each row records system and command identity, optional
+`CODEX_THREAD_ID`, local insertion ID and whole Unix-second observation time.
+The row observes handler entry; it establishes neither completion nor domain
+success. Arguments, outputs, token counts and execution trees are absent.
+
+After installing or updating a program, run its `--register-usage` mode. This
+separate step initializes only an empty Chancery journal and idempotently adds
+the full declared command inventory. Run both Annals programs. Source presence,
+binary selection and catalog publication alone do not register commands.
+
+Recording errors produce bounded diagnostics and preserve product results.
+No automatic retry or migration runs. A missing thread remains unassociated;
+services use the explicit request-scoped API rather than their startup
+environment. Direct internal library calls are not automatically observed.
+Email and Cast frontends preserve thread correlation through credential scrubbing.
+CI disables dispatch recording; journal tests select isolated databases explicitly.
+
+Use `chancery usage commands` or `chancery usage events` to read recorded
+activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,
+registration, privacy, compatibility and backup behavior.

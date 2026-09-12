@@ -33,6 +33,9 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Register identities and inspect recorded command invocations.
+    #[command(subcommand)]
+    Usage(UsageCommand),
     /// List installed contracts.
     List(ListArgs),
     /// Show one complete installed contract.
@@ -43,6 +46,47 @@ pub(crate) enum Command {
     Doctor,
     /// Validate one standalone provider bundle.
     Validate(ValidateArgs),
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum UsageCommand {
+    /// Initialize the journal and register Chancery's commands.
+    Init,
+    /// Add a system and its command IDs. Existing identities remain unchanged.
+    Register {
+        system: String,
+        #[arg(required = true)]
+        commands: Vec<String>,
+    },
+    /// List registered systems.
+    Systems,
+    /// Count recorded uses for every registered command, including zero uses.
+    Commands(UsageFilter),
+    /// Read a bounded page of recorded invocations in insertion order.
+    Events {
+        #[command(flatten)]
+        filter: UsageFilter,
+        #[arg(long, default_value_t = 0)]
+        after: i64,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct UsageFilter {
+    #[arg(long)]
+    pub(crate) system: Option<String>,
+    #[arg(long, conflicts_with = "unattributed")]
+    pub(crate) thread: Option<String>,
+    #[arg(long)]
+    pub(crate) unattributed: bool,
+    /// Inclusive start, in Unix seconds.
+    #[arg(long)]
+    pub(crate) since: Option<i64>,
+    /// Exclusive end, in Unix seconds.
+    #[arg(long)]
+    pub(crate) until: Option<i64>,
 }
 
 #[derive(Debug, Args)]

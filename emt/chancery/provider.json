@@ -25,7 +25,8 @@
       "Current-user private service. Explicit activation authorizes incident diagnosis and mail. Recognized replies authorize one-off interventions; sender verification is deferred. Agents use local execution and the configured read-write workspace."
     ],
     "shared_privacy_and_retention": [
-      "Retains incidents and correspondence without automatic deletion. Job IDs point to Nucleus activity; no operation ledger or tool-output mirror. Providers retain separate copies."
+      "Retains incidents and correspondence without automatic deletion. Job IDs point to Nucleus activity; no operation ledger or tool-output mirror. Providers retain separate copies.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "EMT release and schema one are independent of provider contracts. Exact pending requests and frozen emails survive restarts. Unsupported schema fails. Installation does not activate work."

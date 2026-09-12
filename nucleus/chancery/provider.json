@@ -29,7 +29,8 @@
     ],
     "shared_privacy_and_retention": [
       "Nucleus private state may contain complete prompts, tool arguments and results, source content, exact harness output, terminal diagnostics, and authentication material.",
-      "Nucleus promises no automatic pruning policy for retained job or output records; provider documentation must contain no credentials, private runtime records, or requester source bodies."
+      "Nucleus promises no automatic pruning policy for retained job or output records; provider documentation must contain no credentials, private runtime records, or requester source bodies.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release, entry contract, invocation protocol, store schema, adapter, harness compatibility, and immutable schema or toolset identity have independent compatibility rules.",

@@ -11,6 +11,7 @@ name = "nucleus"
 path = "src/main.rs"
 
 [dependencies]
+chancery-usage.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clap.workspace = true

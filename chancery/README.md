@@ -26,6 +26,8 @@ From the Cell root:
 
 ## Further documentation
 
+- [Command usage journal and API](docs/usage.md)
+
 - [Commands and output](docs/cli.md)
 - [Provider bundle format](docs/manifest.md)
 - [Publish a provider](provider/manuals/provider-publish.md)

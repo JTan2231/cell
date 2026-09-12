@@ -38,3 +38,11 @@ Subsequent update can supply them to Annals and its configured Nucleus model
 integration. Capture does not authorize publication, direct Annals edits,
 installation, or schedule activation. No maximum source size, storage capacity,
 or cross-release compatibility window is promised.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

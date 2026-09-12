@@ -60,7 +60,7 @@ fn default_command_dir() -> Result<PathBuf, String> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("iatreion", "");
     let (root, product, unit, json) = match cli.command {
         Command::Report(args) => (args.root, args.product, None, args.json),
         Command::Show(args) => (args.root, None, Some(args.unit), args.json),

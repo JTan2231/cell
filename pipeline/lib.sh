@@ -4,7 +4,7 @@
 # sourced by the CI, release, generator, and self-test entry points.
 
 PIPELINE_EXPECTED_PRODUCT_COUNT=18
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=66
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=67
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do

@@ -10,7 +10,8 @@ RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1
 DEPLOY_CONFLICT_KEYS='global'
 CARGO_MANIFEST=Cargo.toml
-CARGO_PACKAGES=chancery
+CARGO_PACKAGES='chancery
+chancery-usage'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
@@ -21,4 +22,4 @@ RELEASE_UNITS='chancery|Chancery|package|chancery/crates/chancery/Cargo.toml|cha
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='chancery|target/release/chancery|chancery
 chancery|target/release/chancery-install|chancery-install'
-PROVIDERS='chancery|chancery|chancery/provider|3'
+PROVIDERS='chancery|chancery|chancery/provider|4'

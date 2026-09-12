@@ -14,6 +14,7 @@ fn emit_iatreion_snapshot() -> bool {
         "cast/discovery",
         "cast.discovery.collect",
     ) {
+        chancery_usage::observe("cast", "status-snapshot");
         println!("{snapshot}");
         true
     } else {
@@ -156,7 +157,7 @@ async fn main() {
     if emit_iatreion_snapshot() {
         return;
     }
-    if let Err(error) = execute(Cli::parse()).await {
+    if let Err(error) = execute(chancery_usage::cli::parse::<Cli>("cast", "")).await {
         eprintln!("cast: {error}");
         std::process::exit(1);
     }

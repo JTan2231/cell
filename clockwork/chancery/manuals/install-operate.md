@@ -154,3 +154,11 @@ Rollback across schema two requires the matching schema-one backup, sidecars,
 Clockwork/product releases, prior definitions and generated plists, plus full
 quiescence. Retain the failed store and newer incident evidence. A pre-halt
 backup must not erase a later halt or authorize resumed work.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

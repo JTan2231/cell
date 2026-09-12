@@ -1,0 +1,143 @@
+{
+  "id": "chancery.usage.record",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Record and inspect Cell command usage",
+  "summary": "Register systems and commands, append invocation observations through the shared Rust API, and report recorded activity by system, command, thread and time.",
+  "use_when": [
+    "Registering command identities during installation, recording a product command boundary, or inspecting recorded usage."
+  ],
+  "do_not_use_when": [
+    "The requested result is token accounting, command output, domain success or an inferred execution tree."
+  ],
+  "outcome": "An append-only record of observed command invocations or a scoped report of those records.",
+  "effects": [
+    "Explicit registration initializes only an empty Chancery usage journal and inserts system/command identities.",
+    "Recording appends one observation for a registered command; reports select existing rows. CLI report dispatch can append its own observation."
+  ],
+  "authority": [
+    "Chancery owns the journal, registration and reporting interpretation. Each product owns instrumentation and domain success."
+  ],
+  "success": [
+    "Registration is retained or the selected usage insert commits. Reporting returns selected recorded observations and explicit zero-use commands; none establishes product success or exhaustive coverage."
+  ],
+  "failure_and_recovery": [
+    "Recording returns an error after bounded SQLite contention; the observe adapter emits a bounded diagnostic and preserves the product command result.",
+    "No automatic append retry, migration, update, delete or pruning. Preserve compatible private backups and database-local cursor scope."
+  ],
+  "privacy": [
+    "Retains only opaque system, command and optional Codex thread identities, invocation IDs and observation times in a private current-user database. No arguments, credentials, output, model context or network disclosure."
+  ],
+  "interfaces": [
+    {
+      "label": "Initialize and register Chancery",
+      "invocation": "chancery usage init"
+    },
+    {
+      "label": "Register a product inventory",
+      "invocation": "PROGRAM --register-usage"
+    },
+    {
+      "label": "Report recorded invocations",
+      "invocation": "chancery usage commands [--system SYSTEM] [--thread THREAD] [--since UNIX_SECONDS] [--until UNIX_SECONDS]"
+    },
+    {
+      "label": "Read observations",
+      "invocation": "chancery usage events [--thread THREAD | --unattributed] [--after ID] [--limit COUNT]"
+    },
+    {
+      "label": "Rust recording API",
+      "invocation": "chancery_usage::record_with_thread(system, command, thread)"
+    }
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local product CLIs and explicit library callers record command boundaries; operators register identities and query usage."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Recording requires an initialized supported private journal and registered system/command pair. Registration can initialize an empty journal. Direct service calls supply request-scoped thread identity."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Stable system and command IDs, optional CODEX_THREAD_ID or explicit thread, absolute optional CHANCERY_USAGE_DB, and system/thread/time/page query filters."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Registration results or Chancery schema-three report envelopes with system identities, per-command counts and latest selected times, or insertion-ordered events with next_cursor and has_more."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Each usage row observes one command-handler entry, regardless of its later outcome. Registration and usage are append-only. Zero counts describe selected recorded observations only."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The journal does not report token consumption, outcomes, duration, command content, verified thread identity or parent-child execution relationships."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "System ID is global; command ID is unique within system. Usage ID orders local inserts. recorded_at and time filters are whole Unix seconds. Missing thread is NULL. IDs are opaque 1\u2013128 byte ASCII metadata."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Queries select committed records at the read boundary. Since is inclusive and until exclusive. Counts include registered commands with zero selected usage; recording failures, disabled recording and uninstrumented boundaries remain uncovered."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No exhaustive command coverage, missed-observation count or historical retention horizon is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The local Rust API and CLI use a private regular SQLite file; current-user filesystem permissions are the trust boundary. No daemon or network surface exists."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Initialization accepts only empty or schema-one Chancery state. Registration is idempotent and may partially commit before an error. Each append is a separate insert with a foreign key. Database triggers reject updates/deletes. No automatic retries or migrations."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "SQLite busy timeout is 100 ms. Event page limits are 1\u20131000, default 100. CHANCERY_USAGE_DISABLED=1 suppresses dispatch observations only. No durable queue or output capture exists."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No hard wall-clock latency, throughput or database-capacity objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Journal schema one, crate version, provider release and capability version are separate. Unsupported journals fail; products do not migrate them. Historical identities remain after program removal."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "The journal is local Chancery-owned state. Recording a supplied Codex thread ID performs no Codex lookup or runtime invocation."
+      }
+    ]
+  },
+  "manual": "manuals/usage-record.md"
+}

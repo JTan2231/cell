@@ -70,3 +70,11 @@ archive, deleting provider records, replacing unknown outcomes with guesses,
 or making an unsupported state format appear compatible. Preserve unresolved
 maintenance and recovery evidence. Development success is a synchronized,
 scoped implementation with its actual evidence and remaining limits stated.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

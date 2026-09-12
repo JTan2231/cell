@@ -193,7 +193,7 @@ enum BindingCommand {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let json_requested = std::env::args_os().any(|argument| argument == "--json");
-    let cli = match Cli::try_parse() {
+    let cli = match chancery_usage::cli::try_parse::<Cli>("clockwork", "") {
         Ok(cli) => cli,
         Err(error) => {
             let exit_code = error.exit_code();

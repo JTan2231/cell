@@ -204,3 +204,11 @@ unloaded while admission is held. Final activation restores its captured load
 state only after checking the original release, exact plist digest, complete
 schedule definition, and absence of an enabled Clockwork binding. An altered
 legacy plist retains the recovery failure instead of loading a foreign service.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

@@ -161,9 +161,12 @@ pub struct InstructionsHistoryArgs {
 
 impl Cli {
     /// Parse named-library command arguments with the ordinary typed command parser.
-    pub fn resolve_named_command(mut self) -> Result<Self, clap::Error> {
+    pub fn resolve_named_command(
+        mut self,
+        command_id: Option<String>,
+    ) -> Result<(Self, Option<String>), clap::Error> {
         let Command::Library(LibraryCommand::Named(arguments)) = &self.command else {
-            return Ok(self);
+            return Ok((self, command_id));
         };
         let Some(name) = arguments.first().and_then(|value| value.to_str()) else {
             return Err(clap::Error::raw(
@@ -172,8 +175,9 @@ impl Cli {
             ));
         };
         let name = name.to_owned();
-        let mut scoped = Self::try_parse_from(
+        let (mut scoped, command_id) = chancery_usage::cli::parse_command_from::<Self>(
             std::iter::once(OsString::from("annals")).chain(arguments.iter().skip(1).cloned()),
+            "",
         )?;
         if matches!(scoped.command, Command::Library(_) | Command::Init(_)) {
             return Err(clap::Error::raw(
@@ -203,7 +207,7 @@ impl Cli {
         scoped.quiet |= self.quiet;
         scoped.verbose = scoped.verbose.saturating_add(self.verbose);
         scoped.named_library = Some(name);
-        Ok(scoped)
+        Ok((scoped, command_id))
     }
 }
 

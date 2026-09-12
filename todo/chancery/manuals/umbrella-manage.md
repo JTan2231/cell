@@ -72,3 +72,11 @@ Todo list and search return compact ID, title and lifecycle rows. They default
 to 20 results with `has_more`; use `--limit` with a positive integer for more.
 Show returns the selected umbrella, concerns, notes and current assessment and
 design summaries. Lifecycle and note changes return durable receipts.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

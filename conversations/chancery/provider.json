@@ -29,7 +29,8 @@
     ],
     "shared_privacy_and_retention": [
       "Task titles, working directories, stable references, activity counts, and normalized user and assistant text can be private and are written only to caller-selected process output.",
-      "Conversations retains no corpus, index, daemon state, or credentials; redirected output and inherited App Server diagnostics become the caller's retention responsibility."
+      "Conversations retains no corpus, index, daemon state, or credentials; redirected output and inherited App Server diagnostics become the caller's retention responsibility.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release and entry contract versions are distinct from the selected Codex CLI and App Server protocol version.",
