@@ -3,7 +3,7 @@
   "provider": {
     "id": "platter",
     "name": "Platter",
-    "release": "0.2.6"
+    "release": "0.2.7"
   },
   "promise_scope": {
     "authoritative_for": [
