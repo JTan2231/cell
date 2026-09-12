@@ -23,6 +23,8 @@ const ORIGIN: &str = "http://nucleus.local";
 
 #[derive(Debug, Error)]
 pub enum ClientError {
+    #[error("{0}")]
+    QuotaDeferred(#[from] nucleus_core::QuotaDeferred),
     #[error("deployment readiness was not proved for the named maintenance hold")]
     DeploymentNotReady,
     #[error("HOME is unavailable or is not an absolute path; pass an explicit socket path")]
@@ -106,6 +108,26 @@ impl NucleusClient {
     /// Returns a [`ClientError`] if the API call fails.
     pub async fn health(&self) -> Result<HealthResponseV1, ClientError> {
         self.get("/v1/health").await
+    }
+
+    /// Read health and preserve an expected quota deferral before strict readiness checks.
+    ///
+    /// # Errors
+    /// Returns a transport error or the structured shared quota condition.
+    pub async fn health_for_work(&self) -> Result<HealthResponseV1, ClientError> {
+        let health = self.health().await?;
+        if let Some(quota) = &health.quota {
+            quota.check()?;
+        }
+        Ok(health)
+    }
+
+    /// Read quota admission without starting model work.
+    ///
+    /// # Errors
+    /// Returns an error if the quota endpoint cannot be read.
+    pub async fn quota_status(&self) -> Result<nucleus_core::QuotaStatusV1, ClientError> {
+        self.get("/v1/quota").await
     }
 
     /// Prove requester deployment readiness with open service admission, or
@@ -218,11 +240,16 @@ impl NucleusClient {
     ///
     /// Returns a [`ClientError`] if the account read fails.
     pub async fn account_preflight(&self) -> Result<AccountSnapshotV1, ClientError> {
-        self.account_snapshot(&AccountSnapshotQueryV1 {
-            include_usage: false,
-            wait_seconds: 30,
-        })
-        .await
+        let snapshot = self
+            .account_snapshot(&AccountSnapshotQueryV1 {
+                include_usage: false,
+                wait_seconds: 0,
+            })
+            .await?;
+        if let Some(quota) = &snapshot.quota {
+            quota.check()?;
+        }
+        Ok(snapshot)
     }
 
     /// Read account limits and, when requested, account usage through Nucleus's
@@ -264,6 +291,21 @@ impl NucleusClient {
     pub async fn get_job(&self, job_id: &JobId) -> Result<JobV1, ClientError> {
         self.get(&format!("/v1/jobs/{}", path_segment(job_id.as_str())))
             .await
+    }
+
+    /// Read a requester job, yielding an accepted job while quota pauses its start.
+    /// Active and terminal jobs remain observable regardless of quota admission.
+    ///
+    /// # Errors
+    /// Returns a read error or an expected quota deferral for pending work.
+    pub async fn get_job_for_work(&self, job_id: &JobId) -> Result<JobV1, ClientError> {
+        let job = self.get_job(job_id).await?;
+        if job.summary.state == nucleus_core::JobState::Accepted
+            && let Some(quota) = &job.quota
+        {
+            quota.check()?;
+        }
+        Ok(job)
     }
 
     /// Observe runtime state and pending call identities without request or output bodies.
@@ -570,7 +612,17 @@ impl NucleusClient {
             });
         }
 
-        match serde_json::from_slice::<ErrorResponseV1>(&body) {
+        let decoded = serde_json::from_slice::<ErrorResponseV1>(&body);
+        if let Ok(api_error) = &decoded
+            && api_error.code == "quota_deferred"
+            && let Some(details) = &api_error.details
+            && let Ok(quota) =
+                serde_json::from_value::<nucleus_core::QuotaStatusV1>(details.clone())
+            && quota.is_blocked()
+        {
+            return Err(nucleus_core::QuotaDeferred(Box::new(quota)).into());
+        }
+        match decoded {
             Ok(api_error) => Err(ClientError::Api {
                 status: status.as_u16(),
                 code: api_error.code.clone(),
@@ -652,6 +704,25 @@ fn path_segment(value: &str) -> String {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn quota_deferral_remains_classifiable_through_client_error()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let quota = serde_json::from_value::<nucleus_core::QuotaStatusV1>(serde_json::json!({
+            "version":1, "policy":nucleus_core::QuotaPolicyV1::default(), "state":"low",
+            "accountKey":"account", "limitId":"codex", "remainingPercent":9,
+            "observedAt":100, "resetsAt":200, "conditionId":"condition", "conditionStartedAt":100
+        }))?;
+        let Err(deferred) = quota.check() else {
+            return Err("low quota was admitted".into());
+        };
+        let error = ClientError::from(deferred);
+        assert_eq!(
+            nucleus_core::quota_condition(&error),
+            Some("quota_deferred")
+        );
+        Ok(())
+    }
 
     #[test]
     fn explicit_socket_must_be_absolute() {

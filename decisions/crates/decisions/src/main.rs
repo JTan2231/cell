@@ -291,6 +291,10 @@ fn main() {
         return;
     }
     if let Err(error) = run(Cli::parse()) {
+        if matches!(error.code, "quota_deferred" | "quota_exhausted") {
+            println!("{}", serde_json::json!({"outcome": error.code}));
+            return;
+        }
         eprintln!("krisis: {error}");
         std::process::exit(1);
     }
@@ -678,8 +682,19 @@ fn record_observation_failure(
     observation: &Observation,
     error: &AppError,
 ) -> AppResult<ProcessResult> {
+    if error.code == "quota_deferred" {
+        return Ok(ProcessResult {
+            observation_id: observation.id.clone(),
+            status: "deferred".into(),
+            scope_level: observation.scope_level,
+            outcome: Some("quota_deferred".into()),
+        });
+    }
     store.fail_observation(&observation.id, error.code, &error.message)?;
-    if error.code != "document_source_unavailable" {
+    if !matches!(
+        error.code,
+        "document_source_unavailable" | "quota_exhausted"
+    ) {
         return Err(AppError::new(
             "observation_processing_failed",
             format!(

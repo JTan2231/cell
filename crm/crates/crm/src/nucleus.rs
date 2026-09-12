@@ -210,7 +210,16 @@ fn verify_job_identity(
 }
 
 async fn require_health(client: &NucleusClient) -> Result<()> {
-    validate_health(&client.health().await?, true)
+    let mut health = client.health().await?;
+    if health.status == "ok"
+        && health
+            .quota
+            .as_ref()
+            .is_some_and(nucleus_core::QuotaStatusV1::is_blocked)
+    {
+        health.accepting_jobs = true;
+    }
+    validate_health(&health, true)
 }
 
 async fn require_health_for_doctor(client: &NucleusClient) -> Result<()> {
@@ -418,7 +427,7 @@ async fn serve_mailbox(
 async fn get_job_stably(client: &NucleusClient, job_id: &JobId) -> Result<Option<JobV1>> {
     let mut transport_failures = 0_u8;
     loop {
-        match client.get_job(job_id).await {
+        match client.get_job_for_work(job_id).await {
             Ok(job) => return Ok(Some(job)),
             Err(ClientError::Api { status: 404, .. }) => return Ok(None),
             Err(ClientError::Transport { .. }) if transport_failures < 2 => {
@@ -479,6 +488,12 @@ fn finish_terminal_job(store: &Store, update_id: &str, job: &JobV1) -> Result<u6
         return Ok(revision);
     }
 
+    if job.quota_exhausted() {
+        return Err(Error::domain(
+            "quota_exhausted",
+            "Codex exhausted quota; inspect retained attempt before retry",
+        ));
+    }
     match job.summary.state {
         JobState::Completed => Err(Error::domain(
             "nucleus_job_terminal_invalid",
@@ -1312,6 +1327,7 @@ mod tests {
     fn running_job(request: &JobRequestV1) -> JobV1 {
         let attempt_id = AttemptId::new("attempt-1");
         JobV1 {
+            quota: None,
             version: PROTOCOL_VERSION_V1,
             summary: JobSummaryV1 {
                 version: PROTOCOL_VERSION_V1,

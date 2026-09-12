@@ -1,5 +1,6 @@
 //! Per-user Nucleus coordinator and Unix-socket HTTP API.
 
+mod quota;
 mod schemas;
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -110,6 +111,7 @@ pub enum DaemonError {
 #[derive(Clone)]
 pub struct AppState {
     maintenance: Option<cell_maintenance::Gate>,
+    quota: Option<Arc<quota::QuotaGate>>,
     store: Arc<Mutex<Store>>,
     codex: CodexHarness,
     cancellations: Arc<Mutex<HashMap<String, watch::Sender<bool>>>>,
@@ -139,6 +141,7 @@ impl AppState {
         let (mailbox_changes, _) = broadcast::channel(256);
         let state = Self {
             maintenance: None,
+            quota: None,
             store: Arc::new(Mutex::new(store)),
             codex,
             cancellations: Arc::new(Mutex::new(HashMap::new())),
@@ -295,6 +298,32 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
             .join("deployment-maintenance"),
     ));
     let listener = bind_socket(&config.socket).await?;
+    let quota_root = config.database.parent().unwrap_or_else(|| Path::new("."));
+    state.quota = Some(Arc::new(quota::QuotaGate::open(quota_root).map_err(
+        |source| DaemonError::Io {
+            path: quota_root.to_path_buf(),
+            source,
+        },
+    )?));
+    if let Some(gate) = &state.quota {
+        gate.refresh(&state.codex)
+            .await
+            .map_err(|source| DaemonError::Io {
+                path: quota_root.to_path_buf(),
+                source,
+            })?;
+    }
+    let quota_state = state.clone();
+    let quota_poller = tokio::spawn(async move {
+        loop {
+            if let Some(gate) = &quota_state.quota
+                && let Err(failure) = gate.refresh(&quota_state.codex).await
+            {
+                error!(error = %failure, "quota observation could not be retained");
+            }
+            tokio::time::sleep(Duration::from_secs(quota::POLL_SECONDS)).await;
+        }
+    });
     info!(socket = %config.socket.display(), database = %config.database.display(), "nucleusd ready");
     let shutdown_state = state.clone();
     let completion_state = state.clone();
@@ -307,6 +336,7 @@ pub async fn serve(config: ServeConfig) -> Result<(), DaemonError> {
     // The first sweep can overlap with in-flight request handlers. Once Axum
     // has drained those handlers, close new authentication work and cancel
     // again so a job admitted during that window cannot escape shutdown.
+    quota_poller.abort();
     completion_state.codex.close_auth_operations();
     completion_state.shutdown_jobs().await;
     completion_state
@@ -326,6 +356,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/maintenance/hold", post(maintenance_hold))
         .route("/v1/maintenance/release", post(maintenance_release))
         .route("/v1/account", get(account_snapshot))
+        .route("/v1/quota", get(quota_status))
         .route("/v1/launch-contexts", post(register_launch_context))
         .route("/v1/jobs", post(submit_job).get(list_jobs))
         .route("/v1/jobs/{job_id}", get(get_job))
@@ -375,12 +406,16 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
         .maintenance
         .as_ref()
         .is_none_or(|gate| gate.status().is_ok_and(|status| status.holds.is_empty()));
-    let accepting_jobs =
+    let runtime_ready =
         harness.is_some() && auth.configured && auth.authenticated && maintenance_open;
+    let quota = quota_snapshot(&state).await.ok().flatten();
+    let quota_open =
+        state.quota.is_none() || quota.as_ref().is_some_and(|value| !value.is_blocked());
+    let accepting_jobs = runtime_ready && quota_open;
     let available_slots = state.execution_slots.available_permits();
     Json(HealthResponseV1 {
         version: PROTOCOL_VERSION_V1,
-        status: if accepting_jobs { "ok" } else { "degraded" }.to_owned(),
+        status: if runtime_ready { "ok" } else { "degraded" }.to_owned(),
         daemon_version: ADAPTER_VERSION.to_owned(),
         accepting_jobs,
         checked_at,
@@ -420,6 +455,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
                 .unwrap_or(u32::MAX),
             available_slots: u32::try_from(available_slots).unwrap_or(u32::MAX),
         }),
+        quota,
         detail,
     })
 }
@@ -554,6 +590,57 @@ async fn maintenance_release(
     Ok(Json(maintenance_snapshot(&state).await?))
 }
 
+fn uses_weekly_quota(request: &JobRequestV1) -> bool {
+    request.invocation.model.as_str() != "gpt-5.3-codex-spark"
+}
+
+async fn quota_snapshot(state: &AppState) -> Result<Option<nucleus_core::QuotaStatusV1>, ApiError> {
+    match &state.quota {
+        None => Ok(None),
+        Some(gate) => gate.snapshot().await.map(Some).map_err(|_| {
+            ApiError::internal(
+                "quota_state_unavailable",
+                "quota admission state could not be retained",
+            )
+        }),
+    }
+}
+
+async fn quota_status(
+    State(state): State<AppState>,
+) -> Result<Json<nucleus_core::QuotaStatusV1>, ApiError> {
+    quota_snapshot(&state)
+        .await?
+        .map(Json)
+        .ok_or_else(|| ApiError::not_found("quota gate", "codex"))
+}
+
+async fn check_quota(state: &AppState, request: &JobRequestV1) -> Result<(), ApiError> {
+    if !uses_weekly_quota(request) {
+        return Ok(());
+    }
+    if let Some(gate) = &state.quota {
+        gate.refresh(&state.codex).await.map_err(|_| {
+            ApiError::internal(
+                "quota_state_unavailable",
+                "quota admission state could not be retained",
+            )
+        })?;
+        if let Some(quota) = quota_snapshot(state).await?
+            && quota.is_blocked()
+        {
+            let mut error = ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "quota_deferred",
+                "model work deferred by the Codex quota gate",
+            );
+            error.details = Some(serde_json::to_value(quota).map_err(ApiError::encoding)?);
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
 async fn account_snapshot(
     State(state): State<AppState>,
     query: Result<Query<AccountSnapshotQueryV1>, QueryRejection>,
@@ -570,6 +657,14 @@ async fn account_snapshot(
             )
         })?
         .map_err(ApiError::harness_unavailable)?;
+    if let Some(gate) = &state.quota {
+        gate.refresh(&state.codex).await.map_err(|_| {
+            ApiError::internal(
+                "quota_state_unavailable",
+                "quota state could not be retained",
+            )
+        })?;
+    }
     let snapshot = state
         .codex
         .read_account_snapshot(
@@ -595,6 +690,7 @@ async fn account_snapshot(
             adapter_version: ADAPTER_VERSION.to_owned(),
         },
         rate_limits: snapshot.rate_limits,
+        quota: quota_snapshot(&state).await?,
         usage: snapshot.usage,
         usage_error: snapshot.usage_error,
     }))
@@ -625,6 +721,8 @@ async fn admit_job_request(
     if let Some(existing) = exact_existing_job(state, &request).await? {
         return accepted_response(state, existing, StatusCode::OK).await;
     }
+
+    check_quota(state, &request).await?;
 
     // Hold admission until the durable job and its attempt are published.
     // A prior exact replay above stays available while deployment holds admission.
@@ -809,7 +907,12 @@ async fn get_job(
     } else {
         HashMap::new()
     };
-    Ok(Json(job_to_core(job, attempts, &outputs)?))
+    let mut job = job_to_core(job, attempts, &outputs)?;
+    drop(store);
+    if job.summary.state == JobState::Accepted && uses_weekly_quota(&job.request) {
+        job.quota = quota_snapshot(&state).await?;
+    }
+    Ok(Json(job))
 }
 
 async fn list_jobs(
@@ -1217,7 +1320,7 @@ async fn run_job(
     mut cancel_rx: watch::Receiver<bool>,
 ) {
     let job_id = request.id.to_string();
-    let execution_slot = match acquire_execution_slot(&state, &mut cancel_rx).await {
+    let execution_slot = match acquire_execution_slot(&state, &request, &mut cancel_rx).await {
         Ok(Some(permit)) => permit,
         Ok(None) => {
             finalize_pre_start_cancellation(&state, &job_id, &attempt_id).await;
@@ -1353,6 +1456,13 @@ async fn run_job(
     if terminal.attempt_state != StoreAttemptState::Completed {
         terminal.append_stderr(&stderr_tail);
     }
+    if terminal.reason == AttemptTerminalReason::QuotaExhausted
+        && uses_weekly_quota(&request)
+        && let Some(gate) = &state.quota
+        && let Err(failure) = gate.exhausted().await
+    {
+        error!(error = %failure, "quota exhaustion could not be retained");
+    }
     if let Err(error) = finish_attempt(&state, &attempt_id, &terminal).await {
         error!(job_id, attempt_id, error = %error.message, "could not persist terminal attempt state");
     }
@@ -1362,11 +1472,44 @@ async fn run_job(
 
 async fn acquire_execution_slot(
     state: &AppState,
+    request: &JobRequestV1,
     cancel_rx: &mut watch::Receiver<bool>,
+) -> Result<Option<OwnedSemaphorePermit>, ApiError> {
+    loop {
+        let cancellation = wait_for_cancellation(cancel_rx);
+        tokio::pin!(cancellation);
+        let quota_check = check_quota(state, request);
+        tokio::pin!(quota_check);
+        let open = tokio::select! {
+            biased;
+            () = &mut cancellation => return Ok(None),
+            result = &mut quota_check => result.is_ok(),
+        };
+        if !open {
+            tokio::select! {
+                biased;
+                () = &mut cancellation => return Ok(None),
+                () = tokio::time::sleep(Duration::from_secs(quota::POLL_SECONDS)) => continue,
+            }
+        }
+        let acquired = acquire_capacity_slot(state, &mut cancellation).await?;
+        let Some(permit) = acquired else {
+            return Ok(None);
+        };
+        // A queued job must pass admission again after capacity becomes available.
+        if check_quota(state, request).await.is_ok() {
+            return Ok(Some(permit));
+        }
+        drop(permit);
+    }
+}
+
+async fn acquire_capacity_slot(
+    state: &AppState,
+    cancellation: impl std::future::Future<Output = ()>,
 ) -> Result<Option<OwnedSemaphorePermit>, ApiError> {
     let permit = Arc::clone(&state.execution_slots).acquire_owned();
     tokio::pin!(permit);
-    let cancellation = wait_for_cancellation(cancel_rx);
     tokio::pin!(cancellation);
     tokio::select! {
         biased;
@@ -1735,6 +1878,11 @@ fn terminal_outcome(result: Result<nucleus_codex::CodexOutcome, CodexError>) -> 
             StoreAttemptState::TimedOut,
             AttemptTerminalReason::TimedOut,
             "job exceeded its wall-clock timeout".to_owned(),
+        ),
+        Err(CodexError::QuotaExhausted(detail)) => TerminalOutcome::failed(
+            StoreAttemptState::Failed,
+            AttemptTerminalReason::QuotaExhausted,
+            detail,
         ),
         Err(error @ (CodexError::Protocol(_) | CodexError::EventConsumerDisconnected)) => {
             TerminalOutcome::failed(
@@ -2107,6 +2255,7 @@ fn job_to_core(
     })?;
     Ok(JobV1 {
         version: PROTOCOL_VERSION_V1,
+        quota: None,
         summary: job_summary(job),
         request,
         attempts: attempts
@@ -2499,6 +2648,7 @@ fn terminal_reason_name(value: AttemptTerminalReason) -> &'static str {
     match value {
         AttemptTerminalReason::Completed => "completed",
         AttemptTerminalReason::HarnessFailure => "harness_failure",
+        AttemptTerminalReason::QuotaExhausted => "quota_exhausted",
         AttemptTerminalReason::ProtocolError => "protocol_error",
         AttemptTerminalReason::TimedOut => "timed_out",
         AttemptTerminalReason::Cancelled => "cancelled",
@@ -2511,6 +2661,7 @@ fn parse_terminal_reason(value: &str) -> Option<AttemptTerminalReason> {
     match value {
         "completed" => Some(AttemptTerminalReason::Completed),
         "harness_failure" => Some(AttemptTerminalReason::HarnessFailure),
+        "quota_exhausted" => Some(AttemptTerminalReason::QuotaExhausted),
         "protocol_error" => Some(AttemptTerminalReason::ProtocolError),
         "timed_out" => Some(AttemptTerminalReason::TimedOut),
         "cancelled" => Some(AttemptTerminalReason::Cancelled),
@@ -2828,6 +2979,37 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn quota_deferral_creates_no_job_and_does_not_block_cancellation()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let root = tempfile::tempdir()?;
+        let mut state = AppState::new(
+            Store::open_in_memory()?,
+            CodexHarness::with_codex_home("unused-codex", root.path()),
+        )
+        .await?;
+        state.quota = Some(Arc::new(quota::QuotaGate::open(root.path())?));
+        let request = launch_context_request("quota-test", &LaunchContextId::new("unused"));
+        let Err(error) = admit_job_request(&state, request.clone()).await else {
+            return Err("unknown quota was admitted".into());
+        };
+        assert_eq!(error.code, "quota_deferred");
+        assert_eq!(error.status, StatusCode::TOO_MANY_REQUESTS);
+        assert!(state.store.lock().await.list_jobs()?.is_empty());
+        let (_, mut cancelled) = watch::channel(true);
+        assert!(
+            acquire_execution_slot(&state, &request, &mut cancelled)
+                .await
+                .map_err(|error| std::io::Error::other(error.message))?
+                .is_none()
+        );
+        assert_eq!(
+            state.execution_slots.available_permits(),
+            MAX_CONCURRENT_JOB_ATTEMPTS
+        );
+        Ok(())
+    }
 
     fn launch_context_request(id: &str, context: &LaunchContextId) -> JobRequestV1 {
         let mut invocation = nucleus_core::AgentInvocationV1::new(

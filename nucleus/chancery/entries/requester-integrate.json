@@ -19,7 +19,8 @@
   "effects": [
     "Changes requester implementation, contracts, tests, and operator documentation.",
     "May register new immutable decoder schemas or requester-owned toolset versions.",
-    "May change prompts, models, permissions, timeouts, deployment ordering, and retained job provenance."
+    "May change prompts, models, permissions, timeouts, deployment ordering, and retained job provenance.",
+    "Codex weekly quota is an expected admission pause. Pending requester work is retained without a Clockwork abend; EMT sends one durable condition notice directly through Email without a Nucleus job. Existing deadlines, failure halts and operator pauses remain independent."
   ],
   "authority": [
     "Nucleus owns portable invocation admission, the global eight-slot scheduler, harness supervision, single-authority managed authentication, job records, output atoms, and the tool mailbox.",
@@ -41,7 +42,11 @@
     "Document the working directory, workspace access, local execution, web search, launch context, and tool permissions explicitly."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
   ],
   "session_surfaces": [
     "local_filesystem",

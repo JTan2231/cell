@@ -29,8 +29,13 @@ pub(crate) trait Context<T> {
     fn context(self, code: &'static str, message: impl Into<String>) -> AppResult<T>;
 }
 
-impl<T, E: std::error::Error> Context<T> for Result<T, E> {
+impl<T, E: std::error::Error + 'static> Context<T> for Result<T, E> {
     fn context(self, code: &'static str, message: impl Into<String>) -> AppResult<T> {
-        self.map_err(|error| AppError::new(code, format!("{}: {error}", message.into())))
+        self.map_err(|error| {
+            AppError::new(
+                nucleus_core::quota_condition(&error).unwrap_or(code),
+                format!("{}: {error}", message.into()),
+            )
+        })
     }
 }

@@ -146,6 +146,8 @@ struct StageState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RuntimeState {
+    #[serde(default)]
+    quota_exhausted: bool,
     state: nucleus_core::JobState,
     attempt_id: Option<nucleus_core::AttemptId>,
 }
@@ -295,6 +297,7 @@ pub(crate) fn import_execution(value: &Value) -> Result<Value> {
         request: serde_json::from_value(value["request"].clone())?,
         input_sha256: crate::store::digest(&serde_json::to_vec(&inputs)?),
         runtime: job.map(|job| RuntimeState {
+            quota_exhausted: job.quota_exhausted(),
             state: job.summary.state,
             attempt_id: job.summary.current_attempt_id,
         }),
@@ -463,7 +466,8 @@ async fn run_stage_inner(
             "Nucleus correlation conflicts with retained exact request"
         ),
         Err(ClientError::Api { status: 404, .. }) => {
-            check_readiness(client).await?;
+            let health = client.health_for_work().await?;
+            validate_health(&health, true)?;
             register_tools(client, state).await?;
             // Exact request was committed before any potentially ambiguous submit.
             client.submit_job(&state.request).await?;
@@ -471,15 +475,20 @@ async fn run_stage_inner(
         Err(error) => return Err(error.into()),
     }
     loop {
-        let job = client.get_job(&state.request.id).await?;
+        let job = client.get_job_for_work(&state.request.id).await?;
         ensure!(job.request == state.request, "Nucleus request changed");
+        let quota_exhausted = job.quota_exhausted();
         let terminal = job.summary.state.is_terminal();
         state.runtime = Some(RuntimeState {
+            quota_exhausted,
             state: job.summary.state,
             attempt_id: job.summary.current_attempt_id,
         });
         persist(store, state)?;
         if terminal {
+            if state.accepted.is_none() && quota_exhausted {
+                return Err(nucleus_core::QuotaExhausted.into());
+            }
             return terminal_result(state);
         }
         let pending = client
@@ -506,6 +515,14 @@ async fn run_stage_inner(
 }
 
 fn terminal_result(state: &StageState) -> Result<StageResult> {
+    if state.accepted.is_none()
+        && state
+            .runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.quota_exhausted)
+    {
+        return Err(nucleus_core::QuotaExhausted.into());
+    }
     state.accepted.clone().context("Nucleus job ended without an accepted domain result; inspect retained runtime state before authorizing a new attempt")
 }
 
@@ -1227,6 +1244,7 @@ mod tests {
 
     fn runtime_job(state: &StageState, status: nucleus_core::JobState) -> JobV1 {
         JobV1 {
+            quota: None,
             version: 1,
             summary: nucleus_core::JobSummaryV1 {
                 version: 1,

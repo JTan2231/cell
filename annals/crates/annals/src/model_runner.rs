@@ -70,6 +70,13 @@ pub(crate) struct ModelSettings {
 }
 
 impl ModelSettings {
+    pub(crate) fn frozen(model: String, effort: &str) -> AppResult<Self> {
+        Ok(Self {
+            model,
+            reasoning_effort: serde_json::from_value(serde_json::Value::String(effort.to_owned()))?,
+        })
+    }
+
     #[must_use]
     pub(crate) fn new(quality: ModelQuality, model: Option<&str>) -> Self {
         let (preset_model, reasoning_effort) = match quality {
@@ -151,7 +158,7 @@ impl Runner {
         });
         match result {
             Ok(Ok(_)) => Ok(()),
-            Ok(Err(error)) => Err(auth_error(&error.to_string())),
+            Ok(Err(error)) => Err(client_error("model_auth_unavailable", &error)),
             Err(_) => Err(auth_error(
                 "Nucleus authentication preflight exceeded its time limit",
             )),
@@ -240,8 +247,7 @@ impl Runner {
             program: "annals".to_owned(),
             id: model_run_token.to_owned(),
         };
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        let timeout_seconds = remaining.as_secs().max(1);
+        let timeout_seconds = self.timeout.as_secs().max(1);
         let mut invocation = AgentInvocationV1::new(
             "codex",
             settings.model(),
@@ -264,6 +270,27 @@ impl Runner {
             invocation,
         );
         request.developer_instructions = Some(library_instructions.to_owned());
+        match await_client_call(
+            client,
+            Some(&job_id),
+            client.get_job_for_work(&job_id),
+            deadline,
+            cancellation_requested,
+        )
+        .await
+        {
+            Ok(job) => {
+                if job.request.requester != requester {
+                    return Err(runtime_error(
+                        "model_runner_protocol",
+                        "retained request identity differs",
+                    ));
+                }
+                request = job.request;
+            }
+            Err(ClientCallError::Client(ClientError::Api { status: 404, .. })) => {}
+            Err(error) => return Err(client_call_error(error, "model_runner_failed")),
+        }
         loop {
             match await_client_call(
                 client,
@@ -404,7 +431,7 @@ impl Runner {
                 let job = await_retryable_read(
                     client,
                     &job_id,
-                    || client.get_job(&job_id),
+                    || client.get_job_for_work(&job_id),
                     deadline,
                     cancellation_requested,
                 )
@@ -436,6 +463,7 @@ impl Runner {
                     .and_then(|attempt| attempt.terminal_message.as_deref())
                     .unwrap_or("Nucleus ended the model liaison without a completion detail");
                 let code = match reason {
+                    Some(nucleus_core::AttemptTerminalReason::QuotaExhausted) => "quota_exhausted",
                     Some(nucleus_core::AttemptTerminalReason::TimedOut) => "model_runner_timeout",
                     Some(nucleus_core::AttemptTerminalReason::ProtocolError) => {
                         "model_runner_protocol"
@@ -805,7 +833,10 @@ fn auth_error(message: &str) -> AppError {
 }
 
 fn client_error(code: &'static str, error: &ClientError) -> AppError {
-    runtime_error(code, &error.to_string())
+    runtime_error(
+        nucleus_core::quota_condition(error).unwrap_or(code),
+        &error.to_string(),
+    )
 }
 
 fn runtime_error(code: &'static str, message: &str) -> AppError {
@@ -967,7 +998,7 @@ mod tests {
         let result = runtime()?.block_on(await_retryable_read(
             &client,
             &job_id,
-            || client.get_job(&job_id),
+            || client.get_job_for_work(&job_id),
             started + Duration::from_millis(300),
             &|| false,
         ));

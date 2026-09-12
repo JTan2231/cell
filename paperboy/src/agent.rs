@@ -46,9 +46,11 @@ pub fn source_config() -> Result<ClientConfig> {
     })
 }
 
-pub async fn readiness(client: &NucleusClient, owner: Option<&str>) -> Result<()> {
+pub async fn readiness(client: &NucleusClient, owner: Option<&str>, for_work: bool) -> Result<()> {
     let health = if let Some(owner) = owner {
         client.health_for_deployment(owner).await?
+    } else if for_work {
+        client.health_for_work().await?
     } else {
         client.health().await?
     };
@@ -290,7 +292,7 @@ async fn run_agent(
             "retained Nucleus request conflicts"
         ),
         Err(ClientError::Api { status: 404, .. }) => {
-            readiness(client, None).await?;
+            readiness(client, None, true).await?;
             register_tools(client, brief.report_kind()).await?;
             client.submit_job(request).await?;
             store.connection.execute("UPDATE agent_attempts SET submitted_at=COALESCE(submitted_at,?2),outcome='submitted' WHERE id=?1",params![attempt,crate::now()])?;
@@ -300,7 +302,7 @@ async fn run_agent(
     let mut source: Option<AppServerClient> = None;
     let started = Instant::now();
     loop {
-        let job = client.get_job(&request.id).await?;
+        let job = client.get_job_for_work(&request.id).await?;
         ensure!(job.request == *request, "Nucleus request changed");
         if job.summary.state.is_terminal() {
             let saved = store.brief(&brief.id)?.body.is_some();
@@ -320,6 +322,9 @@ async fn run_agent(
                     }
                 ],
             )?;
+            if !saved && job.quota_exhausted() {
+                return Err(nucleus_core::QuotaExhausted.into());
+            }
             ensure!(
                 saved,
                 "agent ended without a summary; use run --brief ID --retry-agent after resolving the error"

@@ -19,6 +19,16 @@ pub async fn tick(root: &Path, recovery: bool) -> Result<Value> {
     let mut config = Config::load(root)?;
     config.validate()?;
     let mut waiting = Vec::new();
+    let quota_blocked =
+        if let Ok(blocked) = crate::quota::tick(root, &config, !recovery && !config.paused).await {
+            blocked
+        } else {
+            waiting.push("quota_observation_unavailable");
+            true
+        };
+    if quota_blocked {
+        waiting.push("quota_deferred");
+    }
     if !recovery && !config.paused {
         ingest(&mut store, &config)?;
         if poll(root, &store, &mut config).await.is_err() {
@@ -26,19 +36,40 @@ pub async fn tick(root: &Path, recovery: bool) -> Result<Value> {
         }
     }
     if let Some(mut exchange) = store.next()? {
-        if exchange.request_digest.is_none() {
+        if quota_blocked && exchange.request_digest.is_none() {
             if crate::now() >= exchange.deadline_at {
-                finish(root, &store, &exchange, false).await?;
-                return Ok(json!({"waiting":waiting,"status":store.status()?}));
+                store.connection.execute(
+                    "UPDATE exchanges SET state='failed',request_json=NULL,error='quota_deferred_expired' WHERE id=?1",
+                    [&exchange.id],
+                )?;
             }
-            agent::prepare(root, &store, &exchange, &config)?;
-            exchange = store.exchange(&exchange.id)?;
-        }
-        match agent::advance(&store, &exchange).await {
-            Ok(Progress::Waiting) => {}
-            Ok(Progress::Complete) => finish(root, &store, &exchange, true).await?,
-            Ok(Progress::Failed) => finish(root, &store, &exchange, false).await?,
-            Err(_) => waiting.push("nucleus_unavailable_or_submission_unresolved"),
+        } else {
+            if exchange.request_digest.is_none() {
+                if crate::now() >= exchange.deadline_at {
+                    finish(root, &store, &exchange, false).await?;
+                    return Ok(json!({"waiting":waiting,"status":store.status()?}));
+                }
+                agent::prepare(root, &store, &exchange, &config)?;
+                exchange = store.exchange(&exchange.id)?;
+            }
+            match agent::advance(&store, &exchange, quota_blocked).await {
+                Ok(Progress::Waiting) => {}
+                Ok(Progress::Complete) => finish(root, &store, &exchange, true).await?,
+                Ok(Progress::Failed) => finish(root, &store, &exchange, false).await?,
+                Ok(Progress::QuotaExpired) => {
+                    store.connection.execute("UPDATE exchanges SET state='failed',request_json=NULL,error='quota_deferred_expired' WHERE id=?1", [&exchange.id])?;
+                }
+                Ok(Progress::QuotaExhausted) => {
+                    store.connection.execute(
+                    "UPDATE exchanges SET state='failed',request_json=NULL,error='quota_exhausted' WHERE id=?1",
+                    [&exchange.id],
+                )?;
+                }
+                Err(error) if nucleus_core::quota_deferral(error.as_ref()).is_some() => {
+                    waiting.push("quota_deferred");
+                }
+                Err(_) => waiting.push("nucleus_unavailable_or_submission_unresolved"),
+            }
         }
     }
     let pending: Vec<String> = {

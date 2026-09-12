@@ -4,6 +4,7 @@
 pub mod agent;
 pub mod installation;
 pub mod mail;
+mod quota;
 pub mod runner;
 pub mod store;
 

@@ -471,3 +471,8 @@ probe. Retirement is limited to requester `nucleus-deployment`, label
 that requester ID. It removes only those jobs, their attempts, and raw output;
 children, tool calls, or unfinished work block retirement. Ordinary job history
 and shared schemas remain unchanged. This is not a general pruning API.
+
+## Quota admission
+
+The additive quota interface, field semantics, expected deferral, and recovery
+rules are defined in [Quota admission](quota-admission.md).

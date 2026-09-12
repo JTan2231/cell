@@ -79,7 +79,15 @@ impl<'a> Worker<'a> {
             lease.refresh()?;
             self.record_process_result(
                 &update,
-                process(&update),
+                {
+                    let result = process(&update);
+                    if result.as_ref().err().is_some_and(|error| {
+                        matches!(error.code(), "quota_deferred" | "quota_exhausted")
+                    }) {
+                        return first_unsettled_error.map_or(Ok(applied), Err);
+                    }
+                    result
+                },
                 &mut applied,
                 &mut first_unsettled_error,
             )?;
@@ -87,7 +95,15 @@ impl<'a> Worker<'a> {
         while let Some(update) = lease.claim_next_or_release()? {
             self.record_process_result(
                 &update,
-                process(&update),
+                {
+                    let result = process(&update);
+                    if result.as_ref().err().is_some_and(|error| {
+                        matches!(error.code(), "quota_deferred" | "quota_exhausted")
+                    }) {
+                        return first_unsettled_error.map_or(Ok(applied), Err);
+                    }
+                    result
+                },
                 &mut applied,
                 &mut first_unsettled_error,
             )?;
@@ -219,7 +235,8 @@ impl<'a> Worker<'a> {
             "nucleus_job_lost" => self.store.mark_lost(&update.id, &error.to_string())?,
             "nucleus_admission_rejected"
             | "nucleus_job_terminal_invalid"
-            | "nucleus_job_terminal_failed" => {
+            | "nucleus_job_terminal_failed"
+            | "quota_exhausted" => {
                 self.store.mark_failed(&update.id, &error.to_string())?;
             }
             _ => self

@@ -724,6 +724,14 @@ pub(crate) async fn require_health(
     deployment_run_id: Option<&str>,
 ) -> AppResult<()> {
     let mut health = client.health().await.map_err(client_error)?;
+    if health.status == "ok"
+        && health
+            .quota
+            .as_ref()
+            .is_some_and(nucleus_core::QuotaStatusV1::is_blocked)
+    {
+        health.accepting_jobs = true;
+    }
     let mut deployment_proved = false;
     if (health.status != "ok" || !health.accepting_jobs)
         && let Some(run_id) = deployment_run_id.filter(|run_id| !run_id.is_empty())
@@ -1930,7 +1938,10 @@ where
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn client_error(_error: ClientError) -> AppError {
+fn client_error(error: ClientError) -> AppError {
+    if let Some(code) = nucleus_core::quota_condition(&error) {
+        return AppError::new(code, error.to_string());
+    }
     AppError::new(
         "nucleus_request_failed",
         "Nucleus request failed; inspect Nucleus diagnostics",

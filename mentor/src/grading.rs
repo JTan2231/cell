@@ -37,6 +37,7 @@ pub struct Grader {
 
 pub enum Progress {
     Pending,
+    QuotaExhausted,
     Complete(String),
     Failed(String),
 }
@@ -94,6 +95,13 @@ impl Grader {
             .await
             .map_err(|_| fail("Nucleus readiness request timed out"))?
             .map_err(|_| fail("Cannot read Nucleus readiness"))?;
+        if health
+            .quota
+            .as_ref()
+            .is_some_and(nucleus_core::QuotaStatusV1::is_blocked)
+        {
+            return Ok(Progress::Pending);
+        }
         require_admission(&health)?;
 
         let accepted = match timeout(HTTP_TIMEOUT, self.client.submit_job(&request))
@@ -101,6 +109,7 @@ impl Grader {
             .map_err(|_| fail("Nucleus admission is unresolved; retry the same request"))?
         {
             Ok(accepted) => accepted,
+            Err(ClientError::QuotaDeferred(_)) => return Ok(Progress::Pending),
             Err(ClientError::Validation(_)) => {
                 return Ok(Progress::Failed(
                     "Nucleus rejected the grading request".to_owned(),
@@ -283,13 +292,18 @@ fn verify_job(request: &JobRequestV1, job: &JobV1) -> Result<()> {
         || job.summary.label != request.label
         || job.summary.parent != request.parent
         || job.summary.request_digest != request_digest(request)?
-        || job.attempts.len() != 1
+        || (job.attempts.len() != 1
+            && !(job.summary.state == JobState::Accepted
+                && job.attempts.is_empty()
+                && job.summary.current_attempt_id.is_none()))
     {
         return Err(fail(
             "The Nucleus job does not match the immutable grading request",
         ));
     }
-    let attempt = &job.attempts[0];
+    let Some(attempt) = job.attempts.first() else {
+        return Ok(());
+    };
     if attempt.version != PROTOCOL_VERSION_V1
         || attempt.job_id != request.id
         || job.summary.current_attempt_id.as_ref() != Some(&attempt.id)
@@ -324,7 +338,12 @@ fn verify_cancellation_owner(id: &JobId, job: &JobV1) -> Result<()> {
 
 fn progress(request: &JobRequestV1, job: &JobV1) -> Result<Progress> {
     verify_job(request, job)?;
-    let attempt = &job.attempts[0];
+    if job.quota_exhausted() {
+        return Ok(Progress::QuotaExhausted);
+    }
+    let Some(attempt) = job.attempts.first() else {
+        return Ok(Progress::Pending);
+    };
     match job.summary.state {
         JobState::Accepted | JobState::Running | JobState::WaitingOnRequester => {
             Ok(Progress::Pending)

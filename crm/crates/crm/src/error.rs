@@ -26,13 +26,15 @@ impl Error {
         }
     }
 
-    pub const fn code(&self) -> &'static str {
+    pub fn code(&self) -> &'static str {
         match self {
             Self::Domain { code, .. } => code,
             Self::Io { .. } => "io_failed",
             Self::Sql(_) => "database_failed",
             Self::Json(_) => "json_failed",
-            Self::Nucleus(_) => "nucleus_failed",
+            Self::Nucleus(error) => {
+                nucleus_core::quota_condition(error).unwrap_or("nucleus_failed")
+            }
         }
     }
 }

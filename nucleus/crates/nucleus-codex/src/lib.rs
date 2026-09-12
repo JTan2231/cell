@@ -357,6 +357,8 @@ pub enum CodexError {
     TimedOut,
     #[error("Codex turn ended with status {status}: {detail}")]
     TurnFailed { status: String, detail: String },
+    #[error("Codex account usage limit exhausted: {0}")]
+    QuotaExhausted(String),
 }
 
 #[derive(Debug, Clone)]
@@ -407,6 +409,23 @@ impl CodexHarness {
     #[must_use]
     pub fn codex_home(&self) -> Option<&Path> {
         self.codex_home.as_deref()
+    }
+
+    /// Read only the account identity used to scope quota admission. API keys have no
+    /// subscription weekly window. No credential bytes leave the adapter.
+    ///
+    /// # Errors
+    /// Returns an authentication error if the authoritative identity is unavailable.
+    pub fn quota_account_key(&self) -> Result<Option<String>, CodexError> {
+        let home = self.codex_home.as_deref().ok_or_else(|| {
+            CodexError::Authentication("no Nucleus Codex home is configured".into())
+        })?;
+        match read_worker_authentication(home)? {
+            WorkerAuthentication::ApiKey(_) => Ok(None),
+            WorkerAuthentication::ManagedChatgpt(credentials) => Ok(Some(
+                nucleus_core::sha256_digest(credentials.account_id.as_bytes()),
+            )),
+        }
     }
 
     /// Wait until all supervised authentication operations started by this
@@ -1609,6 +1628,13 @@ impl ProtocolClient {
                 .and_then(Value::as_str)
                 .unwrap_or("no error detail was provided")
                 .to_owned();
+            if message
+                .pointer("/params/turn/error/codexErrorInfo")
+                .and_then(Value::as_str)
+                == Some("usageLimitExceeded")
+            {
+                return Err(CodexError::QuotaExhausted(detail));
+            }
             return Err(CodexError::TurnFailed {
                 status: status.to_owned(),
                 detail,

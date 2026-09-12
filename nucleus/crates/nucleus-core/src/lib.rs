@@ -6,6 +6,9 @@
 //! result. Nucleus owns admission, harness execution, lifecycle, and the exact
 //! harness-output observations used by reporting surfaces.
 
+mod quota;
+pub use quota::*;
+
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -699,6 +702,7 @@ impl AttemptState {
 pub enum AttemptTerminalReason {
     Completed,
     HarnessFailure,
+    QuotaExhausted,
     ProtocolError,
     TimedOut,
     Cancelled,
@@ -756,7 +760,7 @@ pub struct JobSummaryV1 {
     pub current_attempt_id: Option<AttemptId>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JobV1 {
     pub version: u32,
@@ -764,6 +768,8 @@ pub struct JobV1 {
     pub request: JobRequestV1,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attempts: Vec<AttemptV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota: Option<QuotaStatusV1>,
 }
 
 /// Compact read-time observation; runtime state never establishes requester-domain success.
@@ -1312,7 +1318,7 @@ pub struct ExecutionCapacityV1 {
     pub available_slots: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HealthResponseV1 {
     pub version: u32,
@@ -1330,6 +1336,8 @@ pub struct HealthResponseV1 {
     pub authentication: AuthenticationReadinessV1,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionCapacityV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota: Option<QuotaStatusV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
 }
@@ -1375,6 +1383,8 @@ pub struct AccountSnapshotV1 {
     pub observed_at: String,
     pub harness: HarnessIdentity,
     pub rate_limits: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quota: Option<QuotaStatusV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]

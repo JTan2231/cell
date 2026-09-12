@@ -104,45 +104,55 @@ fn integrate_with_runner_token_inner(
     // Freeze both selections and admit the run under one write transaction. Another
     // writer cannot change either selection between reuse and run creation.
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let base_revision = revision(&transaction)?;
-    let selected_instructions = instructions::current(&transaction)?;
-    let prompt = pointer_prompt(&work.label, base_revision);
-    let context = ExaminationContext {
-        instruction_revision: selected_instructions.revision,
-        instruction_context_sha256: model_runner::instruction_context_sha256(
+    let existing = run_token.map(|token| transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM model_runs WHERE token=?1 AND work_id=?2 AND status='running')",
+        params![token, work.id], |row| row.get::<_, bool>(0),
+    )).transpose()?.unwrap_or(false);
+    let token = if existing {
+        run_token.unwrap_or_default().to_owned()
+    } else {
+        let base_revision = revision(&transaction)?;
+        let selected_instructions = instructions::current(&transaction)?;
+        let prompt = pointer_prompt(&work.label, base_revision);
+        let context = ExaminationContext {
+            instruction_revision: selected_instructions.revision,
+            instruction_context_sha256: model_runner::instruction_context_sha256(
+                PROMPT_VERSION,
+                &prompt,
+                selected_instructions.revision,
+                &selected_instructions.content,
+            )?,
+        };
+        if reexamine {
+            close_incomplete_context(&transaction, work.id, base_revision, settings, &context)?;
+        } else if let Some(record) = reconciliation_for_frozen_context(
+            &transaction,
+            work.id,
+            base_revision,
+            settings,
             PROMPT_VERSION,
-            &prompt,
-            selected_instructions.revision,
-            &selected_instructions.content,
-        )?,
+            &context,
+        )? {
+            transaction.commit()?;
+            return Ok(record);
+        }
+        create_run_in_context(
+            &transaction,
+            work.id,
+            base_revision,
+            settings,
+            run_token,
+            &context,
+        )?
     };
-    if reexamine {
-        close_incomplete_context(&transaction, work.id, base_revision, settings, &context)?;
-    } else if let Some(record) = reconciliation_for_frozen_context(
-        &transaction,
-        work.id,
-        base_revision,
-        settings,
-        PROMPT_VERSION,
-        &context,
-    )? {
-        transaction.commit()?;
-        return Ok(record);
-    }
-    let token = create_run_in_context(
-        &transaction,
-        work.id,
-        base_revision,
-        settings,
-        run_token,
-        &context,
-    )?;
     transaction.commit()?;
     let mut backend = LiaisonBackend::open(path, &token)?;
     let library_instructions = backend.library_instructions.clone();
+    let prompt = pointer_prompt(&backend.work.label, backend.base_revision);
+    let settings = frozen_run_settings(&connection, &token)?;
     let result = if let Some(cancellation_requested) = cancellation_requested {
         runner.run_liaison_cancellable(
-            settings,
+            &settings,
             &prompt,
             &library_instructions,
             &token,
@@ -152,7 +162,7 @@ fn integrate_with_runner_token_inner(
         )
     } else {
         runner.run_liaison(
-            settings,
+            &settings,
             &prompt,
             &library_instructions,
             &token,
@@ -176,13 +186,14 @@ fn integrate_with_runner_token_inner(
                 )
             })
         }
+        Err(error) if error.code() == "quota_deferred" => Err(error),
         Err(error) => {
             finish_run(
                 &mut connection,
                 &token,
                 "failed",
                 None,
-                Some(&error.to_string()),
+                Some(&format!("{}: {error}", error.code())),
             )?;
             if let Some(record) = reconciliation_for_run(&connection, &token)? {
                 Ok(record)
@@ -191,6 +202,15 @@ fn integrate_with_runner_token_inner(
             }
         }
     }
+}
+
+fn frozen_run_settings(connection: &Connection, token: &str) -> Result<ModelSettings, AppError> {
+    let (model, effort): (String, String) = connection.query_row(
+        "SELECT model,reasoning_effort FROM model_runs WHERE token=?1",
+        [token],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    ModelSettings::frozen(model, &effort)
 }
 
 pub(crate) fn abandon_run(path: &Path, token: &str, work_id: i64) -> Result<(), AppError> {

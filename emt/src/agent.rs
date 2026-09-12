@@ -18,6 +18,8 @@ pub enum Progress {
     Waiting,
     Complete,
     Failed,
+    QuotaExhausted,
+    QuotaExpired,
 }
 
 pub fn prepare(root: &Path, store: &Store, exchange: &Exchange, config: &Config) -> Result<String> {
@@ -122,7 +124,8 @@ fn verify(exchange: &Exchange, job: &JobV1) -> Result<()> {
     Ok(())
 }
 
-pub async fn advance(store: &Store, exchange: &Exchange) -> Result<Progress> {
+#[allow(clippy::too_many_lines)]
+pub async fn advance(store: &Store, exchange: &Exchange, quota_blocked: bool) -> Result<Progress> {
     let client = NucleusClient::for_current_user()?;
     let id = JobId::new(&exchange.nucleus_job_id);
     let job = match timeout(HTTP_TIMEOUT, client.get_job(&id)).await? {
@@ -140,15 +143,43 @@ pub async fn advance(store: &Store, exchange: &Exchange) -> Result<Progress> {
         }
         if !job.summary.state.is_terminal() {
             if crate::now() >= exchange.deadline_at {
+                if job.summary.state == JobState::Accepted
+                    && job
+                        .quota
+                        .as_ref()
+                        .is_some_and(nucleus_core::QuotaStatusV1::is_blocked)
+                {
+                    store.connection.execute(
+                        "UPDATE exchanges SET error='quota_deferred_expired' WHERE id=?1",
+                        [&exchange.id],
+                    )?;
+                }
                 timeout(HTTP_TIMEOUT, client.cancel_job(&id)).await??;
             }
             return Ok(Progress::Waiting);
         }
-        return Ok(if job.summary.state == JobState::Completed {
-            Progress::Complete
-        } else {
-            Progress::Failed
-        });
+        let quota_expired: bool = store.connection.query_row(
+            "SELECT COALESCE(error='quota_deferred_expired',0) FROM exchanges WHERE id=?1",
+            [&exchange.id],
+            |row| row.get(0),
+        )?;
+        if quota_expired && job.summary.state == JobState::Cancelled {
+            return Ok(Progress::QuotaExpired);
+        }
+        return Ok(
+            if job.attempts.last().is_some_and(|attempt| {
+                attempt.terminal_reason == Some(nucleus_core::AttemptTerminalReason::QuotaExhausted)
+            }) {
+                Progress::QuotaExhausted
+            } else if job.summary.state == JobState::Completed {
+                Progress::Complete
+            } else {
+                Progress::Failed
+            },
+        );
+    }
+    if !exchange.job_admitted && quota_blocked && crate::now() >= exchange.deadline_at {
+        return Ok(Progress::QuotaExpired);
     }
     if exchange.job_admitted || crate::now() >= exchange.deadline_at {
         return Ok(Progress::Failed);
@@ -164,7 +195,7 @@ pub async fn advance(store: &Store, exchange: &Exchange) -> Result<Progress> {
     {
         return Err(fail("pending request identity mismatch"));
     }
-    let health = timeout(HTTP_TIMEOUT, client.health()).await??;
+    let health = timeout(HTTP_TIMEOUT, client.health_for_work()).await??;
     let required = [
         HarnessCapability::WorkspaceReadWrite,
         HarnessCapability::BuiltinLocalExecution,
@@ -192,6 +223,7 @@ pub async fn advance(store: &Store, exchange: &Exchange) -> Result<Progress> {
     }
     let receipt = match timeout(HTTP_TIMEOUT, client.submit_job(&request)).await? {
         Ok(receipt) => receipt,
+        Err(error @ ClientError::QuotaDeferred(_)) => return Err(error.into()),
         Err(ClientError::Validation(_)) => return Ok(Progress::Failed),
         Err(ClientError::Api { status, .. })
             if (400..500).contains(&status) && !matches!(status, 408 | 425 | 429) =>

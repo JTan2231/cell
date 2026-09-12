@@ -136,3 +136,24 @@ is no automatic deletion of correspondence or job references. Nucleus, Resend
 and the inbox provider retain independent copies. EMT does not mirror raw
 logs or tool activity, copy credentials or erase provider records. Model
 prompts, explicit exchange reads and email disclose their selected content.
+
+## Shared quota notices
+
+The worker reads Nucleus `GET /v1/quota` without starting an agent. While quota
+blocks admission, unadmitted exchanges wait until recovery or their existing
+deadline. Expired quota deferrals and `quota_exhausted` attempts retain their
+outcome without generating an individual fallback failure email. Retained agent
+emails still use the ordinary delivery path. Unrelated incidents retain their
+normal handling. Existing pauses and failure halts are not cleared.
+
+Each new shared condition freezes one deterministic email in the private
+`quota-notifications/CONDITION_ID.json` record under EMT's state root. Email is
+invoked directly with key `emt/quota/CONDITION_ID`; no Nucleus job authors or sends
+this notice. The same frozen payload has at most two transport invocations,
+at least five minutes apart and within 23 hours of the first attempt. A receipt
+ends sending. An unresolved exhausted send remains uncertain for inspection.
+Keep this directory in backups; do not delete records to retry delivery.
+A missing or unavailable quota observation postpones new model work while frozen
+email delivery continues. An old daemon's quota-endpoint 404 permits rollout
+without a quota gate. Worker recovery and operator pause stop discovery of new
+quota notices but allow frozen notice delivery.

@@ -472,6 +472,7 @@ fn classify(run: &mut Run, directory: &Path) -> AppResult<()> {
     })
 }
 
+#[allow(clippy::too_many_lines)]
 async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> AppResult<()> {
     require_health(client, None).await?;
     register(client).await?;
@@ -533,7 +534,7 @@ async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> App
             }
             after = after.max(pending.call.request_sequence);
         }
-        let job = client.get_job(&run.request.id).await.context(
+        let job = client.get_job_for_work(&run.request.id).await.context(
             "nucleus_observation_failed",
             "cannot observe terminal state; resume the same directory",
         )?;
@@ -552,6 +553,12 @@ async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> App
         if job.summary.state.is_terminal() {
             run.terminal = true;
             run.save(directory)?;
+            if run.classification().is_none() && job.quota_exhausted() {
+                return Err(AppError::new(
+                    "quota_exhausted",
+                    "Codex exhausted quota; inspect the retained job before retry",
+                ));
+            }
             if run.classification().is_none() {
                 return Err(AppError::new(
                     "document_classification_missing",
@@ -561,7 +568,9 @@ async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> App
                     ),
                 ));
             }
-            if matches!(job.summary.state, JobState::Failed | JobState::Cancelled) {
+            if !job.quota_exhausted()
+                && matches!(job.summary.state, JobState::Failed | JobState::Cancelled)
+            {
                 report_runtime_failure(&run.request.id)?;
             }
             return Ok(());

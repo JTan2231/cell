@@ -214,7 +214,7 @@ impl Runner {
         backend: &mut impl Backend,
     ) -> Result<String, RuntimeFailure> {
         let health = client
-            .health()
+            .health_for_work()
             .await
             .map_err(|error| runtime_client_error("model_runner_spawn", &error))?;
         if health.status != "ok" || !health.accepting_jobs || !health.authentication.authenticated {
@@ -424,7 +424,9 @@ impl Runner {
                     }),
                 JobState::Failed | JobState::Cancelled => {
                     let attempt = job.attempts.last();
-                    let code = if attempt.is_some_and(|attempt| {
+                    let code = if job.quota_exhausted() {
+                        "quota_exhausted"
+                    } else if attempt.is_some_and(|attempt| {
                         attempt.state == nucleus_core::AttemptState::TimedOut
                     }) {
                         "model_runner_timeout"
@@ -609,7 +611,10 @@ fn timeout_failure() -> RuntimeFailure {
 }
 
 fn runtime_client_error(code: &'static str, error: &ClientError) -> RuntimeFailure {
-    RuntimeFailure::new(code, format!("Nucleus request failed: {error}"))
+    RuntimeFailure::new(
+        nucleus_core::quota_condition(error).unwrap_or(code),
+        format!("Nucleus request failed: {error}"),
+    )
 }
 
 fn runtime_error(code: &'static str, message: &str) -> AppError {

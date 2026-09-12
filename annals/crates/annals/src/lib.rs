@@ -90,6 +90,13 @@ pub fn run_cli() -> i32 {
             0
         }
         Err(error) => {
+            if matches!(error.code(), "quota_deferred" | "quota_exhausted") {
+                println!(
+                    "{}",
+                    serde_json::json!({"ok":true,"data":{"outcome":error.code()}})
+                );
+                return 0;
+            }
             if cli.json {
                 eprintln!("{}", render::error_json(&error));
             } else {

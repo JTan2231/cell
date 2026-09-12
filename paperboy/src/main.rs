@@ -195,6 +195,10 @@ async fn main() -> std::process::ExitCode {
             std::process::ExitCode::SUCCESS
         }
         Err(error) => {
+            if let Some(code) = nucleus_core::quota_condition(error.as_ref()) {
+                println!("{}", json!({"ok":true,"data":{"outcome":code}}));
+                return std::process::ExitCode::SUCCESS;
+            }
             eprintln!("{}", json!({"ok":false,"error":error.to_string()}));
             std::process::ExitCode::FAILURE
         }

@@ -551,7 +551,12 @@ async fn daemon_http_contract_is_strict_durable_and_attributed() {
         })
         .await
         .or_panic("read Nucleus-owned account snapshot");
-    assert_eq!(account.rate_limits, json!({ "data": [] }));
+    assert_eq!(
+        account.rate_limits,
+        json!({"rateLimitsByLimitId": {"codex": {
+            "limitId": "codex", "primary": {"usedPercent": 0, "windowDurationMins": 10080, "resetsAt": 4_102_444_800_i64}
+        }}})
+    );
 
     let requester = Requester {
         program: "todo".to_owned(),
@@ -1426,6 +1431,10 @@ inventory_id=1
 thread_id=2
 turn_id=3
 case "$mcp_list" in
+  *'"method":"account/rateLimits/read"'*)
+    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":4102444800}}}}}'
+    exit 0
+    ;;
   *'"method":"account/login/start"'*)
     case "$mcp_list" in
       *'"accessToken":"header.e30.signature-fixture-managed-secret"'*) ;;

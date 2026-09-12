@@ -22,7 +22,8 @@
     "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
     "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
     "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs.",
-    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment readiness uses health and creates no synthetic jobs. Startup transactionally retires terminal history belonging to the removed built-in deployment probe, identified by its reserved requester, fixed label, and deterministic job ID; dependent or unfinished records block retirement."
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment readiness uses health and creates no synthetic jobs. Startup transactionally retires terminal history belonging to the removed built-in deployment probe, identified by its reserved requester, fixed label, and deterministic job ID; dependent or unfinished records block retirement.",
+    "Codex weekly quota is an expected admission pause. Pending requester work is retained without a Clockwork abend; EMT sends one durable condition notice directly through Email without a Nucleus job. Existing deadlines, failure halts and operator pauses remain independent."
   ],
   "authority": [
     "Nucleus owns admission, the global eight-slot scheduler, one harness attempt per job, job lifecycle, cancellation, the single-authority managed authentication broker, isolated static API-key job credentials, exact non-authentication harness stdout, and the durable requester-tool mailbox.",

@@ -351,6 +351,11 @@ async fn advance_grading(root: &Path, store: &Store, grader: &Grader) -> Result<
     };
     match grader.advance(&request).await? {
         Progress::Pending => Ok(()),
+        Progress::QuotaExhausted => {
+            store.connection.execute("UPDATE incoming SET state='failed',error_code='quota_exhausted',request_json=NULL WHERE id=?1", [&incoming.id])?;
+            remove_scratch(root, &job_id);
+            Ok(())
+        }
         Progress::Complete(critique) => {
             let payload = serde_json::to_string(&mail::response_email(
                 &assignment,

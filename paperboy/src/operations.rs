@@ -77,7 +77,7 @@ pub async fn doctor(root: &Path, options: &ReportOptions) -> Result<Value> {
             .prepare("SELECT outcome,provider_message_id FROM email_attempts LIMIT 0")?;
     }
     let client = NucleusClient::for_current_user()?;
-    crate::agent::readiness(&client, owner.as_deref()).await?;
+    crate::agent::readiness(&client, owner.as_deref(), false).await?;
     let pointers = options
         .kind
         .source_pointers(options.annals_config.as_deref())?;

@@ -121,6 +121,10 @@ async fn main() {
         return;
     }
     if let Err(error) = run().await {
+        if let Some(code) = nucleus_core::quota_condition(error.as_ref()) {
+            println!("{}", serde_json::json!({"ok":true,"outcome":code}));
+            return;
+        }
         if std::env::args().any(|argument| argument == "--json") {
             println!(
                 "{}",

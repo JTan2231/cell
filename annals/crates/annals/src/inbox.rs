@@ -484,6 +484,8 @@ pub struct RunSummary {
     pub stopped_for_pause: bool,
     pub stopped_for_maintenance: bool,
     pub stopped_for_low_space: bool,
+    #[serde(default)]
+    pub quota_outcome: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub storage: Option<StorageStatus>,
 }
@@ -959,6 +961,7 @@ pub(crate) fn run(
         stopped_for_pause: false,
         stopped_for_maintenance: false,
         stopped_for_low_space: false,
+        quota_outcome: None,
         storage: None,
     };
 
@@ -1014,7 +1017,13 @@ pub(crate) fn run(
         }
         if !auth_preflight_complete && next_is_queued {
             drop(control);
-            runner.preflight_auth()?;
+            if let Err(error) = runner.preflight_auth() {
+                if error.code() == "quota_deferred" {
+                    summary.quota_outcome = Some(error.code().into());
+                    break;
+                }
+                return Err(error);
+            }
             auth_preflight_complete = true;
             continue;
         }
@@ -1037,6 +1046,10 @@ pub(crate) fn run(
             args.stop_on_failure,
             &mut summary,
         )?;
+        auth_preflight_complete = false;
+        if summary.quota_outcome.is_some() {
+            break;
+        }
         if args.stop_on_failure && summary.failed > 0 {
             return Err(AppError::unexpected(
                 "inbox_job_failed",
@@ -2443,6 +2456,9 @@ fn run_retry_event(
         }
         if envelope.receipt.attempts == 0 && !auth_preflight_complete {
             if let Err(error) = runner.preflight_auth() {
+                if error.code() == "quota_deferred" {
+                    return Err(error);
+                }
                 inbox_retry_store::halt(
                     &db::open_write(library)?,
                     event_id,
@@ -2495,6 +2511,14 @@ fn run_retry_event(
             ));
         }
 
+        if summary.quota_outcome.as_deref() == Some("quota_deferred") {
+            return Err(AppError::unexpected(
+                "quota_deferred",
+                format!(
+                    "retry event {event_id} is waiting for quota; continue the same event after recovery"
+                ),
+            ));
+        }
         let after = inbox_retry_store::event_report(&db::open_read(library)?, event_id)?;
         let item = after
             .items
@@ -2617,6 +2641,7 @@ fn empty_run_summary(spool: &Spool) -> RunSummary {
         stopped_for_pause: false,
         stopped_for_maintenance: false,
         stopped_for_low_space: false,
+        quota_outcome: None,
         storage: None,
     }
 }
@@ -3447,18 +3472,27 @@ fn process_one(
         summary.skipped += 1;
         return Ok(());
     }
-    if envelope.recovered && envelope.receipt.attempts > 0 {
+    let quota_resume = envelope
+        .receipt
+        .last_error
+        .as_ref()
+        .is_some_and(|error| error.code == "quota_deferred");
+    if envelope.recovered && envelope.receipt.attempts > 0 && !quota_resume {
         let _control = spool.acquire_control_lock()?;
         if let Some(token) = envelope.receipt.model_run_token.as_deref() {
             runner.cancel_liaison(token);
         }
         return recover_attempt(library, spool, &mut envelope, ingestion_id, summary);
     }
-    summary.attempted += 1;
-    envelope.receipt.attempts = envelope.receipt.attempts.saturating_add(1);
+    if !quota_resume {
+        summary.attempted += 1;
+        envelope.receipt.attempts = envelope.receipt.attempts.saturating_add(1);
+    }
     "processing".clone_into(&mut envelope.receipt.state);
     envelope.receipt.started_at = Some(now()?);
-    envelope.receipt.last_error = None;
+    if !quota_resume {
+        envelope.receipt.last_error = None;
+    }
     write_receipt(&envelope)?;
     {
         let _control = spool.acquire_control_lock()?;
@@ -3521,7 +3555,7 @@ fn process_one(
             {
                 envelope.receipt.model_run_token.as_deref().map(|token| {
                     db::open_read(library)?.query_row(
-                        "SELECT EXISTS(SELECT 1 FROM model_runs WHERE token = ?1 AND failure IS NOT NULL)",
+                        "SELECT EXISTS(SELECT 1 FROM model_runs WHERE token = ?1 AND failure IS NOT NULL AND failure NOT LIKE 'quota_exhausted:%')",
                         [token],
                         |row| row.get::<_, bool>(0),
                     ).map_err(AppError::from)
@@ -3553,6 +3587,20 @@ fn process_one(
             Completion::Duplicate,
             summary,
         ),
+        Err(error) if error.code() == "quota_deferred" => {
+            envelope.receipt.last_error = Some(ReceiptError {
+                code: error.code().into(),
+                message: error.to_string(),
+            });
+            write_receipt(&envelope)?;
+            summary.quota_outcome = Some(error.code().into());
+            Ok(())
+        }
+        Err(error) if error.code() == "quota_exhausted" => {
+            terminalize_failed_job(library, spool, &mut envelope, ingestion_id, &error, summary)?;
+            summary.quota_outcome = Some(error.code().into());
+            Ok(())
+        }
         Err(error) => {
             let stop_activation = !permanent_source_error(&error);
             terminalize_failed_job(library, spool, &mut envelope, ingestion_id, &error, summary)?;
@@ -3626,7 +3674,12 @@ fn process_work(
             }
         }
     }
-    if !stored.new_work && envelope.receipt.retry_event_id.is_none() {
+    let quota_resume = envelope
+        .receipt
+        .last_error
+        .as_ref()
+        .is_some_and(|error| error.code == "quota_deferred");
+    if !stored.new_work && envelope.receipt.retry_event_id.is_none() && !quota_resume {
         drop(connection);
         if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
             runner.cancel_liaison(previous_token);
@@ -3634,11 +3687,20 @@ fn process_work(
         }
         return Ok(WorkProcessing::Duplicate);
     }
-    let run_token = connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
-        row.get::<_, String>(0)
-    })?;
+    let run_token = if quota_resume {
+        envelope.receipt.model_run_token.clone().ok_or_else(|| {
+            AppError::database(
+                "quota_resume_invalid",
+                "quota-deferred examination has no identity",
+            )
+        })?
+    } else {
+        connection.query_row("SELECT lower(hex(randomblob(32)))", [], |row| {
+            row.get::<_, String>(0)
+        })?
+    };
     drop(connection);
-    if let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
+    if !quota_resume && let Some(previous_token) = envelope.receipt.model_run_token.as_deref() {
         runner.cancel_liaison(previous_token);
         liaison::abandon_run(library, previous_token, work.id)?;
     }

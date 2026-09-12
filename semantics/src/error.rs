@@ -36,7 +36,9 @@ impl Error {
             Self::Io { .. } => "io_failed",
             Self::Sql(_) => "database_failed",
             Self::Json(_) => "json_failed",
-            Self::Nucleus(_) => "nucleus_failed",
+            Self::Nucleus(error) => {
+                nucleus_core::quota_condition(error).unwrap_or("nucleus_failed")
+            }
             Self::Conversations(_) => "conversations_failed",
         }
     }
@@ -48,7 +50,8 @@ impl Error {
             Self::Domain {
                 code: "nucleus_admission_rejected"
                     | "nucleus_job_terminal_invalid"
-                    | "nucleus_job_terminal_failed",
+                    | "nucleus_job_terminal_failed"
+                    | "quota_exhausted",
                 ..
             }
         )

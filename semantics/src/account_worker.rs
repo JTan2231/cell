@@ -19,6 +19,7 @@ pub struct AccountWorkerReport {
     pub intake_added: u64,
     pub applied_revision: Option<u64>,
     pub error_event_id: Option<String>,
+    pub quota_outcome: Option<String>,
     pub blocked_project_id: Option<String>,
 }
 
@@ -43,6 +44,7 @@ impl AccountWorkerReport {
             intake_added: 0,
             applied_revision: None,
             error_event_id: None,
+            quota_outcome: None,
             blocked_project_id: None,
         }
     }
@@ -54,6 +56,7 @@ impl AccountWorkerReport {
             intake_added: 0,
             applied_revision: None,
             error_event_id: None,
+            quota_outcome: None,
             blocked_project_id: None,
         }
     }
@@ -208,7 +211,11 @@ where
                 ),
             )?;
         }
-        report.error_event_id = Some(event_id.to_owned());
+        if matches!(error.code(), "quota_deferred" | "quota_exhausted") {
+            report.quota_outcome = Some(error.code().to_owned());
+        } else {
+            report.error_event_id = Some(event_id.to_owned());
+        }
         Ok(())
     }
 
@@ -259,7 +266,11 @@ where
                         ACCOUNT_RECONCILIATION_PENDING,
                     )?;
                 }
-                report.error_event_id = Some(intake.event_id);
+                if matches!(error.code(), "quota_deferred" | "quota_exhausted") {
+                    report.quota_outcome = Some(error.code().to_owned());
+                } else {
+                    report.error_event_id = Some(intake.event_id);
+                }
             }
         }
         Ok(())

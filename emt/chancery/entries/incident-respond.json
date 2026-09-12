@@ -44,7 +44,8 @@
     }
   ],
   "effects": [
-    "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects."
+    "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects.",
+    "Codex weekly quota is an expected admission pause. Pending requester work is retained without a Clockwork abend; EMT sends one durable condition notice directly through Email without a Nucleus job. Existing deadlines, failure halts and operator pauses remain independent."
   ],
   "authority": [
     "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."

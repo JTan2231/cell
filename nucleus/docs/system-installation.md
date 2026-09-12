@@ -114,7 +114,8 @@ Nucleus has no automatic backup or restore command. Select a private destination
 4. Create a SQLite-aware backup of `nucleus.db`. Other copy methods must preserve
    the database and any WAL sidecars as one consistent set.
 5. Back up the credential home separately only when credential recovery is required.
-6. Include logs, service configuration, and requester state as needed. A Nucleus
+6. Include private `quota-policy.json` and `quota-state.json` beside the database.
+   Include logs, service configuration, and requester state as needed. A Nucleus
    backup does not replace product backups.
 7. Start the same service and check readiness:
 

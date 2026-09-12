@@ -48,6 +48,8 @@ enum Command {
     Manual,
     /// Inspect daemon availability.
     Health,
+    /// Inspect the main Codex weekly quota gate without model execution.
+    Quota,
     /// Emit the read-only Iatreion status contract.
     StatusSnapshot {
         /// Confirm JSON output. The status contract is always JSON.
@@ -396,7 +398,15 @@ async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Resu
             let observed_at_end = now_unix_seconds();
 
             let mut admission_reasons = Vec::new();
-            if !health.accepting_jobs {
+            if let Some(quota) = health.quota.as_ref().filter(|quota| quota.is_blocked()) {
+                admission_reasons.push(Reason {
+                    code: "quota_deferred".into(),
+                    summary: format!(
+                        "Codex weekly admission paused ({:?}); remaining={:?}%, reset={:?}",
+                        quota.state, quota.remaining_percent, quota.resets_at
+                    ),
+                });
+            } else if !health.accepting_jobs {
                 admission_reasons.push(Reason {
                     code: "daemon_not_accepting_jobs".to_owned(),
                     summary: "Nucleus is not accepting new jobs".to_owned(),
@@ -549,6 +559,7 @@ async fn run_api(command: Command, client: NucleusClient, compact: bool) -> Resu
             };
             print_json(&snapshot, compact)
         }
+        Command::Quota => print_json(&client.quota_status().await?, compact),
         Command::Health => {
             let health = client.health().await?;
             print_json(&health, compact)?;

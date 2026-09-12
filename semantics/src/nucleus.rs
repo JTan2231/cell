@@ -415,6 +415,14 @@ impl NucleusReconciler {
 
 async fn require_health(client: &NucleusClient, deployment_run_id: Option<&str>) -> Result<()> {
     let mut health = client.health().await?;
+    if health.status == "ok"
+        && health
+            .quota
+            .as_ref()
+            .is_some_and(nucleus_core::QuotaStatusV1::is_blocked)
+    {
+        health.accepting_jobs = true;
+    }
     let mut deployment_proved = false;
     if (health.status != "ok" || !health.accepting_jobs)
         && let Some(run_id) = deployment_run_id.filter(|run_id| !run_id.is_empty())
@@ -496,6 +504,7 @@ const fn explicit_nonretryable_rejection(status: u16) -> bool {
 
 fn bounded_account_runtime_error(error: Error) -> Error {
     match error.code() {
+        "quota_deferred" | "quota_exhausted" => error,
         "nucleus_admission_rejected" => Error::domain(
             "nucleus_admission_rejected",
             "Nucleus rejected the immutable account reconciliation request",
@@ -600,15 +609,23 @@ async fn serve_mailbox(
         {
             return Ok(revision);
         }
-        let job = client.get_job(&job_id).await?;
+        let job = client.get_job_for_work(&job_id).await?;
         if job.summary.state.is_terminal() {
             if store
                 .pending_committed_revision(&intake.event_id, job_id.as_str())?
                 .is_some()
             {
                 let revision = store.finalize_applied(&intake.event_id, job_id.as_str())?;
-                report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                if !job.quota_exhausted() {
+                    report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                }
                 return Ok(revision);
+            }
+            if job.quota_exhausted() {
+                return Err(Error::domain(
+                    "quota_exhausted",
+                    "Codex quota exhausted; inspect retained attempt before retry",
+                ));
             }
             return match job.summary.state {
                 JobState::Completed => Err(Error::domain(
@@ -720,15 +737,23 @@ async fn serve_account_mailbox(
         {
             return Ok(revision);
         }
-        let job = client.get_job(&job_id).await?;
+        let job = client.get_job_for_work(&job_id).await?;
         if job.summary.state.is_terminal() {
             if store
                 .account_pending_committed_revision(&intake.event_id, job_id.as_str())?
                 .is_some()
             {
                 let revision = store.finalize_account_applied(&intake.event_id, job_id.as_str())?;
-                report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                if !job.quota_exhausted() {
+                    report_committed_runtime_failure(job.summary.state, job_id.as_str())?;
+                }
                 return Ok(revision);
+            }
+            if job.quota_exhausted() {
+                return Err(Error::domain(
+                    "quota_exhausted",
+                    "Codex quota exhausted; inspect retained attempt before retry",
+                ));
             }
             return match job.summary.state {
                 JobState::Completed => Err(Error::domain(
