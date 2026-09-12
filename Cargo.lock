@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "paperboy"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "annals-api",
  "anyhow",
