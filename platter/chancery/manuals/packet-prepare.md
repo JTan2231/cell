@@ -109,6 +109,21 @@ characters, extractable text, the Jackson heading and one-page layout before
 acceptance. Each bullet retains its captured career-entry references.
 A run becomes ready only with accepted brief/resume content and retained PDF.
 
+New resume requests separate the task, evidence and disclosure guidance,
+editorial policy, and artifact requirements. Platter embeds its maintained
+`prompts/resume-editorial.md` policy in the executable and copies it into each new
+resume request. Edit that source and rebuild Platter to change the policy.
+The policy guides selection and presentation of consequences, engineering
+judgment, and organizational judgment. The same writer selects, drafts, reviews,
+and revises the bullets. Original bullets, when supplied, provide an approximate
+space reference; the editorial policy governs style. Layout revisions preserve
+the main accomplishment and useful supporting detail.
+
+Editorial review belongs to the writer. Existing submission and rendering checks
+still determine artifact acceptance. Platter retains the exact composed request;
+resuming it does not substitute newer instructions. Policy changes apply to new
+requests and do not rewrite accepted packets.
+
 For an authorized restart after a failed or cancelled preparation, use
 `prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
 accepted resume, and its model jobs must be terminal or absent. The job must

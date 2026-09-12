@@ -209,6 +209,10 @@
     "data_semantics": [
       {
         "status": "declared",
+        "statement": "New resume requests separate task, evidence and disclosure guidance, embedded editorial policy, and artifact requirements. The same writer selects, drafts, reviews and revises for consequence, engineering judgment and organizational judgment. Original bullets, when supplied, are an approximate space reference. Existing checks determine artifact acceptance; retained requests and accepted packets do not acquire later policy changes."
+      },
+      {
+        "status": "declared",
         "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
       },
       {
