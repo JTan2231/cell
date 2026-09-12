@@ -21,7 +21,7 @@
   "runtime_versions": {
     "chancery": {
       "minimum": "0.6.0",
-      "before": "0.7.0"
+      "before": "0.8.0"
     }
   }
 }
