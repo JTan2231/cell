@@ -1,7 +1,7 @@
 [package]
 name = "todo"
 default-run = "todo"
-version = "0.7.0"
+version = "0.7.1"
 edition.workspace = true
 
 [dependencies]
