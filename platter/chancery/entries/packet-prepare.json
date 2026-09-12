@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -92,25 +92,26 @@
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
-    "Models author only plain Jackson bullets; all other original resume source bytes remain fixed.",
+    "Writers author only plain Jackson bullets; all other original resume source bytes remain fixed. The independent reviewer submits only free-text Markdown and cannot accept a resume.",
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
-    "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained.",
+    "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained. New runs also require a validated draft and completed Markdown review before revision.",
     "Preview freezes exact message and ordered immutable artifacts without sending.",
     "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
     "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents.",
     "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition."
   ],
   "failure_and_recovery": [
-    "A consistent schema-two SQLite backup contains the complete packet history. Disposable Ashby board caches are excluded and can be downloaded again. Schema-one file-backed state requires maintained migration.",
+    "A consistent schema-three SQLite backup contains the complete packet history. Disposable Ashby board caches are excluded and can be downloaded again. Schema-one and schema-two state require maintained migration.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
     "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
     "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
     "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend.",
-    "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused."
+    "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
+    "Review and revision reuse their exact retained requests and completed prior results. A failed stage without a result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -163,7 +164,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-two state, the supported resume template, readable Cast and CRM interfaces, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Preparation requires initialized schema-three state, the supported resume template, readable Cast and CRM interfaces, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
@@ -209,6 +210,10 @@
     "data_semantics": [
       {
         "status": "declared",
+        "statement": "New preparations run draft, independent Markdown review and revision as sequential Nucleus jobs. The revision copies the exact retained writer request and adds only the draft with evidence references and raw review text. Writer inputs, policy, model settings, tools and rendering checks otherwise remain identical. The reviewer sees the draft, posting, captured career library and policy without writer history, rationale or brief. Markdown headings are suggested; Platter does not parse findings or verdicts and requires no finding responses from the writer. Review must complete before revision; final artifact checks determine acceptance."
+      },
+      {
+        "status": "declared",
         "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The resume model cannot author fixed sections, dates, identity, employers, projects, skills or layout."
       },
       {
@@ -229,7 +234,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Both stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
+        "statement": "All stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
@@ -301,7 +306,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 6 adds URL-selected run-ad-hoc over Cast collection contract 5 and existing Platter records. It retains contract-five Ashby caching and all existing preparation, edition and send meanings. Private schema 2 and retained packet inputs remain unchanged."
+        "statement": "Preparation contract 7 adds independent editorial review for new runs. Installation contract 5 supports private schema 3, preserving legacy inputs, exact requests and artifacts. Existing runs retain their legacy workflow. Older binaries cannot operate schema three. Cast collection contract 5 and Clockwork schedule contract 3 remain required."
       },
       {
         "status": "unspecified",

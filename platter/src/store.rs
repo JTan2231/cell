@@ -6,7 +6,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 pub const DATABASE: &str = "packets.sqlite3";
 
 pub struct Store {
@@ -22,7 +22,7 @@ pub struct PacketRecord {
     pub company: String,
     pub title: String,
     pub status: String,
-    /// Accepted only when decoding predecessor records; never used by schema two.
+    /// Accepted only when decoding predecessor records; never used by current artifacts.
     #[serde(default, skip_serializing)]
     pub directory: String,
 }
@@ -125,7 +125,7 @@ impl Store {
         };
         let version = store.version()?;
         ensure!(
-            matches!(version, 0 | 1 | SCHEMA_VERSION),
+            matches!(version, 0 | 1 | 2 | SCHEMA_VERSION),
             "unsupported Platter database schema"
         );
         if version == 0 {
@@ -147,7 +147,7 @@ impl Store {
         let store = Self::control(root)?;
         ensure!(
             store.version()? == SCHEMA_VERSION,
-            "legacy file-backed state requires platter migrate under maintenance"
+            "legacy state requires platter migrate under maintenance"
         );
         Ok(store)
     }
@@ -168,7 +168,7 @@ impl Store {
         };
         ensure!(
             store.version()? == SCHEMA_VERSION,
-            "legacy file-backed state requires platter migrate under maintenance"
+            "legacy state requires platter migrate under maintenance"
         );
         Ok(store)
     }
@@ -565,7 +565,7 @@ impl Store {
         Ok(())
     }
 
-    /// A complete schema-two snapshot. Never silently replace an existing backup.
+    /// A complete current-schema snapshot. Never silently replace an existing backup.
     pub fn backup(&self, destination: &Path) -> Result<()> {
         use std::os::unix::fs::PermissionsExt as _;
         ensure!(

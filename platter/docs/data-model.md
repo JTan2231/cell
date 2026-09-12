@@ -1,6 +1,6 @@
 # Platter data model
 
-Schema two uses one private SQLite database. The core tables are:
+Schema three uses one private SQLite database. The core tables are:
 
 | Table | Owned information |
 | --- | --- |
@@ -19,6 +19,18 @@ A packet is a run with its content. Brief and resume-content artifacts contain
 the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
+New runs also capture `resume_editorial`; its absence selects the legacy
+brief/resume workflow. The retained draft request is the common writing setup.
+Revision copies it and adds only `proposed_draft` and `editorial_review`.
+
+`resume-draft`, `resume-draft-source` and `resume-draft-pdf` are validated
+intermediate artifacts. `resume-review` contains the exact UTF-8 Markdown
+review of that draft. Its organization and editorial findings are not parsed.
+`resume-content`, `resume-source` and `resume-pdf` remain the final outputs.
+Draft and revision use the same submission payload and rendering checks.
+Their content and rendered bytes commit together. The draft cannot make a
+packet ready. Review must complete before revision starts.
+
 Ashby board responses are separately cached in `ashby-cache/BOARD.json` under
 the runtime root. Each file holds `response` and its `retrieved_at` download
 time. It is reused for less than 14 days, unless the requested posting is
@@ -51,9 +63,13 @@ There is no artifact deletion API. Fixed content and frozen messages remain
 immutable; any future retention policy must preserve every referenced artifact
 and all delivery uncertainty. Explicit exports never become dependencies.
 
-Migration imports schema one transactionally, records a complete schema-two
+Migration imports schema one transactionally, records a complete schema-three
 backup, and removes only hashed legacy files on its durable cleanup manifest.
 Nucleus tool history is not copied. Unknown remaining regular runtime files
 are retained as imported artifacts. The database backup is self-contained for
 Platter history; rendering programs and Nucleus runtime/authentication remain
 separate dependencies.
+
+Schema-two migration advances the database version without changing retained
+inputs, requests or artifact bytes. Older binaries refuse schema three. New
+stage toolsets coexist with the retained legacy decoders.

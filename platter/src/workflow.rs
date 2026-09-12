@@ -18,6 +18,9 @@ pub(crate) struct Captured {
     pub posting: Posting,
     pub career: Vec<CareerEntry>,
     pub template_artifact: String,
+    /// Absence identifies preparations created before independent editorial review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_editorial: Option<String>,
 }
 
 pub fn initialize(root: &Path, resume: &Path) -> Result<()> {
@@ -101,7 +104,13 @@ async fn prepare_job(
             "fresh preparation requires an incomplete run without an accepted resume"
         );
         let client = nucleus_client::NucleusClient::for_current_user()?;
-        for stage in [Stage::Brief, Stage::Resume] {
+        for stage in [
+            Stage::Brief,
+            Stage::Resume,
+            Stage::ResumeDraft,
+            Stage::ResumeReview,
+            Stage::ResumeRevision,
+        ] {
             if let Some(request) = agent::retained_request(store, &prior.id, stage)? {
                 match client.get_job(&request.id).await {
                     Ok(job) => ensure!(
@@ -138,6 +147,7 @@ async fn prepare_job(
             template_artifact: store
                 .setting("template")?
                 .context("original resume is not initialized")?,
+            resume_editorial: Some(agent::RESUME_EDITORIAL.into()),
         };
         store.insert_run(&record, &captured)?;
         record
@@ -161,6 +171,7 @@ async fn prepare_job(
         guidance,
         original_jackson_bullets: vec![],
         brief: None,
+        ..StageInputs::default()
     };
     let client = nucleus_client::NucleusClient::for_current_user()?;
     let StageResult::Brief(brief) =
@@ -174,8 +185,81 @@ async fn prepare_job(
         return store.run(&record.id);
     }
     inputs.brief = Some(brief);
+    inputs.editorial_policy = captured.resume_editorial;
+    prepare_resume(&client, store, &record.id, &template, inputs, deadline).await?;
+    store.status(&record.id, "ready")?;
+    store.run(&record.id)
+}
+
+async fn prepare_resume(
+    client: &nucleus_client::NucleusClient,
+    store: &Store,
+    run: &str,
+    template: &ResumeTemplate,
+    mut inputs: StageInputs,
+    deadline: Option<Instant>,
+) -> Result<()> {
+    if inputs.editorial_policy.is_none() {
+        write_resume(
+            client,
+            store,
+            run,
+            template,
+            Stage::Resume,
+            inputs,
+            deadline,
+        )
+        .await?;
+        return Ok(());
+    }
+    let draft = write_resume(
+        client,
+        store,
+        run,
+        template,
+        Stage::ResumeDraft,
+        inputs.clone(),
+        deadline,
+    )
+    .await?;
+    inputs.proposed_draft = Some(draft);
+    let StageResult::Review(review) =
+        agent::run_stage(client, store, Stage::ResumeReview, inputs.clone(), deadline).await?
+    else {
+        anyhow::bail!("unexpected editorial review result");
+    };
+    inputs.editorial_review = Some(review);
+    write_resume(
+        client,
+        store,
+        run,
+        template,
+        Stage::ResumeRevision,
+        inputs,
+        deadline,
+    )
+    .await?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)] // Both writers share the same rendering and acceptance path.
+async fn write_resume(
+    client: &nucleus_client::NucleusClient,
+    store: &Store,
+    run: &str,
+    template: &ResumeTemplate,
+    stage: Stage,
+    inputs: StageInputs,
+    deadline: Option<Instant>,
+) -> Result<agent::Resume> {
+    let (content_kind, source_kind, pdf_kind) = stage.resume_artifacts();
+    let filename = if stage == Stage::ResumeDraft {
+        format!("{run}-resume-draft")
+    } else {
+        format!("{run}-resume")
+    };
     let validate_resume = |resume: &agent::Resume| -> Result<()> {
-        if store.run_artifact(&record.id, "resume-pdf")?.is_some() {
+        if store.run_artifact(run, pdf_kind)?.is_some() {
             return Ok(());
         }
         ensure!(
@@ -184,33 +268,38 @@ async fn prepare_job(
         );
         let rendered = template.render_pdf(&resume.jackson_bullets, store.root())?;
         let tx = store.connection.unchecked_transaction()?;
-        store.put_content(&record.id, "resume-content", resume)?;
+        store.put_content(run, content_kind, resume)?;
         store.put_artifact(
-            Some(&record.id),
-            "resume-source",
-            &format!("{}-resume.tex", record.id),
+            Some(run),
+            source_kind,
+            &format!("{filename}.tex"),
             "application/x-tex",
             rendered.source.as_bytes(),
         )?;
         store.put_artifact(
-            Some(&record.id),
-            "resume-pdf",
-            &format!("{}-resume.pdf", record.id),
+            Some(run),
+            pdf_kind,
+            &format!("{filename}.pdf"),
             "application/pdf",
             &rendered.pdf,
         )?;
         tx.commit()?;
         Ok(())
     };
-    let StageResult::Resume(resume) =
-        agent::run_stage_with_resume_validator(&client, store, inputs, deadline, &validate_resume)
-            .await?
+    let StageResult::Resume(resume) = agent::run_stage_with_resume_validator(
+        client,
+        store,
+        stage,
+        inputs,
+        deadline,
+        &validate_resume,
+    )
+    .await?
     else {
         anyhow::bail!("unexpected resume result");
     };
     validate_resume(&resume)?;
-    store.status(&record.id, "ready")?;
-    store.run(&record.id)
+    Ok(resume)
 }
 
 pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec<PacketRecord>> {

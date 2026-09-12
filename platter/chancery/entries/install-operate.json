@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -73,7 +73,7 @@
   "effects": [
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
-    "An explicit transaction imports legacy records and files into schema two, writes a complete schema-two backup, then removes only the hashed legacy files on its retained cleanup manifest.",
+    "An explicit transaction imports legacy records and files into schema three, writes a complete schema-three backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two migration advances the version without changing captured inputs, exact requests or artifact bytes.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
     "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, CRM and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
@@ -88,8 +88,8 @@
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
-    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema two plus originals and cleanup recovery metadata.",
-    "Older binaries cannot operate schema two. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
+    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema three plus originals and cleanup recovery metadata. Schema-two records retain their legacy workflow after the version advance.",
+    "Older binaries cannot operate schema three. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
     "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
     "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
@@ -164,13 +164,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-two SQLite backup with a resumable legacy cleanup manifest."
+        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-three SQLite backup with a resumable legacy cleanup manifest."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Database schema 2 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
+        "statement": "Database schema 3 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
       }
     ],
     "identity_and_units": [
@@ -202,7 +202,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import is transactional. A complete schema-two backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
+        "statement": "Schema-one import is transactional. A complete schema-three backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
       },
       {
         "status": "declared",
@@ -226,7 +226,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation contract 4 verifies Cast collection contract 5 for preparation contract 6. It retains cell-install-v2 and private schema two. Schema one requires the explicit import. Older binaries cannot read schema two. Recovery requires a compatible candidate or a complete predecessor backup with its matching binary."
+        "statement": "Preparation contract 7 adds independent editorial review for new runs. Installation contract 5 supports private schema 3, preserving legacy inputs, exact requests and artifacts. Existing runs retain their legacy workflow. Older binaries cannot operate schema three. Cast collection contract 5 and Clockwork schedule contract 3 remain required."
       }
     ],
     "reliances": [

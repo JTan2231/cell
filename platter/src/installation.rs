@@ -170,10 +170,16 @@ fn lifecycle_inner(
             )?;
             let version: i64 =
                 connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            ensure!(
+                matches!(version, 1 | 2 | crate::store::SCHEMA_VERSION),
+                "unsupported Platter database schema"
+            );
             version == 1
-                || crate::store::Store::open_read_only(&root)?
-                    .setting::<serde_json::Value>("config")?
-                    .is_some()
+                || connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM settings WHERE key='config')",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )?
         } else {
             false
         };
