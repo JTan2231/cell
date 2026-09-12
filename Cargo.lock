@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "annals-usage"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "annals-api",
  "chancery-usage",
