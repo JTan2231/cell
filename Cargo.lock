@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "iatreion"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cell-install",
  "chancery-usage",
@@ -1176,7 +1176,7 @@ dependencies = [
 
 [[package]]
 name = "iatreion-api"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
