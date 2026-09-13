@@ -28,7 +28,8 @@
     ],
     "shared_privacy_and_retention": [
       "The companion reads private local Annals attribution and Nucleus output and account metadata but retains no reporting state.",
-      "It never reads, copies, or stores Nucleus credential files; per-entry effects govern any attended login delegation."
+      "It never reads, copies, or stores Nucleus credential files; per-entry effects govern any attended login delegation.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies the exact bundle bytes. projectionVersion identifies reporting interpretation. Entry contract versions identify documented semantic compatibility.",

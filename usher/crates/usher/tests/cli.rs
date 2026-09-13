@@ -72,7 +72,11 @@ fn fixture() -> Result<TempDir, Box<dyn Error>> {
 fn run(root: &Path, verb: &str, selection: Option<&str>) -> Result<(i32, Value), Box<dyn Error>> {
     let mut command = Command::new(env!("CARGO_BIN_EXE_usher"));
     // A recognition command must not need installed programs, HOME, or registries.
-    command.env_clear().args(["--json", verb]).arg(root);
+    command
+        .env_clear()
+        .env("CHANCERY_USAGE_DISABLED", "1")
+        .args(["--json", verb])
+        .arg(root);
     if let Some(selection) = selection {
         command.args(["--product", selection]);
     }

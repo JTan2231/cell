@@ -27,7 +27,8 @@
     ],
     "shared_privacy_and_retention": [
       "Agent tool replies and Nucleus records may retain private conversation text. Sending discloses the frozen report to Resend and the personal recipient provider. Credentials remain with Nucleus and Email. No automatic pruning.",
-      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification."
+      "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Independent product release, schema-one records, and version-one conversation and decision report toolsets. Unsupported state and runtime capabilities fail explicitly."

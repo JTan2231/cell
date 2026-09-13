@@ -7,6 +7,7 @@ license.workspace = true
 default-run = "conatus"
 
 [dependencies]
+chancery-usage.workspace = true
 anyhow = "1"
 annals = { path = "../annals/crates/annals" }
 annals-api.workspace = true

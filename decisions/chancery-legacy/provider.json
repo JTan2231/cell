@@ -21,7 +21,8 @@
       "The current user reads compatibility records locally through the krisis executable."
     ],
     "shared_privacy_and_retention": [
-      "Retained lifecycle events contain sensitive normalized legacy decision state and machine-local anchors. No retention period is promised."
+      "Retained lifecycle events contain sensitive normalized legacy decision state and machine-local anchors. No retention period is promised.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release 0.4.0 preserves contract-version-one reads while Krisis appends no new events."

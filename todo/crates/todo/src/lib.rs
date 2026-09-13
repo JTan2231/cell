@@ -18,8 +18,6 @@ mod tool_server;
 
 use std::ffi::OsStr;
 
-use clap::Parser as _;
-
 use crate::cli::Cli;
 use crate::error::AppError;
 
@@ -27,7 +25,7 @@ use crate::error::AppError;
 #[must_use]
 pub fn main_entry() -> i32 {
     let json_requested = std::env::args_os().any(|argument| argument == OsStr::new("--json"));
-    let cli = match Cli::try_parse() {
+    let cli = match chancery_usage::cli::try_parse::<Cli>("todo", "") {
         Ok(cli) => cli,
         Err(error) => {
             if matches!(

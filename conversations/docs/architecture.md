@@ -15,6 +15,13 @@ library instead of scraping human CLI output.
 
 ## Connection and reads
 
+On macOS, the CLI and `ClientConfig::default()` select the executable bundled
+with ChatGPT at `/Applications/ChatGPT.app/Contents/Resources/codex`. This keeps
+the default reader on the app's installed version as the app updates.
+`--codex`, `CONVERSATIONS_CODEX`, or an explicit library `codex_path` can select
+another executable. Other platforms default to `codex` on `PATH`. A selected
+executable that cannot start causes an error; there is no executable fallback.
+
 Each invocation starts `codex app-server --stdio`, sends one `initialize`
 request with `experimentalApi: true`, sends `initialized`, performs the bounded
 operation, and terminates the launch. On Unix, Conversations starts the command

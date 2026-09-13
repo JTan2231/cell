@@ -150,11 +150,24 @@ pub async fn main_entry() {
 }
 
 async fn run() -> AppResult<()> {
+    if chancery_usage::cli::registration_requested() {
+        let mut ids = vec![
+            "send".to_owned(),
+            "setup".to_owned(),
+            "status-snapshot".to_owned(),
+        ];
+        ids.extend(chancery_usage::cli::command_ids(
+            &<ReceiveCli as clap::CommandFactory>::command(),
+            "receive",
+        ));
+        chancery_usage::cli::registration_exit("email", &ids);
+    }
     let arguments: Vec<_> = std::env::args_os().collect();
     if arguments.get(1).is_some_and(|value| value == "setup") {
         let setup = settings::Setup::parse_from(
             std::iter::once(arguments[0].clone()).chain(arguments.into_iter().skip(2)),
         );
+        chancery_usage::observe("email", "setup");
         settings::configure(&setup)?;
         println!("{{\"configured\":true}}");
         return Ok(());
@@ -169,6 +182,14 @@ async fn run() -> AppResult<()> {
     {
         let receive = ReceiveCli::parse_from(
             std::iter::once(arguments[0].clone()).chain(arguments.into_iter().skip(2)),
+        );
+        chancery_usage::observe(
+            "email",
+            match &receive.command {
+                ReceiveCommand::Settings => "receive.settings",
+                ReceiveCommand::List { .. } => "receive.list",
+                ReceiveCommand::Get { .. } => "receive.get",
+            },
         );
         let output = match receive.command {
             ReceiveCommand::Settings => serde_json::to_string(&api::receiving_settings().await?),
@@ -186,6 +207,7 @@ async fn run() -> AppResult<()> {
         return Ok(());
     }
     let send = SendCli::parse_from(arguments);
+    chancery_usage::observe("email", "send");
     let options = api::ReplyOptions {
         reply_to: send.reply_to,
         in_reply_to: send.in_reply_to,

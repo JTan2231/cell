@@ -20,6 +20,7 @@ fn main() {
         ],
         false,
     ) {
+        chancery_usage::observe("annals", "status-snapshot");
         println!("{snapshot}");
         return;
     }

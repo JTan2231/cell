@@ -79,3 +79,11 @@ decisions. Concern list defaults to 20 rows with ID, status, recorded time and
 a marked excerpt of at most 240 characters. Results include `has_more`; use
 `--limit` with a positive integer for more. Concern show returns full provenance
 and routing history.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

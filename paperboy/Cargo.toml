@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+chancery-usage.workspace = true
 anyhow = "1"
 annals-api.workspace = true
 cell-install.workspace = true

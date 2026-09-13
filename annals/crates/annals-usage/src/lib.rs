@@ -44,6 +44,18 @@ pub fn main_entry() {
 }
 
 fn run() -> Result<Outcome, AppError> {
+    if chancery_usage::cli::registration_requested() {
+        chancery_usage::cli::registration_exit(
+            "annals",
+            &[
+                "usage.report",
+                "usage.budget",
+                "usage.doctor",
+                "usage.login",
+            ]
+            .map(str::to_owned),
+        );
+    }
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
     let Some(command) = arguments.first().and_then(|argument| argument.to_str()) else {
         print_help();
@@ -60,20 +72,26 @@ fn run() -> Result<Outcome, AppError> {
         }
         "report" => {
             let options = ReportOptions::parse_from(command_arguments("report", &arguments[1..]));
+            chancery_usage::observe("annals", "usage.report");
             run_report(&options)?;
             Ok(Outcome::Success)
         }
         "budget" => {
             let options = BudgetOptions::parse_from(command_arguments("budget", &arguments[1..]));
+            chancery_usage::observe("annals", "usage.budget");
             run_budget(&options)?;
             Ok(Outcome::Success)
         }
         "doctor" => {
             let options = DoctorOptions::parse_from(command_arguments("doctor", &arguments[1..]));
+            chancery_usage::observe("annals", "usage.doctor");
             run_doctor(&options)?;
             Ok(Outcome::Success)
         }
-        "login" => run_login(&arguments[1..]),
+        "login" => {
+            chancery_usage::observe("annals", "usage.login");
+            run_login(&arguments[1..])
+        }
         _ => Err(AppError::UnsupportedCommand(command.to_owned())),
     }
 }

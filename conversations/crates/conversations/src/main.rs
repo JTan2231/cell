@@ -22,7 +22,7 @@ struct Cli {
         long,
         global = true,
         env = "CONVERSATIONS_CODEX",
-        default_value = "codex"
+        default_value = conversations::DEFAULT_CODEX_PATH
     )]
     codex: PathBuf,
 
@@ -248,6 +248,7 @@ fn main() -> ExitCode {
         "conversations/history",
         "conversations.history.explore",
     ) {
+        chancery_usage::observe("conversations", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
@@ -262,7 +263,7 @@ fn main() -> ExitCode {
 
 #[allow(clippy::too_many_lines)] // Keep the small command dispatcher in one readable match.
 fn run() -> Result<(), Box<dyn StdError>> {
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("conversations", "");
     let mut config = ClientConfig {
         codex_path: cli.codex,
         stderr_policy: cli.app_server_stderr.into(),
@@ -283,6 +284,7 @@ fn run() -> Result<(), Box<dyn StdError>> {
             } else {
                 println!("ok: {}", report.ok);
                 println!("host: {}", report.host_id);
+                println!("codex path: {}", report.codex_path);
                 println!("codex: {}", report.executable_version);
                 println!("visible threads: {}", report.visible_threads);
                 if let Some(user_agent) = report.app_server_user_agent {

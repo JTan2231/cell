@@ -28,6 +28,7 @@ dependencies = [
  "base64",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "fs2",
@@ -66,6 +67,7 @@ name = "annals-usage"
 version = "0.6.1"
 dependencies = [
  "annals-api",
+ "chancery-usage",
  "clap",
  "nucleus-client",
  "nucleus-core",
@@ -266,6 +268,7 @@ name = "cast"
 version = "0.4.2"
 dependencies = [
  "cell-install",
+ "chancery-usage",
  "clap",
  "fs2",
  "futures-util",
@@ -345,6 +348,7 @@ name = "chancery"
 version = "0.6.0"
 dependencies = [
  "cell-install",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "serde",
@@ -353,6 +357,18 @@ dependencies = [
  "tempfile",
  "thiserror",
  "unicode-normalization",
+]
+
+[[package]]
+name = "chancery-usage"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -423,6 +439,7 @@ name = "clockwork"
 version = "0.6.0"
 dependencies = [
  "cell-install",
+ "chancery-usage",
  "clap",
  "fs2",
  "hex",
@@ -472,6 +489,7 @@ dependencies = [
  "anyhow",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "fs2",
@@ -490,6 +508,7 @@ name = "conversations"
 version = "0.5.1"
 dependencies = [
  "cell-install",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "serde",
@@ -539,6 +558,7 @@ version = "0.5.1"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "nucleus-client",
@@ -594,6 +614,7 @@ dependencies = [
  "annals-api",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "conversations",
@@ -699,6 +720,7 @@ version = "0.6.0"
 dependencies = [
  "base64",
  "cell-install",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "reqwest",
@@ -715,6 +737,7 @@ version = "0.1.3"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "email",
@@ -1141,6 +1164,7 @@ name = "iatreion"
 version = "0.1.0"
 dependencies = [
  "cell-install",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "serde",
@@ -1481,6 +1505,7 @@ version = "0.1.3"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "chrono",
  "chrono-tz",
  "clap",
@@ -1556,6 +1581,7 @@ version = "0.5.5"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "fs2",
  "iatreion-api",
@@ -1729,6 +1755,7 @@ dependencies = [
  "anyhow",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "chrono",
  "clap",
  "clockwork",
@@ -1866,6 +1893,7 @@ dependencies = [
  "cast",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "chrono",
  "chrono-tz",
  "clap",
@@ -2356,6 +2384,7 @@ dependencies = [
  "annals-api",
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "conversations",
@@ -2760,6 +2789,7 @@ version = "0.7.1"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "chancery-usage",
  "clap",
  "clockwork",
  "iatreion-api",
@@ -3043,6 +3073,7 @@ version = "0.4.0"
 dependencies = [
  "cell-install",
  "chancery",
+ "chancery-usage",
  "clap",
  "iatreion-api",
  "serde",

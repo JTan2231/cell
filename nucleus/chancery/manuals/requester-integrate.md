@@ -187,3 +187,11 @@ clients tolerate a daemon without the optional quota health fields; EMT also
 tolerates the old quota endpoint's 404. Use coordinated maintenance for cutover.
 Keep the policy, state and EMT notice files with their private product backups.
 No rollout, quota reset, or clearance of existing service halts is implicit.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

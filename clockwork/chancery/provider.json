@@ -26,7 +26,8 @@
       "Clockwork is a current-user local CLI and short-lived broker; runtime callers select only a stable key and cannot supply a launch image or process context."
     ],
     "shared_privacy_and_retention": [
-      "Private Clockwork state retains paths, digests, schedules, scrubbed environment, and runtime metadata but no product secret or output body; product output and retention remain product-owned."
+      "Private Clockwork state retains paths, digests, schedules, scrubbed environment, and runtime metadata but no product secret or output body; product output and retention remain product-owned.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release, entry contracts, definition-manifest schema, database schema, and product definition identities have independent compatibility rules."

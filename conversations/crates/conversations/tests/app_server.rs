@@ -590,6 +590,71 @@ fn full_text_search_refresh_and_doctor_keep_boundaries_explicit() {
 }
 
 #[test]
+fn codex_selection_preserves_overrides_and_reports_the_selected_path() {
+    let directory = must(TempDir::new());
+    let script = fake_codex(directory.path());
+    let missing = directory.path().join("missing-codex");
+    let binary = env!("CARGO_BIN_EXE_conversations");
+
+    let help = must(
+        Command::new(binary)
+            .env_remove("CONVERSATIONS_CODEX")
+            .arg("--help")
+            .output(),
+    );
+    assert!(help.status.success());
+    assert!(String::from_utf8_lossy(&help.stdout).contains(conversations::DEFAULT_CODEX_PATH));
+    #[cfg(target_os = "macos")]
+    assert_eq!(
+        conversations::DEFAULT_CODEX_PATH,
+        "/Applications/ChatGPT.app/Contents/Resources/codex"
+    );
+
+    let from_environment = must(
+        Command::new(binary)
+            .env("CONVERSATIONS_CODEX", &script)
+            .env("CONVERSATIONS_HOST_ID", "test-host")
+            .args(["doctor", "--json"])
+            .output(),
+    );
+    assert!(from_environment.status.success());
+    let report: conversations::DoctorReport =
+        must(serde_json::from_slice(&from_environment.stdout));
+    assert_eq!(report.codex_path, script.display().to_string());
+
+    let from_argument = must(
+        Command::new(binary)
+            .env("CONVERSATIONS_CODEX", &missing)
+            .env("CONVERSATIONS_HOST_ID", "test-host")
+            .arg("--codex")
+            .arg(&script)
+            .arg("doctor")
+            .output(),
+    );
+    assert!(from_argument.status.success());
+    assert!(
+        String::from_utf8_lossy(&from_argument.stdout)
+            .contains(&format!("codex path: {}", script.display()))
+    );
+
+    let failed_override = must(
+        Command::new(binary)
+            .env("CONVERSATIONS_CODEX", &script)
+            .env("CONVERSATIONS_HOST_ID", "test-host")
+            .arg("--codex")
+            .arg(&missing)
+            .arg("doctor")
+            .output(),
+    );
+    assert!(!failed_override.status.success());
+    assert!(failed_override.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&failed_override.stderr)
+            .contains(&format!("unable to start {}", missing.display()))
+    );
+}
+
+#[test]
 fn cli_stderr_policy_is_explicit_and_suppressible() {
     assert_eq!(ClientConfig::default().stderr_policy, StderrPolicy::Inherit);
 

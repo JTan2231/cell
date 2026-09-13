@@ -372,7 +372,8 @@ def run_command(command: list[str], environment: dict[str, str]) -> None:
 
 def broker(root: Path, gate: str, lane: str, body: list[str], *, verbose: bool,
            environment: dict[str, str], receipt: bool = False) -> None:
-    command = [sys.executable, str(root / "ci_broker/client.py"), "run", "--quiet-result"]
+    command = [sys.executable, str(root / "ci_broker/client.py"), "run", "--quiet-result",
+               "--env", "CHANCERY_USAGE_DISABLED=1"]
     if verbose:
         command.append("--verbose")
     if receipt:

@@ -5,6 +5,7 @@ fn main() {
         "crm/steward",
         "crm.steward.operate",
     ) {
+        chancery_usage::observe("crm", "status-snapshot");
         println!("{snapshot}");
         return;
     }

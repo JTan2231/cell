@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [dependencies]
+chancery-usage.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clockwork = { path = "../clockwork/crates/clockwork" }

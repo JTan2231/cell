@@ -215,3 +215,11 @@ all holds release. It never clears a Clockwork halt or reconciles a send.
 Each deployment retains its own migration backup. A new backup is selected
 only after any prior import cleanup completes and its retained backup digest
 remains valid. Repeating an interrupted run reuses its validated backup.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

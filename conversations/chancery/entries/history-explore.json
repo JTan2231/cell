@@ -73,6 +73,7 @@
       {"status": "declared", "statement": "Full-history and activity operations require App Server to return every requested page or the specifically documented method-unavailable legacy fallback."}
     ],
     "inputs": [
+      {"status": "declared", "statement": "The CLI selects --codex, then CONVERSATIONS_CODEX, then /Applications/ChatGPT.app/Contents/Resources/codex on macOS or codex on PATH elsewhere. ClientConfig::default() uses the same environment and platform defaults; an explicit codex_path takes precedence. The app owns its bundled executable updates. A selected executable that cannot start fails without executable fallback; doctor reports its selected path and version."},
       {"status": "declared", "statement": "Inputs include the selected Codex binary and host identity, exact thread, turn, or session identifiers, archive and source-kind filters, cwd, title, updated-after, query text, limits, output mode, and diagnostic policy documented for the chosen interface."},
       {"status": "unsupported", "statement": "Raw Codex file paths, SQLite queries, task mutations, arbitrary JSON-RPC methods, credential material, and private internal item kinds are not supported inputs."}
     ],

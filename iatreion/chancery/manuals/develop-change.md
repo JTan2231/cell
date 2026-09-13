@@ -21,3 +21,11 @@ Run focused tests, then the default root gate:
 
 Development does not authorize release, installation, deployment, schedule
 changes, recovery, or Semantics state changes.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

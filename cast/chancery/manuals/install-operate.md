@@ -154,3 +154,11 @@ missing state without collecting. Optional settings are `state_dir` and
 `config_file`, both absolute paths. `config_file` supplies the complete Cast
 configuration through `config set --file`; omitted settings retain current
 values and consumed budgets. Deployment creates no collection schedule.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

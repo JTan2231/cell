@@ -29,6 +29,13 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Executable selected when no caller or environment override is supplied.
+#[cfg(target_os = "macos")]
+pub const DEFAULT_CODEX_PATH: &str = "/Applications/ChatGPT.app/Contents/Resources/codex";
+/// Executable selected when no caller or environment override is supplied.
+#[cfg(not(target_os = "macos"))]
+pub const DEFAULT_CODEX_PATH: &str = "codex";
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("unable to start {path}: {source}")]
@@ -92,6 +99,7 @@ pub enum Error {
 /// Process and identity settings for one App Server connection.
 #[derive(Clone, Debug)]
 pub struct ClientConfig {
+    /// Defaults to `CONVERSATIONS_CODEX`, then `DEFAULT_CODEX_PATH`.
     pub codex_path: PathBuf,
     pub codex_args: Vec<OsString>,
     pub host_id: String,
@@ -113,7 +121,7 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             codex_path: std::env::var_os("CONVERSATIONS_CODEX")
-                .map_or_else(|| PathBuf::from("codex"), PathBuf::from),
+                .map_or_else(|| PathBuf::from(DEFAULT_CODEX_PATH), PathBuf::from),
             codex_args: Vec::new(),
             host_id: local_host_id(),
             request_timeout: Duration::from_secs(30),

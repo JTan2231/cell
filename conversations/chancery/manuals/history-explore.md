@@ -12,6 +12,15 @@ version compatibility is unknown, then select the narrowest operation:
 - `export --json` for a typed deduplicated corpus; or
 - `refresh` only when App Server metadata scan-and-repair is intended.
 
+The CLI selects `--codex PATH`, then `CONVERSATIONS_CODEX`, then its platform
+default. On macOS, that default is the ChatGPT app's bundled executable at
+`/Applications/ChatGPT.app/Contents/Resources/codex`; other platforms use `codex`
+on `PATH`. `ClientConfig::default()` uses the same environment and platform
+defaults; an explicit `codex_path` takes precedence. A missing or unusable
+selected executable fails without trying another executable. For an app
+installed elsewhere, supply its executable explicitly. `doctor` reports the
+selected path and version. The app owns updates to its bundled executable.
+
 An embedded Rust product that already has a canonical machine-local
 `ThreadRef` can call `AppServerClient::read_thread_summary(&ThreadRef)` for the
 exact persisted `ThreadSummary`, including App Server's recorded `cwd`. The
@@ -71,3 +80,11 @@ Show and export return complete normalized user and assistant transcripts.
 `--json` changes only the encoding. Activity returns metadata without content;
 refresh returns metadata counts. Rust metadata methods return complete
 `ThreadSummary` values.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

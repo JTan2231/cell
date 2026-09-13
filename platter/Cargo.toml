@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+chancery-usage.workspace = true
 anyhow = "1"
 base64.workspace = true
 cast = { path = "../cast" }

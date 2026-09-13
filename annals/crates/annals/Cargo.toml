@@ -5,6 +5,7 @@ edition.workspace = true
 default-run = "annals"
 
 [dependencies]
+chancery-usage.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clockwork = { path = "../../../clockwork/crates/clockwork" }

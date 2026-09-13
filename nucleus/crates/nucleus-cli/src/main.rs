@@ -346,7 +346,7 @@ struct UninstalledOutput<'a> {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run(Cli::parse()).await {
+    match run(chancery_usage::cli::parse::<Cli>("nucleus", "")).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("nucleus: {error}");

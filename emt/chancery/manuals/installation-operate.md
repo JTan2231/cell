@@ -149,3 +149,11 @@ A missing or unavailable quota observation postpones new model work while frozen
 email delivery continues. An old daemon's quota-endpoint 404 permits rollout
 without a quota gate. Worker recovery and operator pause stop discovery of new
 quota notices but allow frozen notice delivery.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

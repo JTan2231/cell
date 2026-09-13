@@ -18,7 +18,7 @@
   "outcome": "The caller receives one deterministic dossier for the selected entry. It includes provider scope, the complete contract and manual, normalized facets, transitive dependency contracts, exact provenance, requested version and facet results, and gaps.",
   "effects": [
     "Reads the same fixed, explicitly indexed local provider bundle view used by list, show, and doctor.",
-    "Calculates the dossier and SHA-256 digests in memory. Writes no state, makes no network or model request, and invokes no represented interface."
+    "Calculates the dossier and SHA-256 digests in memory. Retains no dossier state, makes no network or model request, and invokes no represented interface. CLI dispatch separately attempts a usage append."
   ],
   "authority": [
     "Each owning provider bundle is authoritative for its scope and entry claims; Chancery is authoritative only for structural validation, exact-byte basis identification, deterministic assembly, facet classification, and dependency compatibility.",
@@ -146,7 +146,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Each invocation canonicalizes provider selectors once to build one registry view. It calculates dependency status and closure in memory, emits one dossier, and exits without retaining state."
+        "statement": "Each invocation canonicalizes provider selectors once to build one registry view. It calculates dependency status and closure in memory, emits one dossier, and retains no dossier state. CLI dispatch separately attempts a usage append."
       },
       {
         "status": "declared",

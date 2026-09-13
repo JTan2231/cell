@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+chancery-usage.workspace = true
 cell-install.workspace = true
 clap.workspace = true
 fs2.workspace = true

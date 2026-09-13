@@ -172,3 +172,11 @@ Case creation returns a receipt with case ID, revision, stage, summary,
 complete advisory and attention, and recorded time. It does not repeat Markdown.
 Tell returns the stored queued update and any activation warning. Case show
 returns full Markdown. Runtime and domain settlement remain separate.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

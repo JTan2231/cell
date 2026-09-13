@@ -52,7 +52,7 @@ layout when admitting an existing installation or recovering a retained release.
 A combined release can carry independently versioned providers, as Annals does.
 
 The selector may exist before the Chancery CLI is installed. Publishing it is
-a packaging action only; the product runtime never invokes Chancery. A product
+a packaging action only; product runtime uses the shared usage library, without invoking the catalog. A product
 upgrade includes the bundle bytes in its release identity, advances `current`,
 and leaves the selector following that current release. A failed upgrade
 restores both product behavior and documentation coherently.
@@ -90,3 +90,12 @@ exact source references. It reports gaps and leaves live readiness unchecked.
 To repair an invalid provider, validate its source bundle, run its deployment
 tests, and redeploy the product. Do not edit an installed content-addressed
 release or point a selector at a source checkout.
+
+## Register command usage
+
+After selecting the installed program, run `chancery --register-usage`. Run each
+updated product program with `--register-usage` as a separate installation step.
+Annals has two programs: `annals` and `annals-usage`. These modes use Chancery's
+owned initialization API, add each program's full command inventory and execute
+no product work. They fail for unsupported journal schemas and never migrate.
+See [usage](../provider/manuals/usage-record.md) for storage and recovery.

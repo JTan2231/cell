@@ -136,8 +136,8 @@ inspect, back up, or delete `crm.db`.
 
 Provider scope is schema 3 and complete for the five supported entries. Every
 entry must retain a complete normalized promise, explicit gaps, compatible
-dependencies, and a matching detailed manual. CRM runtime never depends on
-Chancery.
+dependencies, and a matching detailed manual. CRM does not invoke the Chancery catalog during execution. Its CLI imports
+the shared Chancery usage writer.
 
 ## Required proof
 
@@ -159,3 +159,11 @@ Use `crm::api::Client` with provider-owned request and response types.
 The client invokes an explicitly selected CLI and decodes its envelopes. It
 preserves this operation's effects, failures, and authority requirements and
 does not retry automatically. Convert results only to caller-local models.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

@@ -1,7 +1,14 @@
 # CLI
 
-All commands accept `--codex PATH` (or `CONVERSATIONS_CODEX`) and an optional
-stable `--host-id` (or `CONVERSATIONS_HOST_ID`). Without an override, macOS
+All commands select Codex in this order: `--codex PATH`, `CONVERSATIONS_CODEX`,
+then the platform default. On macOS, the default is the ChatGPT app's bundled
+`/Applications/ChatGPT.app/Contents/Resources/codex`. Other platforms default
+to `codex` on `PATH`. A missing or unusable selected executable fails the
+command; Conversations does not try another executable. Use an explicit
+override if the app is installed elsewhere.
+
+All commands accept an optional stable `--host-id` (or
+`CONVERSATIONS_HOST_ID`). Without a host override, macOS
 uses an opaque hash of the platform UUID; the raw hardware identifier is never
 returned or retained. The command fails on macOS if it cannot read that stable
 identity. Other platforms use the hostname as a compatibility fallback.
@@ -27,7 +34,8 @@ not selected by that cleanup.
 
 Verifies that the selected Codex binary can start and complete an App Server
 handshake, enumerates visible root tasks without storage repair, reports the
-App Server user agent when available, and warns about recorded CLI-version
+selected executable path and version and the App Server user agent when
+available, and warns about recorded CLI-version
 differences. Its runtime-status warning is intentional: `notLoaded` only
 describes this new App Server process and is not proof that another client is
 idle.

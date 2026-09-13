@@ -23,9 +23,18 @@ Codex processes. The deployer creates:
 - `~/Library/Application Support/Chancery/providers/conversations` selecting
   the current release's provider bundle.
 
+The default macOS reader is
+`/Applications/ChatGPT.app/Contents/Resources/codex`. The app owns that executable
+and its updates. Conversations does not install or update Codex. `--codex` takes
+precedence over `CONVERSATIONS_CODEX`; both override the default. If the app is
+installed elsewhere, supply its executable explicitly. A missing or unusable
+selected executable fails without falling back to `PATH`. Run `conversations
+doctor` to check the selected path, version, and App Server handshake.
+
 Krisis and Paperboy embed the Conversations library. Rebuild and deploy each
-consumer to apply normalization changes such as accepting empty message text;
-replacing the Conversations CLI alone does not update embedded callers.
+consumer to apply library changes; replacing the Conversations CLI alone does
+not update embedded callers. Explicit consumer executable pins still take
+precedence over the library default.
 
 The `cell-install-v2` release identity covers the binary, Rust installer, public
 layout, and complete Chancery bundle. `manifest.json` records the exact inventory;

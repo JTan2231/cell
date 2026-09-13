@@ -229,10 +229,11 @@ fn main() {
         )],
         false,
     ) {
+        chancery_usage::observe("semantics", "status-snapshot");
         println!("{snapshot}");
         return;
     }
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("semantics", "");
     let json = cli.json;
     let scheduled_worker = matches!(
         &cli.command,

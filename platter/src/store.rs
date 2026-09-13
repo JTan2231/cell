@@ -338,6 +338,20 @@ impl Store {
         Ok(())
     }
 
+    pub(crate) fn exclude_job(&self, record: &PacketRecord) -> Result<()> {
+        self.connection.execute(
+            "INSERT INTO jobs(opportunity,cast_job_id,company,title,eligible) VALUES(?1,?2,?3,?4,0)
+             ON CONFLICT(opportunity) DO UPDATE SET eligible=0",
+            params![
+                record.opportunity,
+                record.job_id,
+                record.company,
+                record.title
+            ],
+        )?;
+        Ok(())
+    }
+
     pub fn jobs(&self) -> Result<Vec<JobRecord>> {
         let mut statement = self.connection.prepare(
             "SELECT opportunity,cast_job_id,company,title,eligible FROM jobs ORDER BY opportunity",

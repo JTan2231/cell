@@ -29,7 +29,8 @@
     ],
     "shared_privacy_and_retention": [
       "Private local state retains frozen normalized conversation, exact Nucleus requests/results, and pending document bytes.",
-      "After matching Annals acceptance, Krisis clears its outbox body but keeps the private document run and delivery receipt. Nucleus and Annals own their separate retention."
+      "After matching Annals acceptance, Krisis clears its outbox body but keeps the private document run and delivery receipt. Nucleus and Annals own their separate retention.",
+      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider release identifies bundle bytes. Entry contracts, SQLite schema 6, document tool schemas and downstream exchange contracts have independent versions.",

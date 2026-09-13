@@ -185,10 +185,11 @@ async fn main() -> std::process::ExitCode {
         )],
         false,
     ) {
+        chancery_usage::observe("paperboy", "status-snapshot");
         println!("{snapshot}");
         return std::process::ExitCode::SUCCESS;
     }
-    let cli = Cli::parse();
+    let cli = chancery_usage::cli::parse::<Cli>("paperboy", "");
     match execute(&cli).await {
         Ok(value) => {
             println!("{}", json!({"ok":true,"data":value}));

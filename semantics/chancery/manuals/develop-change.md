@@ -23,7 +23,7 @@ Clockwork schedule contract.
   transport. Tool receipt plus revision is atomic; identical redelivery is
   idempotent and conflicting redelivery fails.
 - Paused projects reject late commits. Worker execution is cross-process serial.
-- Chancery is documentation and discovery, never a runtime dependency.
+- Chancery catalog discovery is not an execution dependency. CLI usage recording uses the separate best-effort `chancery-usage` library.
 
 ## Testing
 
@@ -58,3 +58,11 @@ Keep project operation docs, Chancery entries/manuals, packaging manifests, and
 the shared Nucleus operator manual synchronized with operational changes.
 Development does not itself authorize deployment, publication, upstream
 mutation, or retained-state deletion.
+
+## Command usage
+
+CLI dispatch separately attempts to append system/command identity, observation
+time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
+records invocation only, retains no arguments or output, and preserves product
+results after recording errors. `--register-usage` is the separate post-install
+step that adds the program's complete command inventory without product work.

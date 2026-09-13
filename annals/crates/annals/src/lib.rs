@@ -29,8 +29,6 @@ mod tool_server;
 
 use std::ffi::OsStr;
 
-use clap::Parser;
-
 use crate::cli::Cli;
 use crate::error::AppError;
 
@@ -38,32 +36,39 @@ use crate::error::AppError;
 #[must_use]
 pub fn run_cli() -> i32 {
     let json_requested = std::env::args_os().any(|argument| argument == OsStr::new("--json"));
-    let cli = match Cli::try_parse().and_then(Cli::resolve_named_command) {
-        Ok(cli) => cli,
-        Err(error) => {
-            if matches!(
-                error.kind(),
-                clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
-            ) {
+    chancery_usage::cli::register_if_requested::<Cli>("annals", "");
+    let (cli, command_id) =
+        match chancery_usage::cli::parse_command_from::<Cli>(std::env::args_os(), "")
+            .and_then(|(cli, command)| cli.resolve_named_command(command))
+        {
+            Ok(cli) => cli,
+            Err(error) => {
+                if matches!(
+                    error.kind(),
+                    clap::error::ErrorKind::DisplayHelp | clap::error::ErrorKind::DisplayVersion
+                ) {
+                    if let Err(print_error) = error.print() {
+                        eprintln!("annals: {print_error}");
+                        return 1;
+                    }
+                    return 0;
+                }
+                if json_requested {
+                    let error = AppError::invalid("invalid_command", error.to_string());
+                    eprintln!("{}", render::error_json(&error));
+                    return error.exit_code();
+                }
+                let exit_code = error.exit_code();
                 if let Err(print_error) = error.print() {
                     eprintln!("annals: {print_error}");
                     return 1;
                 }
-                return 0;
+                return exit_code;
             }
-            if json_requested {
-                let error = AppError::invalid("invalid_command", error.to_string());
-                eprintln!("{}", render::error_json(&error));
-                return error.exit_code();
-            }
-            let exit_code = error.exit_code();
-            if let Err(print_error) = error.print() {
-                eprintln!("annals: {print_error}");
-                return 1;
-            }
-            return exit_code;
-        }
-    };
+        };
+    if let Some(command_id) = command_id {
+        chancery_usage::observe("annals", &command_id);
+    }
     match app::execute(&cli) {
         Ok(output) => {
             if cli.json {
