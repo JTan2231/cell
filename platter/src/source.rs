@@ -17,6 +17,7 @@ pub struct Posting {
 
 pub fn discovery(executable: &Path) -> Result<Snapshot> {
     let output = std::process::Command::new(executable)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .args(["export", "--json"])
         .output()?;
     ensure!(
@@ -36,6 +37,7 @@ pub fn collect_job(executable: &Path, url: &str) -> Result<Job> {
     let parsed = url::Url::parse(url)?;
     validate_public_url(&parsed)?;
     let output = std::process::Command::new(executable)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .args(["job", "collect", url])
         .output()?;
     ensure!(

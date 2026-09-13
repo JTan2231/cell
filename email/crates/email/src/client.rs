@@ -167,6 +167,7 @@ impl Client {
         let mut child = tokio::process::Command::new(&self.executable)
             .args(arguments)
             .env_clear()
+            .env("CHANCERY_USAGE_INTERNAL", "1")
             .env("HOME", home)
             .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
             .stdin(if input.is_some() {

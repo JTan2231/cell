@@ -357,6 +357,7 @@ fn product_command(manifest: &Manifest, stdout: File, stderr: File) -> StdComman
         .current_dir(&manifest.cwd)
         .env_clear()
         .envs(&manifest.environment)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
@@ -783,7 +784,10 @@ mod tests {
                 .get_envs()
                 .filter_map(|(name, value)| value.map(|value| (name, value)))
                 .collect::<Vec<_>>(),
-            vec![(OsStr::new("HOME"), OsStr::new("/home/exact"))]
+            vec![
+                (OsStr::new("CHANCERY_USAGE_INTERNAL"), OsStr::new("1")),
+                (OsStr::new("HOME"), OsStr::new("/home/exact")),
+            ]
         );
     }
 }

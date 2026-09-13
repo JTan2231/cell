@@ -237,6 +237,7 @@ async fn doctor_health(
 fn run_login(arguments: &[OsString]) -> Result<Outcome, AppError> {
     let config = UsageConfig::load(None)?;
     let status = Command::new(&config.nucleus)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .args(["auth", "login"])
         .args(arguments)
         .status()

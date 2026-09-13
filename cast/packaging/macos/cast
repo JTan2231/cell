@@ -12,6 +12,7 @@ cast_state_dir=${CAST_STATE_DIR-}
 usage_thread=${CODEX_THREAD_ID-}
 usage_database=${CHANCERY_USAGE_DB-}
 usage_disabled=${CHANCERY_USAGE_DISABLED-}
+usage_internal=${CHANCERY_USAGE_INTERNAL-}
 if [[ -f "${HOME:?}/.zshrc" ]]; then
     source "$HOME/.zshrc" >/dev/null 2>&1
 fi
@@ -23,6 +24,7 @@ exec 3<&0
     CODEX_THREAD_ID="$usage_thread" \
     CHANCERY_USAGE_DB="$usage_database" \
     CHANCERY_USAGE_DISABLED="$usage_disabled" \
+    CHANCERY_USAGE_INTERNAL="$usage_internal" \
     PATH=/usr/bin:/bin:/usr/sbin:/sbin \
     /bin/zsh -c '
 IFS= read -r THEIRSTACK_API_KEY

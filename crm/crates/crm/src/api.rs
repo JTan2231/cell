@@ -121,6 +121,7 @@ impl Client {
         input: Option<&[u8]>,
     ) -> Result<Reply<T>, ClientError> {
         let mut command = std::process::Command::new(&self.executable);
+        command.env("CHANCERY_USAGE_INTERNAL", "1");
         command.arg("--json");
         if let Some(database) = &self.database {
             command.arg("--database").arg(database);

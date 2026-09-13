@@ -96,6 +96,7 @@ pub(crate) fn send(
     snapshot: &DigestSnapshot,
 ) -> AppResult<String> {
     let mut child = Command::new(email_binary)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .args(["--idempotency-key", idempotency_key, &snapshot.subject, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -651,9 +651,11 @@ No rollout, quota reset, or clearance of existing service halts is implicit.
 
 ## Shared command usage
 
-Product CLI dispatches import `chancery-usage` and attempt one append to the
-private Chancery journal. Each row records system and command identity, optional
-`CODEX_THREAD_ID`, local insertion ID and whole Unix-second observation time.
+Product CLI dispatches import `chancery-usage` and record agent command entries
+in the private Chancery journal. New rows require a nonempty `CODEX_THREAD_ID`
+and record system and command identity, local insertion ID and whole Unix-second
+observation time. Missing attribution and `CHANCERY_USAGE_INTERNAL=1` skip the
+write before storage access.
 The row observes handler entry; it establishes neither completion nor domain
 success. Arguments, outputs, token counts and execution trees are absent.
 
@@ -663,11 +665,16 @@ the full declared command inventory. Run both Annals programs. Source presence,
 binary selection and catalog publication alone do not register commands.
 
 Recording errors produce bounded diagnostics and preserve product results.
-No automatic retry or migration runs. A missing thread remains unassociated;
-services use the explicit request-scoped API rather than their startup
-environment. Direct internal library calls are not automatically observed.
-Email and Cast frontends preserve thread correlation through credential scrubbing.
-CI disables dispatch recording; journal tests select isolated databases explicitly.
+No automatic retry or migration runs. Services supply a nonempty thread to the
+explicit request-scoped API. Product dependency processes set
+`CHANCERY_USAGE_INTERNAL=1`; wrappers preserve it and thread correlation through
+credential scrubbing. Clockwork excludes private entries and marks its product
+child internal. The Krisis Stop hook marks its invocation internal. Nucleus
+clears the inherited internal marker and caller thread when launching a fresh
+agent. That agent supplies its own command attribution. CI's separate
+`CHANCERY_USAGE_DISABLED=1` remains in effect. Journal tests use isolated databases.
+Rebuild participating binaries and update wrappers, hooks and pinned Clockwork
+brokers before relying on the new recording policy.
 
 Use `chancery usage commands` or `chancery usage events` to read recorded
 activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,

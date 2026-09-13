@@ -1,18 +1,18 @@
 {
   "id": "chancery.usage.record",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Record and inspect Cell command usage",
-  "summary": "Register systems and commands, append invocation observations through the shared Rust API, and report recorded activity by system, command, thread and time.",
+  "title": "Record and inspect Cell agent command usage",
+  "summary": "Register systems and commands, append agent invocation observations through the shared Rust API, and report recorded activity by system, command, thread and time.",
   "use_when": [
     "Registering command identities during installation, recording a product command boundary, or inspecting recorded usage."
   ],
   "do_not_use_when": [
     "The requested result is token accounting, command output, domain success or an inferred execution tree."
   ],
-  "outcome": "An append-only record of observed command invocations or a scoped report of those records.",
+  "outcome": "An append-only record of observed agent command invocations or a scoped report of recorded observations.",
   "effects": [
     "Explicit registration initializes only an empty Chancery usage journal and inserts system/command identities.",
     "Recording appends one observation for a registered command; reports select existing rows. CLI report dispatch can append its own observation."
@@ -63,25 +63,25 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Recording requires an initialized supported private journal and registered system/command pair. Registration can initialize an empty journal. Direct service calls supply request-scoped thread identity."
+        "statement": "Recording requires an initialized supported private journal and registered system/command pair. Registration can initialize an empty journal. Direct service calls supply request-scoped thread identity. New writes require a nonempty agent thread; automatic dependency calls and hooks are excluded."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Stable system and command IDs, optional CODEX_THREAD_ID or explicit thread, absolute optional CHANCERY_USAGE_DB, and system/thread/time/page query filters."
+        "statement": "Stable system and command IDs, CODEX_THREAD_ID or an explicit request-scoped thread, optional CHANCERY_USAGE_INTERNAL and CHANCERY_USAGE_DISABLED flags, absolute optional CHANCERY_USAGE_DB, and system/thread/time/page query filters."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Registration results or Chancery schema-three report envelopes with system identities, per-command counts and latest selected times, or insertion-ordered events with next_cursor and has_more."
+        "statement": "Registration results or Chancery schema-three report envelopes with system identities, per-command counts and latest selected times, or insertion-ordered events with next_cursor and has_more. Environment-based record returns an optional row ID: None means deliberately skipped before storage access."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Each usage row observes one command-handler entry, regardless of its later outcome. Registration and usage are append-only. Zero counts describe selected recorded observations only."
+        "statement": "New usage rows observe agent command-handler entry, regardless of its later outcome. Workers, hooks and product dependency calls are excluded unless an agent invokes a public command directly. Registration and usage are append-only. Zero counts describe selected recorded observations only."
       },
       {
         "status": "unsupported",
@@ -91,7 +91,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "System ID is global; command ID is unique within system. Usage ID orders local inserts. recorded_at and time filters are whole Unix seconds. Missing thread is NULL. IDs are opaque 1\u2013128 byte ASCII metadata."
+        "statement": "System ID is global; command ID is unique within system. Usage ID orders local inserts. recorded_at and time filters are whole Unix seconds. New writes require thread attribution; existing nullable rows remain readable. IDs are opaque 1\u2013128 byte ASCII metadata."
       }
     ],
     "completeness_and_freshness": [
@@ -119,7 +119,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "SQLite busy timeout is 100 ms. Event page limits are 1\u20131000, default 100. CHANCERY_USAGE_DISABLED=1 suppresses dispatch observations only. No durable queue or output capture exists."
+        "statement": "SQLite busy timeout is 100 ms. Event page limits are 1\u20131000, default 100. Missing thread attribution, CHANCERY_USAGE_DISABLED=1 or CHANCERY_USAGE_INTERNAL=1 skip environment-based recording before storage access. Explicit request-scoped APIs require a thread and do not consult these flags. No durable queue or output capture exists."
       },
       {
         "status": "unspecified",

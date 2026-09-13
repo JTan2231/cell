@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/.local/bin/krisis\" observe ingest",
+            "command": "CHANCERY_USAGE_INTERNAL=1 \"$HOME/.local/bin/krisis\" observe ingest",
             "timeout": 3
           }
         ]

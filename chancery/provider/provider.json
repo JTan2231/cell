@@ -31,7 +31,7 @@
     "shared_privacy_and_retention": [
       "Catalogs and dossiers are calculated in memory. Chancery separately retains registered system/command identities and append-only invocation IDs, Unix-second observation times and optional Codex thread IDs; it retains no command arguments or output.",
       "Provider bundles must not contain credentials, secrets, private source material, or transient runtime output.",
-      "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
+      "Agent CLI dispatch attempts a metadata-only Chancery usage append (system, command, Codex thread and observation time). Missing thread attribution and internal invocations are skipped. Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
       "Provider schema version identifies bundle shape. Provider release identifies the owning release. Entry contract version identifies documented semantic compatibility.",

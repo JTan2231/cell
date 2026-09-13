@@ -380,6 +380,7 @@ impl Client {
         arguments: &[&std::ffi::OsStr],
     ) -> Result<T, Error> {
         let mut command = std::process::Command::new(&self.executable);
+        command.env("CHANCERY_USAGE_INTERNAL", "1");
         command.arg("--json");
         if let Some(state_root) = &self.state_root {
             command.arg("--state-root").arg(state_root);

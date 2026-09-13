@@ -23,6 +23,7 @@ fn activate_command(database: &Path, arguments: &[&str]) -> Result<()> {
     let executable =
         std::env::current_exe().map_err(|source| crate::error::io("current executable", source))?;
     Command::new(executable)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .arg("--database")
         .arg(database)
         .args(arguments)

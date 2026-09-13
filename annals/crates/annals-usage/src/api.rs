@@ -39,6 +39,7 @@ impl Client {
     }
     fn command(&self, operation: &str) -> std::process::Command {
         let mut command = std::process::Command::new(&self.executable);
+        command.env("CHANCERY_USAGE_INTERNAL", "1");
         command.arg(operation);
         if let Some(config) = &self.config {
             command.arg("--config").arg(config);

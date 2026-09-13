@@ -19,10 +19,11 @@ fn registrations_are_idempotent_and_events_are_append_only() -> TestResult {
     store.register_command("alpha", "show")?;
     store.register_command("alpha", "unused")?;
     assert!(store.register_command("unknown", "show").is_err());
-    assert!(store.record("alpha", "unknown", None).is_err());
-    assert_eq!(store.record("alpha", "show", Some("thread-a"))?, 1);
-    assert_eq!(store.record("alpha", "show", Some("thread-a"))?, 2);
-    assert_eq!(store.record("alpha", "show", None)?, 3);
+    assert!(store.record("alpha", "show", "").is_err());
+    assert!(store.record("alpha", "unknown", "thread-a").is_err());
+    assert_eq!(store.record("alpha", "show", "thread-a")?, 1);
+    assert_eq!(store.record("alpha", "show", "thread-a")?, 2);
+    assert_eq!(store.record("alpha", "show", "thread-c")?, 3);
     let counts = store.counts(&Filter::default())?;
     assert_eq!(counts.len(), 2);
     assert_eq!(counts[0].invocations, 3);
@@ -45,16 +46,16 @@ fn registrations_are_idempotent_and_events_are_append_only() -> TestResult {
 }
 
 #[test]
-fn filters_and_pages_preserve_unknown_threads_and_zero_counts() -> TestResult {
+fn filters_and_pages_preserve_thread_scopes_and_zero_counts() -> TestResult {
     let directory = tempfile::tempdir()?;
     let store = Store::initialize(&directory.path().join("usage.sqlite3"))?;
     for system in ["alpha", "beta"] {
         store.register_system(system)?;
         store.register_command(system, "show")?;
     }
-    store.record("alpha", "show", Some("thread-a"))?;
-    store.record("alpha", "show", None)?;
-    store.record("beta", "show", Some("thread-b"))?;
+    store.record("alpha", "show", "thread-a")?;
+    store.record("alpha", "show", "thread-c")?;
+    store.record("beta", "show", "thread-b")?;
     let first = store.events(&Filter::default(), 0, 2)?;
     assert_eq!(first.items.len(), 2);
     assert!(first.has_more);
@@ -72,7 +73,7 @@ fn filters_and_pages_preserve_unknown_threads_and_zero_counts() -> TestResult {
         unattributed: true,
         ..Filter::default()
     };
-    assert_eq!(store.events(&unlinked, 0, 100)?.items.len(), 1);
+    assert_eq!(store.events(&unlinked, 0, 100)?.items.len(), 0);
     let outside = Filter {
         until: Some(1),
         ..Filter::default()
@@ -132,10 +133,10 @@ fn contention_returns_an_error_without_waiting_for_the_command() -> TestResult {
     let blocker = Connection::open(&path)?;
     blocker.execute_batch("BEGIN IMMEDIATE")?;
     let start = Instant::now();
-    assert!(store.record("alpha", "show", None).is_err());
+    assert!(store.record("alpha", "show", "thread-c").is_err());
     assert!(start.elapsed() < Duration::from_secs(2));
     blocker.execute_batch("ROLLBACK")?;
-    store.record("alpha", "show", None)?;
+    store.record("alpha", "show", "thread-c")?;
     assert_eq!(store.events(&Filter::default(), 0, 100)?.items.len(), 1);
     Ok(())
 }
