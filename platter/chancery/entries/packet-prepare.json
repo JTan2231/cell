@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -88,7 +88,8 @@
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
     "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
     "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
-    "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite."
+    "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite.",
+    "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -106,10 +107,10 @@
     "A consistent schema-three SQLite backup contains the complete packet history. Disposable Ashby board caches are excluded and can be downloaded again. Schema-one and schema-two state require maintained migration.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
-    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. A preparation/export failure leaves its existing retained progress and stops before send; individual posting failures keep the existing preparation policy.",
+    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. Posting retrieval failures are skipped before freeze; other preparation/export failures preserve retained progress and stop before send.",
     "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
     "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
-    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend.",
+    "prepare-daily and run-daily mark jobs ineligible when posting retrieval fails, including HTTP errors, timeouts and unsupported or incomplete text, then continue with other candidates. If final freshness excludes the entire ready pool, run-daily prepares other candidates before previewing again. Declined opportunities and an exhausted pool remain expected outcomes. Other preparation failures stop the run. Single-job preparation reports retrieval failure without selecting another job. The eligibility command explicitly enables an excluded job again. Clockwork halts remain intact until explicit continuation.",
     "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
     "Review and revision reuse their exact retained requests and completed prior results. A failed stage without a result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized."
   ],
@@ -218,7 +219,7 @@
       },
       {
         "status": "declared",
-        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
+        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. Posting retrieval failures also set jobs ineligible; daily work continues with other candidates. Explicit eligibility changes can enable excluded jobs again. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
       }
     ],
     "identity_and_units": [
@@ -234,7 +235,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "All stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and defers changed or unavailable inputs. Reopening a frozen edition returns stored contents."
+        "statement": "All stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and excludes changed or unavailable inputs from eligibility while retaining their prepared artifacts. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
@@ -306,7 +307,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 7 adds independent editorial review for new runs. Installation contract 5 supports private schema 3, preserving legacy inputs, exact requests and artifacts. Existing runs retain their legacy workflow. Older binaries cannot operate schema three. Cast collection contract 5 and Clockwork schedule contract 3 remain required."
+        "statement": "Preparation contract 8 excludes jobs after posting retrieval failure and continues with other daily candidates. The independent resume review workflow, private schema 3, exact retained requests, packet artifacts and frozen deliveries remain unchanged. Installation contract 5, Cast collection contract 5 and Clockwork schedule contract 3 remain required."
       },
       {
         "status": "unspecified",

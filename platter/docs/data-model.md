@@ -48,6 +48,12 @@ leaves eligibility unchanged. Neither a receipt nor the existence of an edition
 derives eligibility. Acceptance records external submission; unresolved sends
 remain held even if eligibility is changed later.
 
+A posting retrieval failure sets the job ineligible. An initial failure retains
+the job without a run because no full posting was captured. A failed freshness
+check retains the prepared run as deferred and preserves its artifacts. Daily
+preparation skips excluded jobs and tries other candidates. The eligibility
+command can explicitly enable the job again.
+
 A URL-selected run creates no separate workflow record. Its occurrence ID uses
 the existing ad hoc edition namespace. It resolves a normal Cast job, prepares
 or reuses a normal packet, and freezes one ordinary edition while setting the

@@ -104,6 +104,92 @@ impl Fixture {
             .context("packet disappeared")?
             .status)
     }
+
+    fn candidates(&self, jobs: &[serde_json::Value]) -> Result<()> {
+        let mut settings = workflow::config(self.root())?;
+        settings.cast_executable = self.root().join("candidate-cast");
+        fs::write(
+            &settings.cast_executable,
+            "#!/bin/sh\n/bin/cat \"$0.json\"\n",
+        )?;
+        fs::set_permissions(&settings.cast_executable, fs::Permissions::from_mode(0o700))?;
+        platter::write_json(
+            &self.root().join("candidate-cast.json"),
+            &serde_json::json!({
+                "schema_version":1,"snapshot_revision":1,"captured_at":"2026-09-07T23:00:00Z",
+                "companies":[],"source_health":[],"coverage":[],"jobs":jobs
+            }),
+        )?;
+        Store::open(self.root())?.set_setting("config", &settings)
+    }
+
+    fn cached_posting(
+        &self,
+        id: &str,
+        listed: bool,
+    ) -> Result<(serde_json::Value, serde_json::Value)> {
+        let mut job = candidate(id, &format!("https://jobs.ashbyhq.com/{id}/role"));
+        job["source_key"] = serde_json::json!(format!("ashby:{id}:role"));
+        let posting = serde_json::json!({
+            "jobUrl":job["url"], "isListed":listed,
+            "descriptionHtml":"Build and operate reliable infrastructure for a growing organization. ".repeat(5)
+        });
+        platter::write_json(
+            &self.root().join(format!("ashby-cache/{id}.json")),
+            &serde_json::json!({"retrieved_at":cast::now(),"response":{"jobs":[posting]}}),
+        )?;
+        Ok((job, posting))
+    }
+
+    fn ready_candidate(&self, id: &str, listed: bool) -> Result<PacketRecord> {
+        let (job, posting) = self.cached_posting(id, listed)?;
+        let packet = PacketRecord {
+            id: format!("packet-{id}"),
+            opportunity: format!("ashby:{id}:role"),
+            job_id: id.into(),
+            company: "Example".into(),
+            title: "Engineer".into(),
+            status: "ready".into(),
+            directory: String::new(),
+        };
+        let store = Store::open(self.root())?;
+        store.insert_run(
+            &packet,
+            &serde_json::json!({
+                "job":job,"company":"Example","career":[],"template_artifact":"unused-template",
+                "posting":{"url":job["url"],"retrieved_at":cast::now(),"text":posting.to_string()}
+            }),
+        )?;
+        store.put_content(&packet.id, "brief", &serde_json::json!({
+            "paragraph":"Why it works: Strong infrastructure fit.\n\nRole: Build reliable systems.",
+            "pursue":true
+        }))?;
+        store.put_content(
+            &packet.id,
+            "resume-content",
+            &serde_json::json!({
+                "jackson_bullets":["Built reliable systems"],"evidence":[]
+            }),
+        )?;
+        store.put_artifact(
+            Some(&packet.id),
+            "resume-pdf",
+            "resume.pdf",
+            "application/pdf",
+            b"%PDF-fixture",
+        )?;
+        Ok(packet)
+    }
+}
+
+fn candidate(id: &str, url: &str) -> serde_json::Value {
+    serde_json::json!({
+        "id":id,"revision":1,"company_id":"example","source_id":"fixture",
+        "source_key":"fixture","title":"Engineer","url":url,
+        "first_seen_at":"2026-09-07T23:00:00Z","last_seen_at":"2026-09-07T23:00:00Z",
+        "availability":"listed","missing_complete_snapshots":0,"evidence":[],
+        "compensation":[],"geographic_eligibility":[],"parser_version":"fixture"
+    })
 }
 
 #[test]
@@ -311,36 +397,32 @@ async fn daily_preparation_failure_does_not_send_or_create_an_edition() -> Resul
 }
 
 #[tokio::test]
-async fn daily_candidate_preparation_error_is_not_reported_as_an_empty_success() -> Result<()> {
+async fn daily_unavailable_candidates_are_ineligible_without_an_edition() -> Result<()> {
     let fixture = Fixture::new("Accepted unexpected")?;
-    let mut settings = workflow::config(fixture.root())?;
-    settings.cast_executable = fixture.root().join("candidate-cast");
-    fs::write(
-        &settings.cast_executable,
-        "#!/bin/sh\n/bin/cat \"$0.json\"\n",
-    )?;
-    fs::set_permissions(&settings.cast_executable, fs::Permissions::from_mode(0o700))?;
-    platter::write_json(
-        &fixture.root().join("candidate-cast.json"),
-        &serde_json::json!({
-            "schema_version":1,"snapshot_revision":1,"captured_at":"2026-09-07T23:00:00Z",
-            "companies":[],"source_health":[],"coverage":[],
-            "jobs":[{
-                "id":"candidate","revision":1,"company_id":"example","source_id":"fixture",
-                "source_key":"fixture","title":"Engineer","url":"http://example.com/job",
-                "first_seen_at":"2026-09-07T23:00:00Z","last_seen_at":"2026-09-07T23:00:00Z",
-                "availability":"listed","missing_complete_snapshots":0,"evidence":[],
-                "compensation":[],"geographic_eligibility":[],"parser_version":"fixture"
-            }]
-        }),
-    )?;
-    Store::open(fixture.root())?.set_setting("config", &settings)?;
-    let error = workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+    fixture.candidates(&[
+        candidate("first", "http://example.com/first"),
+        candidate("second", "http://example.com/second"),
+    ])?;
+    // HTTP is rejected locally at the posting retrieval boundary.
+    for _ in 0..2 {
+        assert!(
+            workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+                .await?
+                .is_none()
+        );
+    }
+    let store = Store::open(fixture.root())?;
+    assert!(!store.is_eligible("http://example.com/first")?);
+    assert!(!store.is_eligible("http://example.com/second")?);
+    assert_eq!(store.jobs()?.len(), 3);
+    assert_eq!(store.list()?.len(), 1); // No incomplete run with missing inputs.
+    store.set_eligible("first", true)?;
+    let error = workflow::prepare(fixture.root(), "first", None)
         .await
         .err()
-        .context("candidate error was silently treated as an empty pool")?;
-    // HTTP is rejected locally, before any network, CRM or model invocation.
-    assert!(error.to_string().contains("posting must use public HTTPS"));
+        .context("unavailable posting unexpectedly prepared")?;
+    assert!(format!("{error:#}").contains("posting must use public HTTPS"));
+    assert!(!store.is_eligible("http://example.com/first")?);
     assert!(
         Store::open(fixture.root())?
             .edition("2026-09-07")?
@@ -348,5 +430,120 @@ async fn daily_candidate_preparation_error_is_not_reported_as_an_empty_success()
     );
     assert!(!fixture.email_output("calls").exists());
     assert_eq!(fixture.current_edition()?.status, "frozen");
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_skips_unavailable_candidates_and_sends_the_ready_packet_once() -> Result<()> {
+    let fixture = Fixture::new("Accepted replacement")?;
+    let packet = fixture.ready_candidate("available", true)?;
+    fixture.candidates(&[
+        candidate("first", "http://example.com/first"),
+        candidate("second", "http://example.com/second"),
+    ])?;
+    let now = "2026-09-07T23:00:00Z".parse()?;
+    let edition = workflow::run_daily(fixture.root(), now)
+        .await?
+        .context("missing edition")?;
+    assert_eq!(edition.status, "sent");
+    assert_eq!(edition.packet_ids, vec![packet.id]);
+    let store = Store::open(fixture.root())?;
+    assert!(!store.is_eligible("http://example.com/first")?);
+    assert!(!store.is_eligible("http://example.com/second")?);
+    assert_eq!(
+        workflow::run_daily(fixture.root(), now)
+            .await?
+            .context("accepted edition disappeared")?
+            .receipt,
+        edition.receipt
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.email_output("calls"))?,
+        "invoked\n"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_excludes_unavailable_prepared_postings_and_preserves_their_artifacts() -> Result<()>
+{
+    let fixture = Fixture::new("Accepted replacement")?;
+    let unavailable = fixture.ready_candidate("unavailable", false)?;
+    let available = fixture.ready_candidate("available", true)?;
+    fixture.candidates(&[])?;
+    let edition = workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+        .await?
+        .context("missing edition")?;
+    assert_eq!(edition.packet_ids, vec![available.id]);
+    let store = Store::open(fixture.root())?;
+    assert!(!store.is_eligible(&unavailable.opportunity)?);
+    assert_eq!(store.run(&unavailable.id)?.status, "deferred");
+    assert!(store.run_artifact(&unavailable.id, "resume-pdf")?.is_some());
+    // Excluded postings are not fetched again, even in a later invocation.
+    fs::remove_file(fixture.root().join("ashby-cache/unavailable.json"))?;
+    assert!(
+        workflow::prepare_daily(fixture.root(), None)
+            .await?
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_tries_more_candidates_when_final_freshness_empties_the_pool() -> Result<()> {
+    let fixture = Fixture::new("Accepted unexpected")?;
+    let mut packets = vec![];
+    for id in ["closing-one", "closing-two", "closing-three"] {
+        packets.push(fixture.ready_candidate(id, true)?);
+        let cache = fixture.root().join(format!("ashby-cache/{id}.json"));
+        let mut unlisted: serde_json::Value = serde_json::from_slice(&fs::read(&cache)?)?;
+        unlisted["response"]["jobs"][0]["isListed"] = serde_json::json!(false);
+        platter::write_json(
+            &fixture.root().join(format!("candidate-cast.{id}")),
+            &unlisted,
+        )?;
+    }
+    fixture.candidates(&[candidate("replacement", "http://example.com/replacement")])?;
+    let settings = workflow::config(fixture.root())?;
+    // Cast export falls between initial refresh and final preview. Close the
+    // ready posting then, after preparation has already filled its pool.
+    fs::write(
+        &settings.cast_executable,
+        "#!/bin/sh\nset -eu\nprintf 'invoked\\n' >> \"$0.calls\"\nfor id in closing-one closing-two closing-three; do\n/bin/cp \"$0.$id\" \"$(dirname \"$0\")/ashby-cache/$id.json\"\ndone\n/bin/cat \"$0.json\"\n",
+    )?;
+    assert!(
+        workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+            .await?
+            .is_none()
+    );
+    let store = Store::open(fixture.root())?;
+    for packet in packets {
+        assert!(!store.is_eligible(&packet.opportunity)?);
+    }
+    assert!(!store.is_eligible("http://example.com/replacement")?);
+    assert_eq!(
+        fs::read_to_string(fixture.root().join("candidate-cast.calls"))?,
+        "invoked\ninvoked\n"
+    );
+    assert!(!fixture.email_output("calls").exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn daily_reaches_the_next_candidate_but_still_stops_on_career_capture_failure() -> Result<()>
+{
+    let fixture = Fixture::new("Accepted unexpected")?;
+    let (next, _) = fixture.cached_posting("second", true)?;
+    fixture.candidates(&[candidate("first", "http://example.com/first"), next])?;
+    assert!(
+        workflow::run_daily(fixture.root(), "2026-09-07T23:00:00Z".parse()?)
+            .await
+            .is_err()
+    );
+    let store = Store::open(fixture.root())?;
+    assert!(!store.is_eligible("http://example.com/first")?);
+    assert!(store.is_eligible("ashby:second:role")?);
+    assert!(store.edition("2026-09-07")?.is_none());
+    assert!(!fixture.email_output("calls").exists());
     Ok(())
 }

@@ -23,6 +23,10 @@ pub(crate) struct Captured {
     pub resume_editorial: Option<String>,
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("posting retrieval failed")]
+struct PostingUnavailable;
+
 pub fn initialize(root: &Path, resume: &Path) -> Result<()> {
     let template = ResumeTemplate::load(resume)?;
     let config = Config::new(resume.canonicalize()?)?;
@@ -142,7 +146,13 @@ async fn prepare_job(
         let captured = Captured {
             job: job.clone(),
             company: company.into(),
-            posting: source::posting(store.root(), job).await?,
+            posting: match source::posting(store.root(), job).await {
+                Ok(posting) => posting,
+                Err(error) => {
+                    store.exclude_job(&record)?;
+                    return Err(error.context(PostingUnavailable));
+                }
+            },
             career: source::career_library(&settings.crm_executable)?,
             template_artifact: store
                 .setting("template")?
@@ -334,9 +344,12 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
             .iter()
             .find(|c| c.id == job.company_id)
             .map_or("Unknown employer", |c| c.name.as_str());
-        // A declined opportunity is a successful product decision. An error
-        // ends this pass before another candidate or an email can be admitted.
-        prepare_job(&settings, &store, job, company, deadline, false).await?;
+        if let Err(error) = prepare_job(&settings, &store, job, company, deadline, false).await {
+            if !error.is::<PostingUnavailable>() {
+                return Err(error);
+            }
+            eprintln!("skipped {} (ineligible): {error:#}", job.id);
+        }
     }
     ready(&store)
 }
@@ -349,11 +362,15 @@ pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Resul
     if Store::open_read_only(root)?.edition(&day)?.is_some() {
         return send(root, &day).map(Some);
     }
-    prepare_daily(root, None).await?;
-    if preview(root, &day).await?.is_none() {
-        return Ok(None);
+    loop {
+        if prepare_daily(root, None).await?.is_empty() {
+            return Ok(None);
+        }
+        if preview(root, &day).await?.is_some() {
+            return send(root, &day).map(Some);
+        }
+        // Freshness checks excluded the entire pool. Fill it from other jobs.
     }
-    send(root, &day).map(Some)
 }
 
 /// Prepare, freeze and send one explicitly selected job URL through the same
@@ -461,8 +478,11 @@ async fn refresh_packet(store: &Store, record: &PacketRecord) -> Result<()> {
             );
         }
         Err(error) => {
+            let tx = store.connection.unchecked_transaction()?;
             store.status(&record.id, "deferred")?;
-            eprintln!("deferred {}: {error}", record.id);
+            store.exclude_job(record)?;
+            tx.commit()?;
+            eprintln!("skipped {} (ineligible): {error:#}", record.id);
         }
     }
     Ok(())

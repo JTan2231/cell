@@ -46,9 +46,13 @@ progress needed for recovery, without a separate tool-receipt ledger.
 is checked separately. Creating or sending an edition does not derive this
 field from history. The ordinary preview operation atomically freezes the
 edition and sets selected jobs ineligible. Declining preparation also sets
-eligibility false. Changed postings become stale and ineligible. The eligibility
-command explicitly changes the field again; enabling a declined or stale job
-allows a new preparation run while retaining its older artifacts.
+eligibility false. Posting retrieval failures also set eligibility false,
+including HTTP errors, timeouts and unsupported or incomplete posting text.
+A failed initial retrieval retains the job without creating a preparation run.
+A failed freshness retrieval retains its prepared run as deferred. Changed
+postings become stale and ineligible. The eligibility command explicitly
+enables a job again; older runs and artifacts remain retained. An enabled
+deferred packet must pass freshness before selection.
 `run-ad-hoc` explicitly enables its URL-selected job before normal preparation.
 Its ordinary one-packet freeze sets that job ineligible again.
 Delivery records retain what happened even after eligibility changes.
@@ -58,7 +62,7 @@ Delivery records retain what happened even after eligibility changes.
 Preparation reads supported Cast export and CRM profile list/read interfaces.
 Cast exports contain stored posting excerpts. Platter fetches full posting text
 through a supported adapter before writing. Sources include Greenhouse, Ashby,
-Lever and supported JobPosting JSON-LD. Preparation can fail when pages require
+Lever and supported JobPosting JSON-LD. Retrieval fails when pages require
 unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
@@ -223,11 +227,14 @@ before any preparation: a frozen edition sends its exact retained bytes, an
 accepted edition returns its recorded result without resending, and an
 uncertain edition fails without retrying or preparing replacement packets.
 No ready packets means no edition or email. A later explicit invocation may
-try an empty day again. Missed dates are not backfilled. The first preparation
-error stops the run before another candidate or an email starts. Accepted
-artifacts and frozen delivery records remain retained. A declined opportunity
-is an ordinary decision and permits the next candidate. A failed Cast export
-stops the run.
+try an empty day again. Missed dates are not backfilled. `prepare-daily` and
+`run-daily` skip jobs whose postings cannot be retrieved, mark them ineligible,
+and continue to other candidates. A declined opportunity also permits the next
+candidate. If the final freshness check excludes the entire ready pool,
+`run-daily` prepares other candidates before trying preview again. Other
+preparation errors and failed Cast exports stop the run before sending.
+Accepted artifacts and frozen delivery records remain retained. Single-job
+preparation reports its retrieval error without selecting a replacement job.
 Output contains the edition date, delivery status and selected packet count,
 or the no-edition result. It does not print the message body or PDF bytes.
 
@@ -251,9 +258,10 @@ to inspect it. After repair, explicitly approve future scheduling with
 preparation, reconcile uncertainty, or replace an edition or send key. Binding
 changes, deployment and maintenance release preserve the halt.
 
-Normal preview retrieves posting text again, defers unavailable sources and
-marks changed packets stale. Ashby uses the shared cache, so changes and
-closures can remain undetected until its next download, up to 14 days later.
+Normal preview retrieves posting text again, marks unavailable packets deferred
+and ineligible, and marks changed packets stale and ineligible. Ashby uses the
+shared cache, so changes and closures can remain undetected until its next
+download, up to 14 days later.
 These readiness decisions remain Platter's expected outcomes; a declined or
 stale packet and an empty ready pool are not an abend.
 Existing frozen editions return stored contents without

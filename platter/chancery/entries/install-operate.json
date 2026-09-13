@@ -91,7 +91,7 @@
     "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema three plus originals and cleanup recovery metadata. Schema-two records retain their legacy workflow after the version advance.",
     "Older binaries cannot operate schema three. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
     "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
-    "The daily runner stops at the first preparation error before another candidate or email starts. Declined opportunities, unavailable/stale ready-packet deferrals and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
+    "The daily runner marks jobs ineligible when posting retrieval fails and continues with other candidates. Other preparation errors stop the run before sending. Declined opportunities and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
   "privacy": [
     "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",

@@ -171,7 +171,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
 | `mentor/worker` | Preserve frozen message/key limits; cleanup-only expiry remains available while scheduling is halted. |
 | `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
-| `platter/daily` | Declared source-readiness deferrals; preserve edition bytes and uncertain-send recovery. |
+| `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
 | `todo/daily-email` | Preserve digest occurrence keys and credential loading; skip deliberate deployment holds. |
 
 Before migrating Clockwork runtime state, capture and disable existing bindings,

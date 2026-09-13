@@ -31,7 +31,7 @@
       "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
-      "Preparation contract 7 adds independent editorial review for new runs. Installation contract 5 supports private schema 3, preserving legacy inputs, exact requests and artifacts. Existing runs retain their legacy workflow. Older binaries cannot operate schema three. Cast collection contract 5 and Clockwork schedule contract 3 remain required."
+      "Preparation contract 8 excludes jobs after posting retrieval failure and continues with other daily candidates. The independent resume review workflow, private schema 3, exact retained requests, packet artifacts and frozen deliveries remain unchanged. Installation contract 5, Cast collection contract 5 and Clockwork schedule contract 3 remain required."
     ],
     "operational_limits": [
       "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."
