@@ -122,13 +122,16 @@ pause setting unchanged. It requires initialized, valid configuration and an
 installed release, then generates and registers an immutable Clockwork
 definition and selects it through `mentor/worker`.
 
-The definition runs every 60 seconds with `run_at_load = false`, a 90-second
+The definition runs every hour with `run_at_load = false`, a 90-second
 activation timeout, and skipped overlapping activations. It launches the
 exact native executable under `install/releases/<digest>/bin/mentor` with
 `--json worker`, using MentorMail as its working directory. The launch
 environment contains only `HOME`. Standard output and standard error use
 separate private files. No shell profile is sourced by Mentor's launcher.
 The executable hash comes from the verified selected release.
+
+Existing verified 60-second definitions remain recognized for upgrade.
+Schedule enable and coordinated deployment select the hourly definition.
 
 Daily delivery time, time zone, exercise selection, incoming-message progress,
 and payload safety remain Mentor's responsibilities. Clockwork owns the

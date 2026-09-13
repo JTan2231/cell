@@ -41,7 +41,7 @@
     "operational_limits": [
       "One exclusive product runner, at most one daily assignment per configured local date, no missed-day backfill, and no repeated reserved problem ID. The worker visits at most four 100-record receiving pages per pass and advances grading without waiting for model completion.",
       "Answers are bounded to 128 KiB, HTML extraction inputs to 1 MiB, final critiques to 64 KiB. Grading has a 1200-second active limit; pending content has a 24-hour deadline, and exact payload reuse ends 23 hours after first attempt or at the content deadline. Clockwork continuation does not extend those deadlines.",
-      "The supported Clockwork binding is an interval of 60 seconds with no run-at-load, overlap skip and a 90-second activation timeout. There is no timer, model or final-delivery latency guarantee."
+      "The supported Clockwork binding is an interval of 3600 seconds with no run-at-load, overlap skip and a 90-second activation timeout. There is no timer, model or final-delivery latency guarantee."
     ]
   },
   "entries": [
