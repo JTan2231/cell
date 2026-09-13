@@ -159,7 +159,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Answers: 128 KiB. HTML extraction input: 1 MiB. Critiques: 64 KiB. Nucleus active timeout: 1200 seconds. Four receiving pages of up to 100 records per tick. Send retry window: at most 23 hours from first attempt, also bounded by content expiry. Clockwork interval: 60 seconds; activation timeout: 90 seconds; overlap skip."
+        "statement": "Answers: 128 KiB. HTML extraction input: 1 MiB. Critiques: 64 KiB. Nucleus active timeout: 1200 seconds. Four receiving pages of up to 100 records per tick. Send retry window: at most 23 hours from first attempt, also bounded by content expiry. Clockwork interval: 3600 seconds; activation timeout: 90 seconds; overlap skip."
       },
       {
         "status": "unsupported",

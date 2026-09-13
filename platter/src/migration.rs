@@ -25,6 +25,12 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
+    } else if store.version()? == 2 {
+        // The table layout is unchanged. Older binaries must refuse reviewed runs.
+        // Existing captured inputs and exact requests keep their legacy meanings.
+        let tx = store.connection.unchecked_transaction()?;
+        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        tx.commit()?;
     }
     ensure!(
         store.version()? == SCHEMA_VERSION,
@@ -39,6 +45,18 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
             digest(&std::fs::read(&retained)?) == expected,
             "migration backup changed; cleanup remains held"
         );
+        if retained == backup {
+            let connection = rusqlite::Connection::open_with_flags(
+                &retained,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )?;
+            let version: i64 =
+                connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+            ensure!(
+                version == SCHEMA_VERSION,
+                "backup uses a predecessor schema; select a new backup path"
+            );
+        }
         if retained != backup {
             cleanup(&store)?;
             store.backup(backup)?;
@@ -191,6 +209,9 @@ fn import(store: &Store) -> Result<()> {
                         }
                         StageResult::Resume(resume) => {
                             store.put_content(&record.id, "resume-content", &resume)?;
+                        }
+                        StageResult::Review(_) => {
+                            anyhow::bail!("legacy execution cannot contain an editorial review")
                         }
                     }
                 }
@@ -423,7 +444,7 @@ fn cleanup(store: &Store) -> Result<()> {
     Ok(())
 }
 
-/// Build a self-contained schema-two copy for an isolated delivery exercise.
+/// Build a self-contained current-schema copy for an isolated delivery exercise.
 /// Source activity is fenced with the same file locks as its runtime. This
 /// never cleans up source files, changes source eligibility, or migrates the
 /// installed library. The destination must be new and remains private.
@@ -460,7 +481,7 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .context("read snapshot source schema")?;
     ensure!(
-        matches!(version, 1 | SCHEMA_VERSION),
+        matches!(version, 1 | 2 | SCHEMA_VERSION),
         "unsupported source schema"
     );
     crate::private_dir(destination)?;
@@ -469,6 +490,13 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()])
         .context("copy source SQLite into private snapshot")?;
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
+    if version == 2 {
+        Store::control(destination)?.connection.pragma_update(
+            None,
+            "user_version",
+            SCHEMA_VERSION,
+        )?;
+    }
     if version == 1 {
         ensure!(
             legacy_runner.is_some(),

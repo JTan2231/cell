@@ -137,6 +137,14 @@ Platter's normal preparation, freshness, edition and send records. URL-selected
 work creates no separate workflow state. Cast still owns the resulting source
 and job records; Platter owns packet eligibility and delivery.
 
+Platter runs resume drafting, independent Markdown review and revision as
+separate sequential Nucleus jobs. It owns the handoffs and retained results.
+The revision copies the retained writer setup and adds only the draft and
+review. Review organization and editorial judgments are not parsed. Nucleus
+continues to own execution and has no editorial workflow authority. Schema-three
+Platter state preserves legacy preparations and prevents older binaries from
+skipping the new review stage.
+
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,
 logs, and domain recovery. A process exit does not establish product success.

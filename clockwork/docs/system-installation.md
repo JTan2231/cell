@@ -32,6 +32,10 @@ supplied candidate Chancery reader must validate the provider copy in that
 staged release. Before commit, the same reader must find all three Clockwork
 entries through the installed provider registry and selected provider path.
 
+Coordinated deployment accepts Chancery 0.6 and 0.7 for these provider-schema-three
+validation and discovery interfaces. Chancery's separate usage journal does not
+change those interfaces.
+
 Direct installation retains the prior valid selector for rollback. It neither calls
 `clockwork binding switch` nor scans another product for jobs. Missing
 current-user `.local/bin` and Chancery parent directories may be created;

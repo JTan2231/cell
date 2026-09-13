@@ -32,6 +32,54 @@ fn successive_deployments_keep_distinct_repeatable_backups() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn schema_two_upgrade_preserves_legacy_inputs_requests_and_artifacts() -> Result<()> {
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path().join("state");
+    let backup = temporary.path().join("review-schema.sqlite");
+    let store = Store::open(&root)?;
+    let record = platter::store::PacketRecord {
+        id: "legacy-packet".into(),
+        opportunity: "legacy-opportunity".into(),
+        job_id: "cast-old".into(),
+        company: "Example".into(),
+        title: "Engineer".into(),
+        status: "preparing".into(),
+        directory: String::new(),
+    };
+    let captured = json!({"posting":"Original snapshot", "template_artifact":"original"});
+    let execution = json!({"request":{"instructions":"Exact old request"},"version":2});
+    store.insert_run(&record, &captured)?;
+    store.save_execution(&record.id, "resume", &execution)?;
+    let artifact = store.put_content(
+        &record.id,
+        "brief",
+        &json!({"paragraph":"Original brief", "pursue":true}),
+    )?;
+    drop(store);
+    let connection = rusqlite::Connection::open(root.join(platter::store::DATABASE))?;
+    connection.pragma_update(None, "user_version", 2)?;
+    drop(connection);
+    assert!(Store::open(&root).is_err());
+    platter::migration::migrate(&root, &backup)?;
+    let store = Store::open(&root)?;
+    assert_eq!(store.inputs::<Value>(&record.id)?, captured);
+    assert_eq!(store.execution(&record.id, "resume")?, Some(execution));
+    assert!(store.execution(&record.id, "resume-draft")?.is_none());
+    assert_eq!(
+        store.run_artifact(&record.id, "brief")?.unwrap().content,
+        artifact.content
+    );
+    let version: i64 =
+        rusqlite::Connection::open(&backup)?
+            .pragma_query_value(None, "user_version", |row| row.get(0))?;
+    assert_eq!(version, platter::store::SCHEMA_VERSION);
+    let bytes = fs::read(&backup)?;
+    platter::migration::migrate(&root, &backup)?;
+    assert_eq!(fs::read(backup)?, bytes);
+    Ok(())
+}
+
 fn cli(home: &Path, socket: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_platter"));
     command

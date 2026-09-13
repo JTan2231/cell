@@ -218,7 +218,7 @@ only drained state to a private 0600 file. An existing backup must match the
 drained database exactly; it is never overwritten. With no database yet,
 migration initializes paused schema-one state and reports `backup:null`.
 
-The standard `mentor/worker` definition runs every 60 seconds with no
+The standard `mentor/worker` definition runs every hour with no
 run-at-load, skips overlap, and limits one activation to 90 seconds. A tick
 advances bounded stages and does not wait for a model to finish. Activation,
 network, model, and inbox delays have no guaranteed bound. See

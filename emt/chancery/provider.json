@@ -3,7 +3,7 @@
   "provider": {
     "id": "emt",
     "name": "EMT",
-    "release": "0.1.3"
+    "release": "0.1.4"
   },
   "promise_scope": {
     "authoritative_for": [

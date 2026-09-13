@@ -94,7 +94,7 @@ fn manifest(root: &Path, release: &ReleaseInfo) -> Result<Manifest> {
         arguments: vec!["--json".into(), "worker".into()],
         cwd: path_text(root)?,
         schedule: Schedule::Interval {
-            seconds: 60,
+            seconds: 3600,
             run_at_load: false,
         },
         launch: LaunchImage::Direct {
@@ -133,6 +133,15 @@ fn require_owned_binding(root: &Path, client: &Client, binding: &BindingRecord) 
     // A retained schema-one selection remains owned and can be upgraded. Its
     // immutable bytes and Clockwork incident state must not be rewritten.
     expected.schema_version = definition.manifest.schema_version;
+    // Keep the previous verified interval recognizable during an hourly upgrade.
+    if definition.manifest.schedule
+        == (Schedule::Interval {
+            seconds: 60,
+            run_at_load: false,
+        })
+    {
+        expected.schedule = definition.manifest.schedule.clone();
+    }
     if definition.digest != digest || definition.manifest != expected {
         return Err(fail(
             "mentor/worker does not match Mentor's supported worker definition",

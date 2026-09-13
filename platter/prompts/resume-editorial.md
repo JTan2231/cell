@@ -39,14 +39,3 @@ information. Preserve distinct projects and ownership boundaries when combining
 related material. Operational impact, engineering judgment, and organizational
 judgment guide selection; they do not require one bullet each or all three in
 every bullet.
-
-## Review and revise within this job
-
-Before submission, read the bullets as a set. Can the reader explain the
-contribution, what changed, and where judgment was exercised? Remove details that
-do not improve that understanding or establish relevant qualifications.
-
-If layout feedback requires shortening, reconsider selection and wording while
-preserving the main accomplishment and the mechanism that makes it credible.
-Remove repetition and low-value detail first. Review the revised set again
-before resubmitting.

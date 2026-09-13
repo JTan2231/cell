@@ -129,7 +129,7 @@
   ],
   "checkpoints": [
     "State root remains MentorMail, not the desktop Mentor state.",
-    "The worker has one exact immutable release, HOME only, interval 60, no run-at-load, overlap skip and timeout 90.",
+    "The worker has one exact immutable release, HOME only, interval 3600, no run-at-load, overlap skip and timeout 90.",
     "No unresolved pending content or cancellation is copied into migration backups.",
     "Provider receipts, Nucleus observations and Clockwork runtime records remain separate success evidence."
   ],

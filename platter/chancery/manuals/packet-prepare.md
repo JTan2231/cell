@@ -92,12 +92,12 @@ is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
 CRM capture rejects incomplete lists and detected timestamp changes. Separate
-list/read calls are not a transactional CRM snapshot, but both stages receive
+list/read calls are not a transactional CRM snapshot, but all stages receive
 the same captured library. Models can list/read captured entries and submit
 only their stage content. They have no direct database, general filesystem,
 shell, web, or messaging access. Source text is untrusted material.
 
-Both Nucleus jobs use `gpt-5.6-sol` with `max` effort. New briefs contain
+All Nucleus jobs use `gpt-5.6-sol` with `max` effort. New briefs contain
 Why it works and Role sections with optional Culture, at most 90 words total.
 Why it works is at most 45 words; Role is at most 30; Culture is at most 25.
 Role and Culture are flat specifics rather than comparisons with career
@@ -113,20 +113,42 @@ characters, extractable text, the Jackson heading and one-page layout before
 acceptance. Each bullet retains its captured career-entry references.
 A run becomes ready only with accepted brief/resume content and retained PDF.
 
-New resume requests separate the task, evidence and disclosure guidance,
-editorial policy, and artifact requirements. Platter embeds its maintained
-`prompts/resume-editorial.md` policy in the executable and copies it into each new
-resume request. Edit that source and rebuild Platter to change the policy.
-The policy guides selection and presentation of consequences, engineering
-judgment, and organizational judgment. The same writer selects, drafts, reviews,
-and revises the bullets. Original bullets, when supplied, provide an approximate
-space reference; the editorial policy governs style. Layout revisions preserve
-the main accomplishment and useful supporting detail.
+New preparations use three sequential resume jobs: draft, independent review,
+and revision. Platter captures its embedded `prompts/resume-editorial.md` policy
+with the run. Writer and reviewer instructions are separate from that shared
+policy. Edit these sources and rebuild Platter to change new work.
 
-Editorial review belongs to the writer. Existing submission and rendering checks
-still determine artifact acceptance. Platter retains the exact composed request;
-resuming it does not substitute newer instructions. Policy changes apply to new
-requests and do not rewrite accepted packets.
+The two writers use the same retained instructions, posting, captured career
+library, disclosure guidance, accepted brief, model settings and tools. The
+revision request copies the draft writer request and adds only the complete
+draft with its evidence references and the exact review text. Execution identity
+changes. Platter supplies no handoff summary or selected evidence subset.
+Both writers submit the ordinary Jackson bullet and evidence payload. Both
+receive the same content and layout checks. Original bullets, when supplied,
+provide only an approximate space reference.
+
+The reviewer receives the draft, target posting, captured career library and
+same editorial policy. It receives no writer history, rationale or accepted
+brief. It can read any captured career entry and submit only its review.
+The review is retained as exact free-text Markdown. Overall assessment, What
+works, What to reconsider, and Revision guidance are suggested headings only.
+Platter requires nonblank review text but does not parse its organization,
+findings, verdict or editorial judgments.
+
+Platter retains the draft and its rendered bytes as intermediate artifacts.
+The review must be retained before revision starts. The writer uses the review
+with editorial judgment and submits no finding responses or change report.
+Review text supplies no authority for career claims. A negative review does
+not create an approval gate. Final content and rendering checks determine
+acceptance after the required handoffs; no second editorial review follows
+layout revisions. Draft, review and final artifacts remain private.
+
+Exact stage requests and completed results survive requester restarts. Resuming
+work does not replace the policy or shared writing setup. A failed stage without
+a result stops preparation; it is not skipped or automatically retried.
+Preparations captured before this workflow retain their legacy brief/resume
+path, and accepted packets are not rewritten. New ready packets require the
+draft, review, final resume content and validated PDF as well as the brief.
 
 For an authorized restart after a failed or cancelled preparation, use
 `prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
@@ -238,7 +260,8 @@ changes, deployment and maintenance release preserve the halt.
 
 Normal preview retrieves posting text again, marks unavailable packets deferred
 and ineligible, and marks changed packets stale and ineligible. Ashby uses the
-shared cache, so changes and closures can remain undetected until its next download, up to 14 days later.
+shared cache, so changes and closures can remain undetected until its next
+download, up to 14 days later.
 These readiness decisions remain Platter's expected outcomes; a declined or
 stale packet and an empty ready pool are not an abend.
 Existing frozen editions return stored contents without
@@ -288,10 +311,10 @@ Every external send still requires its own applicable user authority.
 
 ## Recovery and privacy
 
-A schema-two SQLite snapshot contains the entire retained Platter library.
+A schema-three SQLite snapshot contains the entire retained Platter library.
 Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one state must pass the explicit
-[installation migration](install-operate.md); ordinary work refuses it.
+main database without its journal. Schema-one or schema-two state must pass
+the explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves
 to existing identical content; conflicting content is refused. Platter can
