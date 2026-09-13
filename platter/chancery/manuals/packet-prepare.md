@@ -1,7 +1,7 @@
 # Prepare private job packets
 
 Platter captures Cast opportunities and CRM career entries. It uses Nucleus to
-prepare a concise brief and Jackson-only tailored resume, then freezes editions
+prepare a concise brief and tailored Jackson and projects content, then freezes editions
 for authorized delivery through Email. Platter owns retained content, job
 eligibility and delivery outcomes. It does not discover jobs, edit CRM, apply
 to employers, contact them or activate a schedule.
@@ -29,7 +29,12 @@ platter export ARTIFACT_ID /absolute/chosen/resume.pdf
 
 Initialization imports the supported original LaTeX source into an immutable
 artifact. The template must have the expected Jackson National Life bullet
-structure. Its original path is provenance; subsequent work reads its bytes
+structure. New preparations also need one `\section{Projects}` or
+`\section{Side Projects}` ending at the next section or document end. Explicit
+`% PLATTER PROJECTS BEGIN` and `% PLATTER PROJECTS END` comments can instead
+bound that content. The Jackson and projects regions must not overlap.
+Historical preparations require only their original Jackson region.
+Its original path is provenance; subsequent work reads its bytes
 from SQLite. Configuration, captured inputs, execution correlation, accepted
 brief and resume content, generated LaTeX/PDF bytes, editions, receipts and
 maintenance holds all live in that database. Artifact IDs are not file paths.
@@ -94,8 +99,10 @@ retrieval to download again. This does not change existing captured packets.
 CRM capture rejects incomplete lists and detected timestamp changes. Separate
 list/read calls are not a transactional CRM snapshot, but all stages receive
 the same captured library. Models can list/read captured entries and submit
-only their stage content. They have no direct database, general filesystem,
-shell, web, or messaging access. Source text is untrusted material.
+only their stage content. New jobs also use read-only workspace access with
+local execution for project research. Web search stays disabled. The assignment
+permits only research reads, not source changes, service operation or messaging.
+Source text is untrusted material.
 
 All Nucleus jobs use `gpt-5.6-sol` with `max` effort. New briefs contain
 Why it works and Role sections with optional Culture, at most 90 words total.
@@ -106,12 +113,39 @@ change to pursuit eligibility. The displayed recommendation has no caveats or
 hedging; pursuit assessment remains private. Historical paragraph briefs and
 version-one requests remain readable with their existing meanings.
 
-Resume submissions contain only plain Jackson bullet contents and their private
-career-entry references. Every source byte outside that span remains fixed.
-Model text is escaped as LaTeX content. Rendering validates overflow, missing
-characters, extractable text, the Jackson heading and one-page layout before
-acceptance. Each bullet retains its captured career-entry references.
+New resume submissions contain Jackson bullets with captured career-entry
+references and one or two ordered project entries. Each entry has `name`
+(`Cell` or `Wrought`), a plain-text `description`, optional `dates`, one through
+eight plain-text `bullets`, and nonempty private `sources` notes. Names must be
+unique. Each project text field permits at most 1000 characters and no control
+characters. The agent selects emphasis and divides space between the editable
+regions. Dates and claims require source support; validation checks structure,
+not whether a source entails a claim.
+
+The renderer uses https://github.com/jtan2231/cell for Cell and
+https://wrought.experimental.joeytan.dev for Wrought. Source notes are not
+rendered. Every byte outside Jackson bullets and projects content stays fixed.
+Model text is escaped as LaTeX content. Rendering checks overflow, missing
+characters, extractable project text, the Jackson heading and one-page layout.
 A run becomes ready only with accepted brief/resume content and retained PDF.
+
+The shared `prompts/project-resources.md` points agents to
+`/Users/joey/rust/cell`, `/Users/joey/ts/wrought-private`, and the Krisis Annals
+library selected by `/Users/joey/Library/Application Support/Annals/decisions/config.toml`.
+Agents run the local Annals search, concept-evidence and retained-work read
+commands. Search matches concept labels and ancestor context, not arbitrary
+conversation text. Repositories establish implementation; decision documents
+explain constraints, alternatives and reasoning. They can contain rejected
+proposals or anticipated outcomes. The brief can also use project experience.
+
+Platter retains the resource instructions with each new run. It does not pin
+commits or Annals revisions, copy project sources, or provide custom source
+read tools. Draft, review and revision read current local material, including
+working-tree edits. Resumed research can see newer content. Private source
+notes are navigation hints, not reproducible citations. Unavailable required
+sources must be reported as access failures; no source-system repair is part of
+preparation. The local paths, Annals command/config and library must be usable
+by the selected Nucleus harness. Catalog presence does not establish that access.
 
 New preparations use three sequential resume jobs: draft, independent review,
 and revision. Platter captures its embedded `prompts/resume-editorial.md` policy
@@ -123,13 +157,14 @@ library, disclosure guidance, accepted brief, model settings and tools. The
 revision request copies the draft writer request and adds only the complete
 draft with its evidence references and the exact review text. Execution identity
 changes. Platter supplies no handoff summary or selected evidence subset.
-Both writers submit the ordinary Jackson bullet and evidence payload. Both
+Both writers submit the same Jackson and projects payload. Both
 receive the same content and layout checks. Original bullets, when supplied,
 provide only an approximate space reference.
 
 The reviewer receives the draft, target posting, captured career library and
 same editorial policy. It receives no writer history, rationale or accepted
-brief. It can read any captured career entry and submit only its review.
+brief. It can read any captured career entry and current project resource,
+including uncited material, and submit only its review.
 The review is retained as exact free-text Markdown. Overall assessment, What
 works, What to reconsider, and Revision guidance are suggested headings only.
 Platter requires nonblank review text but does not parse its organization,
@@ -147,7 +182,8 @@ Exact stage requests and completed results survive requester restarts. Resuming
 work does not replace the policy or shared writing setup. A failed stage without
 a result stops preparation; it is not skipped or automatically retried.
 Preparations captured before this workflow retain their legacy brief/resume
-path, and accepted packets are not rewritten. New ready packets require the
+path, and accepted packets are not rewritten. Runs without captured project
+resources retain Jackson-only submissions and their original access policy. New ready packets require the
 draft, review, final resume content and validated PDF as well as the brief.
 
 For an authorized restart after a failed or cancelled preparation, use
@@ -311,9 +347,9 @@ Every external send still requires its own applicable user authority.
 
 ## Recovery and privacy
 
-A schema-three SQLite snapshot contains the entire retained Platter library.
+A schema-four SQLite snapshot contains the entire retained Platter library.
 Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one or schema-two state must pass
+main database without its journal. Schema-one, schema-two or schema-three state must pass
 the explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves
@@ -325,7 +361,8 @@ explicit recovery change; do not edit SQLite to force success.
 
 Resume contact details, career history, captured evidence, briefs and supporting
 references remain private. Captured material is disclosed through Nucleus to
-the model service. Authorized sends disclose message and attachments to Email,
+the model service. Direct project research also exposes selected repository and
+Krisis text to Nucleus and the model; Nucleus may retain that tool output. Authorized sends disclose message and attachments to Email,
 Resend and Gmail. Source retrieval discloses HTTP requests to employers.
 Nucleus retains its own runtime records and credentials. This storage change
 does not relocate other products' state. No completion-time guarantee or final

@@ -25,8 +25,8 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
-    } else if store.version()? == 2 {
-        // The table layout is unchanged. Older binaries must refuse reviewed runs.
+    } else if matches!(store.version()?, 2 | 3) {
+        // The table layout is unchanged. Older binaries must refuse project-authoring runs.
         // Existing captured inputs and exact requests keep their legacy meanings.
         let tx = store.connection.unchecked_transaction()?;
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -481,7 +481,7 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .context("read snapshot source schema")?;
     ensure!(
-        matches!(version, 1 | 2 | SCHEMA_VERSION),
+        matches!(version, 1 | 2 | 3 | SCHEMA_VERSION),
         "unsupported source schema"
     );
     crate::private_dir(destination)?;
@@ -490,7 +490,7 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()])
         .context("copy source SQLite into private snapshot")?;
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
-    if version == 2 {
+    if matches!(version, 2 | 3) {
         Store::control(destination)?.connection.pragma_update(
             None,
             "user_version",

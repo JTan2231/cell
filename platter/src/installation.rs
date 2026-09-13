@@ -171,7 +171,7 @@ fn lifecycle_inner(
             let version: i64 =
                 connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
             ensure!(
-                matches!(version, 1 | 2 | crate::store::SCHEMA_VERSION),
+                matches!(version, 1 | 2 | 3 | crate::store::SCHEMA_VERSION),
                 "unsupported Platter database schema"
             );
             version == 1

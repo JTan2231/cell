@@ -1,8 +1,9 @@
 # Platter
 
 Platter prepares private job briefs and tailored resumes from Cast opportunities
-and CRM career material. It changes only the Jackson work-experience bullets
-in the supplied resume. It retains prepared content and email outcomes.
+and CRM career material. Agents research Cell, Wrought and Krisis locally to
+write the projects section alongside Jackson work-experience bullets. Platter
+retains prepared content and email outcomes.
 
 ## Example
 

@@ -1,6 +1,6 @@
 # Platter data model
 
-Schema three uses one private SQLite database. The core tables are:
+Schema four uses one private SQLite database. The core tables are:
 
 | Table | Owned information |
 | --- | --- |
@@ -22,6 +22,11 @@ posting/career snapshot lives on its run and references its exact template.
 New runs also capture `resume_editorial`; its absence selects the legacy
 brief/resume workflow. The retained draft request is the common writing setup.
 Revision copies it and adds only `proposed_draft` and `editorial_review`.
+New runs also retain `project_resources`, the shared local resource instructions.
+Its absence keeps the Jackson-only submission and access policy. New resume
+content adds ordered `projects` with private source notes. Platter stores no
+project-source copies, commit IDs or Annals revisions. Current local research
+may change between stages or after restart.
 
 `resume-draft`, `resume-draft-source` and `resume-draft-pdf` are validated
 intermediate artifacts. `resume-review` contains the exact UTF-8 Markdown
@@ -35,7 +40,8 @@ Ashby board responses are separately cached in `ashby-cache/BOARD.json` under
 the runtime root. Each file holds `response` and its `retrieved_at` download
 time. It is reused for less than 14 days, unless the requested posting is
 absent. A valid new download atomically replaces it. These disposable files
-are excluded from SQLite backups; captured run inputs remain self-contained.
+are excluded from SQLite backups. Captured posting and career inputs remain
+self-contained; project research uses the external local resources.
 
 Run executions contain exact Nucleus requests, input fingerprints, compact
 runtime state and attempt correlation; they contain no copied tool-call log or
@@ -69,13 +75,13 @@ There is no artifact deletion API. Fixed content and frozen messages remain
 immutable; any future retention policy must preserve every referenced artifact
 and all delivery uncertainty. Explicit exports never become dependencies.
 
-Migration imports schema one transactionally, records a complete schema-three
+Migration imports schema one transactionally, records a complete schema-four
 backup, and removes only hashed legacy files on its durable cleanup manifest.
 Nucleus tool history is not copied. Unknown remaining regular runtime files
 are retained as imported artifacts. The database backup is self-contained for
 Platter history; rendering programs and Nucleus runtime/authentication remain
 separate dependencies.
 
-Schema-two migration advances the database version without changing retained
-inputs, requests or artifact bytes. Older binaries refuse schema three. New
+Schema-two and schema-three migration advances the database version without changing retained
+inputs, requests or artifact bytes. Older binaries refuse schema four. New
 stage toolsets coexist with the retained legacy decoders.

@@ -1,4 +1,4 @@
-//! The model may replace Jackson's bullet text; all other resume bytes are fixed.
+//! Render plain Jackson bullets and, for new runs, the complete projects section.
 //!
 //! Templates are private runtime inputs. Never include a real resume in the crate.
 
@@ -15,6 +15,67 @@ const JACKSON: &str = "{Jackson National Life}";
 const LIST_START: &str = "\\resumeItemListStart";
 const LIST_END: &str = "\\resumeItemListEnd";
 const ITEM: &str = "\\resumeItem{";
+const PROJECTS_BEGIN: &str = "% PLATTER PROJECTS BEGIN";
+const PROJECTS_END: &str = "% PLATTER PROJECTS END";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Project {
+    pub name: String,
+    pub description: String,
+    pub dates: Option<String>,
+    pub bullets: Vec<String>,
+    /// Private, current source pointers for editorial review.
+    pub sources: Vec<String>,
+}
+
+fn project_url(name: &str) -> Result<&'static str> {
+    match name {
+        "Cell" => Ok("https://github.com/jtan2231/cell"),
+        "Wrought" => Ok("https://wrought.experimental.joeytan.dev"),
+        _ => bail!("unknown project name"),
+    }
+}
+
+pub(crate) fn validate_projects(projects: &[Project]) -> Result<()> {
+    ensure!(
+        (1..=2).contains(&projects.len()),
+        "select one or two projects"
+    );
+    let mut names = std::collections::BTreeSet::new();
+    for project in projects {
+        project_url(&project.name)?;
+        ensure!(names.insert(&project.name), "duplicate project");
+        ensure!(
+            (1..=8).contains(&project.bullets.len()),
+            "project needs one to eight bullets"
+        );
+        ensure!(
+            !project.sources.is_empty(),
+            "project source notes are required"
+        );
+        for text in std::iter::once(&project.description)
+            .chain(project.dates.iter())
+            .chain(&project.bullets)
+            .chain(&project.sources)
+        {
+            ensure!(
+                !text.trim().is_empty()
+                    && !text.chars().any(char::is_control)
+                    && text.chars().count() <= 1000,
+                "project text must be a nonempty plain paragraph of at most 1000 characters"
+            );
+        }
+        ensure!(
+            project
+                .bullets
+                .iter()
+                .all(|text| !text.starts_with(['•', '*', '-'])),
+            "project bullets must omit bullet markers"
+        );
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub(crate) struct RendererFailure;
@@ -147,6 +208,88 @@ impl ResumeTemplate {
         Ok(())
     }
 
+    /// Check the supported projects section or explicit project markers.
+    ///
+    /// # Errors
+    /// Rejects a missing, ambiguous, reversed or overlapping region.
+    pub fn validate_projects_region(&self) -> Result<()> {
+        self.validate()?;
+        let projects = projects_range(&self.source)?;
+        let jackson = jackson_range(&self.source)?;
+        ensure!(
+            projects.end <= jackson.start || jackson.end <= projects.start,
+            "projects and Jackson regions overlap"
+        );
+        Ok(())
+    }
+
+    /// Render both editable regions. None preserves the legacy Jackson-only path.
+    ///
+    /// # Errors
+    /// Rejects invalid project text, unsupported templates or changed fixed bytes.
+    pub fn render_latex_with_projects(
+        &self,
+        bullets: &[String],
+        projects: Option<&[Project]>,
+    ) -> Result<String> {
+        let mut rendered = self.render_latex(bullets)?;
+        let Some(projects) = projects else {
+            return Ok(rendered);
+        };
+        self.validate_projects_region()?;
+        validate_projects(projects)?;
+        let range = projects_range(&rendered)?;
+        let mut content = String::new();
+        for project in projects {
+            content.push_str("\n\\par\\noindent\\textbf{\\href{");
+            content.push_str(project_url(&project.name)?);
+            content.push_str("}{");
+            content.push_str(&escape_latex(&project.name));
+            content.push_str("}}");
+            if let Some(dates) = &project.dates {
+                content.push_str("\\hfill ");
+                content.push_str(&escape_latex(dates));
+            }
+            content.push_str("\\par\n\\noindent\\emph{");
+            content.push_str(&escape_latex(&project.description));
+            content.push_str("}\n");
+            content.push_str(LIST_START);
+            for bullet in &project.bullets {
+                content.push('\n');
+                content.push_str(ITEM);
+                content.push_str(&escape_latex(bullet));
+                content.push('}');
+            }
+            content.push('\n');
+            content.push_str(LIST_END);
+            content.push('\n');
+        }
+        rendered.replace_range(range, &content);
+        self.validate_fixed_regions(&rendered)?;
+        Ok(rendered)
+    }
+
+    fn validate_fixed_regions(&self, rendered: &str) -> Result<()> {
+        let mut original = [jackson_range(&self.source)?, projects_range(&self.source)?];
+        let mut candidate = [jackson_range(rendered)?, projects_range(rendered)?];
+        original.sort_by_key(|range| range.start);
+        candidate.sort_by_key(|range| range.start);
+        let (mut left, mut right) = (0, 0);
+        for (a, b) in original.iter().zip(&candidate) {
+            ensure!(
+                self.source[left..a.start] == rendered[right..b.start],
+                "resume changes outside Jackson and projects are forbidden"
+            );
+            left = a.end;
+            right = b.end;
+        }
+        ensure!(
+            self.source[left..] == rendered[right..],
+            "resume changes outside Jackson and projects are forbidden"
+        );
+        Ok(())
+    }
+
     /// Compile in disposable private space and return validated bytes.
     /// Tectonic and Python 3 with pypdf use the same explicit resolution as doctor.
     ///
@@ -154,7 +297,20 @@ impl ResumeTemplate {
     /// Returns input, filesystem, compiler, overflow, page count and text-check
     /// failures. Each external command has a two-minute execution timeout.
     pub fn render_pdf(&self, bullets: &[String], output_dir: &Path) -> Result<RenderedResume> {
-        let source = self.render_latex(bullets)?;
+        self.render_pdf_with_projects(bullets, None, output_dir)
+    }
+
+    /// Render the selected project entries with the same PDF and layout checks.
+    ///
+    /// # Errors
+    /// Returns content, template, compiler, extraction and one-page layout errors.
+    pub fn render_pdf_with_projects(
+        &self,
+        bullets: &[String],
+        projects: Option<&[Project]>,
+        output_dir: &Path,
+    ) -> Result<RenderedResume> {
+        let source = self.render_latex_with_projects(bullets, projects)?;
         create_private_dir(output_dir)?;
         // The caller holds Platter's database admission lock. Recover abandoned
         // renderer work from an interrupted invocation before creating new work.
@@ -197,11 +353,11 @@ impl ResumeTemplate {
         let log = fs::read_to_string(build.path().join("render.log"))?;
         ensure!(
             !log.contains("Overfull \\hbox") && !log.contains("Overfull \\vbox"),
-            "resume text overflows the fixed template; shorten Jackson bullets and render again"
+            "resume text overflows the fixed template; shorten the editable resume content and render again"
         );
         ensure!(
             !log.contains("Missing character:"),
-            "resume contains characters the fixed template cannot render; revise Jackson text"
+            "resume contains characters the fixed template cannot render; revise the editable text"
         );
 
         let mut inspect =
@@ -222,7 +378,7 @@ impl ResumeTemplate {
             serde_json::from_str(&inspection).context("read PDF inspection result")?;
         ensure!(
             pages == 1,
-            "resume has {pages} pages; shorten Jackson bullets to preserve the original one-page layout"
+            "resume has {pages} pages; shorten the editable content to preserve the original one-page layout"
         );
         ensure!(
             !text.trim().is_empty(),
@@ -233,9 +389,67 @@ impl ResumeTemplate {
             "resume PDF is missing the Jackson heading"
         );
 
+        if let Some(projects) = projects {
+            let compact = |value: &str| {
+                value
+                    .chars()
+                    .filter(|ch| !ch.is_whitespace())
+                    .collect::<String>()
+            };
+            let extracted = compact(&text);
+            for project in projects {
+                for expected in std::iter::once(&project.name)
+                    .chain(std::iter::once(&project.description))
+                    .chain(project.dates.iter())
+                    .chain(&project.bullets)
+                {
+                    ensure!(
+                        extracted.contains(&compact(expected)),
+                        "resume PDF is missing project text; revise unsupported characters or layout"
+                    );
+                }
+            }
+        }
         let pdf = fs::read(build.path().join("render.pdf"))?;
         Ok(RenderedResume { source, pdf, pages })
     }
+}
+
+fn projects_range(source: &str) -> Result<Range<usize>> {
+    if source.contains(PROJECTS_BEGIN) || source.contains(PROJECTS_END) {
+        ensure!(
+            source.matches(PROJECTS_BEGIN).count() == 1
+                && source.matches(PROJECTS_END).count() == 1,
+            "projects markers must occur exactly once"
+        );
+        let start = source
+            .find(PROJECTS_BEGIN)
+            .context("projects start missing")?
+            + PROJECTS_BEGIN.len();
+        let end = source.find(PROJECTS_END).context("projects end missing")?;
+        ensure!(start < end, "projects markers are reversed");
+        return Ok(start..end);
+    }
+    let headings = ["\\section{Projects}", "\\section{Side Projects}"];
+    let matches: Vec<_> = headings
+        .iter()
+        .flat_map(|heading| {
+            source
+                .match_indices(heading)
+                .map(|(offset, text)| offset + text.len())
+        })
+        .collect();
+    ensure!(
+        matches.len() == 1,
+        "template needs one Projects or Side Projects section, or explicit PLATTER PROJECTS markers"
+    );
+    let start = matches[0];
+    let rest = &source[start..];
+    let end = rest
+        .find("\\section{")
+        .or_else(|| rest.find("\\end{document}"))
+        .context("projects section has no end boundary")?;
+    Ok(start..start + end)
 }
 
 fn digest(bytes: &[u8]) -> String {
@@ -483,5 +697,63 @@ mod tests {
         ] {
             assert!(template().render_latex(&bullets).is_err());
         }
+    }
+
+    #[test]
+    fn projects_replace_only_their_region_and_keep_sources_private() {
+        let source = FIXTURE.replace(
+            "Fixed projects and skills",
+            "\\section{Projects}\nOld project\n\\section{Skills}\nFixed skills",
+        );
+        let template = ResumeTemplate::from_source("fixture".into(), source.clone()).unwrap();
+        let projects = vec![
+            Project {
+                name: "Cell".into(),
+                description: "Rust & SQLite".into(),
+                dates: None,
+                bullets: vec![r"Built recovery; 40% \input{untrusted}".into()],
+                sources: vec!["private/source.rs:42".into()],
+            },
+            Project {
+                name: "Wrought".into(),
+                description: "Go and React".into(),
+                dates: Some("2026".into()),
+                bullets: vec!["Built a world editor".into()],
+                sources: vec!["Annals work label".into()],
+            },
+        ];
+        let rendered = template
+            .render_latex_with_projects(&["Jackson work".into()], Some(&projects))
+            .unwrap();
+        assert!(rendered.contains("https://github.com/jtan2231/cell"));
+        assert!(rendered.contains("https://wrought.experimental.joeytan.dev"));
+        assert!(rendered.contains(r"40\% \textbackslash{}input\{untrusted\}"));
+        assert!(!rendered.contains("private/source.rs") && !rendered.contains("Annals work label"));
+        assert!(!rendered.contains("Old project"));
+        assert!(rendered.contains("Fixed other employer bullet"));
+        template.validate_fixed_regions(&rendered).unwrap();
+        assert!(
+            template
+                .validate_fixed_regions(&rendered.replace("Fixed skills", "Changed skills"))
+                .is_err()
+        );
+        assert!(template.validate_fixed_content(&rendered).is_err());
+        assert!(
+            template
+                .render_latex_with_projects(&["Jackson work".into()], None)
+                .unwrap()
+                .contains("Old project")
+        );
+
+        let marked = source.replace(
+            "\\section{Projects}\nOld project\n",
+            "% PLATTER PROJECTS BEGIN\nOld project\n% PLATTER PROJECTS END\n",
+        );
+        let marked = ResumeTemplate::from_source("fixture".into(), marked).unwrap();
+        marked
+            .render_latex_with_projects(&["Jackson work".into()], Some(&projects))
+            .unwrap();
+        assert!(self::template().validate_projects_region().is_err());
+        assert!(validate_projects(&[projects[0].clone(), projects[0].clone()]).is_err());
     }
 }

@@ -141,9 +141,14 @@ Platter runs resume drafting, independent Markdown review and revision as
 separate sequential Nucleus jobs. It owns the handoffs and retained results.
 The revision copies the retained writer setup and adds only the draft and
 review. Review organization and editorial judgments are not parsed. Nucleus
-continues to own execution and has no editorial workflow authority. Schema-three
+continues to own execution and has no editorial workflow authority. Schema-four
 Platter state preserves legacy preparations and prevents older binaries from
-skipping the new review stage.
+misreading project-authoring runs. New Platter jobs use read-only workspace
+access and local execution to research the hardcoded Cell and Wrought paths
+and the Krisis library through Annals. Web search remains disabled. The source
+instructions and accepted outputs are retained; project sources are current
+local reads without snapshots. The writer owns Jackson and projects content;
+Platter owns validation, rendering and delivery.
 
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,
