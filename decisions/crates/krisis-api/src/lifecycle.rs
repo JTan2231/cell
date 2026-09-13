@@ -122,6 +122,7 @@ impl Client {
 
     fn json<T: DeserializeOwned>(&self, arguments: &[&str]) -> Result<T, Error> {
         let mut command = Command::new(&self.binary);
+        command.env("CHANCERY_USAGE_INTERNAL", "1");
         if let Some(database) = &self.database {
             command.arg("--database").arg(database);
         }

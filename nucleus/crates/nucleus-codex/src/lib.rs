@@ -3223,6 +3223,8 @@ fn apply_launch_environment(command: &mut Command, spec: &CodexRunSpec) {
         command.envs(environment);
     }
     command
+        .env_remove("CODEX_THREAD_ID")
+        .env_remove("CHANCERY_USAGE_INTERNAL")
         .env_remove("CODEX_EXEC_SERVER_URL")
         .env_remove("OPENAI_API_KEY")
         .env_remove("CODEX_ACCESS_TOKEN");
@@ -4086,6 +4088,9 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
         fs::create_dir(&codex_home)?;
         let mut environment = BTreeMap::new();
         environment.insert("CALLER_ONLY".to_owned(), "present".to_owned());
+        environment.insert("CODEX_THREAD_ID".to_owned(), "parent-thread".to_owned());
+        environment.insert("CHANCERY_USAGE_INTERNAL".to_owned(), "1".to_owned());
+        environment.insert("CHANCERY_USAGE_DISABLED".to_owned(), "1".to_owned());
         environment.insert("CAPTURE_PATH".to_owned(), capture.display().to_string());
         environment.insert("CODEX_HOME".to_owned(), "/attacker/home".to_owned());
         environment.insert(
@@ -4120,6 +4125,14 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
 
         let captured = fs::read_to_string(capture)?;
         assert!(captured.lines().any(|line| line == "CALLER_ONLY=present"));
+        assert!(
+            captured
+                .lines()
+                .any(|line| line == "CHANCERY_USAGE_DISABLED=1")
+        );
+        for name in ["CODEX_THREAD_ID=", "CHANCERY_USAGE_INTERNAL="] {
+            assert!(!captured.lines().any(|line| line.starts_with(name)));
+        }
         assert!(!captured.lines().any(|line| line.starts_with("HOME=")));
         assert!(
             !captured

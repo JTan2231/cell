@@ -32,6 +32,7 @@ pub(crate) async fn observe(
     };
     let executable = command_dir.join(command);
     let mut child = match Command::new(&executable)
+        .env("CHANCERY_USAGE_INTERNAL", "1")
         .args(["status-snapshot", "--json"])
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

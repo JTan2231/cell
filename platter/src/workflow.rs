@@ -614,6 +614,7 @@ pub(crate) fn send_edition(root: &Path, id: &str, executable: Option<&Path>) -> 
     let payload =
         serde_json::to_vec(&serde_json::json!({"body":edition.body,"attachments":attachments}))?;
     let mut command = std::process::Command::new(executable);
+    command.env("CHANCERY_USAGE_INTERNAL", "1");
     command
         .args(["--payload-stdin", "--idempotency-key"])
         .arg(&edition.idempotency_key)

@@ -160,6 +160,7 @@ impl CliClient {
             return Err(ClientError::InvalidRequest);
         }
         let mut process = Process::new(&self.executable);
+        process.env("CHANCERY_USAGE_INTERNAL", "1");
         if let Some(root) = &self.state_root {
             process.env("ANNALS_STATE_DIR", root);
         }

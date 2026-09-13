@@ -193,19 +193,26 @@ enum BindingCommand {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let json_requested = std::env::args_os().any(|argument| argument == "--json");
-    let cli = match chancery_usage::cli::try_parse::<Cli>("clockwork", "") {
-        Ok(cli) => cli,
-        Err(error) => {
-            let exit_code = error.exit_code();
-            if json_requested && exit_code != 0 {
-                emit_error(&Error::new("cli_invalid", error.to_string()), true);
-                std::process::exit(1);
-            } else {
-                let _ = error.print();
+    chancery_usage::cli::register_if_requested::<Cli>("clockwork", "");
+    let (cli, usage_command) =
+        match chancery_usage::cli::parse_command_from::<Cli>(std::env::args_os(), "") {
+            Ok(cli) => cli,
+            Err(error) => {
+                let exit_code = error.exit_code();
+                if json_requested && exit_code != 0 {
+                    emit_error(&Error::new("cli_invalid", error.to_string()), true);
+                    std::process::exit(1);
+                } else {
+                    let _ = error.print();
+                }
+                std::process::exit(exit_code);
             }
-            std::process::exit(exit_code);
-        }
-    };
+        };
+    if !matches!(&cli.command, Command::Launchd { .. } | Command::Exec { .. })
+        && let Some(command) = usage_command
+    {
+        chancery_usage::observe("clockwork", &command);
+    }
     let json = cli.json;
     let private_exec = matches!(&cli.command, Command::Exec { .. });
     if let Err(error) = run(cli).await {

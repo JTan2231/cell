@@ -190,13 +190,11 @@ impl Store {
     }
 
     /// A request-scoped thread must be supplied explicitly by service callers.
-    /// `None` means no thread association; it never consults process environment.
-    pub fn record(&self, system: &str, command: &str, thread: Option<&str>) -> Result<i64> {
+    /// This method never consults process environment.
+    pub fn record(&self, system: &str, command: &str, thread: &str) -> Result<i64> {
         validate_id(system)?;
         validate_id(command)?;
-        if let Some(thread) = thread {
-            validate_id(thread)?;
-        }
+        validate_id(thread)?;
         let recorded_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .ok()
@@ -306,19 +304,27 @@ pub fn register_command(system: &str, command: &str) -> Result<()> {
     Store::open(&default_path()?)?.register_command(system, command)
 }
 
-pub fn record(system: &str, command: &str) -> Result<i64> {
-    record_with_thread(system, command, thread_from_env()?.as_deref())
+/// Record an agent invocation, or skip it before accessing storage.
+pub fn record(system: &str, command: &str) -> Result<Option<i64>> {
+    if ["CHANCERY_USAGE_DISABLED", "CHANCERY_USAGE_INTERNAL"]
+        .iter()
+        .any(|name| std::env::var_os(name).as_deref() == Some(std::ffi::OsStr::new("1")))
+    {
+        return Ok(None);
+    }
+    let Some(thread) = thread_from_env()? else {
+        return Ok(None);
+    };
+    record_with_thread(system, command, &thread).map(Some)
 }
 
-pub fn record_with_thread(system: &str, command: &str, thread: Option<&str>) -> Result<i64> {
+/// Explicit request-scoped recording; the caller owns agent attribution.
+pub fn record_with_thread(system: &str, command: &str, thread: &str) -> Result<i64> {
     Store::open(&default_path()?)?.record(system, command, thread)
 }
 
 /// Command dispatch preserves the product result after a bounded recording error.
 pub fn observe(system: &str, command: &str) {
-    if std::env::var_os("CHANCERY_USAGE_DISABLED").as_deref() == Some(std::ffi::OsStr::new("1")) {
-        return;
-    }
     if let Err(error) = record(system, command) {
         eprintln!("chancery usage: {error}");
     }

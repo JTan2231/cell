@@ -95,6 +95,7 @@ impl Client {
 
     fn json<T: DeserializeOwned>(&self, arguments: &[OsString]) -> Result<T, Error> {
         let output = Command::new(&self.binary)
+            .env("CHANCERY_USAGE_INTERNAL", "1")
             .arg("--config")
             .arg(&self.config)
             .arg("--json")
