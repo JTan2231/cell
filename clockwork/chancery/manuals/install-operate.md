@@ -36,7 +36,7 @@ inside the staged release before any public selector mutation. Before commit,
 the same reader must discover all three Clockwork entries through the installed
 providers registry and selected provider path.
 
-Coordinated deployment accepts Chancery 0.6 and 0.7 for these provider-schema-three
+Coordinated deployment accepts Chancery 0.6 through 0.8 for these provider-schema-three
 validation and discovery interfaces. Chancery's separate usage journal does not
 change those interfaces.
 
