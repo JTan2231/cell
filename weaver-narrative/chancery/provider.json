@@ -3,7 +3,7 @@
   "provider": {
     "id": "weaver",
     "name": "Weaver",
-    "release": "0.1.0"
+    "release": "0.3.0"
   },
   "promise_scope": {
     "authoritative_for": [
