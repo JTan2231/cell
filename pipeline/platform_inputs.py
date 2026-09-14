@@ -18,7 +18,7 @@ PRODUCT_INPUTS = (
 # points also belong to the installation boundary, even inside product code.
 PRODUCT_RUNTIME_INPUTS = {
     "annals": ("annals/crates/annals/src/db.rs", "annals/crates/annals/src/cli.rs",
-               "annals/crates/annals/src/main.rs"),
+               "annals/crates/annals/src/main.rs", "annals/crates/annals/src/sqlite.rs"),
     "nucleus": ("nucleus/crates/nucleus-cli/src/service.rs",
                 "nucleus/crates/nucleus-cli/src/main.rs",
                 "nucleus/crates/nucleus-store/src/lib.rs",

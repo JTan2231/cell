@@ -68,7 +68,16 @@ Bounded graph and search operations benefit from SQL joins and indexes. After
 replaying the selected revision, Annals projects that in-memory state into
 connection-local temporary concept, edge, and evidence tables. Those tables
 exist only for the connection and revision being queried. They are disposable
-query acceleration, not library state or authority.
+query acceleration, not library state or authority. SQLite keeps all temporary
+query tables and indexes in memory. Reads need no writable temporary directory.
+
+Readers open the library and catalog read-only. Library writers retain readable
+WAL and shared-memory sidecars after close. Writers disable the checkpoint and
+file cleanup at connection close; automatic checkpoints during writes remain
+enabled. Initialization, migration, and
+recovery prepare those files; named creation prepares them at the final path.
+Backups use rollback-journal mode so each backup remains a standalone readable
+file. Reads do not initialize, migrate, checkpoint, or repair library state.
 
 ## Source deliveries and inbox recovery
 

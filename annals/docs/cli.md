@@ -65,6 +65,15 @@ intact. Future examinations use the selection captured when they start.
 
 ## Global options
 
+Read commands need no filesystem write permission. Read access must include
+the selected config, catalog, library, prepared SQLite sidecars, and any spool
+records and locks used by the command. Query scratch storage stays in memory.
+Initialization and migration prepare persistent WAL files; migration also
+prepares a configured spool's control lock. For existing state, perform the
+authorized update before removing writer access. A missing required sidecar or
+lock requires setup or recovery; a read does not create it. Usage-journal errors
+do not change the command result.
+
 ```text
 annals [--config PATH] [--library PATH] [--expected-library-id ID] [--json] [--quiet] [-v...] COMMAND
 ```

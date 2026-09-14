@@ -1,5 +1,7 @@
 # Exchange Krisis decision documents
 
+Feed reads require only read access to the selected config, catalog, library, prepared SQLite sidecars, and accepted envelopes. Document reads take a shared lock through the existing read-only spool control file. Setup and migration create required coordination files; feed reads never create or repair them.
+
 Use one separately provisioned Annals decisions library. Its explicitly selected config
 must select its own database and spool and must pin the persistent identity
 returned by `annals init --kind decisions`:

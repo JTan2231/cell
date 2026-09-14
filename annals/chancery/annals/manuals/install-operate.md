@@ -1,5 +1,7 @@
 # Operate the installed Annals release
 
+Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it.
+
 The user-owned macOS deployment installs Annals and Annals Usage together,
 plus configuration, content-addressed releases, and the scheduled inbox
 Clockwork binding `annals/inbox`. Nucleus remains a separately installed

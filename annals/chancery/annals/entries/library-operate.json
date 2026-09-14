@@ -101,6 +101,7 @@
       {"status": "unspecified", "statement": "No backup duration, maximum library size, migration latency, or long-term backup-retention guarantee is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "Library inspection, instruction reads, statistics, history, and reconciliation inspection require only read access to their selected state and prepared SQLite sidecars. Query scratch storage stays in memory. Initialization and migration prepare persistent WAL files; migration also prepares the configured spool control lock. Backups are standalone SQLite files. Reads never perform setup or recovery."},
       {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "Named scope rejects --library, ignores ANNALS_LIBRARY, and verifies the selected persistent identity. An explicit config may tune execution but cannot redirect the registered database or spool or bypass its admission kind. Operator paths can be pinned with expected_library_id or --expected-library-id."},
       {"status": "declared", "statement": "The supported boundary is the local Annals CLI operating one explicitly resolved private library and an explicitly chosen backup or request file where applicable."},

@@ -49,12 +49,12 @@ pub struct Library {
 
 impl Library {
     pub fn open(path: &Path) -> Result<Self, Error> {
-        Ok(Self {
-            connection: Connection::open_with_flags(
-                path,
-                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-            )?,
-        })
+        let connection = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        connection.pragma_update(None, "temp_store", "MEMORY")?;
+        Ok(Self { connection })
     }
     pub fn deliveries(&self, limit: usize) -> Result<Vec<DeliveryRecord>, Error> {
         read_deliveries(&self.connection, limit)

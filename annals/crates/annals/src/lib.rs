@@ -25,6 +25,7 @@ mod reconciliation_draft;
 mod render;
 mod resolver;
 mod revision_store;
+mod sqlite;
 mod tool_server;
 
 use std::ffi::OsStr;

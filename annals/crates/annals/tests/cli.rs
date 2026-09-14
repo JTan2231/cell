@@ -11,12 +11,43 @@ use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
+#[path = "support/readonly.rs"]
+mod readonly;
+
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const DATABASE_LABEL: &str = "Database systems";
 const CONCURRENCY_LABEL: &str = "Concurrency control";
 const SERIALIZABLE_LABEL: &str = "Serializable execution";
 const LOCKING_LABEL: &str = "Predicate locking";
+
+#[test]
+fn named_library_reads_need_no_writable_catalog_or_state() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let invoke = |args: &[&str]| -> TestResult<Value> {
+        successful_json(
+            &Command::new(env!("CARGO_BIN_EXE_annals"))
+                .env("ANNALS_STATE_DIR", directory.path())
+                .env_remove("ANNALS_CONFIG")
+                .env_remove("ANNALS_LIBRARY")
+                .args(["--json"])
+                .args(args)
+                .output()?,
+        )
+    };
+    invoke(&["library", "create", "readable"])?;
+    let _read_only = readonly::ReadOnlyTree::new(directory.path())?;
+    let reader = annals::api::LibraryReader::open_named(directory.path(), "readable")?;
+    assert_eq!(reader.overview(None)?.revision, 0);
+    assert_eq!(invoke(&["library", "readable", "overview"])?["revision"], 0);
+    invoke(&["library", "list"])?;
+    invoke(&["library", "readable", "instructions", "show"])?;
+    assert_eq!(
+        invoke(&["library", "readable", "inbox", "status"])?["queued"],
+        0
+    );
+    Ok(())
+}
 
 #[test]
 fn identity_pinned_backup_preserves_schema_five_and_rejects_another_identity() -> TestResult {
@@ -104,6 +135,7 @@ fn public_reader_and_cli_share_corpus_and_retention_views() -> TestResult {
     assert_eq!(result.retention, "new");
     assert_eq!(serde_json::to_value(&result)?, retained);
     seed_diamond(&library, "Diamond")?;
+    let _read_only = readonly::ReadOnlyTree::new(library.directory.path())?;
     let reader = LibraryReader::open(&library.path)?;
     let shown = library.json_ok(["work", "show", "Read boundary"])?;
     let content: WorkContent = serde_json::from_value(shown.clone())?;
@@ -141,6 +173,7 @@ fn public_graph_reader_preserves_cli_pages_and_walk_bounds() -> TestResult {
     seed_diamond(&library, "Diamond")?;
     let id_text = search_concept_id(&library, 1, SERIALIZABLE_LABEL)?;
     let id = id_text.parse()?;
+    let _read_only = readonly::ReadOnlyTree::new(library.directory.path())?;
     let reader = LibraryReader::open(&library.path)?;
     let parents = reader.parents(None, id, 1, None)?;
     assert_eq!(

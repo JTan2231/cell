@@ -1,5 +1,7 @@
 # Explore the Annals corpus
 
+Reads require only read access to the selected config, catalog, library, and prepared SQLite sidecars. Query scratch storage stays in memory. Reads never initialize or repair state. Initialization or authorized migration prepares persistent WAL files. Missing required state stops the read; usage-journal failures preserve its result.
+
 Annals reads are local and bounded. HEAD is the default. Commands that accept
 `--at <REVISION>` can read an immutable historical corpus state. Reads invoke
 no model and make no network request.

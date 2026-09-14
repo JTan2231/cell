@@ -58,6 +58,10 @@ struct Spool {
     decision_library: PathBuf,
 }
 
+pub(crate) fn prepare_spool(root: &Path) -> Result<(), AppError> {
+    Spool::new(root).create()
+}
+
 impl Spool {
     fn new(root: &Path) -> Self {
         Self {
@@ -99,6 +103,7 @@ impl Spool {
                 )
             })?;
         }
+        drop(self.acquire_control_lock()?);
         Ok(())
     }
 
@@ -157,6 +162,22 @@ impl Spool {
                     self.control_lock.display()
                 ),
             )
+        })?;
+        Ok(file)
+    }
+
+    fn acquire_read_control_lock(&self) -> Result<File, AppError> {
+        let file = File::open(&self.control_lock).map_err(|error| {
+            AppError::unexpected(
+                "inbox_control_lock_failed",
+                format!(
+                    "unable to read inbox control lock {}: {error}",
+                    self.control_lock.display()
+                ),
+            )
+        })?;
+        fs2::FileExt::lock_shared(&file).map_err(|error| {
+            AppError::unexpected("inbox_control_lock_failed", error.to_string())
         })?;
         Ok(file)
     }
@@ -1788,7 +1809,7 @@ pub(crate) fn accepted_document(
     accepted_at: &str,
 ) -> Result<(String, String), AppError> {
     let spool = Spool::new(&config.inbox()?.root);
-    let _control = spool.acquire_control_lock()?;
+    let _control = spool.acquire_read_control_lock()?;
     require_decision_library_binding(&spool, library_id)?;
     let (receipt, source) = find_published_acceptance(&spool, "krisis", key)?.ok_or_else(|| {
         AppError::unexpected(
@@ -3236,7 +3257,7 @@ fn set_pause(config: &Config, paused: bool) -> Result<CommandOutput, AppError> {
         root: spool.root.display().to_string(),
         paused: spool.pause_requested()?,
         changed,
-        locked: inbox_locked(&spool.lock),
+        locked: inbox_locked(&spool.lock)?,
         maintenance: spool.maintenance_requested()?,
     };
     let human = if paused {
@@ -3385,7 +3406,7 @@ pub(crate) fn status(library: &Path, config: &Config) -> Result<CommandOutput, A
     let _control = spool
         .root
         .exists()
-        .then(|| spool.acquire_control_lock())
+        .then(|| spool.acquire_read_control_lock())
         .transpose()?;
     let mut value = inspect(&spool, inbox.settle_seconds)?;
     let storage = storage_status(library, &spool, inbox.minimum_available_bytes)?;
@@ -5747,7 +5768,7 @@ fn inspect(spool: &Spool, settle_seconds: u64) -> Result<InboxStatus, AppError> 
         duplicates: count_directories(&spool.duplicates)?,
         failed: count_directories(&spool.failed)?,
         skipped: count_directories(&spool.skipped)?,
-        locked: inbox_locked(&spool.lock),
+        locked: inbox_locked(&spool.lock)?,
         paused: spool.pause_requested()?,
         maintenance: spool.maintenance_requested()?,
         storage: None,
@@ -5819,15 +5840,17 @@ fn count_directories(path: &Path) -> Result<usize, AppError> {
     })
 }
 
-fn inbox_locked(path: &Path) -> bool {
-    let Ok(file) = OpenOptions::new().read(true).write(true).open(path) else {
-        return false;
+fn inbox_locked(path: &Path) -> Result<bool, AppError> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(error.into()),
     };
-    if fs2::FileExt::try_lock_exclusive(&file).is_err() {
-        return true;
+    match fs2::FileExt::try_lock_shared(&file) {
+        Ok(()) => Ok(false),
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(true),
+        Err(error) => Err(error.into()),
     }
-    let _ = fs2::FileExt::unlock(&file);
-    false
 }
 
 #[cfg(test)]
@@ -5835,6 +5858,24 @@ mod tests {
     use std::fs;
     use std::io;
     use std::os::unix::fs::symlink;
+
+    #[test]
+    fn read_only_lock_handles_preserve_writer_exclusion() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let directory = tempfile::tempdir()?;
+        let spool = super::Spool::new(directory.path());
+        spool.create()?;
+        let writer = spool.acquire_lock()?;
+        for path in [&spool.lock, &spool.control_lock] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o400))?;
+        }
+        let _reader = spool.acquire_read_control_lock()?;
+        assert!(super::inbox_locked(&spool.lock)?);
+        drop(writer);
+        assert!(!super::inbox_locked(&spool.lock)?);
+        Ok(())
+    }
 
     use super::{
         FileIdentity, JobPriority, QUEUE_VERSION, QueueIndex, Spool, backlog_sources,

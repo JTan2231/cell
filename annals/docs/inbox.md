@@ -27,6 +27,10 @@ the `register` and `run` flags override it. A zero settling interval is allowed.
 `minimum_available_bytes` defaults to `7_000_000_000` and sets the storage
 reserve required before a new inbox claim; zero disables that gate.
 `inbox status`, `inbox retry preview`, and `inbox retry status` are read-only.
+Status and accepted-document reads open the existing control lock read-only
+and take a shared lock against spool writers. Setup creates that lock. Reads
+never create it. Worker-lock probes require only read access and report access
+errors instead of reporting the worker unlocked.
 
 ## Register sources
 

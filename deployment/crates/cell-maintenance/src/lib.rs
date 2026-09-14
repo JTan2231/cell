@@ -212,13 +212,20 @@ impl Gate {
             Err(error) => return Err(error.into()),
             Ok(_) => {}
         }
-        let _control = self.control()?;
-        self.status_locked()
+        require_private_directory(&self.root)?;
+        require_private_directory(&self.root.join("holds"))?;
+        let control = private_file_read(&self.root.join("control.lock"))?;
+        fs2::FileExt::lock_shared(&control)?;
+        self.status_with_activity(&private_file_read(&self.root.join("activity.lock"))?)
     }
 
     fn status_locked(&self) -> Result<Status> {
         let activity = self.activity()?;
-        let drained = match fs2::FileExt::try_lock_exclusive(&activity) {
+        self.status_with_activity(&activity)
+    }
+
+    fn status_with_activity(&self, activity: &File) -> Result<Status> {
+        let drained = match fs2::FileExt::try_lock_exclusive(activity) {
             Ok(()) => true,
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => false,
             Err(error) => return Err(error.into()),
@@ -312,10 +319,18 @@ fn private_directory(path: &Path) -> Result<()> {
         }
         Err(error) => return Err(error.into()),
     }
+    require_private_directory(path)
+}
+
+fn require_private_directory(path: &Path) -> Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if !metadata.is_dir() || metadata.file_type().is_symlink() {
+        return Err(invalid_state().into());
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt as _;
-        if fs::symlink_metadata(path)?.permissions().mode() & 0o077 != 0 {
+        if metadata.permissions().mode() & 0o077 != 0 {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
                 "maintenance directory must be private",
@@ -370,6 +385,46 @@ fn validate_file(file: &File) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_status_needs_only_read_access_and_never_repairs_locks() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let root = tempfile::tempdir()?;
+        let gate = Gate::new(root.path().join("gate"));
+        let admitted = gate.enter()?;
+        gate.hold("run")?;
+        let paths = [
+            gate.path().to_owned(),
+            gate.path().join("holds"),
+            gate.path().join("control.lock"),
+            gate.path().join("activity.lock"),
+            gate.path().join("holds/run"),
+        ];
+        let permissions = paths
+            .iter()
+            .map(|path| fs::metadata(path).map(|meta| meta.permissions()))
+            .collect::<io::Result<Vec<_>>>()?;
+        for (path, permission) in paths.iter().zip(&permissions) {
+            fs::set_permissions(path, fs::Permissions::from_mode(permission.mode() & !0o222))?;
+        }
+        let result = (|| -> Result<()> {
+            let status = gate.status()?;
+            assert_eq!(status.holds, ["run"]);
+            assert!(!status.drained);
+            drop(admitted);
+            assert!(gate.status()?.drained);
+            Ok(())
+        })();
+        for (path, permission) in paths.iter().zip(permissions) {
+            fs::set_permissions(path, permission)?;
+        }
+        result?;
+        fs::remove_file(gate.path().join("control.lock"))?;
+        assert!(gate.status().is_err());
+        assert!(!gate.path().join("control.lock").exists());
+        Ok(())
+    }
 
     #[test]
     fn hold_fences_new_work_but_existing_admission_can_drain() -> Result<()> {

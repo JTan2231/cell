@@ -7,6 +7,10 @@ use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
 use crate::error::AppError;
 
+#[cfg(test)]
+#[path = "../tests/support/readonly.rs"]
+mod readonly;
+
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 pub(crate) const CURRENT_SCHEMA_VERSION: i64 = 7;
 const FRESH_STATE_SCHEMA_VERSION: i64 = 3;
@@ -253,6 +257,7 @@ fn initialize_reserved_file(
 ) -> Result<Connection, AppError> {
     let mut connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE)
         .map_err(|error| open_error(path, &error))?;
+    crate::sqlite::persist_wal(&connection)?;
     configure_connection(&connection)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     transaction.execute_batch(SCHEMA).map_err(|error| {
@@ -292,10 +297,16 @@ fn open_existing(path: &Path, flags: OpenFlags) -> Result<Connection, AppError> 
             format!("library not found: {}", path.display()),
         ));
     }
-    Connection::open_with_flags(path, flags).map_err(|error| open_error(path, &error))
+    let connection =
+        Connection::open_with_flags(path, flags).map_err(|error| open_error(path, &error))?;
+    if flags.contains(OpenFlags::SQLITE_OPEN_READ_WRITE) {
+        crate::sqlite::persist_wal(&connection)?;
+    }
+    Ok(connection)
 }
 
 fn configure_connection(connection: &Connection) -> Result<(), AppError> {
+    connection.pragma_update(None, "temp_store", "MEMORY")?;
     connection
         .pragma_update(None, "foreign_keys", true)
         .map_err(|error| {
@@ -370,7 +381,11 @@ fn enable_wal(connection: &Connection) -> Result<(), AppError> {
                 "database_configuration_failed",
                 format!("unable to enable SQLite WAL mode: {error}"),
             )
-        })
+        })?;
+    // WAL opening is lazy. Materialize its coordination files while this
+    // writer owns directory access, including a newly initialized library.
+    schema_version(connection)?;
+    Ok(())
 }
 
 fn reserve_new_file(path: &Path, code: &'static str, description: &str) -> Result<(), AppError> {
@@ -411,7 +426,11 @@ fn backup_to_reserved_file(source: &Connection, output: &Path) -> Result<(), App
                 "backup_failed",
                 format!("unable to complete SQLite backup: {error}"),
             )
-        })
+        })?;
+    drop(backup);
+    // A backup is a standalone file, readable without creating WAL sidecars.
+    destination.pragma_update(None, "journal_mode", "DELETE")?;
+    Ok(())
 }
 
 fn open_error(path: &Path, error: &rusqlite::Error) -> AppError {
@@ -426,6 +445,68 @@ mod tests {
     use super::*;
 
     type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn read_only_storage_supports_temp_queries_and_live_writers() -> TestResult {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("annals.db");
+        drop(init(&path)?);
+        assert!(directory.path().join("annals.db-wal").exists());
+        assert!(directory.path().join("annals.db-shm").exists());
+        let backup_path = directory.path().join("backup.db");
+        backup(&open_read(&path)?, &backup_path)?;
+        let read_only = readonly::ReadOnlyTree::new(directory.path())?;
+        let reader = open_read(&path)?;
+        assert!(reader.is_readonly("main")?);
+        assert_eq!(head_revision(&open_read(&backup_path)?)?, 0);
+        assert_eq!(
+            reader.pragma_query_value(None, "temp_store", |row| row.get::<_, i64>(0))?,
+            2
+        );
+        reader.execute_batch(
+            "CREATE TEMP TABLE scratch(value BLOB);
+            WITH RECURSIVE n(v) AS (VALUES(1) UNION ALL SELECT v+1 FROM n WHERE v<100000)
+            INSERT INTO scratch SELECT zeroblob(100) FROM n;",
+        )?;
+        assert_eq!(
+            reader.query_row("SELECT count(*) FROM scratch", [], |row| row
+                .get::<_, i64>(0))?,
+            100_000
+        );
+        assert!(
+            reader
+                .execute("UPDATE library_identity SET library_id = 'forbidden'", [])
+                .is_err()
+        );
+        drop(reader);
+        drop(read_only);
+        let mut writer = open_write(&path)?;
+        let reader = open_read(&path)?;
+        let transaction = writer.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        transaction.execute(
+            "INSERT INTO works(label, normalized_label, text, sha256, created_at)
+            VALUES('new', 'new', 'source', ?1, 'now')",
+            ["0".repeat(64)],
+        )?;
+        assert_eq!(
+            reader.query_row("SELECT count(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            0
+        );
+        transaction.commit()?;
+        assert_eq!(
+            reader.query_row("SELECT count(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            1
+        );
+        drop(writer);
+        drop(reader);
+        let _read_only = readonly::ReadOnlyTree::new(directory.path())?;
+        assert_eq!(
+            open_read(&path)?
+                .query_row("SELECT count(*) FROM works", [], |row| row.get::<_, i64>(0))?,
+            1
+        );
+        Ok(())
+    }
 
     // Existing migration fixtures start with the current schema, then remove
     // later additions to construct their historical input format.

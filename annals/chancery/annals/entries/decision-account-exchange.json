@@ -153,6 +153,7 @@
       }
     ],
     "access": [
+      {"status": "declared", "statement": "Feed reads require only read access to the selected config, catalog, library, prepared SQLite sidecars, and accepted envelopes. Document reads take a shared lock through the existing read-only spool control file. Setup and migration create required coordination files; feed reads never create or repair them."},
       {
         "status": "declared",
         "statement": "Named scope is an identity-checked wrapper over the same account/feed command. Operator-path calls still require explicit --config and reject --library. A name or librarian instruction change cannot bypass immutable decisions admission."

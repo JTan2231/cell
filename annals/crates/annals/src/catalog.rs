@@ -223,6 +223,7 @@ fn finish_creation(
             LibraryKind::General
         };
         let database = db::init_with_identity(&staged, kind, &library.library_id)?;
+        database.pragma_update(None, "journal_mode", "DELETE")?;
         database
             .close()
             .map_err(|(_, error)| AppError::from(error))?;
@@ -231,7 +232,7 @@ fn finish_creation(
         rename_absent(&staged, &library.library)?;
         File::open(directory)?.sync_all()?;
     }
-    verify(&library, &db::open_read(&library.library)?)?;
+    verify(&library, &db::open_write(&library.library)?)?;
     for child in [
         "",
         "incoming",
@@ -244,6 +245,7 @@ fn finish_creation(
     ] {
         private_directory(&library.spool.join(child))?;
     }
+    crate::inbox::prepare_spool(&library.spool)?;
     let document: String = connection.query_row(
         "SELECT initial_config FROM libraries WHERE name = ?1",
         [&library.name],
@@ -389,6 +391,7 @@ fn open_read(root: &Path) -> AppResult<Option<Connection>> {
         return Ok(None);
     }
     let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    connection.pragma_update(None, "temp_store", "MEMORY")?;
     require_schema(&connection)?;
     Ok(Some(connection))
 }

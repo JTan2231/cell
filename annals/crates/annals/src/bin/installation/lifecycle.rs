@@ -574,6 +574,8 @@ fn restore_database(backup: &Path, database: &Path) -> Result<()> {
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
     )
     .map_err(|_| Error::new("cannot open Annals database for recovery"))?;
+    crate::sqlite::persist_wal(&destination)
+        .map_err(|_| Error::new("cannot preserve Annals WAL files during recovery"))?;
     let backup = rusqlite::backup::Backup::new(&source, &mut destination)
         .map_err(|_| Error::new("cannot start Annals database recovery"))?;
     let until = Instant::now() + MINUTE;

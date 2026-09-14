@@ -7,7 +7,8 @@ worker state remain private.
 ## Read a library
 
 `LibraryReader` uses Annals queries and cursor rules to return provider-owned
-views. It is read-only.
+views. It requires only read access to the library, its prepared SQLite sidecars,
+and the catalog for named selection. Query scratch storage stays in memory.
 
 ## Invoke the CLI
 

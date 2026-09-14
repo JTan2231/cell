@@ -229,6 +229,7 @@
       }
     ],
     "access": [
+      {"status": "declared", "statement": "Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it."},
       {
         "status": "declared",
         "statement": "The supported boundary is the repository-owned macOS deployers operating the current user's private primary installation or physically separate decisions state and only their respective Clockwork keys."

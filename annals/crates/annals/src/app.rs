@@ -148,7 +148,7 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         Command::Instructions(command) => library_instructions(path, command),
         Command::Maintenance(command) => crate::maintenance::command(path, command),
         Command::Init(args) => initialize(path, args),
-        Command::Migrate => migrate_library(path),
+        Command::Migrate => migrate_library(path, config),
         Command::Stats => stats(path),
         Command::Overview(args) => overview(path, args.at),
         Command::Roots(args) => roots(path, args),
@@ -460,8 +460,11 @@ fn initialize(path: &Path, args: &InitArgs) -> Result<CommandOutput, AppError> {
     .mutation())
 }
 
-fn migrate_library(path: &Path) -> Result<CommandOutput, AppError> {
+fn migrate_library(path: &Path, config: &Config) -> Result<CommandOutput, AppError> {
     let result = db::migrate(path)?;
+    if let Some(inbox) = &config.inbox {
+        inbox::prepare_spool(&inbox.root)?;
+    }
     let human = if result.migrated {
         format!(
             "Migrated {} from schema version {} to {}",

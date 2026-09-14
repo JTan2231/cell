@@ -670,6 +670,13 @@ No rollout, quota reset, or clearance of existing service halts is implicit.
 
 ## Shared command usage
 
+Annals read commands require only read access to their selected state and
+prepared SQLite sidecars and spool locks. Query scratch storage stays in memory.
+Annals initialization, migration, and recovery prepare persistent WAL files;
+migration prepares the configured spool lock. Shared maintenance status opens
+existing lock files read-only and never repairs incomplete gates. Mutating
+operations retain responsibility for setup and recovery.
+
 Product CLI dispatches import `chancery-usage` and record agent command entries
 in the private Chancery journal. New rows require a nonempty `CODEX_THREAD_ID`
 and record system and command identity, local insertion ID and whole Unix-second

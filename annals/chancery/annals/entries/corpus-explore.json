@@ -88,6 +88,7 @@
       {"status": "unspecified", "statement": "No wall-clock read latency, unlimited graph expansion, or indefinite cursor validity across changed command context is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "Reads require only read access to the selected config, catalog, library, and prepared SQLite sidecars. Query scratch storage stays in memory. Reads never initialize or repair state. Initialization or authorized migration prepares persistent WAL files. Missing required state stops the read; usage-journal failures preserve its result."},
       {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "The supported boundary is a local read through the Annals CLI against an explicitly resolved private library."},
       {"status": "unsupported", "statement": "No model, network, mutation, direct SQLite, or external disclosure surface is provided by exploration."}

@@ -744,7 +744,7 @@ fn configuration_selects_paths_and_library_overrides_follow_precedence() -> Test
     successful_json(&output)?;
     assert!(explicit_library.is_file());
 
-    fs::create_dir_all(installation.inbox.join("incoming"))?;
+    installation.json_ok(["migrate"])?;
     fs::write(installation.inbox.join("incoming/queued.txt"), "queued")?;
     let status = installation.json_ok(["inbox", "status"])?;
     assert_eq!(status_count(&status, "incoming"), Some(1), "{status}");
@@ -2405,7 +2405,7 @@ fn retained_bytes_bypass_an_unusable_inbox_label() -> TestResult {
 fn an_exclusive_spool_lock_prevents_overlapping_runs() -> TestResult {
     let installation = Installation::new(0)?;
     installation.init()?;
-    fs::create_dir_all(&installation.inbox)?;
+    installation.json_ok(["migrate"])?;
     let lock = OpenOptions::new()
         .read(true)
         .write(true)

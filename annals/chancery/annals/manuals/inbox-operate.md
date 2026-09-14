@@ -1,5 +1,7 @@
 # Operate the Annals inbox
 
+Read-only inbox operations need no filesystem write permission. Status takes a shared lock through the existing read-only control file. Worker-lock probes use read-only handles and propagate access errors. Setup or migration creates the control file. An absent spool stays absent; incomplete initialized state requires setup or recovery.
+
 The Annals inbox is a durable filesystem spool driven by external scheduling.
 Annals has no resident inbox daemon and every job has at most one processing
 attempt. Operate it through supported commands; never edit `job.json`, move

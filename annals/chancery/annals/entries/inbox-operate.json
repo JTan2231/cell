@@ -107,6 +107,7 @@
       {"status": "unspecified", "statement": "No schedule interval, queue-drain deadline, starvation bound, storage-restoration time, or model-completion latency is promised."}
     ],
     "access": [
+      {"status": "declared", "statement": "Read-only inbox operations need no filesystem write permission. Status takes a shared lock through the existing read-only control file. Worker-lock probes use read-only handles and propagate access errors. Setup or migration creates the control file. An absent spool stays absent; incomplete initialized state requires setup or recovery."},
       {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
       {"status": "declared", "statement": "The supported boundary is the local Annals inbox CLI and its configured private spool and library; dispatch may use the configured local Nucleus requester interface."},
       {"status": "unsupported", "statement": "Direct job.json editing, manual archive moves, direct SQLite writes, and host-wide service or storage control are not supported inbox surfaces."}

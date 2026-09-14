@@ -1,5 +1,7 @@
 # Operate an Annals library
 
+Library inspection, instruction reads, statistics, history, and reconciliation inspection require only read access to their selected state and prepared SQLite sidecars. Query scratch storage stays in memory. Initialization and migration prepare persistent WAL files; migration also prepares the configured spool control lock. Backups are standalone SQLite files. Reads never perform setup or recovery.
+
 This capability covers deterministic library administration and explicit
 corpus-history changes. It does not operate the scheduled inbox or invoke the
 AI reader.

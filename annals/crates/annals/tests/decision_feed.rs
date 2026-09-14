@@ -11,6 +11,9 @@ use rusqlite::Connection;
 use serde_json::Value;
 use tempfile::TempDir;
 
+#[path = "support/readonly.rs"]
+mod readonly;
+
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 struct Installation {
@@ -31,6 +34,7 @@ fn a_new_reader_can_page_existing_documents_from_the_start() -> TestResult {
         "# Adopt the proposal\n\nSource conversation.",
     )?;
     installation.accept("existing-decision", &document)?;
+    let _read_only = readonly::ReadOnlyTree::new(installation.directory.path())?;
     let client = annals_api::Client::new(env!("CARGO_BIN_EXE_annals"), &installation.config);
     let start = client.start()?;
     let watermark = client.watermark()?;
@@ -44,6 +48,7 @@ fn a_new_reader_can_page_existing_documents_from_the_start() -> TestResult {
     assert!(end.events.is_empty());
     assert_eq!(end.next_cursor, page.next_cursor);
     assert_eq!(client.start()?.watermark, start.watermark);
+    assert_eq!(installation.json_ok(["inbox", "status"])?["queued"], 1);
     Ok(())
 }
 
