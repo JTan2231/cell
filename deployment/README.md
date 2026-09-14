@@ -84,8 +84,9 @@ bundle only after checking its exact material and executable integrity.
 Source bytes and build inputs determine build identity. Git HEAD does not.
 Publication can therefore build updated versions and reuse those artifacts
 after the same bytes are committed. A schema-one candidate records executable
-hashes and versions, plus packaging and adapter source hashes. Deployment
-matches the source material, binds the candidate to its selected commit, and
+hashes and versions, plus packaging and adapter source hashes. Source paths
+follow the product descriptor's `PRODUCT_DIR`. Deployment matches the source
+material, binds the candidate to its selected commit, and
 retains a separate build receipt. It deploys sealed executable copies without
 reading a later Cargo target. Build records do not record CI success.
 

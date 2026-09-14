@@ -13,7 +13,10 @@
   "companions": [
     "conatus",
     "krisis",
-    "semantics"
+    "paperboy",
+    "platter",
+    "semantics",
+    "weaver"
   ],
   "runtime_versions": {
     "nucleus": {

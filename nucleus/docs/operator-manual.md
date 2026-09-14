@@ -130,6 +130,11 @@ after Nucleus acknowledges it. Editorial choices belong to the prompt; Weaver
 retains no source inventory, citation graph, or feed consumer cursor. It runs
 on demand and has no scheduled publishing or email stage.
 
+Weaver embeds the Annals and Nucleus clients, Iatreion status types, and
+Chancery usage support. It is a deployment companion of those products.
+Companion declarations also cover embedded usage libraries, so a provider
+deployment rebuilds its installed consumers with the selected source.
+
 Cast collection stores jobs without a title substring requirement. Configured
 provider queries still limit discovery. Downstream consumers own selection by
 title, seniority, location and other preferences.

@@ -59,15 +59,16 @@ class BuildTests(unittest.TestCase):
         self.write("deployment/crates/cell-install/src/lib.rs", "// shared adapter\n")
         packages = []
         for name in ("alpha", "beta"):
+            directory = "beta-source" if name == "beta" else name
             binaries = [name, name + "-helper"] if name == "alpha" else [name]
             binary_rows = "\n".join(f"{binary}|target/release/{binary}|{binary}" for binary in binaries)
-            self.write(f"pipeline/products/{name}.sh", f"PRODUCT_ID={name}\nPRODUCT_DIR={name}\n"
+            self.write(f"pipeline/products/{name}.sh", f"PRODUCT_ID={name}\nPRODUCT_DIR={directory}\n"
                        f"CARGO_PACKAGES={name}-package\nRELEASE_UNITS='" + "\n".join(
                            f"{binary}|Fixture|package|Cargo.toml|fixture-|1" for binary in binaries)
                        + f"'\nRELEASE_BINARY_CHECKS='{binary_rows}'\n")
-            self.write(f"{name}/packaging/manifest.txt", "owned packaging\n")
-            self.write(f"{name}/chancery/provider.json", '{"release":"1.0.0"}\n')
-            self.write(f"{name}/deployment/adapter.py", "# owned adapter\n")
+            self.write(f"{directory}/packaging/manifest.txt", "owned packaging\n")
+            self.write(f"{directory}/chancery/provider.json", '{"release":"1.0.0"}\n')
+            self.write(f"{directory}/deployment/adapter.py", "# owned adapter\n")
             packages.append({"name": name + "-package", "version": "1.0.0",
                              "targets": [{"name": binary, "kind": ["bin"]} for binary in binaries]})
         self.write("metadata.json", json.dumps({"packages": packages}))
@@ -127,6 +128,8 @@ class BuildTests(unittest.TestCase):
         for product in ("alpha", "beta"):
             manifest = candidate.verify(self.base / "output" / "candidates" / product, product=product)
             self.assertEqual(manifest["source_key"], result["source_key"])
+            directory = "beta-source" if product == "beta" else product
+            self.assertIn(f"{directory}/chancery/provider.json", manifest["source_inputs"])
             for relative, digest in manifest["source_inputs"].items():
                 self.assertEqual(candidate.digest(Path(result["cache_entry"]) / "materials" / relative), digest)
         self.assertEqual(json.loads((self.base / "output/result.json").read_text()), result)

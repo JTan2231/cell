@@ -6,6 +6,23 @@
   "description": "Installation through the shared Rust transaction library.",
   "adapter_binary": "chancery-install",
   "companions": [
-    "usher"
+    "annals",
+    "cast",
+    "clockwork",
+    "conatus",
+    "conversations",
+    "crm",
+    "email",
+    "emt",
+    "iatreion",
+    "krisis",
+    "mentor",
+    "nucleus",
+    "paperboy",
+    "platter",
+    "semantics",
+    "todo",
+    "usher",
+    "weaver"
   ]
 }

@@ -21,6 +21,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ci_broker.client import git, source_snapshot
+from deployment.inventory import descriptor
 
 
 class CandidateError(RuntimeError):
@@ -161,7 +162,13 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
         source_key = content_source_key(source)
         if source_key != build_source_key:
             raise CandidateError("source changed before sealing release build")
-    product_dir = "decisions" if product == "krisis" else product
+    descriptor_id = "decisions" if product == "krisis" else product
+    descriptor_path = source / "pipeline/products" / f"{descriptor_id}.sh"
+    regular(descriptor_path)
+    values = descriptor(descriptor_path.read_text())
+    product_dir = values.get("PRODUCT_DIR", "")
+    if values.get("PRODUCT_ID") != descriptor_id or not re.fullmatch(r"[a-z][a-z0-9-]*", product_dir):
+        raise CandidateError("invalid product directory declaration")
     canonical = "krisis" if product == "decisions" else product
     source_inputs: dict[str, str] = {}
     tracked = git(source, "ls-files", "-z").split(b"\x00")
