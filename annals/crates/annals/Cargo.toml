@@ -1,6 +1,6 @@
 [package]
 name = "annals"
-version = "0.20.4"
+version = "0.20.5"
 edition.workspace = true
 default-run = "annals"
 
