@@ -119,7 +119,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The source is the full normalized root conversation through one selected completed exchange containing a nonblank user message. Empty or whitespace-only assistant text and earlier turns with no messages are valid context. The classifier identifies user decisions. Later exchanges are excluded and required history is never truncated."
+        "statement": "The source is the full normalized root conversation through one selected completed exchange containing a nonblank user message. Before building a new document run, the observer completes a turn without nonblank user text as not_eligible and returns success without classification or delivery. Saved document runs retain their existing recovery path. Empty or whitespace-only assistant text and earlier turns with no messages are valid context. The classifier identifies user decisions. Later exchanges are excluded and required history is never truncated."
       },
       {
         "status": "declared",
