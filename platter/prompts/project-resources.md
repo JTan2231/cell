@@ -1,5 +1,8 @@
 # Available projects
 
+The captured career library also contains narrative information about these
+side projects. Read the relevant career entries for that context.
+
 Cell: `/Users/joey/rust/cell`
 Public URL: https://github.com/jtan2231/cell
 
@@ -39,10 +42,15 @@ inventing supporting detail or operating the source system.
 
 Select complementary project and Jackson accomplishments for the target role.
 Explain the project's purpose before relying on unfamiliar internal names.
-Descriptions can include relevant technologies. Use captured career material
-or explicit source statements for personal contribution and dates; omit dates
-when unsupported. Implementation and tests alone do not establish adoption,
-measured performance, or business impact.
+Use captured career material or explicit source statements for personal
+contribution and dates; omit dates when unsupported. Implementation and tests
+alone do not establish adoption, measured performance, or business impact.
+
+Use this structure for each side-project heading: bold title, italic
+comma-delimited technologies on the same line, then an italic one-line description:
+
+**Title** *Technologies, comma-delimited*\
+*One-line description*
 
 For each project, supply short private source notes naming the supporting file
 paths (with optional line numbers), Annals work labels, or captured career-entry
