@@ -87,7 +87,7 @@
   ],
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Preparation captures Cast posting and Vita career inputs, runs one constrained Nucleus draft job and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also research current Cell and Wrought files and read Krisis through the local Annals CLI.",
+    "Preparation captures Cast posting and Vita career inputs, runs one constrained Nucleus draft job and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also read Krisis through the local Annals CLI.",
     "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
@@ -198,7 +198,7 @@
       },
       {
         "status": "declared",
-        "statement": "Resources are /Users/joey/rust/cell, /Users/joey/ts/wrought-private and the Annals CLI with /Users/joey/Library/Application Support/Annals/decisions/config.toml. New templates require one Projects or Side Projects section, or explicit PLATTER PROJECTS BEGIN/END comments bounding content separately from Jackson."
+        "statement": "Resources are captured career entries and the Annals CLI with /Users/joey/Library/Application Support/Annals/decisions/config.toml. New templates require one Projects or Side Projects section, or explicit PLATTER PROJECTS BEGIN/END comments bounding content separately from Jackson."
       },
       {
         "status": "declared",
@@ -282,7 +282,7 @@
       },
       {
         "status": "declared",
-        "statement": "Project research reads current local repositories and the Krisis Annals library. Platter retains resource instructions and source notes, not source copies, commits or corpus revisions. Stages and resumed research may see changes. Citations are navigation hints; source access and claim support are not guaranteed by their presence."
+        "statement": "Project research reads the current Krisis Annals library. Platter retains resource instructions and source notes, not source copies or corpus revisions. Stages and resumed research may see changes. Citations are navigation hints; source access and claim support are not guaranteed by their presence."
       }
     ],
     "access": [
@@ -413,7 +413,7 @@
       },
       {
         "status": "declared",
-        "statement": "Project research depends on the current local Cell and Wrought directories being readable by the selected Nucleus harness. Platter provides no repository snapshots or availability guarantee.",
+        "statement": "Historical preparations that retain repository resource instructions depend on those local directories being readable by the selected Nucleus harness. Platter provides no repository snapshots or availability guarantee.",
         "target": "local-projects",
         "kind": "external"
       }

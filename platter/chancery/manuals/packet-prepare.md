@@ -139,23 +139,23 @@ Model text is escaped as LaTeX content. Rendering checks overflow, missing
 characters, extractable project text, the Jackson heading and one-page layout.
 A run becomes ready only with accepted brief/resume content and retained PDF.
 
-The shared `prompts/project-resources.md` points agents to
-`/Users/joey/rust/cell`, `/Users/joey/ts/wrought-private`, and the Krisis Annals
-library selected by `/Users/joey/Library/Application Support/Annals/decisions/config.toml`.
+The shared `prompts/project-resources.md` points agents to captured career
+entries and the Krisis Annals library selected by
+`/Users/joey/Library/Application Support/Annals/decisions/config.toml`.
 Agents run the local Annals search, concept-evidence and retained-work read
 commands. Search matches concept labels and ancestor context, not arbitrary
-conversation text. Repositories establish implementation; decision documents
-explain constraints, alternatives and reasoning. They can contain rejected
-proposals or anticipated outcomes. The brief can also use project experience.
+conversation text. Decision documents explain constraints, alternatives and
+reasoning. They can contain rejected proposals or anticipated outcomes. The
+brief can also use project experience.
 
 Platter retains the resource instructions with each new run. It does not pin
-commits or Annals revisions, copy project sources, or provide custom source
-read tools. Research reads current local material, including
-working-tree edits. Resumed research can see newer content. Private source
-notes are navigation hints, not reproducible citations. Unavailable required
+Annals revisions, copy project sources, or provide custom source read tools.
+Research reads current local material. Resumed research can see newer content.
+Private source notes are navigation hints, not reproducible citations. Unavailable required
 sources must be reported as access failures; no source-system repair is part of
-preparation. The local paths, Annals command/config and library must be usable
-by the selected Nucleus harness. Catalog presence does not establish that access.
+preparation. The Annals command/config and library must be usable by the selected
+Nucleus harness. Catalog presence does not establish that access. Historical runs
+retain their captured resource instructions, including repository guidance.
 
 New preparations capture `generation=single_draft_v1` and use one Nucleus draft
 job. Its `prompts/draft.md` assignment combines pursuit assessment, brief and
@@ -388,9 +388,10 @@ explicit recovery change; do not edit SQLite to force success.
 
 Resume contact details, career history, captured evidence, briefs and supporting
 references remain private. Captured material is disclosed through Nucleus to
-the model service. Direct project research also exposes selected repository and
-Krisis text to Nucleus and the model; Nucleus may retain that tool output. Authorized sends disclose message and attachments to Email,
-Resend and Gmail. Source retrieval discloses HTTP requests to employers.
+the model service. Direct project research also exposes selected Krisis text
+to Nucleus and the model; Nucleus may retain that tool output. Authorized sends
+disclose message and attachments to Email, Resend and Gmail. Source retrieval
+discloses HTTP requests to employers.
 Nucleus retains its own runtime records and credentials. This storage change
 does not relocate other products' state. No completion-time guarantee or final
 delivery observer is promised. Installation and migration use the separate

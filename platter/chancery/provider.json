@@ -23,7 +23,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "The current-user CLI operates private state. New model jobs have read-only workspace access and local execution for research in the supplied local repositories and Annals library, plus captured career and submission tools. Historical jobs retain their original access policy. The installer publishes only Platter-owned selectors; a source bundle establishes neither installed readiness nor send authority."
+      "The current-user CLI operates private state. New model jobs have read-only workspace access and local execution for research in the supplied Annals library, plus captured career and submission tools. Historical jobs retain their original access policy. The installer publishes only Platter-owned selectors; a source bundle establishes neither installed readiness nor send authority."
     ],
     "shared_privacy_and_retention": [
       "Original resume, captured career entries, posting text, model inputs/results, evidence references, PDFs, editions and send outcomes are private retained data. Nucleus/model processing receives career material; explicit send discloses the brief and resume attachments to Email, Resend and Gmail. Project and Krisis research text may be retained by Nucleus; Platter retains resource pointers and private source notes, not project-source snapshots.",
