@@ -85,9 +85,10 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
     } else {
         Config::new(root.join("original-resume.json"))?
     };
+    let annals = crate::source::annals_executable()?;
     for (name, path) in [
         ("cast", &settings.cast_executable),
-        ("crm", &settings.crm_executable),
+        ("annals", &annals),
         ("email", &settings.email_executable),
     ] {
         let version = probe(path, &["--version"], name)?;

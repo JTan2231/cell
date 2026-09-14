@@ -1886,8 +1886,9 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platter"
-version = "0.2.11"
+version = "0.2.12"
 dependencies = [
+ "annals",
  "anyhow",
  "base64",
  "cast",
@@ -1898,7 +1899,6 @@ dependencies = [
  "chrono-tz",
  "clap",
  "clockwork",
- "crm",
  "fs2",
  "iatreion-api",
  "nucleus-client",

@@ -23,7 +23,7 @@ When installation is authorized and the changes are committed on local main:
 
 `plan` is read-only. A deployment selects its exact local `main` commit; it
 ignores uncommitted changes and does not publish a release, commit, tag or
-push. When selected together, Cast, CRM, Email and Nucleus install before
+push. When selected together, Cast, Annals, Email and Nucleus install before
 Platter. Maintenance includes Nucleus and its registered requesters, whose
 installed maintenance interfaces must already be compatible. Unselected
 products are not upgraded to satisfy a missing prerequisite.
@@ -130,12 +130,12 @@ when a retained backup uses a predecessor schema.
 
 ## Readiness and recovery
 
-`doctor` checks retained state, configured executable identities, Cast's exact
+`doctor` checks retained state, Cast/Annals/Email executable identities, Cast's exact
 job-URL command, Email's byte-payload interface, renderer availability and
 strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
-`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read CRM
-profiles, render a PDF, submit a model job or send mail. Cast/CRM executable
+`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read Vita
+works, render a PDF, submit a model job or send mail. Cast/Annals executable
 identity is not proof that their libraries are initialized. `--state-only`
 requires neither rendering nor external service readiness.
 
@@ -209,10 +209,13 @@ reconcile an uncertain edition. No deployment step clears this incident.
 
 Cell deployment captures and disables `platter/daily`. During configuration it
 migrates supported state, initializes a missing template from the supplied
-`resume` absolute path, and updates Cast, CRM and Email executable references
+`resume` absolute path, and updates Cast and Email executable references
 to the final installed releases. An initialized template cannot be replaced
 through deployment settings. `platter --json config` reads retained settings
-without loading dependency data or preparing packets.
+without loading dependency data or preparing packets. Career reads use the fixed
+`~/.local/bin/annals` command and its named `vita` library. Annals must support
+named libraries and work list/show. Stored `crm_executable` fields are ignored
+and omitted when configuration is saved. No Vita source setting is stored.
 
 The optional `enabled` setting selects intended activation. An absent binding
 stays absent when no activation setting is supplied. Existing definitions keep

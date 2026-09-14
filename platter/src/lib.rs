@@ -44,14 +44,13 @@ pub fn default_state_dir(home: &Path) -> Result<PathBuf> {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// Ignore retired fields in stored settings, including crm_executable.
 pub struct Config {
     pub daily_count: usize,
     pub delivery_hour: u32,
     pub delivery_minute: u32,
     pub timezone: String,
     pub cast_executable: PathBuf,
-    pub crm_executable: PathBuf,
     pub email_executable: PathBuf,
     pub original_resume: PathBuf,
 }
@@ -66,7 +65,6 @@ impl Config {
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
             cast_executable: bin.join("cast"),
-            crm_executable: bin.join("crm"),
             email_executable: bin.join("email"),
             original_resume,
         })
@@ -84,7 +82,6 @@ impl Config {
         let _: chrono_tz::Tz = self.timezone.parse().context("invalid time zone")?;
         for path in [
             &self.cast_executable,
-            &self.crm_executable,
             &self.email_executable,
             &self.original_resume,
         ] {
@@ -116,4 +113,25 @@ pub fn write_json(path: &Path, value: &impl Serialize) -> Result<()> {
     file.persist(path)?;
     std::fs::File::open(parent)?.sync_all()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stored_config_ignores_the_retired_crm_executable() -> Result<()> {
+        let config: Config = serde_json::from_value(serde_json::json!({
+            "daily_count":3,"delivery_hour":9,"delivery_minute":0,
+            "timezone":"America/Chicago","cast_executable":"/tools/cast",
+            "crm_executable":"/missing/crm","email_executable":"/tools/email",
+            "original_resume":"/private/resume.tex"
+        }))?;
+        config.validate()?;
+        let saved = serde_json::to_value(&config)?;
+        assert!(saved.get("crm_executable").is_none());
+        assert!(saved.get("vita_executable").is_none());
+        assert_eq!(saved["cast_executable"], "/tools/cast");
+        Ok(())
+    }
 }

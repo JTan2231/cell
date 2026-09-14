@@ -1,9 +1,9 @@
 # Prepare private job packets
 
-Platter captures Cast opportunities and CRM career entries. It uses Nucleus to
+Platter captures Cast opportunities and Vita career entries. It uses Nucleus to
 prepare a concise brief and tailored Jackson and projects content, then freezes editions
 for authorized delivery through Email. Platter owns retained content, job
-eligibility and delivery outcomes. It does not discover jobs, edit CRM, apply
+eligibility and delivery outcomes. It does not discover jobs, edit source libraries, apply
 to employers, contact them or activate a schedule.
 
 ## Storage and commands
@@ -64,7 +64,18 @@ Delivery records retain what happened even after eligibility changes.
 
 ## Preparation and readiness
 
-Preparation reads supported Cast export and CRM profile list/read interfaces.
+Preparation reads supported Cast export and Annals work list/show interfaces.
+Vita is the fixed Annals library named `vita`. Platter invokes
+`~/.local/bin/annals library vita work list --limit 1000 --json` and reads each
+returned work with `work show LABEL --json`. It does not call CRM.
+
+Each work becomes one career entry. Its work label is the entry ID; the first
+heading is its title, or the work label when no heading exists. Its complete
+text becomes the entry body. Platter uses all listed works and rejects an empty
+or incomplete list. Works added after that list are available to a later
+preparation. Reads start no Annals model work. The [Vita guide](vita.md)
+describes the library and its supported commands.
+
 Cast exports contain stored posting excerpts. Platter fetches full posting text
 through a supported adapter before writing. Sources include Greenhouse, Ashby,
 Lever and supported JobPosting JSON-LD. Retrieval fails when pages require
@@ -96,10 +107,8 @@ download time, not the time it was read from disk. The cache is disposable and
 is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
-CRM capture rejects incomplete lists and detected timestamp changes. Separate
-list/read calls are not a transactional CRM snapshot, but all stages receive
-the same captured library. Models can list/read captured entries and submit
-only their stage content. New jobs also use read-only workspace access with
+All stages receive the same captured career data. Models can list/read entries
+and submit only their stage content. New jobs also use read-only workspace access with
 local execution for project research. Web search stays disabled. The assignment
 permits only research reads, not source changes, service operation or messaging.
 Source text is untrusted material.
@@ -330,7 +339,7 @@ platter send YYYY-MM-DD --ad-hoc RUN_ID \
 
 `--ad-hoc` remains a CLI selection operation, not an edition type. These
 editions use the same schema, ordinary subject format and sending behavior.
-The operation leaves job eligibility untouched and performs no Cast, CRM,
+The operation leaves job eligibility untouched and performs no Cast, Annals,
 source retrieval, Nucleus or rendering work. Without `--packet`, it selects up
 to three retained complete packets in ID order. Repeated `--packet` specifies
 one through three distinct packets. `RUN_ID` contains 1 through 80 ASCII

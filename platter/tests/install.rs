@@ -177,7 +177,6 @@ esac
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
             cast_executable: self.home.join(".local/bin/cast"),
-            crm_executable: self.home.join(".local/bin/crm"),
             email_executable: self.home.join(".local/bin/email"),
             original_resume: root.join("fixture-original.tex"),
         };
@@ -185,7 +184,7 @@ esac
             store.initialize(&settings, &template).unwrap();
         }
         fs::create_dir_all(self.home.join(".local/bin")).unwrap();
-        for name in ["cast", "crm", "email"] {
+        for name in ["cast", "annals", "email"] {
             let executable = self.home.join(".local/bin").join(name);
             fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
             fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();

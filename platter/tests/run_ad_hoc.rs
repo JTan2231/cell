@@ -103,7 +103,6 @@ impl Fixture {
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
             cast_executable: cast.clone(),
-            crm_executable: tools.join("unused-crm"),
             email_executable: email.clone(),
             original_resume: tools.join("unused-resume.tex"),
         };

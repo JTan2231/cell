@@ -1,11 +1,11 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
-  "summary": "Prepare private briefs and resumes with tailored Jackson and projects content for eligible Cast jobs or one supplied job URL. Freeze editions and send retained attachment bytes through authorized runs.",
+  "summary": "Prepare private job briefs and resumes from Cast opportunities and Vita career material. Freeze editions and send retained attachment bytes through authorized runs.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
@@ -14,7 +14,7 @@
     "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient."
   ],
   "do_not_use_when": [
-    "The request is job discovery, CRM editing, employer outreach or application submission.",
+    "The request is job discovery, source-library editing, employer outreach or application submission.",
     "The caller expects stored delivery settings or installation alone to enable a schedule, or wants a change to fixed resume content."
   ],
   "outcome": "Stored brief, Jackson and projects content, private source notes and validated resume. Preview freezes one through three ready packets. Authorized send records provider acceptance.",
@@ -82,9 +82,9 @@
   ],
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Preparation captures Cast posting and CRM career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also research current Cell and Wrought files and read Krisis through the local Annals CLI.",
+    "Preparation captures Cast posting and Vita career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also research current Cell and Wrought files and read Krisis through the local Annals CLI.",
     "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
-    "Retained-material preview creates the same edition records without changing eligibility or calling Cast, CRM, employer sources, Nucleus or the renderer.",
+    "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
     "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
     "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
@@ -130,11 +130,6 @@
       "max_contract_exclusive": 6
     },
     {
-      "id": "crm.profile.maintain",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
@@ -158,7 +153,7 @@
   "does_not_authorize": [
     "Installing or enabling any scheduled activation.",
     "Sending when the user requested only preparation or preview.",
-    "Changing fixed resume content, modifying CRM or Cast outside run-ad-hoc's exact URL collection, applying to a job or contacting an employer."
+    "Changing fixed resume content, modifying Vita or Cast outside run-ad-hoc's exact URL collection, applying to a job or contacting an employer."
   ],
   "promise": {
     "consumers": [
@@ -170,7 +165,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-four state, the supported resume template, readable Cast and CRM interfaces, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Preparation requires initialized schema-four state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
@@ -248,7 +243,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "All stages use the same stored posting and captured CRM library. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Separate CRM list and read calls do not share a transaction. Capture checks entry timestamps and rejects incomplete lists. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and excludes changed or unavailable inputs from eligibility while retaining their prepared artifacts. Reopening a frozen edition returns stored contents."
+        "statement": "All stages use the same stored posting and captured Vita career data. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Preparation reads up to 1000 works from the fixed Annals vita library and rejects an empty or incomplete list. Each entry contains a work label as its ID, the first heading as its title (or the label when absent), and the complete work text. Works added after the list are available to a later preparation. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and excludes changed or unavailable inputs from eligibility while retaining their prepared artifacts. Reopening a frozen edition returns stored contents."
       },
       {
         "status": "declared",
@@ -260,7 +255,7 @@
       },
       {
         "status": "declared",
-        "statement": "A new run-ad-hoc occurrence uses Cast's exact job-URL operation, normal Cast export and the same posting, CRM, model, rendering and pre-freeze freshness reads as daily work. An existing occurrence bypasses those reads and follows its retained send state."
+        "statement": "A new run-ad-hoc occurrence uses Cast's exact job-URL operation, normal Cast export and the same posting, Vita, model, rendering and pre-freeze freshness reads as daily work. An existing occurrence bypasses those reads and follows its retained send state."
       },
       {
         "status": "declared",
@@ -324,7 +319,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 9 adds current local project research and Jackson-plus-projects submissions. Installation contract 6 supports private schema 4 with unchanged table layout. Historical inputs, toolsets and artifacts keep their original meanings; older binaries refuse schema four."
+        "statement": "Preparation contract 10 reads career material from the fixed Annals vita library. Installation contract 7 requires Annals and ignores the retired CRM executable setting. Database schema 4, retained inputs, toolsets and artifacts keep their existing meanings."
       },
       {
         "status": "unspecified",
@@ -348,10 +343,10 @@
       },
       {
         "status": "declared",
-        "statement": "Career entries come from CRM supported profile list and read operations.",
-        "target": "crm",
+        "statement": "Career entries are the complete retained works in the fixed Annals vita library, read through ~/.local/bin/annals work list/show in named-library scope.",
+        "target": "annals",
         "kind": "data",
-        "contract": "crm.profile.maintain"
+        "contract": "annals.corpus.explore"
       },
       {
         "status": "declared",

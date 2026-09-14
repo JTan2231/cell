@@ -1,12 +1,11 @@
 use crate::agent::CareerEntry;
+use annals::api::{CliClient, Request, Response, WorkCommand, WorkShowArgs};
 use anyhow::{Context, Result, bail, ensure};
 use cast::models::{Job, JobSelection, Snapshot};
-use crm::api::{Client, Data, Request};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Posting {
@@ -58,58 +57,49 @@ pub fn job_url_matches(job: &Job, url: &str) -> Result<bool> {
     cast::adapters::job_url_matches(job, url).map_err(anyhow::Error::msg)
 }
 
-pub fn career_library(executable: &Path) -> Result<Vec<CareerEntry>> {
-    let client = Client::new(executable);
-    let list = || -> Result<_> {
-        let Data::ProfileList { entries, has_more } = client
-            .execute(&Request::ListProfileEntries { limit: 1000 })?
-            .data
-        else {
-            bail!("CRM returned the wrong profile-list result")
-        };
-        ensure!(!has_more, "CRM profile list is incomplete");
-        ensure!(!entries.is_empty(), "CRM has no career entries");
-        let versions: BTreeMap<_, _> = entries
-            .iter()
-            .map(|entry| {
-                (
-                    entry.id.clone(),
-                    (entry.title.clone(), entry.updated_at.clone()),
-                )
-            })
-            .collect();
-        ensure!(
-            versions.len() == entries.len(),
-            "CRM returned duplicate profile identities"
-        );
-        Ok((entries, versions))
+pub(crate) fn annals_executable() -> Result<PathBuf> {
+    let home = std::env::var_os("HOME").context("HOME is unavailable")?;
+    Ok(PathBuf::from(home).join(".local/bin/annals"))
+}
+
+pub fn career_library() -> Result<Vec<CareerEntry>> {
+    read_career_library(&annals_executable()?)
+}
+
+fn read_career_library(executable: &Path) -> Result<Vec<CareerEntry>> {
+    let client = CliClient::new(executable.to_owned()).for_named_library("vita");
+    let Response::Works(works) = client.call(&Request::Work(WorkCommand::List { limit: 1000 }))?
+    else {
+        bail!("Annals returned the wrong work-list result")
     };
-    let (entries, before) = list()?;
+    ensure!(!works.has_more, "Vita work list is incomplete");
+    ensure!(!works.items.is_empty(), "Vita has no career entries");
     let mut captured = Vec::new();
-    for entry in entries {
-        let Data::ProfileEntry { entry: body } = client
-            .execute(&Request::ShowProfileEntry {
-                entry: entry.id.clone(),
-            })?
-            .data
+    for work in works.items {
+        let Response::Work(content) =
+            client.call(&Request::Work(WorkCommand::Show(WorkShowArgs {
+                label: work.work.clone(),
+            })))?
         else {
-            bail!("CRM returned the wrong profile-read result")
+            bail!("Annals returned the wrong work-read result")
         };
         ensure!(
-            body.id == entry.id && body.title == entry.title && body.updated_at == entry.updated_at,
-            "career material changed during capture; retry capture"
+            content.view.summary.work == work.work,
+            "Annals returned a different work"
         );
+        let title = content
+            .view
+            .headings
+            .first()
+            .and_then(|heading| heading.path.last())
+            .cloned()
+            .unwrap_or_else(|| work.work.clone());
         captured.push(CareerEntry {
-            id: body.id,
-            title: body.title,
-            markdown: body.body_md,
+            id: work.work,
+            title,
+            markdown: content.text,
         });
     }
-    let (_, after) = list()?;
-    ensure!(
-        before == after,
-        "career material changed during capture; retry capture"
-    );
     Ok(captured)
 }
 
@@ -711,34 +701,95 @@ mod tests {
         }
     }
 
-    #[test]
-    fn career_capture_detects_an_edit_after_the_entry_was_read() {
+    fn fake_vita() -> tempfile::TempDir {
         use std::os::unix::fs::PermissionsExt;
-        for changes in [false, true] {
-            let directory = tempfile::tempdir().unwrap();
-            let executable = directory.path().join("crm");
-            let initial = json!({"ok":true,"data":{"type":"profile_list","entries":[{"id":"entry-one","title":"Career","updated_at":"2026-09-01T00:00:00Z"}],"has_more":false}});
-            let read = json!({"ok":true,"data":{"type":"profile_entry","entry":{"id":"entry-one","title":"Career","updated_at":"2026-09-01T00:00:00Z","body_md":"Exact career text"}}});
-            let mut after = initial.clone();
-            if changes {
-                after["data"]["entries"][0]["updated_at"] = json!("2026-09-02T00:00:00Z");
-            }
-            let script = format!(
-                "#!/bin/sh\ncase \"$*\" in\n  *'profile list'*)\n    if [ -f \"$0.seen\" ]; then\n      printf '%s\\n' '{after}'\n    else\n      printf '%s\\n' '{initial}'\n    fi;;\n  *'profile show'*)\n    touch \"$0.seen\"\n    printf '%s\\n' '{read}';;\n  *) exit 2;;\nesac\n"
-            );
-            std::fs::write(&executable, script).unwrap();
-            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-            let captured = career_library(&executable);
-            if changes {
-                assert!(
-                    captured
-                        .unwrap_err()
-                        .to_string()
-                        .contains("changed during capture")
-                );
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("annals");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nset -eu\ncase \"$*\" in\n  '--json library vita work list --limit=1000') cat \"$0.list\";;\n  '--json library vita work show -- guidance') cat \"$0.guidance\";;\n  '--json library vita work show -- story') cat \"$0.story\";;\n  *) exit 91;;\nesac\n",
+        ).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let items = ["guidance", "story"].map(|label| {
+            json!({
+                "work":label,"sha256":"unused","size_bytes":0,"first_retained_at":"unused"
+            })
+        });
+        std::fs::write(
+            directory.path().join("annals.list"),
+            json!({"ok":true,"data":{"schema_version":2,"items":items,"has_more":false}})
+                .to_string(),
+        )
+        .unwrap();
+        for (index, text, headings) in [
+            (
+                0,
+                "# Disclosure rules\n\nExact guidance.\n",
+                json!([{"path":["Disclosure rules"]}]),
+            ),
+            (1, "Exact career text with caveats.\n", json!([])),
+        ] {
+            let mut work = items[index].clone();
+            work["text"] = json!(text);
+            work["headings"] = headings;
+            std::fs::write(
+                directory
+                    .path()
+                    .join(format!("annals.{}", work["work"].as_str().unwrap())),
+                json!({"ok":true,"data":work}).to_string(),
+            )
+            .unwrap();
+        }
+        directory
+    }
+
+    #[test]
+    fn career_library_reads_complete_vita_works() {
+        let directory = fake_vita();
+        let entries = read_career_library(&directory.path().join("annals")).unwrap();
+        assert_eq!(
+            entries,
+            vec![
+                CareerEntry {
+                    id: "guidance".into(),
+                    title: "Disclosure rules".into(),
+                    markdown: "# Disclosure rules\n\nExact guidance.\n".into(),
+                },
+                CareerEntry {
+                    id: "story".into(),
+                    title: "story".into(),
+                    markdown: "Exact career text with caveats.\n".into(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn career_library_reports_empty_incomplete_and_failed_reads() {
+        for failure in ["empty", "incomplete", "read"] {
+            let directory = fake_vita();
+            if failure == "read" {
+                std::fs::remove_file(directory.path().join("annals.story")).unwrap();
             } else {
-                assert_eq!(captured.unwrap()[0].markdown, "Exact career text");
+                let path = directory.path().join("annals.list");
+                let mut list: Value =
+                    serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+                if failure == "empty" {
+                    list["data"]["items"] = json!([]);
+                } else {
+                    list["data"]["has_more"] = json!(true);
+                }
+                std::fs::write(path, list.to_string()).unwrap();
             }
+            let error = read_career_library(&directory.path().join("annals"))
+                .unwrap_err()
+                .to_string();
+            let expected = match failure {
+                "empty" => "Vita has no career entries",
+                "incomplete" => "Vita work list is incomplete",
+                _ => "Annals command failed",
+            };
+            assert!(error.contains(expected), "{error}");
         }
     }
 }

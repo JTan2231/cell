@@ -1,7 +1,7 @@
 # Platter
 
 Platter prepares private job briefs and tailored resumes from Cast opportunities
-and CRM career material. Agents research Cell, Wrought and Krisis locally to
+and Vita career material. Agents research Cell, Wrought and Krisis locally to
 write the projects section alongside Jackson work-experience bullets. Platter
 retains prepared content and email outcomes.
 
@@ -30,5 +30,6 @@ From the Cell root:
 ## Further documentation
 
 - [Preparation, editions, and delivery](chancery/manuals/packet-prepare.md)
+- [Vita career library](chancery/manuals/vita.md)
 - [Stored records](docs/data-model.md)
 - [Installation and migration](chancery/manuals/install-operate.md)

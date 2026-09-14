@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -75,7 +75,7 @@
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
     "An explicit transaction imports legacy records and files into schema four, writes a complete schema-four backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two and schema-three migration advances the version without changing captured inputs, exact requests or artifact bytes.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
-    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, CRM and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -109,11 +109,6 @@
       "max_contract_exclusive": 6
     },
     {
-      "id": "crm.profile.maintain",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
@@ -127,6 +122,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "annals.corpus.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -144,7 +144,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Cast exact job-URL collection, Email attachment support and local renderer tooling must be available. When selected together, Cast, CRM, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
+        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Cast exact job-URL collection, Email attachment support and local renderer tooling must be available. When selected together, Cast, Annals, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
       },
       {
         "status": "declared",
@@ -159,6 +159,10 @@
       {
         "status": "declared",
         "statement": "Deployment accepts resume and enabled only. An initialized original template cannot be replaced. With no enabled setting, absence and disabled intent remain. config returns retained settings without dependency reads or domain work."
+      },
+      {
+        "status": "declared",
+        "statement": "Career reads use ~/.local/bin/annals and the fixed named library vita. No career-source setting is stored. Retired crm_executable fields are ignored on read and omitted when configuration is saved."
       }
     ],
     "outputs": [
@@ -182,7 +186,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/CRM/Email executable identity, Cast job-collect help, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or CRM libraries or read their domain contents."
+        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/Annals/Email executable identity, Cast job-collect help, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or Vita libraries or read their domain contents."
       },
       {
         "status": "declared",
@@ -210,7 +214,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, CRM and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
       }
     ],
     "operational_limits": [
@@ -226,7 +230,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 9 adds current local project research and Jackson-plus-projects submissions. Installation contract 6 supports private schema 4 with unchanged table layout. Historical inputs, toolsets and artifacts keep their original meanings; older binaries refuse schema four."
+        "statement": "Preparation contract 10 reads career material from the fixed Annals vita library. Installation contract 7 requires Annals and ignores the retired CRM executable setting. Database schema 4, retained inputs, toolsets and artifacts keep their existing meanings."
       }
     ],
     "reliances": [
@@ -239,7 +243,7 @@
       },
       {
         "status": "declared",
-        "statement": "Runtime prerequisite probes rely on supported Cast export and exact job-URL commands, CRM commands and Email attachment support; unselected installations are not upgraded implicitly.",
+        "statement": "Runtime prerequisite probes rely on supported Cast export and exact job-URL commands, Annals commands and Email attachment support; unselected installations are not upgraded implicitly.",
         "target": "runtime-dependencies",
         "kind": "readiness"
       },

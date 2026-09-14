@@ -68,7 +68,7 @@ requesting products --> Nucleus --> isolated Codex app-server
 Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy
-Cast --> Platter <-- CRM career entries
+Cast --> Platter <-- Vita career works in Annals
 Platter, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report
@@ -136,6 +136,12 @@ Platter `run-ad-hoc` uses Cast's exact `job collect` operation, then reuses
 Platter's normal preparation, freshness, edition and send records. URL-selected
 work creates no separate workflow state. Cast still owns the resulting source
 and job records; Platter owns packet eligibility and delivery.
+
+Platter reads career material from the fixed Annals library `vita` through
+`~/.local/bin/annals library vita work list/show`. Annals owns the retained
+works; Platter uses their full text as its career entries. Platter does not
+call CRM or store a configurable career-source executable. See the
+[Vita guide](/Users/joey/rust/cell/platter/chancery/manuals/vita.md).
 
 Platter runs resume drafting, independent Markdown review and revision as
 separate sequential Nucleus jobs. It owns the handoffs and retained results.

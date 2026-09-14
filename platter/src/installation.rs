@@ -270,7 +270,6 @@ fn lifecycle_inner(
             }
             let mut config = crate::workflow::config(&root)?;
             config.cast_executable = std::fs::canonicalize(context.home.join(".local/bin/cast"))?;
-            config.crm_executable = std::fs::canonicalize(context.home.join(".local/bin/crm"))?;
             config.email_executable = std::fs::canonicalize(context.home.join(".local/bin/email"))?;
             crate::store::Store::open(&root)?.set_setting("config", &config)?;
         }

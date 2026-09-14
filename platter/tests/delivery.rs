@@ -40,7 +40,6 @@ impl Fixture {
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
             cast_executable: root.join("unused-cast"),
-            crm_executable: root.join("unused-crm"),
             email_executable: email.clone(),
             original_resume: root.join("unused-original-resume.json"),
         };
@@ -325,7 +324,7 @@ async fn daily_sends_the_local_date_once_without_preparing_after_freeze() -> Res
         fs::read_to_string(fixture.email_output("calls"))?,
         "invoked\n"
     );
-    // Cast and CRM do not exist in this fixture, so either preparation would fail.
+    // Cast and Annals do not exist in this fixture, so either preparation would fail.
     Ok(())
 }
 

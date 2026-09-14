@@ -187,7 +187,6 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
         delivery_minute: 0,
         timezone: "America/Chicago".into(),
         cast_executable: home.join(".local/bin/cast"),
-        crm_executable: home.join(".local/bin/crm"),
         email_executable: home.join(".local/bin/email"),
         original_resume: original,
     };
@@ -407,7 +406,7 @@ fn status_and_local_state_are_read_only_and_backup_preserves_schema() -> Result<
 fn fake_prerequisites(home: &Path) -> Result<(PathBuf, PathBuf)> {
     let bin = home.join(".local/bin");
     fs::create_dir_all(&bin)?;
-    for name in ["cast", "crm", "email", "tectonic", "python3"] {
+    for name in ["cast", "annals", "email", "tectonic", "python3"] {
         let path = bin.join(name);
         let body = match name {
             "cast" => "case \"$1:${2-}\" in --version:) echo 'cast 0.4.1';; job:--help) echo 'collect';; *) exit 95;; esac".to_owned(),

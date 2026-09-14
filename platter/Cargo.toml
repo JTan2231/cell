@@ -1,6 +1,6 @@
 [package]
 name = "platter"
-version = "0.2.11"
+version = "0.2.12"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -8,9 +8,9 @@ license.workspace = true
 [dependencies]
 chancery-usage.workspace = true
 anyhow = "1"
+annals = { path = "../annals/crates/annals" }
 base64.workspace = true
 cast = { path = "../cast" }
-crm = { path = "../crm/crates/crm" }
 cell-install.workspace = true
 cell-maintenance.workspace = true
 nucleus-client.workspace = true

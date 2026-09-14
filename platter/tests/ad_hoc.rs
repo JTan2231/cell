@@ -68,7 +68,6 @@ impl Fixture {
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
             cast_executable: forbidden.clone(),
-            crm_executable: forbidden.clone(),
             email_executable: forbidden,
             original_resume: root.join("original.json"),
         };
