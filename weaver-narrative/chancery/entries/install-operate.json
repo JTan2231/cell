@@ -1,0 +1,183 @@
+{
+  "id": "weaver.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or recover Weaver",
+  "summary": "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document.",
+  "use_when": [
+    "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document."
+  ],
+  "do_not_use_when": [
+    "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
+  ],
+  "outcome": "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document.",
+  "interfaces": [
+    {
+      "label": "Deploy",
+      "invocation": "./deploy.sh weaver --settings /absolute/settings.json"
+    },
+    {
+      "label": "Initialize",
+      "invocation": "weaver init --annals-config /absolute/decisions/config.toml"
+    },
+    {
+      "label": "Read configuration",
+      "invocation": "weaver config"
+    },
+    {
+      "label": "Read readiness",
+      "invocation": "weaver doctor"
+    },
+    {
+      "label": "Read maintenance",
+      "invocation": "weaver maintenance status"
+    },
+    {
+      "label": "Hold",
+      "invocation": "weaver maintenance hold RUN_ID"
+    },
+    {
+      "label": "Drain",
+      "invocation": "weaver maintenance drain"
+    },
+    {
+      "label": "Release",
+      "invocation": "weaver maintenance release RUN_ID"
+    },
+    {
+      "label": "Inspect release",
+      "invocation": "weaver-install inspect"
+    }
+  ],
+  "effects": [
+    "Install selects immutable program and provider bytes, initializes supported Weaver SQLite state, stores reading configuration, and acquires and releases run-owned admission holds. It creates no narrative, model job, email, or schedule."
+  ],
+  "authority": [
+    "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission.",
+    "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
+  ],
+  "success": [
+    "Exact installed candidate integrity, readable schema 1 and Annals source, compatible Nucleus readiness, and release of run-owned holds establish installation success."
+  ],
+  "failure_and_recovery": [
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+  ],
+  "privacy": [
+    "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
+    "Chancery usage observes command identity and optional task correlation, never arguments or output. Recording failure does not change the product result."
+  ],
+  "dependencies": [
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "does_not_authorize": [
+    "Source mutation, remote disclosure, publication, email, state deletion, automatic retry, or effects outside the user-approved endpoint."
+  ],
+  "promise": {
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A document ID is its unique Nucleus job ID. Local creation and observed terminal times are Unix seconds. Text bounds count UTF-8 bytes. Annals acceptance time describes storage, not decision occurrence."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List selects at most 100 document rows, default 20, newest first with has_more. Show returns one exact row. Live source traversals are bounded by Annals pagination. Source selection and interpretation are agent-driven; no complete historical recall or reproducible source snapshot is asserted."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No provider latency, maximum source age, end-to-end completion time, or comprehensive research coverage is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The shared Cell transaction owns exact program/provider publication and recovery. Weaver gates new work, drains live commands and nonterminal Nucleus jobs, and configures schema 1 under its sole hold. Resume may settle prior work. Configuration changes preserve saved documents. Unknown drain remains incomplete; recovery preserves other holds."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, perpetual retention, source latency, or automatic retry service objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals supplies complete accepted Krisis text through its start, watermark, and page reading client.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies constrained execution, managed authentication, and the durable requester mailbox.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current local user and authorized Cell agents or deployment coordinator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Authorized installation or configuration, compatible Annals and Nucleus releases, an existing decisions library, and attributable product-owned selectors. First installation requires annals_config settings."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The deployment uses a committed local-main candidate. The only setup setting is annals_config, an absolute existing decisions-library config. Init also accepts an absolute annals_binary. Hold and release take exact owner IDs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+      }
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

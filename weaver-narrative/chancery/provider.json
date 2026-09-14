@@ -1,0 +1,43 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "weaver",
+    "name": "Weaver",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission."
+    ],
+    "not_authoritative_for": [
+      "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
+    ],
+    "inventory": {
+      "covers": [
+        "All Weaver authoring, revision, resume, document reads, configuration, readiness, maintained installation, and development outcomes."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version, factual certification, citations, source inventories, source mutation, publication, email, scheduling, automatic retries, and retired Weaver workflows."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Private current-user local CLI and SQLite. The author can only read accepted Annals documents and submit Markdown; workspace, shell, and web are disabled."
+    ],
+    "shared_privacy_and_retention": [
+      "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
+      "Chancery usage observes command identity and optional task correlation, never arguments or output. Recording failure does not change the product result."
+    ],
+    "compatibility_and_retirement": [
+      "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+    ],
+    "operational_limits": [
+      "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+    ]
+  },
+  "entries": [
+    "entries/narrative-write.json",
+    "entries/install-operate.json",
+    "entries/develop-change.json"
+  ]
+}

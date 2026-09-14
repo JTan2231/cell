@@ -1,0 +1,167 @@
+{
+  "id": "weaver.narrative.write",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Author a narrative from a free-form direction",
+  "summary": "Read the accepted decision history in Annals, compose a narrative under the user direction, and retain private Markdown through one Nucleus authoring job.",
+  "use_when": [
+    "Read the accepted decision history in Annals, compose a narrative under the user direction, and retain private Markdown through one Nucleus authoring job."
+  ],
+  "do_not_use_when": [
+    "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
+  ],
+  "outcome": "Read the accepted decision history in Annals, compose a narrative under the user direction, and retain private Markdown through one Nucleus authoring job.",
+  "interfaces": [
+    {
+      "label": "Write",
+      "invocation": "weaver write DIRECTION"
+    },
+    {
+      "label": "Revise",
+      "invocation": "weaver revise DOCUMENT_ID DIRECTION"
+    },
+    {
+      "label": "Resume",
+      "invocation": "weaver resume DOCUMENT_ID"
+    },
+    {
+      "label": "List",
+      "invocation": "weaver list --limit 20"
+    },
+    {
+      "label": "Read",
+      "invocation": "weaver show DOCUMENT_ID"
+    }
+  ],
+  "effects": [
+    "Authoring consumes Nucleus allowance, reads private source material, and stores the document and execution bookkeeping in SQLite."
+  ],
+  "authority": [
+    "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission.",
+    "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
+  ],
+  "success": [
+    "Markdown saved in Weaver is domain success. A terminal job without a submitted document is an error. Later runtime failure preserves saved prose."
+  ],
+  "failure_and_recovery": [
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+  ],
+  "privacy": [
+    "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
+    "Chancery usage observes command identity and optional task correlation, never arguments or output. Recording failure does not change the product result."
+  ],
+  "dependencies": [
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "does_not_authorize": [
+    "Source mutation, remote disclosure, publication, email, state deletion, automatic retry, or effects outside the user-approved endpoint."
+  ],
+  "promise": {
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A document ID is its unique Nucleus job ID. Local creation and observed terminal times are Unix seconds. Text bounds count UTF-8 bytes. Annals acceptance time describes storage, not decision occurrence."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List selects at most 100 document rows, default 20, newest first with has_more. Show returns one exact row. Live source traversals are bounded by Annals pagination. Source selection and interpretation are agent-driven; no complete historical recall or reproducible source snapshot is asserted."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No provider latency, maximum source age, end-to-end completion time, or comprehensive research coverage is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Save the exact request before admission. Resume the same job after uncertainty. Save Markdown and a pending tool reply atomically, and clear the reply after Nucleus acknowledgement. A saved document survives later runtime failure. New revisions are separate requests without a stored revision relationship."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, perpetual retention, source latency, or automatic retry service objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals supplies complete accepted Krisis text through its start, watermark, and page reading client.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies constrained execution, managed authentication, and the durable requester mailbox.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current local user and authorized Cell agents or deployment coordinator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Configured readable Annals decisions state, initialized Weaver schema 1, and compatible authenticated Nucleus admission for new work."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "A free-form direction, or an existing document and another free-form direction. Audience, voice, form, and length are inferred by the agent, not application fields."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+      }
+    ]
+  },
+  "manual": "manuals/narrative-write.md"
+}

@@ -30,6 +30,7 @@ members = [
     "conatus",
     "mentor",
     "emt",
+    "weaver-narrative",
 ]
 resolver = "3"
 

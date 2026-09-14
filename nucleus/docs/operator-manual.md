@@ -47,6 +47,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/README.md) |
 | Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
 | Paperboy | Reports from conversations or accepted Krisis decisions | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
+| Weaver | Narratives authored from free-form directions and Annals reading | [Weaver](/Users/joey/rust/cell/weaver-narrative/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/README.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/decisions/README.md) |
 | Semantics | Registered project terminology and its revision history | [Semantics](/Users/joey/rust/cell/semantics/README.md) |
@@ -67,7 +68,7 @@ requesting products --> Nucleus --> isolated Codex app-server
 
 Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
-Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy
+Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy, Weaver
 Cast --> Platter <-- Vita career works in Annals
 Platter, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
@@ -121,6 +122,13 @@ identities, and preserves its cursor, operator pause and schedule intent.
 Each product owns its data and success rules. Nucleus owns execution. A completed
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.
+
+Weaver runs one authoring job per free-form direction. Its agent reads accepted
+Annals documents on demand and submits Markdown. Weaver stores documents and
+the minimum Nucleus recovery state in SQLite. A pending tool reply is cleared
+after Nucleus acknowledges it. Editorial choices belong to the prompt; Weaver
+retains no source inventory, citation graph, or feed consumer cursor. It runs
+on demand and has no scheduled publishing or email stage.
 
 Cast collection stores jobs without a title substring requirement. Configured
 provider queries still limit discovery. Downstream consumers own selection by

@@ -1,0 +1,155 @@
+{
+  "id": "weaver.develop.change",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Weaver narrative authoring",
+  "summary": "Change Weaver prompts, CLI, document storage, Annals reads, Nucleus integration, or installation while preserving the small narrative workflow.",
+  "use_when": [
+    "Change Weaver prompts, CLI, document storage, Annals reads, Nucleus integration, or installation while preserving the small narrative workflow."
+  ],
+  "do_not_use_when": [
+    "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
+  ],
+  "outcome": "Change Weaver prompts, CLI, document storage, Annals reads, Nucleus integration, or installation while preserving the small narrative workflow.",
+  "interfaces": [
+    {
+      "label": "Validate",
+      "invocation": "./ci.sh"
+    },
+    {
+      "label": "Read maintained terminology",
+      "invocation": "semantics repository show weaver-narrative"
+    }
+  ],
+  "effects": [
+    "Changes owned source, tests, and documentation; registration or deployment effects remain separately authorized by the requested endpoint."
+  ],
+  "authority": [
+    "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission.",
+    "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
+  ],
+  "success": [
+    "The changed behavior meets the agreed endpoint, preserves requester authority and recovery, and passes default root CI before deployment."
+  ],
+  "failure_and_recovery": [
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+  ],
+  "privacy": [
+    "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
+    "Chancery usage observes command identity and optional task correlation, never arguments or output. Recording failure does not change the product result."
+  ],
+  "dependencies": [
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "does_not_authorize": [
+    "Source mutation, remote disclosure, publication, email, state deletion, automatic retry, or effects outside the user-approved endpoint."
+  ],
+  "promise": {
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A document ID is its unique Nucleus job ID. Local creation and observed terminal times are Unix seconds. Text bounds count UTF-8 bytes. Annals acceptance time describes storage, not decision occurrence."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List selects at most 100 document rows, default 20, newest first with has_more. Show returns one exact row. Live source traversals are bounded by Annals pagination. Source selection and interpretation are agent-driven; no complete historical recall or reproducible source snapshot is asserted."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No provider latency, maximum source age, end-to-end completion time, or comprehensive research coverage is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Save the exact request before admission. Resume the same job after uncertainty. Save Markdown and a pending tool reply atomically, and clear the reply after Nucleus acknowledgement. A saved document survives later runtime failure. New revisions are separate requests without a stored revision relationship."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, perpetual retention, source latency, or automatic retry service objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals supplies complete accepted Krisis text through its start, watermark, and page reading client.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies constrained execution, managed authentication, and the durable requester mailbox.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      }
+    ],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current local user and authorized Cell agents or deployment coordinator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Read the Weaver Semantics repository, installed Nucleus manual, relevant provider contracts, and repository instructions. Establish the user-approved endpoint."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "An authorized change to Weaver source, prompt, CLI, SQLite, immutable toolset, provider, or maintained installation contract."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+      }
+    ]
+  },
+  "manual": "manuals/develop-change.md"
+}

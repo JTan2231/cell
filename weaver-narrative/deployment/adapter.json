@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "product": "weaver",
+  "application": "Weaver",
+  "dependencies": ["annals", "nucleus"],
+  "adapter_binary": "weaver-install",
+  "requester_service": "nucleus",
+  "description": "Install Weaver and initialize its document store and Annals reading configuration under owned maintenance.",
+  "runtime_versions": {
+    "annals": {"minimum": "0.20.1", "before": "0.21.0"},
+    "nucleus": {"minimum": "0.5.7", "before": "0.6.0"}
+  }
+}

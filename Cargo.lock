@@ -3224,6 +3224,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "weaver"
+version = "0.1.0"
+dependencies = [
+ "annals-api",
+ "anyhow",
+ "axum",
+ "cell-install",
+ "cell-maintenance",
+ "chancery-usage",
+ "clap",
+ "fs2",
+ "iatreion-api",
+ "nucleus-client",
+ "nucleus-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
