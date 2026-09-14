@@ -18,7 +18,7 @@ import tomllib
 
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from deployment.inventory import applications
+from deployment.inventory import applications, descriptor
 
 PRODUCTS = applications(Path(__file__).resolve().parent.parent)
 HEX = re.compile(r"[0-9a-f]{64}")
@@ -179,7 +179,8 @@ def live_pins(home, installs, currents):
     for product, application in PRODUCTS.items():
         if application not in currents:
             continue
-        metadata = json.loads((source / product / "deployment/adapter.json").read_text())
+        values = descriptor((source / "pipeline/products" / f"{product}.sh").read_text())
+        metadata = json.loads((source / values["PRODUCT_DIR"] / "deployment/adapter.json").read_text())
         arguments = metadata.get("pin_inventory")
         if arguments is None:
             continue
@@ -286,7 +287,8 @@ def clean_installed_release_history(home: Path, usher_installer: Path | None = N
     base = home / "Library/Application Support"
     installs = {}
     for product, application in PRODUCTS.items():
-        metadata = json.loads((source / product / "deployment/adapter.json").read_text())
+        values = descriptor((source / "pipeline/products" / f"{product}.sh").read_text())
+        metadata = json.loads((source / values["PRODUCT_DIR"] / "deployment/adapter.json").read_text())
         require(metadata.get("application") == application, "Cell installation metadata differs")
         installs[application] = base / application / "install"
     with installer_locks(home, installs):
