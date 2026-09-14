@@ -7,7 +7,10 @@ normalized user/assistant conversation through that exchange. Code renders the
 source; the classifier returns only `is_decision` and `summary`.
 
 The selected turn must contain a nonblank user message because Krisis identifies
-user decisions. Empty or whitespace-only assistant text and earlier turns with
+user decisions. Before building a new document run, the observer marks a completed
+turn without nonblank user text as `not_eligible` and returns success. Later
+scheduled work can proceed. Saved document runs retain their existing recovery
+path. Empty or whitespace-only assistant text and earlier turns with
 no messages are valid context. The classifier decides whether the selected
 exchange contains a user decision.
 

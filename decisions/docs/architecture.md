@@ -9,8 +9,11 @@ whether a decision occurred; code checks the result structure and renders text.
 ## Source and classification
 
 The Stop hook stores only session/turn correlation. Reconciliation discovers
-missed completed root turns through Conversations. The observer freezes the full
-normalized conversation prefix through the selected completed exchange. Exchanges
+missed completed root turns through Conversations. Before building a new document
+run, the observer marks a completed turn without nonblank user text as
+`not_eligible` and returns success. It does not classify or deliver that turn.
+Saved document runs retain their existing recovery path. The observer freezes the
+full normalized conversation prefix through the selected completed exchange. Exchanges
 completed before the activation baseline are ineligible. Missing or unfinished
 hook sources fail on their first processing error.
 

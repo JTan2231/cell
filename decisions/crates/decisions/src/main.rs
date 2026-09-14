@@ -17,7 +17,7 @@ use std::io::Read as _;
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use conversations::{AppServerClient, ClientConfig, StderrPolicy};
+use conversations::{AppServerClient, ClientConfig, Role, StderrPolicy};
 use decisions::api::{
     AccountDelivery, ActivationReceipt, DoctorReport, HookReceipt, ObservationProcess,
     ProcessOutput, ProcessResult, StopHookInput,
@@ -748,17 +748,48 @@ fn process_selected_observation(
         .state_directory()
         .join("document-runs")
         .join(format!("{}-{}", observation.id, observation.attempt_epoch));
-    let thread_id = if let Some(id) = observation.thread_id.clone() {
-        id
+    let saved_run = directory
+        .join("run.json")
+        .try_exists()
+        .map_err(|error| AppError::new("document_run_unavailable", error.to_string()))?;
+    let thread_id = if let Some(id) = observation.thread_id.as_ref().filter(|_| saved_run) {
+        id.clone()
     } else {
         let mut client = AppServerClient::spawn(ClientConfig {
             stderr_policy: StderrPolicy::Suppress,
             ..ClientConfig::default()
         })
         .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
-        let activity = client
-            .resolve_turn_activity(&observation.session_id, &observation.turn_id)
-            .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
+        let activity = if let Some(thread_id) = &observation.thread_id {
+            client.read_turn_activity(thread_id, &observation.turn_id)
+        } else {
+            client.resolve_turn_activity(&observation.session_id, &observation.turn_id)
+        }
+        .map_err(|error| AppError::new("document_source_unavailable", error.to_string()))?;
+        if !saved_run
+            && !activity
+                .turn
+                .messages
+                .iter()
+                .any(|message| message.role == Role::User && !message.text.trim().is_empty())
+        {
+            let completed_at = activity.turn.completed_at.ok_or_else(|| {
+                AppError::new("document_source_invalid", "selected exchange is incomplete")
+            })?;
+            store.mark_observation_not_eligible(
+                &observation.id,
+                &activity.turn.reference.host_id,
+                &activity.turn.reference.thread_id,
+                completed_at,
+                None,
+            )?;
+            return Ok(ProcessResult {
+                observation_id: observation.id.clone(),
+                status: "complete".to_owned(),
+                scope_level: 0,
+                outcome: Some("not_eligible".to_owned()),
+            });
+        }
         activity.turn.reference.thread_id
     };
     let mut ineligible = None;
