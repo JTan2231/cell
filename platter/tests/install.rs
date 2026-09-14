@@ -178,13 +178,14 @@ esac
             timezone: "America/Chicago".into(),
             cast_executable: self.home.join(".local/bin/cast"),
             email_executable: self.home.join(".local/bin/email"),
+            weaver_executable: self.home.join(".local/bin/weaver"),
             original_resume: root.join("fixture-original.tex"),
         };
         if store.setting::<Value>("config").unwrap().is_none() {
             store.initialize(&settings, &template).unwrap();
         }
         fs::create_dir_all(self.home.join(".local/bin")).unwrap();
-        for name in ["cast", "annals", "email"] {
+        for name in ["cast", "annals", "email", "weaver"] {
             let executable = self.home.join(".local/bin").join(name);
             fs::write(&executable, "#!/bin/sh\nexit 0\n").unwrap();
             fs::set_permissions(&executable, fs::Permissions::from_mode(0o755)).unwrap();

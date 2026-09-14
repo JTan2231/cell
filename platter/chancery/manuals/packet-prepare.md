@@ -1,8 +1,8 @@
 # Prepare private job packets
 
 Platter captures Cast opportunities and Vita career entries. It uses Nucleus to
-prepare a concise brief and tailored Jackson and projects content, then freezes editions
-for authorized delivery through Email. Platter owns retained content, job
+prepare a concise brief and tailored Jackson content. Weaver supplies project
+bullets. Platter freezes editions for authorized delivery through Email. Platter owns retained content, job
 eligibility and delivery outcomes. It does not discover jobs, edit source libraries, apply
 to employers, contact them or activate a schedule.
 
@@ -108,85 +108,84 @@ download time, not the time it was read from disk. The cache is disposable and
 is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
-The draft job receives the captured career data. Models can list/read entries
-and submit only their assigned content. New jobs also use read-only workspace access with
-local execution for project research. Web search stays disabled. The assignment
-permits only research reads, not source changes, service operation or messaging.
-Source text is untrusted material.
+New preparations capture `generation=weaver_projects_v1` and the exact Cell,
+Wrought and shortening directions. Platter calls the installed Weaver client
+sequentially before its own draft job. Each initial direction asks for at most
+three concise resume bullets, with one brief sentence per bullet. The first
+line selects “bullet points for cell” or “bullet points for wrought”. Weaver
+owns its Annals reads and authoring. Platter retains the request IDs before
+calling Weaver and stores the returned documents as private immutable artifacts.
 
-All Nucleus jobs use `gpt-5.6-sol` with `max` effort. New briefs contain
-Why it works and Role sections with optional Culture, at most 90 words total.
-Why it works is at most 45 words; Role is at most 30; Culture is at most 25.
-Role and Culture are flat specifics rather than comparisons with career
-experience. Unsupported culture is omitted without additional research or a
-change to pursuit eligibility. The displayed recommendation has no caveats or
-hedging; pursuit assessment remains private. Historical paragraph briefs and
-version-one requests remain readable with their existing meanings.
+Weaver Markdown must contain one flat unordered list with one through three
+items. Platter converts text, emphasis and inline code into plain bullet text,
+joins wrapped lines, and escapes LaTeX. It does not rewrite claims or supply
+source notes. Empty output, clarification questions and unsupported structures
+fail preparation. A bullet permits at most 1000 characters and no control
+characters. Concision is requested through the direction; length is also subject
+to the one-page renderer.
 
-New resume submissions contain Jackson bullets with captured career-entry
-references and one or two ordered project entries. Each entry has `name`
-(`Cell` or `Wrought`), a plain-text `description`, optional `dates`, one through
-eight plain-text `bullets`, and nonempty private `sources` notes. Names must be
-unique. Each project text field permits at most 1000 characters and no control
-characters. The agent selects emphasis and divides space between the editable
-regions. Dates and claims require source support; validation checks structure,
-not whether a source entails a claim.
+The template has fixed Cell and Wrought presentation and exactly one marker pair
+for each bullet list: `% PLATTER CELL BULLETS BEGIN` / `END` and
+`% PLATTER WROUGHT BULLETS BEGIN` / `END`. Each END marker repeats the full
+prefix, for example `% PLATTER CELL BULLETS END`. The markers must be inside
+Projects and must not overlap. Headers, descriptions, technology lists, links,
+dates, project order and all other template bytes remain fixed. Jackson bullets
+remain separately editable. Missing markers stop new preparation before writing.
 
-The renderer uses https://github.com/jtan2231/cell for Cell and
-https://wrought.experimental.joeytan.dev for Wrought. Source notes are not
-rendered. Every byte outside Jackson bullets and projects content stays fixed.
-Model text is escaped as LaTeX content. Rendering checks overflow, missing
-characters, extractable project text, the Jackson heading and one-page layout.
-A run becomes ready only with accepted brief/resume content and retained PDF.
+Platter checks the project bullets against the template's captured Jackson text.
+A content or layout rejection permits one shortening round through Weaver's
+revision operation, using the captured shortening direction. Both projects are
+revised once, with the same three-bullet limit. A second rejection stops work.
+Renderer infrastructure failure stops immediately. All returned documents remain
+retained; `project-bullets` records the accepted pair.
 
-The shared `prompts/project-resources.md` points agents to captured career
-entries and the Krisis Annals library selected by
-`/Users/joey/Library/Application Support/Annals/decisions/config.toml`.
-Agents run the local Annals search, concept-evidence and retained-work read
-commands. Search matches concept labels and ancestor context, not arbitrary
-conversation text. Decision documents explain constraints, alternatives and
-reasoning. They can contain rejected proposals or anticipated outcomes. The
-brief can also use project experience.
+The Platter draft job receives the captured posting, career data and fixed
+project bullets. It writes the brief and Jackson bullets and checks its work
+against the captured editorial policy. It has career-read and `submit_draft`
+tools; workspace, local execution and web access are disabled. The immutable
+`platter/draft/2` toolset excludes project fields. Platter inserts the retained
+project bullets after validation. Final brief, resume content, LaTeX and PDF
+commit together before acknowledgement. Layout rejection permits correction of
+Jackson within the same draft job. No additional editorial agent is used.
 
-Platter retains the resource instructions with each new run. It does not pin
-Annals revisions, copy project sources, or provide custom source read tools.
-Research reads current local material. Resumed research can see newer content.
-Private source notes are navigation hints, not reproducible citations. Unavailable required
-sources must be reported as access failures; no source-system repair is part of
-preparation. The Annals command/config and library must be usable by the selected
-Nucleus harness. Catalog presence does not establish that access. Historical runs
-retain their captured resource instructions, including repository guidance.
+The draft uses `gpt-5.6-sol` at max effort. Brief sections remain Why it works
+(at most 45 words), Role (at most 30) and optional Culture (at most 25), with at
+most 90 words total. Role and Culture are flat specifics. Unsupported culture
+is omitted. Declining retains its assessment without a resume and sets the job
+ineligible. Project authoring has already occurred when the draft declines.
 
-New preparations capture `generation=single_draft_v1` and use one Nucleus draft
-job. Its `prompts/draft.md` assignment combines pursuit assessment, brief and
-resume writing, and self-review. Platter captures the embedded
-`prompts/resume-editorial.md` policy with the run. Edit the draft prompt or
-editorial policy and rebuild Platter to change new work.
+Rendering checks overflow, missing characters, extractable project text, the
+Jackson heading and one-page layout. Platter is ready only after accepted brief,
+assembled resume content and a validated retained PDF. A Weaver document alone
+is not a ready packet. Weaver certifies neither factual claims nor complete
+historical research coverage.
 
-The agent submits the brief and resume together through `submit_draft`.
-Declining requires no resume or rendering. A pursued packet requires both
-outputs. Platter validates the brief and resume, renders the resume, then
-commits the brief, resume content, LaTeX and PDF together before acknowledging
-acceptance. Content or layout rejection returns feedback to the same job for
-correction. Self-review produces no separate report or approval gate. New runs
-retain no intermediate draft or review artifacts.
+Resume a preparation through the same Platter command. Its saved Weaver IDs and
+directions reuse the original assignments. Quota deferral preserves work and
+returns the ordinary quota outcome. Terminal failures receive no replacement
+job. Saved Weaver prose survives a later runtime failure, which remains an error.
+Deadlines and maintenance include only the Weaver jobs recorded for this packet,
+along with its Platter jobs. No source-system repair or direct Codex fallback is
+part of preparation.
 
-Exact requests and accepted results survive requester restarts. Resuming work
-keeps its retained instructions and does not render accepted content again.
-A failed job without an accepted result stops preparation; it is not
-automatically retried. New ready packets require the accepted brief, resume
-content and validated PDF.
+Historical `single_draft_v1` runs retain their combined brief/Jackson/projects
+writer, read-only local Annals research, model-authored project descriptions and
+source notes, original toolset and complete-project rendering boundary. Captures
+without `generation` retain their previous brief/resume or draft/review/revision
+workflow. Their captured instructions, accepted artifacts and template references
+remain unchanged.
 
-Captures without `generation` retain their original workflow. Those with
-`resume_editorial` run brief, draft, independent Markdown review and revision.
-The revision copies the retained writer request and adds only the complete
-draft and exact review. The reviewer receives the draft, posting, career
-library and policy without writer history or the brief. Review must be
-nonblank; its organization and judgments are not parsed. Both writers receive
-the same content and layout checks. Draft, review and final artifacts remain
-private and retained. Captures without editorial policy use the legacy
-brief/resume path. Captures without project resources keep Jackson-only
-submissions and their original access policy. Accepted packets are not rewritten.
+Import a fixed project template for future runs:
+
+```sh
+platter import-projects-template /absolute/private/resume.tex
+```
+
+The import requires both bullet marker pairs and permits changes only inside the
+existing Projects section. It stores a new immutable template artifact and
+selects it for future captures. Existing runs keep their previous template.
+The old template remains retained. This operation starts no model work and sends
+nothing. Private resume bytes must remain outside the repository.
 
 For an authorized restart after a failed or cancelled preparation, use
 `prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
@@ -374,9 +373,9 @@ Every external send still requires its own applicable user authority.
 
 ## Recovery and privacy
 
-A schema-five SQLite snapshot contains the entire retained Platter library.
+A schema-six SQLite snapshot contains the entire retained Platter library.
 Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one through schema-four state must pass
+main database without its journal. Schema-one through schema-five state must pass
 the explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves

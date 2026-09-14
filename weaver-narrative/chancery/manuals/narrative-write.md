@@ -34,6 +34,24 @@ List returns metadata for up to 100 documents, newest first. The default is 20.
 not invoke an agent or create an absent database. `finished_at` describes the
 observed end of execution; it is separate from having saved Markdown.
 
+## Caller identity and Rust client
+
+A local caller can supply `weaver write --id REQUEST_ID DIRECTION` or
+`weaver revise DOCUMENT_ID --request-id REQUEST_ID DIRECTION`. The ID contains
+one through 120 ASCII letters, digits, underscores or hyphens. It is the document
+and Nucleus job identity. Repeating an ID with the same direction and input
+Markdown continues its saved exact invocation or returns its completed result.
+Different input under that ID is refused. Terminal failures receive no new
+attempt. Calls without an ID keep automatic identity generation.
+
+`weaver::api::Client` invokes the selected absolute installed executable and owns
+the JSON types for write, revise, show, resume and doctor. Platter and other Rust
+callers use these types instead of private Weaver storage. A deferred response
+contains `id`, `outcome=quota_deferred` and `detail`. A saved document view remains
+separate from that outcome. Process failure can coexist with saved Markdown;
+read the exact ID to inspect it. Dropping a client call stops its CLI process,
+but callers must separately cancel its exact Nucleus job when abandoning work.
+
 ## Reading and execution
 
 Weaver uses the configured Annals executable and explicit decisions config as

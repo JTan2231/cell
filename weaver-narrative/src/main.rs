@@ -25,9 +25,18 @@ enum Commands {
         annals_binary: Option<PathBuf>,
     },
     /// Author one document from a free-form direction. Wait for the result.
-    Write { direction: String },
+    Write {
+        direction: String,
+        #[arg(long)]
+        id: Option<String>,
+    },
     /// Author a new document using saved Markdown and a free-form direction.
-    Revise { id: String, direction: String },
+    Revise {
+        id: String,
+        direction: String,
+        #[arg(long)]
+        request_id: Option<String>,
+    },
     /// Continue the exact saved Nucleus job after interruption or deferral.
     Resume { id: String },
     /// List saved and pending document metadata.
@@ -68,9 +77,16 @@ async fn execute(cli: &Cli) -> Result<Value> {
                 },
             )
         }
-        Commands::Write { direction } => weaver::operations::write(&root, direction, None).await,
-        Commands::Revise { id, direction } => {
-            weaver::operations::write(&root, direction, Some(id)).await
+        Commands::Write { direction, id } => {
+            weaver::operations::write_with_id(&root, direction, None, id.as_deref()).await
+        }
+        Commands::Revise {
+            id,
+            direction,
+            request_id,
+        } => {
+            weaver::operations::write_with_id(&root, direction, Some(id), request_id.as_deref())
+                .await
         }
         Commands::Resume { id } => weaver::operations::resume(&root, id).await,
         Commands::List { limit } => weaver::store::Store::open(&root, true)?.list(*limit),

@@ -131,6 +131,7 @@ pub fn main() -> std::process::ExitCode {
 #[serde(deny_unknown_fields)]
 struct Settings {
     resume: Option<std::path::PathBuf>,
+    projects_template: Option<std::path::PathBuf>,
     enabled: Option<bool>,
 }
 
@@ -171,7 +172,7 @@ fn lifecycle_inner(
             let version: i64 =
                 connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
             ensure!(
-                matches!(version, 1 | 2 | 3 | 4 | crate::store::SCHEMA_VERSION),
+                matches!(version, 1 | 2 | 3 | 4 | 5 | crate::store::SCHEMA_VERSION),
                 "unsupported Platter database schema"
             );
             version == 1
@@ -195,6 +196,20 @@ fn lifecycle_inner(
                 "Platter resume must be an absolute path"
             );
             crate::resume::ResumeTemplate::load(resume)?;
+        }
+        if let Some(path) = &settings.projects_template {
+            ensure!(
+                path.is_absolute(),
+                "projects template path must be absolute"
+            );
+            let candidate = crate::resume::ResumeTemplate::load(path)?;
+            if initialized {
+                crate::store::Store::control(&root)?
+                    .template()?
+                    .validate_project_template_import(&candidate)?;
+            } else {
+                candidate.validate_fixed_projects()?;
+            }
         }
         return Ok(
             json!({"initialized":initialized,"schedule":ScheduleState::capture_installed(&context.home, KEY)?}),
@@ -271,7 +286,12 @@ fn lifecycle_inner(
             let mut config = crate::workflow::config(&root)?;
             config.cast_executable = std::fs::canonicalize(context.home.join(".local/bin/cast"))?;
             config.email_executable = std::fs::canonicalize(context.home.join(".local/bin/email"))?;
+            config.weaver_executable =
+                std::fs::canonicalize(context.home.join(".local/bin/weaver"))?;
             crate::store::Store::open(&root)?.set_setting("config", &config)?;
+            if let Some(path) = &settings.projects_template {
+                crate::workflow::import_projects_template(&root, path)?;
+            }
         }
         if state.binding.is_some() || settings.enabled.is_some() {
             let executable = std::fs::canonicalize(context.home.join(".local/bin/platter"))?;

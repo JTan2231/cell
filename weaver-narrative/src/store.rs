@@ -80,6 +80,14 @@ pub struct Store {
 }
 
 impl Store {
+    pub fn contains(&self, id: &str) -> Result<bool> {
+        Ok(self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM documents WHERE id=?1)",
+            [id],
+            |row| row.get(0),
+        )?)
+    }
+
     pub fn initialize(root: &Path) -> Result<Self> {
         private_directory(root)?;
         let path = root.join(DATABASE);

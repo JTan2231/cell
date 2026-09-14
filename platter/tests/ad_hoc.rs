@@ -69,6 +69,7 @@ impl Fixture {
             timezone: "America/Chicago".into(),
             cast_executable: forbidden.clone(),
             email_executable: forbidden,
+            weaver_executable: root.join("original.json"),
             original_resume: root.join("original.json"),
         };
         let mut store = Store::open(root)?;

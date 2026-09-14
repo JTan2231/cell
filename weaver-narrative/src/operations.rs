@@ -37,7 +37,25 @@ pub fn initialize(root: &Path, config: &Config) -> Result<Value> {
 }
 
 pub async fn write(root: &Path, direction: &str, revise: Option<&str>) -> Result<Value> {
-    let _admission = gate(root).enter()?;
+    write_with_id(root, direction, revise, None).await
+}
+
+pub async fn write_with_id(
+    root: &Path,
+    direction: &str,
+    revise: Option<&str>,
+    id: Option<&str>,
+) -> Result<Value> {
+    let retained = id
+        .map(|id| Store::open(root, true)?.contains(id))
+        .transpose()?
+        .unwrap_or(false);
+    let admission = gate(root);
+    let _admission = if retained {
+        admission.recover()?
+    } else {
+        admission.enter()?
+    };
     let _lock = store::runner_lock(root)?;
     let config = Config::read(root)?;
     let mut store = Store::open(root, false)?;
@@ -52,10 +70,54 @@ pub async fn write(root: &Path, direction: &str, revise: Option<&str>) -> Result
     } else {
         None
     };
-    let request = agent::request(direction, markdown, &root.join("agent-workspace"))?;
-    let document = store.create(&request)?;
-    eprintln!("Weaver document {}", document.id);
+    let request = assignment(
+        &store,
+        direction,
+        markdown,
+        &root.join("agent-workspace"),
+        id,
+    )?;
+    let saved = store.document(request.id.as_str())?;
+    if saved.finished_at.is_some() && saved.error.is_none() && saved.markdown.is_some() {
+        return saved.view();
+    }
+    eprintln!("Weaver document {}", request.id);
     execute(&mut store, &config, &request).await
+}
+
+fn assignment(
+    store: &Store,
+    direction: &str,
+    markdown: Option<&str>,
+    cwd: &Path,
+    id: Option<&str>,
+) -> Result<nucleus_core::JobRequestV1> {
+    if let Some(id) = id {
+        ensure!(
+            (1..=120).contains(&id.len())
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+            "invalid Weaver request ID"
+        );
+        if store.contains(id)? {
+            let request = store.document(id)?.request;
+            let input: Value = serde_json::from_str(&request.prompt)?;
+            ensure!(
+                input["direction"].as_str() == Some(direction)
+                    && input.get("document").and_then(Value::as_str) == markdown,
+                "Weaver request ID belongs to different input"
+            );
+            return Ok(request);
+        }
+    }
+    let mut request = agent::request(direction, markdown, cwd)?;
+    if let Some(id) = id {
+        request.id = id.into();
+        request.requester.id = id.into();
+    }
+    store.create(&request)?;
+    Ok(request)
 }
 
 pub async fn resume(root: &Path, id: &str) -> Result<Value> {
@@ -73,14 +135,18 @@ async fn execute(
     request: &nucleus_core::JobRequestV1,
 ) -> Result<Value> {
     let client = NucleusClient::for_current_user()?;
-    agent::run(&client, store, config, request)
-        .await
-        .with_context(|| {
-            format!(
-                "document {} retained; use weaver resume {}",
-                request.id, request.id
-            )
-        })?;
+    let result = agent::run(&client, store, config, request).await;
+    if let Err(error) = &result
+        && let Some(outcome) = nucleus_core::quota_condition(error.as_ref())
+    {
+        return Ok(json!({"id":request.id,"outcome":outcome,"detail":error.to_string()}));
+    }
+    result.with_context(|| {
+        format!(
+            "document {} retained; use weaver resume {}",
+            request.id, request.id
+        )
+    })?;
     store.document(request.id.as_str())?.view()
 }
 
@@ -127,4 +193,46 @@ pub async fn doctor(root: &Path) -> Result<Value> {
     Config::read(root)?.reader().start()?;
     agent::readiness(&NucleusClient::for_current_user()?, owner.as_deref(), false).await?;
     Ok(json!({"ready":true,"schema_version":1}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caller_identity_replays_exact_request_and_rejects_changed_input() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let store = Store::initialize(root.path())?;
+        let first = assignment(
+            &store,
+            "bullet points",
+            None,
+            root.path(),
+            Some("platter-cell"),
+        )?;
+        let replay = assignment(
+            &store,
+            "bullet points",
+            None,
+            root.path(),
+            Some("platter-cell"),
+        )?;
+        assert_eq!(first, replay);
+        assert!(assignment(&store, "different", None, root.path(), Some("platter-cell")).is_err());
+        assert!(
+            assignment(
+                &store,
+                "bullet points",
+                Some("revision"),
+                root.path(),
+                Some("platter-cell")
+            )
+            .is_err()
+        );
+        assert_eq!(
+            store.list(10)?["documents"].as_array().map(Vec::len),
+            Some(1)
+        );
+        Ok(())
+    }
 }

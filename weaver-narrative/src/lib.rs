@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod agent;
+pub mod api;
 pub mod installation;
 pub mod operations;
 pub mod store;

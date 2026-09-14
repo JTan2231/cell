@@ -45,6 +45,10 @@ enum Command {
         #[arg(long)]
         resume: PathBuf,
     },
+    /// Import fixed Cell/Wrought presentation for future runs; change only Projects.
+    ImportProjectsTemplate {
+        path: PathBuf,
+    },
     Prepare {
         job_id: String,
         /// Restart incomplete preparation with new source capture and no prior model context.
@@ -129,7 +133,11 @@ async fn main() {
         return;
     }
     if let Err(error) = run().await {
-        if let Some(code) = nucleus_core::quota_condition(error.as_ref()) {
+        if let Some(code) = nucleus_core::quota_condition(error.as_ref()).or_else(|| {
+            error
+                .downcast_ref::<platter::projects::Deferred>()
+                .map(|_| "quota_deferred")
+        }) {
             println!("{}", serde_json::json!({"ok":true,"outcome":code}));
             return;
         }
@@ -204,6 +212,10 @@ async fn run() -> Result<()> {
         Command::Init { resume } => {
             workflow::initialize(&root, &resume)?;
             println!("initialized: {}", root.display());
+        }
+        Command::ImportProjectsTemplate { path } => {
+            workflow::import_projects_template(&root, &path)?;
+            println!("fixed projects template imported");
         }
         Command::Prepare { job_id, fresh } => {
             let result = if fresh {

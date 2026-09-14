@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 11,
+  "contract_version": 12,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -18,7 +18,7 @@
     "The request is job discovery, source-library editing, employer outreach or application submission.",
     "The caller expects stored delivery settings or installation alone to enable a schedule, or wants a change to fixed resume content."
   ],
-  "outcome": "Stored brief, Jackson and projects content, private source notes and validated resume. Preview freezes one through three ready packets. Authorized send records provider acceptance.",
+  "outcome": "Stored brief, Jackson and Weaver project bullets, fixed presentation and validated one-page resume. Preview freezes ready packets; authorized send records provider acceptance.",
   "interfaces": [
     {
       "label": "Initialize from original resume",
@@ -83,11 +83,15 @@
     {
       "label": "Print the selected release daily failure policy without activation",
       "invocation": "platter schedule-definition"
+    },
+    {
+      "label": "Import fixed project template for future runs",
+      "invocation": "platter import-projects-template /absolute/private/resume.tex"
     }
   ],
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Preparation captures Cast posting and Vita career inputs, runs one constrained Nucleus draft job and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also read Krisis through the local Annals CLI.",
+    "Preparation captures posting, career data, template and exact project directions. It requests Cell and Wrought Markdown from Weaver, retains the returned documents, then runs one constrained Platter brief/Jackson draft. Final content and rendered bytes commit together.",
     "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
@@ -99,7 +103,7 @@
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
-    "The draft agent writes the brief, Jackson bullets and complete projects content, and checks its own work against the editorial policy. Platter owns mechanical acceptance. All other template bytes stay fixed. Historical runs retain their original workflow and authoring boundary.",
+    "Weaver authors project bullets. Platter owns fixed presentation, Markdown conversion, at most three bullets per project and mechanical acceptance. Its draft agent writes only brief and Jackson; its toolset cannot submit project fields. Historical runs retain their original boundaries.",
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
@@ -110,7 +114,7 @@
     "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition."
   ],
   "failure_and_recovery": [
-    "A consistent schema-five SQLite backup contains retained Platter history. Schema-one through schema-four state require maintained migration. Project sources are external current local reads and are not included in the backup.",
+    "A consistent schema-six backup includes retained templates, Weaver directions, IDs, documents and packet history. Schemas one through five require maintained migration. Weaver source reads and Nucleus records remain provider-owned.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. Posting retrieval failures are skipped before freeze; other preparation/export failures preserve retained progress and stop before send.",
@@ -119,11 +123,12 @@
     "prepare-daily and run-daily mark jobs ineligible when posting retrieval fails, including HTTP errors, timeouts and unsupported or incomplete text, then continue with other candidates. If final freshness excludes the entire ready pool, run-daily prepares other candidates before previewing again. Declined opportunities and an exhausted pool remain expected outcomes. Other preparation failures stop the run. Single-job preparation reports retrieval failure without selecting another job. The eligibility command explicitly enables an excluded job again. Clockwork halts remain intact until explicit continuation.",
     "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
     "Draft jobs reuse their exact retained requests and accepted results without rendering accepted content again. Historical stages retain their original continuation path. A failed job without an accepted result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
-    "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding."
+    "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding.",
+    "Weaver quota deferral retains assignments without a new attempt. Terminal failure remains an error even when prose is saved. Exact recorded Weaver IDs participate in deadlines and maintenance. One captured shortening round is permitted for project layout rejection; renderer infrastructure failure stops immediately."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
-    "Nucleus and the model receive captured career material and selected project and Krisis text from direct research. Nucleus can retain tool output. Authorized sends disclose the brief and resume to the fixed personal recipient via Email, Resend and Gmail."
+    "Nucleus and the model receive career and posting inputs for Platter, and selected Annals decisions for Weaver. Platter retains Weaver Markdown, not its source reads. Authorized sends disclose only their frozen message and attachments through Email."
   ],
   "dependencies": [
     {
@@ -155,6 +160,11 @@
       "id": "annals.corpus.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "weaver.narrative.write",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -172,7 +182,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-five state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Preparation requires initialized schema-six state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin. New runs require a fixed Cell/Wrought template with both bullet marker pairs and a compatible configured Weaver reader."
       },
       {
         "status": "declared",
@@ -198,7 +208,7 @@
       },
       {
         "status": "declared",
-        "statement": "Resources are captured career entries and the Annals CLI with /Users/joey/Library/Application Support/Annals/decisions/config.toml. New templates require one Projects or Side Projects section, or explicit PLATTER PROJECTS BEGIN/END comments bounding content separately from Jackson."
+        "statement": "Each run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
       },
       {
         "status": "declared",
@@ -234,11 +244,11 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New preparations capture generation=single_draft_v1. One draft job assesses pursuit, writes the brief and resume, and reviews its own content against the captured editorial policy. submit_draft carries both outputs. Mechanical validation precedes one atomic artifact commit; content and layout rejection returns feedback to the same job. New runs produce no intermediate draft or review artifacts. Captures without generation keep their original brief/resume or brief/draft/review/revision workflow, retained requests and artifacts."
+        "statement": "New runs use weaver_projects_v1. Sequential Weaver calls precede the Platter draft. Retained project Markdown becomes plain bullets without editorial rewriting. At most one shortening round precedes the draft. The draft tool submits only brief and Jackson; Platter adds project_bullets and atomically retains brief, assembled content, LaTeX and PDF. Historical generations retain their prior workflows."
       },
       {
         "status": "declared",
-        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The model authors Jackson bullets and ordered Cell/Wrought entries with descriptions, optional supported dates, bullets and private source notes. Public project URLs are fixed. Identity, other experience, education, skills and layout remain fixed."
+        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The model authors Jackson only. The fixed template owns all project presentation; Weaver supplies at most three bullets per project."
       },
       {
         "status": "declared",
@@ -282,13 +292,13 @@
       },
       {
         "status": "declared",
-        "statement": "Project research reads the current Krisis Annals library. Platter retains resource instructions and source notes, not source copies or corpus revisions. Stages and resumed research may see changes. Citations are navigation hints; source access and claim support are not guaranteed by their presence."
+        "statement": "Weaver selects current accepted Annals decisions through its own reader. Platter retains exact returned Markdown and request identities. Neither complete historical coverage nor factual certification is promised. Earlier packet artifacts remain unchanged."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "New jobs use Nucleus read-only workspace access with local execution for research at the hardcoded Cell/Wrought paths and supported Annals commands. Captured career reads and submit tools remain requester-owned. Web search stays disabled; source changes, service operation and messaging are outside the assignment. Historical jobs preserve their original policy."
+        "statement": "New Platter jobs have captured career reads and draft submission tools, with workspace, local execution and web disabled. Weaver owns source access. Historical Platter jobs keep their captured access policy."
       }
     ],
     "lifecycle_and_consistency": [
@@ -324,7 +334,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "No candidate or token budget caps daily preparation. Model gpt-5.6-sol with max effort runs one draft job. Individual execution, network and rendering safety timeouts remain. Full posting adapters and one-page original-template rendering impose explicit input limits; runtime allowance and provider limits still apply."
+        "statement": "No candidate or token budget caps daily preparation. Model gpt-5.6-sol with max effort runs one draft job. Individual execution, network and rendering safety timeouts remain. Full posting adapters and one-page original-template rendering impose explicit input limits; runtime allowance and provider limits still apply. Weaver calls are sequential; each project has one through three bullets of at most 1000 characters. Short form is requested editorially and the one-page check remains mandatory."
       },
       {
         "status": "unspecified",
@@ -342,11 +352,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
+        "statement": "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
       },
       {
         "status": "unspecified",
-        "statement": "No arbitrary incompatible rollback, future template replacement, model support interval or deprecation window is promised."
+        "statement": "No arbitrary incompatible rollback, model support interval or deprecation window is promised. Projects-only template import is supported for future captures."
       }
     ],
     "reliances": [
@@ -406,7 +416,7 @@
       },
       {
         "status": "declared",
-        "statement": "Agents use Annals concept search, evidence and complete retained-work reads for Krisis decision context.",
+        "statement": "Historical project-authoring agents use Annals concept search, evidence and retained works under their frozen instructions.",
         "target": "annals",
         "kind": "data",
         "contract": "annals.corpus.explore"
@@ -416,6 +426,13 @@
         "statement": "Historical preparations that retain repository resource instructions depend on those local directories being readable by the selected Nucleus harness. Platter provides no repository snapshots or availability guarantee.",
         "target": "local-projects",
         "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Weaver authors private project Markdown through its typed installed CLI client, with caller-supplied identity and exact-request recovery. It owns its Annals reads and Nucleus jobs.",
+        "target": "weaver",
+        "kind": "control",
+        "contract": "weaver.narrative.write"
       }
     ]
   },

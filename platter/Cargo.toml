@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 chancery-usage.workspace = true
 anyhow = "1"
+weaver = { path = "../weaver-narrative" }
+pulldown-cmark = "0.13"
 annals = { path = "../annals/crates/annals" }
 base64.workspace = true
 cast = { path = "../cast" }

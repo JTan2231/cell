@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -73,9 +73,9 @@
   "effects": [
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
-    "An explicit transaction imports legacy records and files into schema five, writes a complete schema-five backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-four migration advances the version without changing captured inputs, exact requests or artifact bytes.",
+    "An explicit transaction imports legacy records and files into schema six, writes a complete schema-six backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-five migration advances the version without changing captured inputs, exact requests or artifact bytes.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
-    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -88,8 +88,8 @@
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
-    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema five plus originals and cleanup recovery metadata. Schema-two through schema-four records retain their legacy workflow after the version advance.",
-    "Older binaries cannot operate schema five. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
+    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema six plus originals and cleanup recovery metadata. Schema-two through schema-five records retain their legacy workflow after the version advance.",
+    "Older binaries cannot operate schema six. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
     "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
     "The daily runner marks jobs ineligible when posting retrieval fails and continues with other candidates. Other preparation errors stop the run before sending. Declined opportunities and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
@@ -127,6 +127,11 @@
       "id": "annals.corpus.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "weaver.narrative.write",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -149,6 +154,10 @@
       {
         "status": "declared",
         "statement": "A state backup requires the exact deployment hold and quiescence. Unsupported state or ambiguous default roots stop installation; initialization is a separate explicit runtime operation."
+      },
+      {
+        "status": "declared",
+        "statement": "Weaver must support authoring contract 2 and caller request identity before the Platter candidate is admitted. Initialized readiness checks Weaver doctor without writing. Maintenance includes exactly the Weaver jobs recorded in Platter runs."
       }
     ],
     "inputs": [
@@ -158,7 +167,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment accepts resume and enabled only. An initialized original template cannot be replaced. With no enabled setting, absence and disabled intent remain. config returns retained settings without dependency reads or domain work."
+        "statement": "Deployment accepts resume for missing initialization, projects_template for a projects-only immutable template import, and enabled for explicit activation intent. Other template bytes and existing run references remain fixed. config exposes retained Weaver, Cast and Email executable pins."
       },
       {
         "status": "declared",
@@ -168,7 +177,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-five SQLite backup with a resumable legacy cleanup manifest."
+        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-six SQLite backup with a resumable legacy cleanup manifest."
       }
     ],
     "data_semantics": [
@@ -206,7 +215,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import is transactional. A complete schema-five backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
+        "statement": "Schema-one import is transactional. A complete schema-six backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
       },
       {
         "status": "declared",
@@ -214,7 +223,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
       }
     ],
     "operational_limits": [
@@ -230,7 +239,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
+        "statement": "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
       }
     ],
     "reliances": [
@@ -265,6 +274,13 @@
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Weaver authors private project Markdown through its typed installed CLI client, with caller-supplied identity and exact-request recovery. It owns its Annals reads and Nucleus jobs.",
+        "target": "weaver",
+        "kind": "control",
+        "contract": "weaver.narrative.write"
       }
     ]
   },

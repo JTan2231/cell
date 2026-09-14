@@ -22,8 +22,10 @@ const LEGACY_TOOL_NAMESPACE: &str = "job-packets";
 pub(crate) const RESUME_EDITORIAL: &str = include_str!("../prompts/resume-editorial.md");
 const RESUME_WRITER: &str = include_str!("../prompts/resume-writer.md");
 const RESUME_REVIEWER: &str = include_str!("../prompts/resume-reviewer.md");
-pub(crate) const PROJECT_RESOURCES: &str = include_str!("../prompts/project-resources.md");
+#[cfg(test)]
+const PROJECT_RESOURCES: &str = include_str!("../prompts/project-resources.md");
 const DRAFT: &str = include_str!("../prompts/draft.md");
+const WEAVER_DRAFT: &str = include_str!("../prompts/weaver-draft.md");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -51,6 +53,8 @@ pub struct StageInputs {
     pub editorial_review: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_resources: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_projects: Option<crate::projects::ProjectBullets>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +181,8 @@ pub struct Resume {
     /// None retains the historical Jackson-only payload and rendering boundary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub projects: Option<Vec<Project>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_bullets: Option<crate::projects::ProjectBullets>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -396,7 +402,7 @@ fn validate_handoff(store: &Store, stage: Stage, inputs: &StageInputs) -> Result
     match stage {
         Stage::Draft => ensure!(
             inputs.editorial_policy.is_some()
-                && inputs.project_resources.is_some()
+                && (inputs.project_resources.is_some() || inputs.fixed_projects.is_some())
                 && inputs.brief.is_none()
                 && inputs.proposed_draft.is_none()
                 && inputs.editorial_review.is_none(),
@@ -495,6 +501,28 @@ fn validate_inputs(inputs: &StageInputs) -> Result<()> {
 
 fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRequestV1> {
     let mut request = build_legacy_request(stage, inputs, cwd)?;
+    if inputs.fixed_projects.is_some() {
+        ensure!(
+            stage == Stage::Draft && inputs.project_resources.is_none(),
+            "fixed projects require the Weaver draft workflow"
+        );
+        request.invocation.toolset = Some(ToolsetRef {
+            provider: TOOL_NAMESPACE.into(),
+            name: "draft".into(),
+            version: 2,
+        });
+        request.instructions = format!(
+            "{WEAVER_DRAFT}\n\n{}",
+            inputs
+                .editorial_policy
+                .as_deref()
+                .context("editorial policy missing")?
+        );
+        let mut prompt: Value = serde_json::from_str(&request.prompt)?;
+        prompt["fixed_projects"] = serde_json::to_value(&inputs.fixed_projects)?;
+        request.prompt = prompt.to_string();
+        return Ok(request);
+    }
     let Some(resources) = &inputs.project_resources else {
         return Ok(request);
     };
@@ -807,6 +835,7 @@ fn retained_tool_namespace(state: &StageState) -> Result<&'static str> {
                 || (namespace == TOOL_NAMESPACE
                     && state.stage == Stage::Brief
                     && toolset.version == 2)
+                || fixed_project_tools(state)
                 || project_tools(state)),
         "stage request has a conflicting retained toolset identity"
     );
@@ -821,6 +850,13 @@ fn sectioned_brief(state: &StageState) -> bool {
             .toolset
             .as_ref()
             .is_some_and(|toolset| toolset.version >= 2)
+}
+
+fn fixed_project_tools(state: &StageState) -> bool {
+    state.stage == Stage::Draft
+        && state.request.invocation.toolset.as_ref().is_some_and(|t| {
+            t.provider.as_str() == TOOL_NAMESPACE && t.name.as_str() == "draft" && t.version == 2
+        })
 }
 
 fn project_tools(state: &StageState) -> bool {
@@ -844,6 +880,9 @@ fn project_tools(state: &StageState) -> bool {
 
 fn call_schema_id(state: &StageState, name: &str) -> Result<String> {
     let namespace = retained_tool_namespace(state)?;
+    if fixed_project_tools(state) && name == "submit_draft" {
+        return Ok("platter.submit-draft.arguments.v2".into());
+    }
     if project_tools(state) && name == "submit_resume" {
         return Ok(format!("{namespace}.submit-resume.arguments.v2"));
     }
@@ -969,10 +1008,38 @@ fn project_tool_definitions(stage: Stage) -> Result<ToolsetDefinitionsV1> {
     Ok(definitions)
 }
 
+fn fixed_draft_definitions() -> Result<ToolsetDefinitionsV1> {
+    let mut definitions = tool_definitions(Stage::Draft, TOOL_NAMESPACE, false)?;
+    let jackson = tool_definitions(Stage::Resume, TOOL_NAMESPACE, false)?;
+    let mut schema: Value = serde_json::from_str(
+        jackson
+            .tools
+            .iter()
+            .find(|t| t.name == "submit_resume")
+            .context("Jackson schema missing")?
+            .input_schema
+            .get(),
+    )?;
+    schema["type"] = json!(["object", "null"]);
+    let tool = definitions
+        .tools
+        .iter_mut()
+        .find(|t| t.name == "submit_draft")
+        .context("draft tool missing")?;
+    let mut combined: Value = serde_json::from_str(tool.input_schema.get())?;
+    combined["properties"]["resume"] = schema;
+    tool.input_schema = to_raw_value(&combined)?;
+    tool.input_schema_id = "platter.submit-draft.arguments.v2".into();
+    tool.description = "Submit the brief and Jackson bullets. The requester inserts the fixed Weaver project bullets. A declined opportunity has no resume.".into();
+    Ok(definitions)
+}
+
 async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()> {
     let namespace = retained_tool_namespace(state)?;
     let sectioned = sectioned_brief(state);
-    let definitions = if project_tools(state) {
+    let definitions = if fixed_project_tools(state) {
+        fixed_draft_definitions()?
+    } else if project_tools(state) {
         project_tool_definitions(state.stage)?
     } else {
         tool_definitions(state.stage, namespace, sectioned)?
@@ -984,6 +1051,7 @@ async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()
                 &tool.name,
                 if (sectioned && tool.name == "submit_brief")
                     || (project_tools(state) && tool.name == "submit_resume")
+                    || (fixed_project_tools(state) && tool.name == "submit_draft")
                 {
                     "2"
                 } else {
@@ -1157,6 +1225,11 @@ fn execute_tool(
                 "resume submission not allowed in this stage"
             );
             let resume: Resume = serde_json::from_str(call.arguments.get())?;
+            let raw: Value = serde_json::from_str(call.arguments.get())?;
+            ensure!(
+                raw.get("project_bullets").is_none(),
+                "project bullets are requester-owned"
+            );
             if !project_tools(state) {
                 let submitted: Value = serde_json::from_str(call.arguments.get())?;
                 ensure!(
@@ -1204,7 +1277,31 @@ fn execute_draft(
         state.stage == Stage::Draft,
         "draft submission not allowed in this stage"
     );
-    let submission: DraftSubmission = serde_json::from_str(call.arguments.get())?;
+    let mut submission: DraftSubmission = serde_json::from_str(call.arguments.get())?;
+    if let Some(resume) = &submission.resume {
+        let raw: Value = serde_json::from_str(call.arguments.get())?;
+        ensure!(
+            raw["resume"].get("project_bullets").is_none(),
+            "project bullets are requester-owned"
+        );
+        if fixed_project_tools(state) {
+            ensure!(
+                raw["resume"].get("projects").is_none() && resume.projects.is_none(),
+                "project fields are not writable"
+            );
+        }
+    }
+    if fixed_project_tools(state)
+        && let Some(resume) = &mut submission.resume
+    {
+        resume.project_bullets = Some(
+            state
+                .inputs
+                .fixed_projects
+                .clone()
+                .context("fixed project input missing")?,
+        );
+    }
     ensure!(
         submission.brief.pursue == submission.resume.is_some(),
         "pursued drafts require a resume; declined drafts must not contain one"
@@ -1223,7 +1320,13 @@ fn execute_draft(
     }
     let brief = submission.brief.into_brief()?;
     if let Some(resume) = &submission.resume {
-        ensure!(resume.projects.is_some(), "draft resume requires projects");
+        ensure!(
+            resume.projects.is_some() != fixed_project_tools(state),
+            "draft project boundary differs"
+        );
+        if let Some(bullets) = &resume.project_bullets {
+            bullets.validate()?;
+        }
         validate_resume(resume, &state.inputs.career_entries)?;
     }
     let result = StageResult::Draft(Draft {
@@ -1602,6 +1705,7 @@ mod tests {
         );
         let mut resume = Resume {
             projects: None,
+            project_bullets: None,
             jackson_bullets: vec!["Supported work".into()],
             evidence: vec![],
         };
@@ -1706,6 +1810,7 @@ mod tests {
     fn candidate() -> Resume {
         Resume {
             projects: None,
+            project_bullets: None,
             jackson_bullets: vec![
                 "Built a diagnostic service that made failures easier to investigate".into(),
             ],
@@ -2755,5 +2860,54 @@ mod tests {
                 .is_error
         );
         assert!(state.accepted.is_some());
+    }
+    #[test]
+    fn weaver_draft_has_no_project_write_authority() {
+        let root = tempfile::tempdir().unwrap();
+        let store = fixture_store(root.path());
+        let mut input = writing_inputs();
+        input.brief = None;
+        let fixed = crate::projects::ProjectBullets {
+            cell: vec!["Built Cell".into()],
+            wrought: vec!["Built Wrought".into()],
+        };
+        input.fixed_projects = Some(fixed.clone());
+        let mut state = load_or_create(&store, Stage::Draft, input).unwrap();
+        assert!(fixed_project_tools(&state));
+        assert!(!state.request.invocation.builtin_tools.local_execution);
+        assert_eq!(
+            state.request.invocation.workspace_access,
+            WorkspaceAccess::None
+        );
+        let definitions = fixed_draft_definitions().unwrap();
+        let tool = definitions
+            .tools
+            .iter()
+            .find(|t| t.name == "submit_draft")
+            .unwrap();
+        let schema: Value = serde_json::from_str(tool.input_schema.get()).unwrap();
+        assert!(
+            schema["properties"]["resume"]["properties"]
+                .get("projects")
+                .is_none()
+        );
+        let mut payload = single_draft_payload();
+        payload["resume"]
+            .as_object_mut()
+            .unwrap()
+            .remove("projects");
+        let validate = |result: &StageResult| retain_fixture_draft(&store, result);
+        let mut invalid = payload.clone();
+        invalid["resume"]["projects"] = json!(null);
+        let bad_call = call(&state, "bad", "submit_draft", &invalid);
+        assert!(execute_draft(&mut state, &bad_call, Some(&validate)).is_err());
+        let submission = call(&state, "good", "submit_draft", &payload);
+        execute_draft(&mut state, &submission, Some(&validate)).unwrap();
+        let retained: Resume = store
+            .content("packet-1", "resume-content")
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained.project_bullets, Some(fixed));
+        assert!(retained.projects.is_none());
     }
 }

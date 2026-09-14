@@ -5,6 +5,7 @@ pub mod agent;
 pub mod installation;
 pub mod maintenance;
 pub mod migration;
+pub mod projects;
 pub mod readiness;
 pub mod resume;
 pub mod source;
@@ -53,6 +54,12 @@ pub struct Config {
     pub cast_executable: PathBuf,
     pub email_executable: PathBuf,
     pub original_resume: PathBuf,
+    #[serde(default = "default_weaver")]
+    pub weaver_executable: PathBuf,
+}
+
+fn default_weaver() -> PathBuf {
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/bin/weaver")
 }
 
 impl Config {
@@ -67,6 +74,7 @@ impl Config {
             cast_executable: bin.join("cast"),
             email_executable: bin.join("email"),
             original_resume,
+            weaver_executable: bin.join("weaver"),
         })
     }
 
@@ -84,6 +92,7 @@ impl Config {
             &self.cast_executable,
             &self.email_executable,
             &self.original_resume,
+            &self.weaver_executable,
         ] {
             anyhow::ensure!(path.is_absolute(), "configured paths must be absolute");
         }

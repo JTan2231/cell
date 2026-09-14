@@ -32,3 +32,7 @@ Implementation authority alone does not authorize Git publication, deployment,
 state deletion, source mutation, email, or a new attempt at failed work. Follow
 the user's authorized endpoint and the shared deployment playbook. Unknown
 state or unsupported providers remain errors; do not add execution fallbacks.
+
+Rust consumers use `weaver::api::Client` and its provider-owned views. Preserve
+caller-supplied ID replay without reconstructing the retained Nucleus request
+from newer prompts. The direction and input Markdown identify conflicts.

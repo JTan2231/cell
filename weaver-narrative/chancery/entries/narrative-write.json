@@ -1,6 +1,6 @@
 {
   "id": "weaver.narrative.write",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -33,6 +33,14 @@
     {
       "label": "Read",
       "invocation": "weaver show DOCUMENT_ID"
+    },
+    {
+      "label": "Write with retained caller identity",
+      "invocation": "weaver write --id REQUEST_ID DIRECTION"
+    },
+    {
+      "label": "Revise with retained caller identity",
+      "invocation": "weaver revise DOCUMENT_ID --request-id REQUEST_ID DIRECTION"
     }
   ],
   "effects": [
@@ -46,7 +54,8 @@
     "Markdown saved in Weaver is domain success. A terminal job without a submitted document is an error. Later runtime failure preserves saved prose."
   ],
   "failure_and_recovery": [
-    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds.",
+    "A caller can persist its ID before writing. Repeating matching input resumes or returns that document without a replacement attempt, even after response loss. Different input is refused. Dropping the CLI process does not cancel a Nucleus job; cancellation names the exact document/job ID."
   ],
   "privacy": [
     "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
@@ -154,12 +163,20 @@
       {
         "status": "declared",
         "statement": "A free-form direction, or an existing document and another free-form direction. Audience, voice, form, and length are inferred by the agent, not application fields."
+      },
+      {
+        "status": "declared",
+        "statement": "Optional caller IDs contain one through 120 ASCII letters, digits, underscores or hyphens. A repeated ID must have identical direction and input Markdown; it reuses the saved exact invocation. Calls without an ID generate one."
       }
     ],
     "outputs": [
       {
         "status": "declared",
         "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+      },
+      {
+        "status": "declared",
+        "statement": "weaver::api::Client owns the installed CLI JSON views and write, revise, show, resume and doctor transport. Quota deferral returns id, outcome=quota_deferred and detail. A process error can coexist with saved Markdown; show reads that exact document."
       }
     ]
   },

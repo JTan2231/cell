@@ -23,7 +23,7 @@ When installation is authorized and the changes are committed on local main:
 
 `plan` is read-only. A deployment selects its exact local `main` commit; it
 ignores uncommitted changes and does not publish a release, commit, tag or
-push. When selected together, Cast, Annals, Email and Nucleus install before
+push. When selected together, Cast, Annals, Email, Nucleus and Weaver install before
 Platter. Maintenance includes Nucleus and its registered requesters, whose
 installed maintenance interfaces must already be compatible. Unselected
 products are not upgraded to satisfy a missing prerequisite.
@@ -48,7 +48,7 @@ Altered releases, foreign selectors or changed candidate identities stop
 publication. Product and catalog writer locks protect atomic selection and
 file compensation.
 
-All durable runtime content and maintenance holds live in schema-five
+All durable runtime content and maintenance holds live in schema-six
 `packets.sqlite3` at the canonical root. Fresh state uses
 `~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
 in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
@@ -93,12 +93,12 @@ while present, so a coordinated transition accounts for old binaries already
 running. Empty predecessor gate files are retired on a drained final release.
 
 Maintenance observes all pages of nonterminal jobs under both `platter` and
-`job-packets`. Drain cancels orphaned matching work only once local admissions
+`job-packets`, plus the exact Weaver job IDs retained in packet executions. Drain cancels orphaned matching work only once local admissions
 and the predecessor runner have settled. It creates no replacement jobs or
 synthetic domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
-Migration is an explicit one-way schema-one to schema-five import. It preserves
+Migration is an explicit one-way schema-one to schema-six import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
 bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
 Legacy reserved/sent jobs become ineligible; their preparation runs remain
@@ -107,30 +107,30 @@ do not determine job eligibility. Any remaining owned runtime files are
 retained as imported artifacts. Duplicate tool history is not imported.
 
 The import commits transactionally before filesystem cleanup. It then writes
-a complete schema-five backup and records a hashed cleanup manifest. A missing,
+a complete schema-six backup and records a hashed cleanup manifest. A missing,
 conflicting or changed source file stops import; backup or cleanup failure
 retains originals and recovery information. Reinvocation resumes cleanup only
 when the chosen backup and remaining source hashes still agree. Only manifest
-files are removed. A backup created here is a schema-five recovery image, not an
+files are removed. A backup created here is a schema-six recovery image, not an
 old-binary rollback image. No production migration is implied by a source edit.
 
-Old binaries cannot operate schema five. Do not restore an old binary against
+Old binaries cannot operate schema six. Do not restore an old binary against
 the migrated database. Recovery after this boundary requires a compatible
 candidate or an explicitly selected complete predecessor database/files backup
 with its matching binary. Installation file compensation does not undo schema
 migration. Preserve holds after unresolved recovery.
 
-Schema-two through schema-four migration advances the database version with the same table layout.
+Schema-two through schema-five migration advances the database version with the same table layout.
 It preserves exact captured inputs, requests and artifact bytes. Existing runs
 keep their legacy workflow. The version guard prevents an older binary from
-resuming a single-draft run through an older workflow. Each
+resuming a Weaver-project run through an older workflow. Each
 migration retains a complete current-schema recovery backup. It does not create
 an old-binary rollback image or start model work. Select a new backup path
 when a retained backup uses a predecessor schema.
 
 ## Readiness and recovery
 
-`doctor` checks retained state, Cast/Annals/Email executable identities, Cast's exact
+`doctor` checks retained state, Cast/Annals/Email/Weaver executable identities, Cast's exact
 job-URL command, Email's byte-payload interface, renderer availability and
 strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
@@ -209,9 +209,11 @@ reconcile an uncertain edition. No deployment step clears this incident.
 
 Cell deployment captures and disables `platter/daily`. During configuration it
 migrates supported state, initializes a missing template from the supplied
-`resume` absolute path, and updates Cast and Email executable references
-to the final installed releases. An initialized template cannot be replaced
-through deployment settings. `platter --json config` reads retained settings
+`resume` absolute path, and updates Cast, Email and Weaver executable references
+to the final installed releases. The `resume` setting cannot replace an initialized template. The optional
+`projects_template` absolute path imports a private template through the same
+projects-only checks as `platter import-projects-template`. Import retains the
+old artifact and changes only the default template for future runs. `platter --json config` reads retained settings
 without loading dependency data or preparing packets. Career reads use the fixed
 `~/.local/bin/annals` command and its named `vita` library. Annals must support
 named libraries and work list/show. Stored `crm_executable` fields are ignored
@@ -234,3 +236,13 @@ time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
 records invocation only, retains no arguments or output, and preserves product
 results after recording errors. `--register-usage` is the separate post-install
 step that adds the program's complete command inventory without product work.
+
+## Weaver integration
+
+Require Weaver authoring contract 2 and its caller-supplied request identity.
+Platter pins the selected installed Weaver executable. Doctor checks that
+`weaver write --help` exposes `--id` and, for initialized Platter state, checks
+Weaver's read-only doctor. This creates no model job. Weaver must be deployed
+before the new Platter release. The shared deployment dependency declaration
+orders the selected releases and maintenance. No unrelated Weaver jobs belong
+to Platter's cancellation or recovery authority.

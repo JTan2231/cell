@@ -104,6 +104,7 @@ impl Fixture {
             timezone: "America/Chicago".into(),
             cast_executable: cast.clone(),
             email_executable: email.clone(),
+            weaver_executable: tools.join("unused-resume.tex"),
             original_resume: tools.join("unused-resume.tex"),
         };
         let store = Store::open(&root)?;
@@ -290,15 +291,20 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
         .ok_or_else(|| anyhow::anyhow!("new packet missing"))?;
     let captured: Value = store.inputs(&new.id)?;
     assert_eq!(captured["regeneration_id"], "regeneration-one");
-    assert_eq!(captured["generation"], "single_draft_v1");
+    assert_eq!(captured["generation"], "weaver_projects_v1");
     assert_eq!(captured["career"][0]["markdown"], "Current career evidence");
     assert_eq!(
         captured["resume_editorial"],
         include_str!("../prompts/resume-editorial.md")
     );
+    assert!(captured["project_resources"].is_null());
     assert_eq!(
-        captured["project_resources"],
-        include_str!("../prompts/project-resources.md")
+        captured["project_directions"],
+        json!([
+            platter::projects::CELL_DIRECTION,
+            platter::projects::WROUGHT_DIRECTION,
+            platter::projects::SHORTEN_DIRECTION
+        ])
     );
     assert!(store.run_artifact(&new.id, "brief")?.is_none());
     assert!(store.execution(&new.id, "brief")?.is_none());

@@ -25,8 +25,8 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
-    } else if matches!(store.version()?, 2..=4) {
-        // The table layout is unchanged. Older binaries must refuse single-draft runs.
+    } else if matches!(store.version()?, 2..=5) {
+        // The table layout is unchanged. Older binaries must refuse Weaver runs.
         // Existing captured inputs and exact requests keep their legacy meanings.
         let tx = store.connection.unchecked_transaction()?;
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
@@ -483,7 +483,7 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .context("read snapshot source schema")?;
     ensure!(
-        matches!(version, 1 | 2 | 3 | 4 | SCHEMA_VERSION),
+        matches!(version, 1 | 2 | 3 | 4 | 5 | SCHEMA_VERSION),
         "unsupported source schema"
     );
     crate::private_dir(destination)?;

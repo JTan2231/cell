@@ -90,6 +90,7 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
         ("cast", &settings.cast_executable),
         ("annals", &annals),
         ("email", &settings.email_executable),
+        ("weaver", &settings.weaver_executable),
     ] {
         let version = probe(path, &["--version"], name)?;
         ensure!(
@@ -112,6 +113,15 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
             .any(|word| word == "--payload-stdin"),
         "Email must support --payload-stdin before Platter installation; deploy the byte-payload Email release first"
     );
+    let weaver_help = probe(
+        &settings.weaver_executable,
+        &["write", "--help"],
+        "Weaver caller identity",
+    )?;
+    ensure!(
+        weaver_help.split_whitespace().any(|word| word == "--id"),
+        "Weaver must support caller request IDs"
+    );
     let tectonic = renderer("tectonic")?;
     let python = renderer("python3")?;
     probe(&tectonic, &["--version"], "Tectonic")?;
@@ -127,6 +137,12 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
 
 pub async fn doctor(root: &Path) -> Result<Value> {
     let local = local_dependencies(root)?;
+    if local["initialized"] == true {
+        let client = weaver::api::Client::new(crate::workflow::config(root)?.weaver_executable)?;
+        tokio::time::timeout(Duration::from_secs(30), client.doctor())
+            .await
+            .context("Weaver readiness timed out")??;
+    }
     let client = NucleusClient::for_current_user()?;
     let health = tokio::time::timeout(Duration::from_secs(20), async {
         if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {

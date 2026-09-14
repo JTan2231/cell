@@ -7,7 +7,8 @@
     "annals",
     "email",
     "nucleus",
-    "clockwork"
+    "clockwork",
+    "weaver"
   ],
   "maintenance_products": [],
   "description": "Migrate and configure Platter under held admission; update its disabled daily definition and restore saved intent.",
@@ -33,6 +34,10 @@
     "annals": {
       "minimum": "0.20.4",
       "before": "0.21.0"
+    },
+    "weaver": {
+      "minimum": "0.1.1",
+      "before": "0.2.0"
     }
   },
   "activation_bindings": [

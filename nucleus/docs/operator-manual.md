@@ -156,18 +156,13 @@ works; Platter uses their full text as its career entries. Platter does not
 call CRM or store a configurable career-source executable. See the
 [Vita guide](/Users/joey/rust/cell/platter/chancery/manuals/vita.md).
 
-Platter runs one draft job for pursuit assessment, brief and resume writing,
-and self-review. It validates the combined submission and atomically retains
-the accepted brief, resume content, LaTeX and PDF. Mechanical rejection allows
-correction within the same job. Nucleus owns execution; Platter owns acceptance.
-Schema-five state preserves earlier preparations and their original workflows,
-and prevents older binaries from misreading single-draft runs.
-New Platter jobs use read-only workspace
-access and local execution to research the hardcoded Cell and Wrought paths
-and the Krisis library through Annals. Web search remains disabled. The source
-instructions and accepted outputs are retained; project sources are current
-local reads without snapshots. The writer owns Jackson and projects content;
-Platter owns validation, rendering and delivery.
+Platter obtains Cell and Wrought bullets from Weaver through its typed local
+client, then runs its brief/Jackson draft job. Platter owns request correlation,
+fixed resume presentation, mechanical acceptance and retained packet bytes.
+Weaver owns project authoring and Annals reads. Each provider retains its exact
+Nucleus requests. Platter cancellation and drain include its recorded Weaver job
+IDs without taking authority over unrelated Weaver work. Historical Platter
+runs keep their captured workflow and toolset.
 
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,

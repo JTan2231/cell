@@ -249,7 +249,7 @@ fn runner(root: &Path) -> Result<Option<File>> {
     Ok(Some(file))
 }
 
-async fn unfinished(client: &NucleusClient) -> Result<Vec<JobId>> {
+async fn unfinished(client: &NucleusClient, root: &Path) -> Result<Vec<JobId>> {
     let mut jobs = Vec::new();
     for program in ["platter", "job-packets"] {
         let mut query = ListJobsQueryV1 {
@@ -280,6 +280,20 @@ async fn unfinished(client: &NucleusClient) -> Result<Vec<JobId>> {
             query.after = Some(next);
         }
     }
+    if root.join(crate::store::DATABASE).exists() {
+        let store = Store::control(root)?;
+        if store.version()? >= 5 {
+            for run in store.list()? {
+                for id in crate::projects::job_ids(&store, &run.id)? {
+                    match client.get_job(&id).await {
+                        Ok(job) if !job.summary.state.is_terminal() => jobs.push(id),
+                        Ok(_) | Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
+                        Err(error) => return Err(error.into()),
+                    }
+                }
+            }
+        }
+    }
     Ok(jobs)
 }
 
@@ -296,7 +310,7 @@ async fn status_inner(home: &Path, root: &Path, client: &NucleusClient) -> Resul
         }
         Err(error) => return Err(error),
     };
-    let jobs = unfinished(client).await?;
+    let jobs = unfinished(client, root).await?;
     Ok(Status {
         protocol_version: 1,
         holds: status.holds,
@@ -346,7 +360,7 @@ pub async fn drain(home: &Path, root: &Path) -> Result<Status> {
     };
     if guards.is_some() {
         tokio::time::timeout(Duration::from_secs(30), async {
-            for id in unfinished(&client).await? {
+            for id in unfinished(&client, root).await? {
                 client.cancel_job(&id).await?;
             }
             Ok::<_, anyhow::Error>(())

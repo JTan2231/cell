@@ -27,12 +27,15 @@ pub(crate) struct Captured {
     pub regeneration_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<Generation>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_directions: Option<[String; 3]>,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Generation {
     SingleDraftV1,
+    WeaverProjectsV1,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -43,6 +46,29 @@ pub fn initialize(root: &Path, resume: &Path) -> Result<()> {
     let template = ResumeTemplate::load(resume)?;
     let config = Config::new(resume.canonicalize()?)?;
     Store::open(root)?.initialize(&config, &template)
+}
+
+pub fn import_projects_template(root: &Path, path: &Path) -> Result<()> {
+    ensure!(
+        path.is_absolute(),
+        "projects template path must be absolute"
+    );
+    let candidate = ResumeTemplate::load(path)?;
+    let store = Store::open(root)?;
+    store
+        .template()?
+        .validate_project_template_import(&candidate)?;
+    let tx = store.connection.unchecked_transaction()?;
+    let artifact = store.put_artifact(
+        None,
+        "template",
+        "projects-resume.tex",
+        "application/x-tex",
+        candidate.source.as_bytes(),
+    )?;
+    store.set_setting("template", &artifact.id)?;
+    tx.commit()?;
+    Ok(())
 }
 
 pub fn config(root: &Path) -> Result<Config> {
@@ -134,6 +160,19 @@ async fn ensure_other_runs_settled(
 }
 
 async fn ensure_run_settled(store: &Store, run: &str) -> Result<()> {
+    for id in crate::projects::job_ids(store, run)? {
+        match nucleus_client::NucleusClient::for_current_user()?
+            .get_job(&id)
+            .await
+        {
+            Ok(job) => ensure!(
+                job.summary.state.is_terminal(),
+                "prior Weaver job is still active"
+            ),
+            Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
     for stage in [
         Stage::Draft,
         Stage::Brief,
@@ -252,9 +291,14 @@ async fn capture_packet(
             .setting("template")?
             .context("original resume is not initialized")?,
         resume_editorial: Some(agent::RESUME_EDITORIAL.into()),
-        project_resources: Some(agent::PROJECT_RESOURCES.into()),
+        project_resources: None,
         regeneration_id: regeneration_id.map(str::to_owned),
-        generation: Some(Generation::SingleDraftV1),
+        generation: Some(Generation::WeaverProjectsV1),
+        project_directions: Some([
+            crate::projects::CELL_DIRECTION.into(),
+            crate::projects::WROUGHT_DIRECTION.into(),
+            crate::projects::SHORTEN_DIRECTION.into(),
+        ]),
     };
     store.insert_run(&record, &captured)?;
     Ok(record)
@@ -296,6 +340,23 @@ async fn prepare_record(
         ..StageInputs::default()
     };
     let client = nucleus_client::NucleusClient::for_current_user()?;
+    if matches!(captured.generation, Some(Generation::WeaverProjectsV1)) {
+        inputs.fixed_projects = Some(
+            crate::projects::prepare(
+                store,
+                &record.id,
+                &template,
+                captured
+                    .project_directions
+                    .as_ref()
+                    .context("captured project directions missing")?,
+                deadline,
+            )
+            .await?,
+        );
+        inputs.editorial_policy = captured.resume_editorial;
+        return prepare_draft(&client, store, &record, &template, inputs, deadline).await;
+    }
     if matches!(captured.generation, Some(Generation::SingleDraftV1)) {
         inputs.editorial_policy = captured.resume_editorial;
         return prepare_draft(&client, store, &record, &template, inputs, deadline).await;
@@ -340,11 +401,15 @@ async fn prepare_draft(
                         ),
                     "not enough invocation time remains to render; run remains retained"
                 );
-                template.render_pdf_with_projects(
-                    &resume.jackson_bullets,
-                    resume.projects.as_deref(),
-                    store.root(),
-                )
+                if let Some(projects) = &resume.project_bullets {
+                    template.render_pdf_fixed(Some(&resume.jackson_bullets), projects, store.root())
+                } else {
+                    template.render_pdf_with_projects(
+                        &resume.jackson_bullets,
+                        resume.projects.as_deref(),
+                        store.root(),
+                    )
+                }
             })
             .transpose()?;
         retain_draft(store, &record.id, draft, rendered.as_ref())

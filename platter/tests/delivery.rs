@@ -41,6 +41,7 @@ impl Fixture {
             timezone: "America/Chicago".into(),
             cast_executable: root.join("unused-cast"),
             email_executable: email.clone(),
+            weaver_executable: root.join("unused-original-resume.json"),
             original_resume: root.join("unused-original-resume.json"),
         };
         let mut store = Store::open(root)?;

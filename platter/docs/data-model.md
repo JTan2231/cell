@@ -1,6 +1,6 @@
 # Platter data model
 
-Schema five uses one private SQLite database. The core tables are:
+Schema six uses one private SQLite database. The core tables are:
 
 | Table | Owned information |
 | --- | --- |
@@ -19,15 +19,27 @@ A packet is a run with its content. Brief and resume-content artifacts contain
 the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
-New runs capture `generation=single_draft_v1` and `resume_editorial`. One draft
-job assesses pursuit, writes the brief and resume, and reviews its own work.
-Captures without `generation` retain the original workflow: an editorial policy
-selects brief, draft, review and revision; its absence selects brief/resume.
-New runs also retain `project_resources`, the shared local resource instructions.
-Its absence keeps the Jackson-only submission and access policy. New resume
-content adds ordered `projects` with private source notes. Platter stores no
-project-source copies, commit IDs or Annals revisions. Current local research
-may change between stages or after restart.
+New runs capture `generation=weaver_projects_v1`, the editorial policy and
+three exact directions: Cell, Wrought and optional shortening. Executions retain
+caller-owned Weaver IDs before authoring starts. `weaver-cell`, `weaver-wrought`
+and optional `weaver-cell-short` / `weaver-wrought-short` artifacts store the
+provider document views with exact Markdown. `project-bullets` stores the accepted
+plain-text pair. Each project contains one through three bullets.
+
+The `platter/draft/2` job writes only brief and Jackson content. The requester adds
+`project_bullets` to accepted resume content; the model cannot submit that field.
+The final brief, assembled content, LaTeX and PDF commit together. Project source
+history remains in Weaver and Nucleus. Platter retains no Annals snapshots.
+
+A projects-only template import stores a new immutable artifact and updates the
+default template setting. Captured runs still reference their exact earlier
+artifact. The fixed template includes names, descriptions, technologies, links,
+order and two marked project bullet regions. Rendering changes only these regions
+and Jackson bullets.
+
+Historical `single_draft_v1` captures keep their former combined writer, project
+research and source notes. Captures without `generation` retain their original
+staged workflows. All retained requests and outputs keep their meanings.
 
 Regeneration runs also capture `regeneration_id`. This request identity and the
 captured Cast job identify one ordinary run for retries. Capture commits them
@@ -86,13 +98,13 @@ There is no artifact deletion API. Fixed content and frozen messages remain
 immutable; any future retention policy must preserve every referenced artifact
 and all delivery uncertainty. Explicit exports never become dependencies.
 
-Migration imports schema one transactionally, records a complete schema-five
+Migration imports schema one transactionally, records a complete schema-six
 backup, and removes only hashed legacy files on its durable cleanup manifest.
 Nucleus tool history is not copied. Unknown remaining regular runtime files
 are retained as imported artifacts. The database backup is self-contained for
 Platter history; rendering programs and Nucleus runtime/authentication remain
 separate dependencies.
 
-Schema-two through schema-four migration advances the database version without changing retained
-inputs, requests or artifact bytes. Older binaries refuse schema five. New
+Schema-two through schema-five migration advances the database version without changing retained
+inputs, requests or artifact bytes. Older binaries refuse schema six. New
 stage toolsets coexist with the retained legacy decoders.

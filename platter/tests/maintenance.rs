@@ -188,6 +188,7 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
         timezone: "America/Chicago".into(),
         cast_executable: home.join(".local/bin/cast"),
         email_executable: home.join(".local/bin/email"),
+        weaver_executable: root.join("unused-weaver"),
         original_resume: original,
     };
     Store::open(root)?.initialize(&settings, &template)?;
@@ -406,11 +407,12 @@ fn status_and_local_state_are_read_only_and_backup_preserves_schema() -> Result<
 fn fake_prerequisites(home: &Path) -> Result<(PathBuf, PathBuf)> {
     let bin = home.join(".local/bin");
     fs::create_dir_all(&bin)?;
-    for name in ["cast", "annals", "email", "tectonic", "python3"] {
+    for name in ["cast", "annals", "email", "weaver", "tectonic", "python3"] {
         let path = bin.join(name);
         let body = match name {
             "cast" => "case \"$1:${2-}\" in --version:) echo 'cast 0.4.1';; job:--help) echo 'collect';; *) exit 95;; esac".to_owned(),
             "email" => "case \"$1\" in --version) echo 'email 0.5.2';; --help) echo '--payload-stdin';; *) exit 93;; esac".to_owned(),
+            "weaver" => "case \"$1:${2-}\" in --version:) echo 'weaver 0.1.1';; write:--help) echo '--id';; *) exit 93;; esac".to_owned(),
             "python3" => "test \"$1\" = '-c' || exit 94; echo 'pypdf ready'".to_owned(),
             _ => format!("test \"$1\" = '--version' || exit 95; echo '{name} 0.1.0'"),
         };

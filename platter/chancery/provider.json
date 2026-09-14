@@ -23,15 +23,15 @@
       ]
     },
     "shared_access_and_trust": [
-      "The current-user CLI operates private state. New model jobs have read-only workspace access and local execution for research in the supplied Annals library, plus captured career and submission tools. Historical jobs retain their original access policy. The installer publishes only Platter-owned selectors; a source bundle establishes neither installed readiness nor send authority."
+      "The current-user CLI operates private state. New Platter jobs use captured career reads and draft submission only, with workspace, shell and web disabled. Weaver owns project research and prose. Historical jobs retain their original access policy. Installer selection establishes no send authority."
     ],
     "shared_privacy_and_retention": [
-      "Original resume, captured career entries, posting text, model inputs/results, evidence references, PDFs, editions and send outcomes are private retained data. Nucleus/model processing receives career material; explicit send discloses the brief and resume attachments to Email, Resend and Gmail. Project and Krisis research text may be retained by Nucleus; Platter retains resource pointers and private source notes, not project-source snapshots.",
+      "Original and fixed project templates, captured career/posting inputs, Weaver requests and documents, packet artifacts, PDFs and editions remain private. Weaver and Nucleus retain source reads separately. Authorized sends disclose frozen message and attachments through Email.",
       "Clockwork incident notification discloses bounded operational metadata to the fixed Email recipient. Product content and private failure output are not copied into the notification.",
       "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
-      "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
+      "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
     ],
     "operational_limits": [
       "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."

@@ -2,6 +2,7 @@
 //!
 //! Templates are private runtime inputs. Never include a real resume in the crate.
 
+use crate::projects::ProjectBullets;
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -89,6 +90,10 @@ impl std::fmt::Display for RendererFailure {
 }
 
 impl std::error::Error for RendererFailure {}
+
+#[derive(Debug, thiserror::Error)]
+#[error("resume content does not fit the fixed template")]
+pub(crate) struct LayoutFailure;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -311,6 +316,118 @@ impl ResumeTemplate {
         output_dir: &Path,
     ) -> Result<RenderedResume> {
         let source = self.render_latex_with_projects(bullets, projects)?;
+        let expected = projects
+            .into_iter()
+            .flatten()
+            .flat_map(|project| {
+                std::iter::once(project.name.clone())
+                    .chain(std::iter::once(project.description.clone()))
+                    .chain(project.dates.clone())
+                    .chain(project.bullets.clone())
+            })
+            .collect::<Vec<_>>();
+        Self::compile(source, &expected, output_dir)
+    }
+
+    pub fn render_latex_fixed(
+        &self,
+        jackson: Option<&[String]>,
+        projects: &ProjectBullets,
+    ) -> Result<String> {
+        projects.validate()?;
+        self.validate_fixed_projects()?;
+        let mut source = if let Some(bullets) = jackson {
+            self.render_latex(bullets)?
+        } else {
+            self.source.clone()
+        };
+        for (name, bullets) in [("CELL", &projects.cell), ("WROUGHT", &projects.wrought)] {
+            let range = fixed_project_range(&source, name)?;
+            let mut replacement = String::new();
+            for bullet in bullets {
+                replacement.push_str("\n\\resumeItem{");
+                replacement.push_str(&escape_latex(bullet));
+                replacement.push('}');
+            }
+            replacement.push('\n');
+            source.replace_range(range, &replacement);
+        }
+        self.validate_fixed_project_bytes(&source)?;
+        Ok(source)
+    }
+
+    pub fn render_pdf_fixed(
+        &self,
+        jackson: Option<&[String]>,
+        projects: &ProjectBullets,
+        output_dir: &Path,
+    ) -> Result<RenderedResume> {
+        let source = self.render_latex_fixed(jackson, projects)?;
+        let expected = ["Cell".into(), "Wrought".into()]
+            .into_iter()
+            .chain(projects.cell.clone())
+            .chain(projects.wrought.clone())
+            .collect::<Vec<_>>();
+        Self::compile(source, &expected, output_dir)
+    }
+
+    pub fn validate_fixed_projects(&self) -> Result<()> {
+        self.validate_projects_region()?;
+        let section = projects_range(&self.source)?;
+        let cell = fixed_project_range(&self.source, "CELL")?;
+        let wrought = fixed_project_range(&self.source, "WROUGHT")?;
+        ensure!(
+            cell.end <= wrought.start || wrought.end <= cell.start,
+            "project bullet regions overlap"
+        );
+        for range in [cell, wrought] {
+            ensure!(
+                section.start <= range.start && range.end <= section.end,
+                "project bullet region is outside Projects"
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_fixed_project_bytes(&self, source: &str) -> Result<()> {
+        let spans = |text: &str| -> Result<Vec<Range<usize>>> {
+            let mut ranges = vec![
+                jackson_range(text)?,
+                fixed_project_range(text, "CELL")?,
+                fixed_project_range(text, "WROUGHT")?,
+            ];
+            ranges.sort_by_key(|r| r.start);
+            Ok(ranges)
+        };
+        let (mut left, mut right) = (0, 0);
+        for (a, b) in spans(&self.source)?.iter().zip(spans(source)?) {
+            ensure!(
+                self.source[left..a.start] == source[right..b.start],
+                "fixed resume content changed"
+            );
+            left = a.end;
+            right = b.end;
+        }
+        ensure!(
+            self.source[left..] == source[right..],
+            "fixed resume content changed"
+        );
+        Ok(())
+    }
+
+    pub fn validate_project_template_import(&self, candidate: &Self) -> Result<()> {
+        candidate.validate_fixed_projects()?;
+        let old = projects_range(&self.source)?;
+        let new = projects_range(&candidate.source)?;
+        ensure!(
+            self.source[..old.start] == candidate.source[..new.start]
+                && self.source[old.end..] == candidate.source[new.end..],
+            "template import may change only the projects section"
+        );
+        Ok(())
+    }
+
+    fn compile(source: String, expected: &[String], output_dir: &Path) -> Result<RenderedResume> {
         create_private_dir(output_dir)?;
         // The caller holds Platter's database admission lock. Recover abandoned
         // renderer work from an interrupted invocation before creating new work.
@@ -351,6 +468,7 @@ impl ResumeTemplate {
         compiler.env("HOME", build.path().join("cache"));
         run_checked(&mut compiler, build.path(), "tectonic").context(RendererFailure)?;
         let log = fs::read_to_string(build.path().join("render.log"))?;
+        (|| -> Result<()> {
         ensure!(
             !log.contains("Overfull \\hbox") && !log.contains("Overfull \\vbox"),
             "resume text overflows the fixed template; shorten the editable resume content and render again"
@@ -359,6 +477,9 @@ impl ResumeTemplate {
             !log.contains("Missing character:"),
             "resume contains characters the fixed template cannot render; revise the editable text"
         );
+
+        Ok(())
+        })().context(LayoutFailure)?;
 
         let mut inspect =
             Command::new(crate::readiness::renderer("python3").context(RendererFailure)?);
@@ -376,6 +497,7 @@ impl ResumeTemplate {
             run_checked(&mut inspect, build.path(), "pdf-inspection").context(RendererFailure)?;
         let PdfInspection { pages, text } =
             serde_json::from_str(&inspection).context("read PDF inspection result")?;
+        (|| -> Result<()> {
         ensure!(
             pages == 1,
             "resume has {pages} pages; shorten the editable content to preserve the original one-page layout"
@@ -389,30 +511,29 @@ impl ResumeTemplate {
             "resume PDF is missing the Jackson heading"
         );
 
-        if let Some(projects) = projects {
-            let compact = |value: &str| {
-                value
-                    .chars()
-                    .filter(|ch| !ch.is_whitespace())
-                    .collect::<String>()
-            };
-            let extracted = compact(&text);
-            for project in projects {
-                for expected in std::iter::once(&project.name)
-                    .chain(std::iter::once(&project.description))
-                    .chain(project.dates.iter())
-                    .chain(&project.bullets)
-                {
-                    ensure!(
-                        extracted.contains(&compact(expected)),
-                        "resume PDF is missing project text; revise unsupported characters or layout"
-                    );
-                }
-            }
+        let compact = |value: &str| value.chars().filter(|ch| !ch.is_whitespace()).collect::<String>();
+        let extracted = compact(&text);
+        for expected in expected {
+            ensure!(extracted.contains(&compact(expected)), "resume PDF is missing project text; revise unsupported characters or layout");
         }
+        Ok(())
+        })().context(LayoutFailure)?;
         let pdf = fs::read(build.path().join("render.pdf"))?;
         Ok(RenderedResume { source, pdf, pages })
     }
+}
+
+fn fixed_project_range(source: &str, name: &str) -> Result<Range<usize>> {
+    let begin = format!("% PLATTER {name} BULLETS BEGIN");
+    let end = format!("% PLATTER {name} BULLETS END");
+    ensure!(
+        source.matches(&begin).count() == 1 && source.matches(&end).count() == 1,
+        "template needs exactly one {name} bullet region"
+    );
+    let start = source.find(&begin).context("project start missing")? + begin.len();
+    let end = source.find(&end).context("project end missing")?;
+    ensure!(start < end, "project bullet markers are reversed");
+    Ok(start..end)
 }
 
 fn projects_range(source: &str) -> Result<Range<usize>> {
@@ -755,5 +876,61 @@ mod tests {
             .unwrap();
         assert!(self::template().validate_projects_region().is_err());
         assert!(validate_projects(&[projects[0].clone(), projects[0].clone()]).is_err());
+    }
+    #[test]
+    fn fixed_project_bullets_preserve_headers_technologies_and_other_bytes() {
+        let base = template();
+        let section = r"\section{Projects}
+Fixed Cell header | Rust
+\resumeItemListStart
+% PLATTER CELL BULLETS BEGIN
+\resumeItem{Old Cell}
+% PLATTER CELL BULLETS END
+\resumeItemListEnd
+Fixed Wrought header | Go
+\resumeItemListStart
+% PLATTER WROUGHT BULLETS BEGIN
+\resumeItem{Old Wrought}
+% PLATTER WROUGHT BULLETS END
+\resumeItemListEnd
+\section{Skills}
+Fixed skills";
+        let original = ResumeTemplate::from_source(
+            "fixture".into(),
+            base.source.replace(
+                "Fixed projects and skills",
+                "\\section{Projects}\nOld projects\n\\section{Skills}\nFixed skills",
+            ),
+        )
+        .unwrap();
+        let candidate = ResumeTemplate::from_source(
+            "fixture".into(),
+            base.source.replace("Fixed projects and skills", section),
+        )
+        .unwrap();
+        original
+            .validate_project_template_import(&candidate)
+            .unwrap();
+        let bullets = ProjectBullets {
+            cell: vec!["Built C# & Rust".into()],
+            wrought: vec!["Preserved player choice".into()],
+        };
+        let rendered = candidate
+            .render_latex_fixed(Some(&["Jackson contribution".into()]), &bullets)
+            .unwrap();
+        assert!(rendered.contains("Fixed Cell header | Rust"));
+        assert!(rendered.contains("Fixed Wrought header | Go"));
+        assert!(rendered.contains(r"Built C\# \& Rust"));
+        assert!(
+            candidate
+                .validate_fixed_project_bytes(
+                    &rendered.replace("Fixed Cell header", "Changed header")
+                )
+                .is_err()
+        );
+        let mut invalid = candidate.clone();
+        invalid.source = invalid.source.replace("Fixed identity", "Changed identity");
+        invalid.source_sha256 = digest(invalid.source.as_bytes());
+        assert!(original.validate_project_template_import(&invalid).is_err());
     }
 }
