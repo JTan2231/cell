@@ -226,3 +226,132 @@ fn url_selected_command_reuses_the_daily_packet_and_send_records() -> Result<()>
     drop(fixture.directory);
     Ok(())
 }
+
+#[test]
+#[allow(clippy::too_many_lines)] // One isolated CLI scenario covers capture, retry and preserved delivery.
+fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending() -> Result<()> {
+    use serde_json::{Value, json};
+    let fixture = Fixture::new()?;
+    let store = Store::open(&fixture.root)?;
+    // Start with a sent packet and its retained receipt.
+    assert!(fixture.run(&fixture.url)?.status.success());
+    let original = serde_json::to_value(store.run(&fixture.packet.id)?)?;
+    let edition = serde_json::to_value(store.edition("ad-hoc/url-one")?)?;
+    let old_pdf = store
+        .run_artifact(&fixture.packet.id, "resume-pdf")?
+        .ok_or_else(|| anyhow::anyhow!("missing PDF"))?;
+    let annals = fixture.home.join(".local/bin/annals");
+    fs::create_dir_all(
+        annals
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("missing parent"))?,
+    )?;
+    fs::write(
+        &annals,
+        "#!/bin/sh\nset -eu\nprintf 'read\\n' >> \"$0.calls\"\ncase \"$*\" in\n'--json library vita work list --limit=1000') /bin/cat \"$0.list\";;\n'--json library vita work show -- story') /bin/cat \"$0.story\";;\n*) exit 91;;\nesac\n",
+    )?;
+    fs::set_permissions(&annals, fs::Permissions::from_mode(0o700))?;
+    let summary =
+        json!({"work":"story","sha256":"unused","size_bytes":0,"first_retained_at":"unused"});
+    fs::write(
+        annals.with_extension("list"),
+        json!({"ok":true,"data":{"schema_version":2,"items":[summary],"has_more":false}})
+            .to_string(),
+    )?;
+    let mut work = summary;
+    work["text"] = json!("Current career evidence");
+    work["headings"] = json!([]);
+    fs::write(
+        annals.with_extension("story"),
+        json!({"ok":true,"data":work}).to_string(),
+    )?;
+    // Capture commits before this deliberately missing template stops execution.
+    store.set_setting("template", &"missing-template")?;
+    let run = |job: &str, id: &str| -> Result<Output> {
+        Ok(Command::new(env!("CARGO_BIN_EXE_platter"))
+            .env_clear()
+            .env("HOME", &fixture.home)
+            .env("PATH", "/usr/bin:/bin")
+            .env(
+                "NUCLEUS_SOCKET",
+                fixture.directory.path().join("absent.sock"),
+            )
+            .env("CHANCERY_USAGE_DISABLED", "1")
+            .args(["regenerate", job, "--id", id])
+            .output()?)
+    };
+    let first = run(&fixture.packet.job_id, "regeneration-one")?;
+    assert!(!first.status.success());
+    let records = store.list()?;
+    assert_eq!(records.len(), 2);
+    let new = records
+        .iter()
+        .find(|packet| packet.id != fixture.packet.id)
+        .ok_or_else(|| anyhow::anyhow!("new packet missing"))?;
+    let captured: Value = store.inputs(&new.id)?;
+    assert_eq!(captured["regeneration_id"], "regeneration-one");
+    assert_eq!(captured["career"][0]["markdown"], "Current career evidence");
+    assert_eq!(
+        captured["resume_editorial"],
+        include_str!("../prompts/resume-editorial.md")
+    );
+    assert_eq!(
+        captured["project_resources"],
+        include_str!("../prompts/project-resources.md")
+    );
+    assert!(store.run_artifact(&new.id, "brief")?.is_none());
+    assert!(store.execution(&new.id, "brief")?.is_none());
+    let cast_calls = Fixture::calls(&fixture.cast)?;
+    let career_calls = Fixture::calls(&annals)?;
+    fs::remove_file(&fixture.cast)?;
+    fs::remove_file(&annals)?;
+    let retry = run(&fixture.packet.job_id, "regeneration-one")?;
+    assert!(!retry.status.success());
+    assert_eq!(retry.stderr, first.stderr);
+    assert_eq!(store.list()?.len(), 2);
+    assert_eq!(store.inputs::<Value>(&new.id)?, captured);
+    let conflict = run("different-job", "regeneration-one")?;
+    assert!(String::from_utf8_lossy(&conflict.stderr).contains("different job"));
+    assert!(!run(&fixture.packet.job_id, "../bad")?.status.success());
+
+    // A retained completed result is returned without any dependency calls.
+    let new_brief = store.put_content(
+        &new.id,
+        "brief",
+        &json!({"paragraph":"New brief", "pursue":true}),
+    )?;
+    let new_pdf = store.put_artifact(
+        Some(&new.id),
+        "resume-pdf",
+        "new.pdf",
+        "application/pdf",
+        b"new PDF fixture",
+    )?;
+    store.status(&new.id, "ready")?;
+    let complete = run(&fixture.packet.job_id, "regeneration-one")?;
+    assert!(complete.status.success());
+    let output = String::from_utf8(complete.stdout)?;
+    assert!(output.contains(&format!("{}: ready", new.id)));
+    assert!(output.contains(&new_brief.id) && output.contains(&new_pdf.id));
+    assert_eq!(store.list()?.len(), 2);
+    assert!(!store.is_eligible(&fixture.packet.opportunity)?);
+    assert_eq!(
+        serde_json::to_value(store.run(&fixture.packet.id)?)?,
+        original
+    );
+    assert_eq!(
+        serde_json::to_value(store.edition("ad-hoc/url-one")?)?,
+        edition
+    );
+    assert_eq!(store.artifact(&old_pdf.id)?.content, old_pdf.content);
+    assert_eq!(Fixture::calls(&fixture.cast)?, cast_calls);
+    assert_eq!(Fixture::calls(&annals)?, career_calls);
+    assert_eq!(Fixture::calls(&fixture.email)?, "invoked\n");
+    platter::maintenance::gate(&fixture.home).hold("regeneration-test")?;
+    assert!(
+        !run(&fixture.packet.job_id, "regeneration-one")?
+            .status
+            .success()
+    );
+    Ok(())
+}

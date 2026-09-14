@@ -28,6 +28,12 @@ content adds ordered `projects` with private source notes. Platter stores no
 project-source copies, commit IDs or Annals revisions. Current local research
 may change between stages or after restart.
 
+Regeneration runs also capture `regeneration_id`. This request identity and the
+captured Cast job identify one ordinary run for retries. Capture commits them
+together under mutation admission. Reuse resumes or returns that run; another
+job cannot reuse the ID. Regeneration preserves earlier runs and does not enable
+the job for daily selection.
+
 `resume-draft`, `resume-draft-source` and `resume-draft-pdf` are validated
 intermediate artifacts. `resume-review` contains the exact UTF-8 Markdown
 review of that draft. Its organization and editorial findings are not parsed.

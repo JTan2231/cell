@@ -52,6 +52,13 @@ enum Command {
         fresh: bool,
     },
     PrepareDaily,
+    /// Create another packet for a previously prepared job, without enabling it or sending mail.
+    Regenerate {
+        job_id: String,
+        /// Stable request identity; reuse it to resume or retrieve this preparation.
+        #[arg(long)]
+        id: String,
+    },
     /// Prepare, freeze and send today's edition with applicable send authorization.
     RunDaily,
     /// Prepare, freeze and send one URL-selected packet with this invocation's authority.
@@ -145,9 +152,12 @@ async fn run() -> Result<()> {
         cli.stop_after_seconds.is_none()
             || matches!(
                 cli.command,
-                Command::Prepare { .. } | Command::PrepareDaily | Command::RunAdHoc { .. }
+                Command::Prepare { .. }
+                    | Command::PrepareDaily
+                    | Command::RunAdHoc { .. }
+                    | Command::Regenerate { .. }
             ),
-        "--stop-after-seconds applies only to prepare, prepare-daily and run-ad-hoc"
+        "--stop-after-seconds applies only to prepare, prepare-daily, regenerate and run-ad-hoc"
     );
     let home = maintenance::home()?;
     let root = platter::default_state_dir(&home)?;
@@ -206,6 +216,16 @@ async fn run() -> Result<()> {
         Command::PrepareDaily => {
             let ready = workflow::prepare_daily(&root, deadline).await?;
             println!("{} complete new packets ready", ready.len());
+        }
+        Command::Regenerate { job_id, id } => {
+            let result = workflow::regenerate(&root, &job_id, &id, deadline).await?;
+            println!("{}: {}", result.id, result.status);
+            let store = Store::open_read_only(&root)?;
+            for kind in ["brief", "resume-pdf"] {
+                if let Some(artifact) = store.run_artifact(&result.id, kind)? {
+                    println!("{kind}: {}", artifact.id);
+                }
+            }
         }
         Command::RunDaily => {
             if let Some(edition) = workflow::run_daily(&root, chrono::Utc::now()).await? {

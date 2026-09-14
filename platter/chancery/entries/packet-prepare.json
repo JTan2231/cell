@@ -5,13 +5,14 @@
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
-  "summary": "Prepare private job briefs and resumes from Cast opportunities and Vita career material. Freeze editions and send retained attachment bytes through authorized runs.",
+  "summary": "Prepare or regenerate private job briefs and resumes from Cast opportunities and Vita career material. Freeze editions and send retained attachment bytes through authorized runs.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
     "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
     "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
-    "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient."
+    "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient.",
+    "The user wants another packet for a previously prepared job, including one already used in an edition, without re-enabling it or sending email."
   ],
   "do_not_use_when": [
     "The request is job discovery, source-library editing, employer outreach or application submission.",
@@ -30,6 +31,10 @@
     {
       "label": "Restart incomplete preparation without prior model context",
       "invocation": "platter prepare JOB_ID --fresh"
+    },
+    {
+      "label": "Generate another packet for a previously prepared job",
+      "invocation": "platter regenerate CAST_JOB_ID --id REQUEST_ID"
     },
     {
       "label": "Prepare the daily ready pool",
@@ -89,7 +94,8 @@
     "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
     "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
     "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite.",
-    "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts."
+    "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts.",
+    "Regenerate captures a new ordinary run with current inputs and writing instructions. It leaves earlier runs and editions intact and does not enable the job or send mail. Availability, compensation, posting retrieval and pursuit checks still apply; retrieval failure or decline can set eligibility false."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -112,7 +118,8 @@
     "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
     "prepare-daily and run-daily mark jobs ineligible when posting retrieval fails, including HTTP errors, timeouts and unsupported or incomplete text, then continue with other candidates. If final freshness excludes the entire ready pool, run-daily prepares other candidates before previewing again. Declined opportunities and an exhausted pool remain expected outcomes. Other preparation failures stop the run. Single-job preparation reports retrieval failure without selecting another job. The eligibility command explicitly enables an excluded job again. Clockwork halts remain intact until explicit continuation.",
     "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
-    "Review and revision reuse their exact retained requests and completed prior results. A failed stage without a result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized."
+    "Review and revision reuse their exact retained requests and completed prior results. A failed stage without a result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
+    "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -179,7 +186,7 @@
       },
       {
         "status": "declared",
-        "statement": "Preparation selects a Cast job, eligible daily pool, or one exact public URL through run-ad-hoc. Optional --stop-after-seconds applies to prepare, prepare-daily and run-ad-hoc. Default count is three; stored 09:00 fields create no schedule. The two run commands capture the current date once in the configured time zone before new preparation."
+        "statement": "Preparation selects a Cast job, eligible daily pool, or one exact public URL through run-ad-hoc. Optional --stop-after-seconds applies to prepare, prepare-daily, regenerate and run-ad-hoc. Default count is three; stored 09:00 fields create no schedule. The two run commands capture the current date once in the configured time zone before new preparation."
       },
       {
         "status": "declared",
@@ -192,6 +199,10 @@
       {
         "status": "declared",
         "statement": "Resources are /Users/joey/rust/cell, /Users/joey/ts/wrought-private and the Annals CLI with /Users/joey/Library/Application Support/Annals/decisions/config.toml. New templates require one Projects or Side Projects section, or explicit PLATTER PROJECTS BEGIN/END comments bounding content separately from Jackson."
+      },
+      {
+        "status": "declared",
+        "statement": "Regenerate selects a previously prepared Cast job and a required request ID of 1 through 80 ASCII letters, digits, underscores or hyphens. It supports --stop-after-seconds and does not require daily eligibility."
       }
     ],
     "outputs": [
@@ -214,6 +225,10 @@
       {
         "status": "declared",
         "statement": "New resume payloads require one or two unique Cell/Wrought entries with description, optional dates, one through eight bullets and private source notes. Text fields have at most 1000 characters and no controls. The renderer supplies https://github.com/jtan2231/cell and https://wrought.experimental.joeytan.dev and omits source notes."
+      },
+      {
+        "status": "declared",
+        "statement": "Regenerate prints the selected request's packet ID and status, plus retained brief and final PDF artifact IDs when available; it prints no content bytes."
       }
     ],
     "data_semantics": [
@@ -227,7 +242,7 @@
       },
       {
         "status": "declared",
-        "statement": "Eligibility determines whether Platter may consider a job. Ordinary preview sets selected jobs ineligible. Posting retrieval failures also set jobs ineligible; daily work continues with other candidates. Explicit eligibility changes can enable excluded jobs again. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
+        "statement": "Eligibility determines ordinary job selection. Explicit regeneration permits another preparation without enabling the job. Ordinary preview sets selected jobs ineligible. Posting retrieval failures also set jobs ineligible; daily work continues with other candidates. Explicit eligibility changes can enable excluded jobs again. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
       }
     ],
     "identity_and_units": [
@@ -238,6 +253,10 @@
       {
         "status": "declared",
         "statement": "Ordinary edition identity is its day; --ad-hoc and run-ad-hoc retain a caller-supplied occurrence ID in the same namespace. Frozen date, selection, message, ordered attachment names/bytes and idempotency key are immutable. A deliberately changed payload requires a new identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Regeneration IDs use a separate namespace from edition occurrences. The optional regeneration_id captured input binds one request to its ordinary run and captured Cast job. A new ID requests another preparation."
       }
     ],
     "completeness_and_freshness": [
@@ -259,7 +278,7 @@
       },
       {
         "status": "declared",
-        "statement": "Preparation, including --fresh, and preview reuse an Ashby board downloaded less than 14 days ago if it contains the selected posting. Missing, invalid, expired or future-dated caches and a posting absent from the cache trigger one download. Cached timestamps remain the original download time. Changes and closures can remain undetected until the next download. A failed refresh leaves the old file intact but fails retrieval; expired data is not a fallback. Remove a board cache file to force its next download."
+        "statement": "Preparation, including --fresh and regenerate, and preview reuse an Ashby board downloaded less than 14 days ago if it contains the selected posting. Missing, invalid, expired or future-dated caches and a posting absent from the cache trigger one download. Cached timestamps remain the original download time. Changes and closures can remain undetected until the next download. A failed refresh leaves the old file intact but fails retrieval; expired data is not a fallback. Remove a board cache file to force its next download."
       },
       {
         "status": "declared",
@@ -296,6 +315,10 @@
       {
         "status": "declared",
         "statement": "For a new URL selection, Cast permits targeted observation from disabled or automatically excluded sources, retains only the selected job, and preserves source enrollment and board-scan progress. Platter continues with that normal job through export and preparation."
+      },
+      {
+        "status": "declared",
+        "statement": "Mutation admission serializes regeneration lookup, source capture and execution. The request ID commits atomically with the new run's immutable inputs. Reuse resumes or returns that run without recapture; a different job is refused. Terminal stage failures require an explicit new request ID. No prior packet or delivery payload is rewritten."
       }
     ],
     "operational_limits": [

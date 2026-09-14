@@ -18,6 +18,7 @@ root; it cannot create an independent live library that bypasses maintenance.
 platter init --resume /absolute/original-resume.tex
 platter prepare CAST_JOB_ID
 platter prepare CAST_JOB_ID --fresh
+platter regenerate CAST_JOB_ID --id REQUEST_ID
 platter prepare-daily
 platter run-ad-hoc JOB_URL --id OCCURRENCE_ID
 platter preview YYYY-MM-DD
@@ -204,6 +205,31 @@ outputs, requests, transcripts or error feedback. Older runs and accepted
 artifacts remain retained. Ordinary preparation still resumes retained work.
 Fresh preparation uses the same Ashby cache policy.
 
+To create another packet for a previously prepared job, including one already
+used in an edition, run `regenerate CAST_JOB_ID --id REQUEST_ID`. It captures
+source inputs and current writing instructions again, then uses the ordinary
+brief, draft, review, revision and PDF pipeline. It does not copy prior outputs
+or model context, change old packet statuses, enable an ineligible job, freeze
+an edition or send email. Availability, compensation and pursuit checks still
+apply. Retrieval failure or a declined brief still sets eligibility false.
+Successful regeneration leaves the current eligibility policy unchanged.
+
+The request ID contains 1 through 80 ASCII letters, digits, underscores or
+hyphens and belongs to the regeneration namespace. It is retained atomically
+with the new run's captured inputs. A failure before capture creates no run
+or request binding. Reuse for another Cast job is refused. Repeating a captured
+request resumes that exact preparation or returns its retained outcome without
+recapturing sources. A terminal stage failure remains a failure; another attempt
+requires a new request ID. Other model jobs for the opportunity must be terminal
+or absent before creating or resuming a regeneration. Maintenance admission
+serializes the entire command with other mutations.
+
+The result prints the packet ID and status, plus retained brief and final PDF
+artifact IDs when available. Use export to write an artifact, or select that
+packet in a new retained-material edition for a separately authorized send.
+Older packets, immutable artifacts and frozen delivery records remain intact.
+Regeneration uses the existing posting cache policy and has no time guarantee.
+
 Rendering uses Tectonic and Python 3 with pypdf. Absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON` overrides are supported; otherwise resolution checks
 `~/.local/bin`, `/usr/local/bin`, `/opt/homebrew/bin` and `/usr/bin`.
@@ -220,7 +246,7 @@ feedback. Repair the dependency before an explicit fresh preparation. Content
 and layout rejection still allows revision within the current model job.
 
 There is no candidate or token budget. An optional
-`--stop-after-seconds SECONDS` on `prepare`, `prepare-daily` or `run-ad-hoc`
+`--stop-after-seconds SECONDS` on `prepare`, `prepare-daily`, `regenerate` or `run-ad-hoc`
 requests cancellation of the exact live Nucleus job at the deadline and
 retains progress. The normal external
 source, rendering and execution timeouts still apply. Three ready packets is

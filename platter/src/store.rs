@@ -271,6 +271,17 @@ impl Store {
         Ok(self.connection.query_row(&format!("{PACKET_SELECT} WHERE j.opportunity=?1 ORDER BY r.created_at DESC,r.id DESC LIMIT 1"), [opportunity], row_packet).optional()?)
     }
 
+    pub(crate) fn regeneration(&self, request_id: &str) -> Result<Option<PacketRecord>> {
+        Ok(self
+            .connection
+            .query_row(
+                &format!("{PACKET_SELECT} WHERE json_extract(r.inputs,'$.regeneration_id')=?1"),
+                [request_id],
+                row_packet,
+            )
+            .optional()?)
+    }
+
     pub fn run(&self, id: &str) -> Result<PacketRecord> {
         Ok(self.connection.query_row(
             &format!("{PACKET_SELECT} WHERE r.id=?1"),

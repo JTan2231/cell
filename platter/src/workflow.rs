@@ -23,6 +23,8 @@ pub(crate) struct Captured {
     pub resume_editorial: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_resources: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub regeneration_id: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +58,96 @@ pub async fn prepare_fresh(
     prepare_selected(root, job_id, deadline, true).await
 }
 
+/// Prepare another packet without enabling the job or changing prior packets.
+/// The CLI holds mutation admission across request lookup, capture and execution.
+pub async fn regenerate(
+    root: &Path,
+    job_id: &str,
+    request_id: &str,
+    deadline: Option<Instant>,
+) -> Result<PacketRecord> {
+    ensure!(
+        (1..=80).contains(&request_id.len())
+            && request_id
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-'),
+        "regeneration ID must contain 1 through 80 ASCII letters, digits, underscores or hyphens"
+    );
+    let store = Store::open(root)?;
+    if let Some(record) = store.regeneration(request_id)? {
+        let captured: Captured = store.inputs(&record.id)?;
+        ensure!(
+            captured.job.id == job_id,
+            "regeneration ID belongs to a different job"
+        );
+        if record.status != "preparing" {
+            return Ok(record);
+        }
+        ensure_other_runs_settled(&store, &record.opportunity, Some(&record.id)).await?;
+        return prepare_record(&store, record, deadline).await;
+    }
+    let settings = config(root)?;
+    let snapshot = source::discovery(&settings.cast_executable)?;
+    let job = snapshot
+        .jobs
+        .iter()
+        .find(|job| job.id == job_id)
+        .context("Cast job not found")?;
+    ensure!(
+        source::eligible(job),
+        "opportunity fails availability/compensation constraints"
+    );
+    let opportunity = source::identity(job)?;
+    ensure!(
+        store.packet(&opportunity)?.is_some(),
+        "no prior packet for this job; use prepare"
+    );
+    ensure_other_runs_settled(&store, &opportunity, None).await?;
+    let company = snapshot
+        .companies
+        .iter()
+        .find(|company| company.id == job.company_id)
+        .map_or("Unknown employer", |company| company.name.as_str());
+    let record = capture_packet(&store, job, company, Some(request_id)).await?;
+    prepare_record(&store, record, deadline).await
+}
+
+async fn ensure_other_runs_settled(
+    store: &Store,
+    opportunity: &str,
+    except: Option<&str>,
+) -> Result<()> {
+    for record in store.list()? {
+        if record.opportunity == opportunity && Some(record.id.as_str()) != except {
+            ensure_run_settled(store, &record.id).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn ensure_run_settled(store: &Store, run: &str) -> Result<()> {
+    for stage in [
+        Stage::Brief,
+        Stage::Resume,
+        Stage::ResumeDraft,
+        Stage::ResumeReview,
+        Stage::ResumeRevision,
+    ] {
+        if let Some(request) = agent::retained_request(store, run, stage)? {
+            let client = nucleus_client::NucleusClient::for_current_user()?;
+            match client.get_job(&request.id).await {
+                Ok(job) => ensure!(
+                    job.summary.state.is_terminal(),
+                    "prior model job is still active"
+                ),
+                Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+    Ok(())
+}
+
 async fn prepare_selected(
     root: &Path,
     job_id: &str,
@@ -78,7 +170,6 @@ async fn prepare_selected(
     prepare_job(&store, job, company, deadline, fresh).await
 }
 
-#[allow(clippy::too_many_lines)] // Keep the ordered preparation stages together.
 async fn prepare_job(
     store: &Store,
     job: &Job,
@@ -108,25 +199,7 @@ async fn prepare_job(
                 && store.run_artifact(&prior.id, "resume-pdf")?.is_none(),
             "fresh preparation requires an incomplete run without an accepted resume"
         );
-        let client = nucleus_client::NucleusClient::for_current_user()?;
-        for stage in [
-            Stage::Brief,
-            Stage::Resume,
-            Stage::ResumeDraft,
-            Stage::ResumeReview,
-            Stage::ResumeRevision,
-        ] {
-            if let Some(request) = agent::retained_request(store, &prior.id, stage)? {
-                match client.get_job(&request.id).await {
-                    Ok(job) => ensure!(
-                        job.summary.state.is_terminal(),
-                        "prior model job is still active"
-                    ),
-                    Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
-                    Err(error) => return Err(error.into()),
-                }
-            }
-        }
+        ensure_run_settled(store, &prior.id).await?;
         existing = None;
     }
     let record = if let Some(record) = existing {
@@ -135,35 +208,53 @@ async fn prepare_job(
         }
         record
     } else {
-        let record = PacketRecord {
-            id: format!("packet_{}", uuid::Uuid::now_v7()),
-            opportunity: opportunity.clone(),
-            job_id: job.id.clone(),
-            company: company.into(),
-            title: job.title.clone(),
-            status: "preparing".into(),
-            directory: String::new(),
-        };
-        let captured = Captured {
-            job: job.clone(),
-            company: company.into(),
-            posting: match source::posting(store.root(), job).await {
-                Ok(posting) => posting,
-                Err(error) => {
-                    store.exclude_job(&record)?;
-                    return Err(error.context(PostingUnavailable));
-                }
-            },
-            career: source::career_library()?,
-            template_artifact: store
-                .setting("template")?
-                .context("original resume is not initialized")?,
-            resume_editorial: Some(agent::RESUME_EDITORIAL.into()),
-            project_resources: Some(agent::PROJECT_RESOURCES.into()),
-        };
-        store.insert_run(&record, &captured)?;
-        record
+        capture_packet(store, job, company, None).await?
     };
+    prepare_record(store, record, deadline).await
+}
+
+async fn capture_packet(
+    store: &Store,
+    job: &Job,
+    company: &str,
+    regeneration_id: Option<&str>,
+) -> Result<PacketRecord> {
+    let record = PacketRecord {
+        id: format!("packet_{}", uuid::Uuid::now_v7()),
+        opportunity: source::identity(job)?,
+        job_id: job.id.clone(),
+        company: company.into(),
+        title: job.title.clone(),
+        status: "preparing".into(),
+        directory: String::new(),
+    };
+    let captured = Captured {
+        job: job.clone(),
+        company: company.into(),
+        posting: match source::posting(store.root(), job).await {
+            Ok(posting) => posting,
+            Err(error) => {
+                store.exclude_job(&record)?;
+                return Err(error.context(PostingUnavailable));
+            }
+        },
+        career: source::career_library()?,
+        template_artifact: store
+            .setting("template")?
+            .context("original resume is not initialized")?,
+        resume_editorial: Some(agent::RESUME_EDITORIAL.into()),
+        project_resources: Some(agent::PROJECT_RESOURCES.into()),
+        regeneration_id: regeneration_id.map(str::to_owned),
+    };
+    store.insert_run(&record, &captured)?;
+    Ok(record)
+}
+
+async fn prepare_record(
+    store: &Store,
+    record: PacketRecord,
+    deadline: Option<Instant>,
+) -> Result<PacketRecord> {
     let captured: Captured = store.inputs(&record.id)?;
     let template = store.template_artifact(&captured.template_artifact)?;
     let posting = format!(
@@ -202,7 +293,7 @@ async fn prepare_job(
     };
     if !brief.pursue {
         store.status(&record.id, "declined")?;
-        store.set_eligible(&opportunity, false)?;
+        store.set_eligible(&record.opportunity, false)?;
         return store.run(&record.id);
     }
     inputs.brief = Some(brief);
