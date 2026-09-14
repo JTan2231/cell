@@ -1,6 +1,6 @@
 # Platter data model
 
-Schema four uses one private SQLite database. The core tables are:
+Schema five uses one private SQLite database. The core tables are:
 
 | Table | Owned information |
 | --- | --- |
@@ -19,9 +19,10 @@ A packet is a run with its content. Brief and resume-content artifacts contain
 the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
-New runs also capture `resume_editorial`; its absence selects the legacy
-brief/resume workflow. The retained draft request is the common writing setup.
-Revision copies it and adds only `proposed_draft` and `editorial_review`.
+New runs capture `generation=single_draft_v1` and `resume_editorial`. One draft
+job assesses pursuit, writes the brief and resume, and reviews its own work.
+Captures without `generation` retain the original workflow: an editorial policy
+selects brief, draft, review and revision; its absence selects brief/resume.
 New runs also retain `project_resources`, the shared local resource instructions.
 Its absence keeps the Jackson-only submission and access policy. New resume
 content adds ordered `projects` with private source notes. Platter stores no
@@ -34,13 +35,17 @@ together under mutation admission. Reuse resumes or returns that run; another
 job cannot reuse the ID. Regeneration preserves earlier runs and does not enable
 the job for daily selection.
 
-`resume-draft`, `resume-draft-source` and `resume-draft-pdf` are validated
-intermediate artifacts. `resume-review` contains the exact UTF-8 Markdown
-review of that draft. Its organization and editorial findings are not parsed.
-`resume-content`, `resume-source` and `resume-pdf` remain the final outputs.
-Draft and revision use the same submission payload and rendering checks.
-Their content and rendered bytes commit together. The draft cannot make a
-packet ready. Review must complete before revision starts.
+The draft submits brief and resume content together. Mechanical checks precede
+one transaction retaining `brief`, `resume-content`, `resume-source` and
+`resume-pdf`. A declined draft retains only its brief assessment. Rejected
+content is not accepted; correction remains within the same job. New runs
+produce no intermediate draft or review artifacts.
+
+Historical `resume-draft`, `resume-draft-source`, `resume-draft-pdf` and
+`resume-review` artifacts retain their meanings. The review is exact UTF-8
+Markdown; its organization and judgments are not parsed. Historical revision
+copies the retained writer request and adds only `proposed_draft` and
+`editorial_review`. Review must complete before that revision starts.
 
 Ashby board responses are separately cached in `ashby-cache/BOARD.json` under
 the runtime root. Each file holds `response` and its `retrieved_at` download
@@ -81,13 +86,13 @@ There is no artifact deletion API. Fixed content and frozen messages remain
 immutable; any future retention policy must preserve every referenced artifact
 and all delivery uncertainty. Explicit exports never become dependencies.
 
-Migration imports schema one transactionally, records a complete schema-four
+Migration imports schema one transactionally, records a complete schema-five
 backup, and removes only hashed legacy files on its durable cleanup manifest.
 Nucleus tool history is not copied. Unknown remaining regular runtime files
 are retained as imported artifacts. The database backup is self-contained for
 Platter history; rendering programs and Nucleus runtime/authentication remain
 separate dependencies.
 
-Schema-two and schema-three migration advances the database version without changing retained
-inputs, requests or artifact bytes. Older binaries refuse schema four. New
+Schema-two through schema-four migration advances the database version without changing retained
+inputs, requests or artifact bytes. Older binaries refuse schema five. New
 stage toolsets coexist with the retained legacy decoders.

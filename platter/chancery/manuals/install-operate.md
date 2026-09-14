@@ -48,7 +48,7 @@ Altered releases, foreign selectors or changed candidate identities stop
 publication. Product and catalog writer locks protect atomic selection and
 file compensation.
 
-All durable runtime content and maintenance holds live in schema-four
+All durable runtime content and maintenance holds live in schema-five
 `packets.sqlite3` at the canonical root. Fresh state uses
 `~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
 in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
@@ -98,7 +98,7 @@ and the predecessor runner have settled. It creates no replacement jobs or
 synthetic domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
-Migration is an explicit one-way schema-one to schema-four import. It preserves
+Migration is an explicit one-way schema-one to schema-five import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
 bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
 Legacy reserved/sent jobs become ineligible; their preparation runs remain
@@ -107,23 +107,23 @@ do not determine job eligibility. Any remaining owned runtime files are
 retained as imported artifacts. Duplicate tool history is not imported.
 
 The import commits transactionally before filesystem cleanup. It then writes
-a complete schema-four backup and records a hashed cleanup manifest. A missing,
+a complete schema-five backup and records a hashed cleanup manifest. A missing,
 conflicting or changed source file stops import; backup or cleanup failure
 retains originals and recovery information. Reinvocation resumes cleanup only
 when the chosen backup and remaining source hashes still agree. Only manifest
-files are removed. A backup created here is a schema-four recovery image, not an
+files are removed. A backup created here is a schema-five recovery image, not an
 old-binary rollback image. No production migration is implied by a source edit.
 
-Old binaries cannot operate schema four. Do not restore an old binary against
+Old binaries cannot operate schema five. Do not restore an old binary against
 the migrated database. Recovery after this boundary requires a compatible
 candidate or an explicitly selected complete predecessor database/files backup
 with its matching binary. Installation file compensation does not undo schema
 migration. Preserve holds after unresolved recovery.
 
-Schema-two and schema-three migration advances the database version with the same table layout.
+Schema-two through schema-four migration advances the database version with the same table layout.
 It preserves exact captured inputs, requests and artifact bytes. Existing runs
 keep their legacy workflow. The version guard prevents an older binary from
-resuming a reviewed run through the legacy path and skipping review. Each
+resuming a single-draft run through an older workflow. Each
 migration retains a complete current-schema recovery backup. It does not create
 an old-binary rollback image or start model work. Select a new backup path
 when a retained backup uses a predecessor schema.

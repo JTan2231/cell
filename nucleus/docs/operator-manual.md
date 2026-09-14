@@ -143,13 +143,13 @@ works; Platter uses their full text as its career entries. Platter does not
 call CRM or store a configurable career-source executable. See the
 [Vita guide](/Users/joey/rust/cell/platter/chancery/manuals/vita.md).
 
-Platter runs resume drafting, independent Markdown review and revision as
-separate sequential Nucleus jobs. It owns the handoffs and retained results.
-The revision copies the retained writer setup and adds only the draft and
-review. Review organization and editorial judgments are not parsed. Nucleus
-continues to own execution and has no editorial workflow authority. Schema-four
-Platter state preserves legacy preparations and prevents older binaries from
-misreading project-authoring runs. New Platter jobs use read-only workspace
+Platter runs one draft job for pursuit assessment, brief and resume writing,
+and self-review. It validates the combined submission and atomically retains
+the accepted brief, resume content, LaTeX and PDF. Mechanical rejection allows
+correction within the same job. Nucleus owns execution; Platter owns acceptance.
+Schema-five state preserves earlier preparations and their original workflows,
+and prevents older binaries from misreading single-draft runs.
+New Platter jobs use read-only workspace
 access and local execution to research the hardcoded Cell and Wrought paths
 and the Krisis library through Annals. Web search remains disabled. The source
 instructions and accepted outputs are retained; project sources are current

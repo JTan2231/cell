@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 10,
+  "contract_version": 11,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -87,7 +87,7 @@
   ],
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Preparation captures Cast posting and Vita career inputs, runs constrained Nucleus stages and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also research current Cell and Wrought files and read Krisis through the local Annals CLI.",
+    "Preparation captures Cast posting and Vita career inputs, runs one constrained Nucleus draft job and retains accepted content and rendered bytes as artifacts referencing the preparation run. New model jobs also research current Cell and Wrought files and read Krisis through the local Annals CLI.",
     "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
@@ -99,18 +99,18 @@
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
-    "New writers author Jackson bullets and the complete projects content. All other template bytes stay fixed. The reviewer submits free-text Markdown and cannot accept a resume. Historical runs retain their original authoring boundary.",
+    "The draft agent writes the brief, Jackson bullets and complete projects content, and checks its own work against the editorial policy. Platter owns mechanical acceptance. All other template bytes stay fixed. Historical runs retain their original workflow and authoring boundary.",
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
-    "Preparation succeeds when accepted brief/resume artifacts and a validated one-page PDF are retained. New runs also require a validated draft and completed Markdown review before revision.",
+    "Preparation succeeds when the combined draft submission passes content and rendering checks and its brief, resume content, LaTeX and one-page PDF are retained together. A declined draft requires no resume or rendering.",
     "Preview freezes exact message and ordered immutable artifacts without sending.",
     "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
     "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents.",
     "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition."
   ],
   "failure_and_recovery": [
-    "A consistent schema-four SQLite backup contains retained Platter history. Schema-one through schema-three state require maintained migration. Project sources are external current local reads and are not included in the backup.",
+    "A consistent schema-five SQLite backup contains retained Platter history. Schema-one through schema-four state require maintained migration. Project sources are external current local reads and are not included in the backup.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. Posting retrieval failures are skipped before freeze; other preparation/export failures preserve retained progress and stop before send.",
@@ -118,7 +118,7 @@
     "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
     "prepare-daily and run-daily mark jobs ineligible when posting retrieval fails, including HTTP errors, timeouts and unsupported or incomplete text, then continue with other candidates. If final freshness excludes the entire ready pool, run-daily prepares other candidates before previewing again. Declined opportunities and an exhausted pool remain expected outcomes. Other preparation failures stop the run. Single-job preparation reports retrieval failure without selecting another job. The eligibility command explicitly enables an excluded job again. Clockwork halts remain intact until explicit continuation.",
     "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
-    "Review and revision reuse their exact retained requests and completed prior results. A failed stage without a result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
+    "Draft jobs reuse their exact retained requests and accepted results without rendering accepted content again. Historical stages retain their original continuation path. A failed job without an accepted result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
     "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding."
   ],
   "privacy": [
@@ -172,7 +172,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-four state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Preparation requires initialized schema-five state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
@@ -234,7 +234,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New preparations run draft, independent Markdown review and revision as sequential Nucleus jobs. The revision copies the exact retained writer request and adds only the draft with evidence references and raw review text. Writer inputs, policy, model settings, tools and rendering checks otherwise remain identical. The reviewer sees the draft, posting, captured career library and policy without writer history, rationale or brief. Markdown headings are suggested; Platter does not parse findings or verdicts and requires no finding responses from the writer. Review must complete before revision; final artifact checks determine acceptance."
+        "statement": "New preparations capture generation=single_draft_v1. One draft job assesses pursuit, writes the brief and resume, and reviews its own content against the captured editorial policy. submit_draft carries both outputs. Mechanical validation precedes one atomic artifact commit; content and layout rejection returns feedback to the same job. New runs produce no intermediate draft or review artifacts. Captures without generation keep their original brief/resume or brief/draft/review/revision workflow, retained requests and artifacts."
       },
       {
         "status": "declared",
@@ -324,7 +324,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "No candidate or token budget caps daily preparation. Model gpt-5.6-sol with max effort runs brief then resume. Individual execution, network and rendering safety timeouts remain. Full posting adapters and one-page original-template rendering impose explicit input limits; runtime allowance and provider limits still apply."
+        "statement": "No candidate or token budget caps daily preparation. Model gpt-5.6-sol with max effort runs one draft job. Individual execution, network and rendering safety timeouts remain. Full posting adapters and one-page original-template rendering impose explicit input limits; runtime allowance and provider limits still apply."
       },
       {
         "status": "unspecified",
@@ -342,7 +342,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 10 reads career material from the fixed Annals vita library. Installation contract 7 requires Annals and ignores the retired CRM executable setting. Database schema 4, retained inputs, toolsets and artifacts keep their existing meanings."
+        "statement": "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
       },
       {
         "status": "unspecified",

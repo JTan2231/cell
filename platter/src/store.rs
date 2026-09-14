@@ -6,7 +6,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 pub const DATABASE: &str = "packets.sqlite3";
 
 pub struct Store {
@@ -125,7 +125,7 @@ impl Store {
         };
         let version = store.version()?;
         ensure!(
-            matches!(version, 0 | 1 | 2 | 3 | SCHEMA_VERSION),
+            matches!(version, 0 | 1 | 2 | 3 | 4 | SCHEMA_VERSION),
             "unsupported Platter database schema"
         );
         if version == 0 {

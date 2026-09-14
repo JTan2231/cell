@@ -108,8 +108,8 @@ download time, not the time it was read from disk. The cache is disposable and
 is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
-All stages receive the same captured career data. Models can list/read entries
-and submit only their stage content. New jobs also use read-only workspace access with
+The draft job receives the captured career data. Models can list/read entries
+and submit only their assigned content. New jobs also use read-only workspace access with
 local execution for project research. Web search stays disabled. The assignment
 permits only research reads, not source changes, service operation or messaging.
 Source text is untrusted material.
@@ -150,51 +150,43 @@ proposals or anticipated outcomes. The brief can also use project experience.
 
 Platter retains the resource instructions with each new run. It does not pin
 commits or Annals revisions, copy project sources, or provide custom source
-read tools. Draft, review and revision read current local material, including
+read tools. Research reads current local material, including
 working-tree edits. Resumed research can see newer content. Private source
 notes are navigation hints, not reproducible citations. Unavailable required
 sources must be reported as access failures; no source-system repair is part of
 preparation. The local paths, Annals command/config and library must be usable
 by the selected Nucleus harness. Catalog presence does not establish that access.
 
-New preparations use three sequential resume jobs: draft, independent review,
-and revision. Platter captures its embedded `prompts/resume-editorial.md` policy
-with the run. Writer and reviewer instructions are separate from that shared
-policy. Edit these sources and rebuild Platter to change new work.
+New preparations capture `generation=single_draft_v1` and use one Nucleus draft
+job. Its `prompts/draft.md` assignment combines pursuit assessment, brief and
+resume writing, and self-review. Platter captures the embedded
+`prompts/resume-editorial.md` policy with the run. Edit the draft prompt or
+editorial policy and rebuild Platter to change new work.
 
-The two writers use the same retained instructions, posting, captured career
-library, disclosure guidance, accepted brief, model settings and tools. The
-revision request copies the draft writer request and adds only the complete
-draft with its evidence references and the exact review text. Execution identity
-changes. Platter supplies no handoff summary or selected evidence subset.
-Both writers submit the same Jackson and projects payload. Both
-receive the same content and layout checks. Original bullets, when supplied,
-provide only an approximate space reference.
+The agent submits the brief and resume together through `submit_draft`.
+Declining requires no resume or rendering. A pursued packet requires both
+outputs. Platter validates the brief and resume, renders the resume, then
+commits the brief, resume content, LaTeX and PDF together before acknowledging
+acceptance. Content or layout rejection returns feedback to the same job for
+correction. Self-review produces no separate report or approval gate. New runs
+retain no intermediate draft or review artifacts.
 
-The reviewer receives the draft, target posting, captured career library and
-same editorial policy. It receives no writer history, rationale or accepted
-brief. It can read any captured career entry and current project resource,
-including uncited material, and submit only its review.
-The review is retained as exact free-text Markdown. Overall assessment, What
-works, What to reconsider, and Revision guidance are suggested headings only.
-Platter requires nonblank review text but does not parse its organization,
-findings, verdict or editorial judgments.
+Exact requests and accepted results survive requester restarts. Resuming work
+keeps its retained instructions and does not render accepted content again.
+A failed job without an accepted result stops preparation; it is not
+automatically retried. New ready packets require the accepted brief, resume
+content and validated PDF.
 
-Platter retains the draft and its rendered bytes as intermediate artifacts.
-The review must be retained before revision starts. The writer uses the review
-with editorial judgment and submits no finding responses or change report.
-Review text supplies no authority for career claims. A negative review does
-not create an approval gate. Final content and rendering checks determine
-acceptance after the required handoffs; no second editorial review follows
-layout revisions. Draft, review and final artifacts remain private.
-
-Exact stage requests and completed results survive requester restarts. Resuming
-work does not replace the policy or shared writing setup. A failed stage without
-a result stops preparation; it is not skipped or automatically retried.
-Preparations captured before this workflow retain their legacy brief/resume
-path, and accepted packets are not rewritten. Runs without captured project
-resources retain Jackson-only submissions and their original access policy. New ready packets require the
-draft, review, final resume content and validated PDF as well as the brief.
+Captures without `generation` retain their original workflow. Those with
+`resume_editorial` run brief, draft, independent Markdown review and revision.
+The revision copies the retained writer request and adds only the complete
+draft and exact review. The reviewer receives the draft, posting, career
+library and policy without writer history or the brief. Review must be
+nonblank; its organization and judgments are not parsed. Both writers receive
+the same content and layout checks. Draft, review and final artifacts remain
+private and retained. Captures without editorial policy use the legacy
+brief/resume path. Captures without project resources keep Jackson-only
+submissions and their original access policy. Accepted packets are not rewritten.
 
 For an authorized restart after a failed or cancelled preparation, use
 `prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
@@ -208,7 +200,7 @@ Fresh preparation uses the same Ashby cache policy.
 To create another packet for a previously prepared job, including one already
 used in an edition, run `regenerate CAST_JOB_ID --id REQUEST_ID`. It captures
 source inputs and current writing instructions again, then uses the ordinary
-brief, draft, review, revision and PDF pipeline. It does not copy prior outputs
+draft and mechanical validation pipeline. It does not copy prior outputs
 or model context, change old packet statuses, enable an ineligible job, freeze
 an edition or send email. Availability, compensation and pursuit checks still
 apply. Retrieval failure or a declined brief still sets eligibility false.
@@ -382,9 +374,9 @@ Every external send still requires its own applicable user authority.
 
 ## Recovery and privacy
 
-A schema-four SQLite snapshot contains the entire retained Platter library.
+A schema-five SQLite snapshot contains the entire retained Platter library.
 Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one, schema-two or schema-three state must pass
+main database without its journal. Schema-one through schema-four state must pass
 the explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves

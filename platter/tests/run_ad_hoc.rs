@@ -290,6 +290,7 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
         .ok_or_else(|| anyhow::anyhow!("new packet missing"))?;
     let captured: Value = store.inputs(&new.id)?;
     assert_eq!(captured["regeneration_id"], "regeneration-one");
+    assert_eq!(captured["generation"], "single_draft_v1");
     assert_eq!(captured["career"][0]["markdown"], "Current career evidence");
     assert_eq!(
         captured["resume_editorial"],

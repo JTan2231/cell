@@ -31,7 +31,7 @@
       "CLI dispatch separately attempts a metadata-only Chancery usage append (system, command, optional Codex thread and observation time). Recording errors preserve product results; no arguments or output are retained. Registration is a separate --register-usage installation step."
     ],
     "compatibility_and_retirement": [
-      "Preparation contract 10 reads career material from the fixed Annals vita library. Installation contract 7 requires Annals and ignores the retired CRM executable setting. Database schema 4, retained inputs, toolsets and artifacts keep their existing meanings."
+      "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
     ],
     "operational_limits": [
       "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."

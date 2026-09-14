@@ -33,8 +33,8 @@ fn successive_deployments_keep_distinct_repeatable_backups() -> Result<()> {
 }
 
 #[test]
-fn schema_two_and_three_upgrades_preserve_legacy_inputs_requests_and_artifacts() -> Result<()> {
-    for prior_version in [2, 3] {
+fn schema_two_through_four_upgrades_preserve_legacy_inputs_requests_and_artifacts() -> Result<()> {
+    for prior_version in [2, 3, 4] {
         let temporary = tempfile::tempdir()?;
         let root = temporary.path().join("state");
         let backup = temporary.path().join("review-schema.sqlite");

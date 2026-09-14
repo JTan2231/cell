@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -73,7 +73,7 @@
   "effects": [
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
-    "An explicit transaction imports legacy records and files into schema four, writes a complete schema-four backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two and schema-three migration advances the version without changing captured inputs, exact requests or artifact bytes.",
+    "An explicit transaction imports legacy records and files into schema five, writes a complete schema-five backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-four migration advances the version without changing captured inputs, exact requests or artifact bytes.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
     "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast and Email executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
@@ -88,8 +88,8 @@
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
-    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema four plus originals and cleanup recovery metadata. Schema-two and schema-three records retain their legacy workflow after the version advance.",
-    "Older binaries cannot operate schema four. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
+    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema five plus originals and cleanup recovery metadata. Schema-two through schema-four records retain their legacy workflow after the version advance.",
+    "Older binaries cannot operate schema five. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
     "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
     "The daily runner marks jobs ineligible when posting retrieval fails and continues with other candidates. Other preparation errors stop the run before sending. Declined opportunities and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
@@ -168,13 +168,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-four SQLite backup with a resumable legacy cleanup manifest."
+        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-five SQLite backup with a resumable legacy cleanup manifest."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Database schema 4 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
+        "statement": "Database schema 5 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
       }
     ],
     "identity_and_units": [
@@ -206,7 +206,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import is transactional. A complete schema-four backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
+        "statement": "Schema-one import is transactional. A complete schema-five backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
       },
       {
         "status": "declared",
@@ -230,7 +230,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 10 reads career material from the fixed Annals vita library. Installation contract 7 requires Annals and ignores the retired CRM executable setting. Database schema 4, retained inputs, toolsets and artifacts keep their existing meanings."
+        "statement": "Preparation contract 11 uses one draft job for combined brief and resume submission. Installation contract 8 migrates schemas one through four to schema five without changing retained inputs, requests or artifacts. Captures without generation retain their original workflow. Historical toolsets remain immutable and readable."
       }
     ],
     "reliances": [

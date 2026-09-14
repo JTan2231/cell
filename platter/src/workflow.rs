@@ -1,7 +1,7 @@
 use crate::{
     Config, ad_hoc,
     agent::{self, Brief, CareerEntry, Stage, StageInputs, StageResult},
-    resume::ResumeTemplate,
+    resume::{RenderedResume, ResumeTemplate},
     source::{self, Posting},
     store::{Edition, PacketRecord, Store},
 };
@@ -25,6 +25,14 @@ pub(crate) struct Captured {
     pub project_resources: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub regeneration_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<Generation>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Generation {
+    SingleDraftV1,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -127,6 +135,7 @@ async fn ensure_other_runs_settled(
 
 async fn ensure_run_settled(store: &Store, run: &str) -> Result<()> {
     for stage in [
+        Stage::Draft,
         Stage::Brief,
         Stage::Resume,
         Stage::ResumeDraft,
@@ -245,6 +254,7 @@ async fn capture_packet(
         resume_editorial: Some(agent::RESUME_EDITORIAL.into()),
         project_resources: Some(agent::PROJECT_RESOURCES.into()),
         regeneration_id: regeneration_id.map(str::to_owned),
+        generation: Some(Generation::SingleDraftV1),
     };
     store.insert_run(&record, &captured)?;
     Ok(record)
@@ -286,6 +296,10 @@ async fn prepare_record(
         ..StageInputs::default()
     };
     let client = nucleus_client::NucleusClient::for_current_user()?;
+    if matches!(captured.generation, Some(Generation::SingleDraftV1)) {
+        inputs.editorial_policy = captured.resume_editorial;
+        return prepare_draft(&client, store, &record, &template, inputs, deadline).await;
+    }
     let StageResult::Brief(brief) =
         agent::run_stage(&client, store, Stage::Brief, inputs.clone(), deadline).await?
     else {
@@ -301,6 +315,87 @@ async fn prepare_record(
     prepare_resume(&client, store, &record.id, &template, inputs, deadline).await?;
     store.status(&record.id, "ready")?;
     store.run(&record.id)
+}
+
+async fn prepare_draft(
+    client: &nucleus_client::NucleusClient,
+    store: &Store,
+    record: &PacketRecord,
+    template: &ResumeTemplate,
+    inputs: StageInputs,
+    deadline: Option<Instant>,
+) -> Result<PacketRecord> {
+    let validate = |result: &StageResult| {
+        let StageResult::Draft(draft) = result else {
+            anyhow::bail!("unexpected draft result");
+        };
+        let rendered = draft
+            .resume
+            .as_ref()
+            .map(|resume| {
+                ensure!(
+                    deadline
+                        .is_none_or(
+                            |d| d.saturating_duration_since(Instant::now()).as_secs() > 245
+                        ),
+                    "not enough invocation time remains to render; run remains retained"
+                );
+                template.render_pdf_with_projects(
+                    &resume.jackson_bullets,
+                    resume.projects.as_deref(),
+                    store.root(),
+                )
+            })
+            .transpose()?;
+        retain_draft(store, &record.id, draft, rendered.as_ref())
+    };
+    let StageResult::Draft(draft) =
+        agent::run_stage_with_validator(client, store, Stage::Draft, inputs, deadline, &validate)
+            .await?
+    else {
+        anyhow::bail!("unexpected draft result");
+    };
+    if draft.brief.pursue {
+        store.status(&record.id, "ready")?;
+    } else {
+        store.status(&record.id, "declined")?;
+        store.set_eligible(&record.opportunity, false)?;
+    }
+    store.run(&record.id)
+}
+
+pub(crate) fn retain_draft(
+    store: &Store,
+    run: &str,
+    draft: &agent::Draft,
+    rendered: Option<&RenderedResume>,
+) -> Result<()> {
+    ensure!(
+        draft.brief.pursue == draft.resume.is_some()
+            && draft.resume.is_some() == rendered.is_some(),
+        "draft content and rendered result disagree"
+    );
+    let tx = store.connection.unchecked_transaction()?;
+    store.put_content(run, "brief", &draft.brief)?;
+    if let (Some(resume), Some(rendered)) = (&draft.resume, rendered) {
+        store.put_content(run, "resume-content", resume)?;
+        store.put_artifact(
+            Some(run),
+            "resume-source",
+            &format!("{run}-resume.tex"),
+            "application/x-tex",
+            rendered.source.as_bytes(),
+        )?;
+        store.put_artifact(
+            Some(run),
+            "resume-pdf",
+            &format!("{run}-resume.pdf"),
+            "application/pdf",
+            &rendered.pdf,
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 async fn prepare_resume(
@@ -402,15 +497,14 @@ async fn write_resume(
         tx.commit()?;
         Ok(())
     };
-    let StageResult::Resume(resume) = agent::run_stage_with_resume_validator(
-        client,
-        store,
-        stage,
-        inputs,
-        deadline,
-        &validate_resume,
-    )
-    .await?
+    let StageResult::Resume(resume) =
+        agent::run_stage_with_validator(client, store, stage, inputs, deadline, &|result| {
+            match result {
+                StageResult::Resume(resume) => validate_resume(resume),
+                _ => anyhow::bail!("unexpected resume result"),
+            }
+        })
+        .await?
     else {
         anyhow::bail!("unexpected resume result");
     };

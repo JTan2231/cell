@@ -23,6 +23,7 @@ pub(crate) const RESUME_EDITORIAL: &str = include_str!("../prompts/resume-editor
 const RESUME_WRITER: &str = include_str!("../prompts/resume-writer.md");
 const RESUME_REVIEWER: &str = include_str!("../prompts/resume-reviewer.md");
 pub(crate) const PROJECT_RESOURCES: &str = include_str!("../prompts/project-resources.md");
+const DRAFT: &str = include_str!("../prompts/draft.md");
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +56,7 @@ pub struct StageInputs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
+    Draft,
     Brief,
     Resume,
     ResumeDraft,
@@ -65,6 +67,7 @@ pub enum Stage {
 impl Stage {
     fn name(self) -> &'static str {
         match self {
+            Self::Draft => "draft",
             Self::Brief => "brief",
             Self::Resume => "resume",
             Self::ResumeDraft => "resume-draft",
@@ -75,6 +78,7 @@ impl Stage {
 
     fn submit_tool(self) -> &'static str {
         match self {
+            Self::Draft => "submit_draft",
             Self::Brief => "submit_brief",
             Self::Resume | Self::ResumeDraft | Self::ResumeRevision => "submit_resume",
             Self::ResumeReview => "submit_review",
@@ -113,6 +117,20 @@ struct BriefSubmission {
     #[serde(default)]
     culture: Option<String>,
     pursue: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DraftSubmission {
+    brief: BriefSubmission,
+    resume: Option<Resume>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Draft {
+    pub brief: Brief,
+    pub resume: Option<Resume>,
 }
 
 impl BriefSubmission {
@@ -164,6 +182,7 @@ pub struct Resume {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "stage", content = "result", rename_all = "snake_case")]
 pub enum StageResult {
+    Draft(Draft),
     Brief(Brief),
     Resume(Resume),
     Review(String),
@@ -201,18 +220,18 @@ pub async fn run_stage(
     run_stage_impl(client, store, stage, inputs, deadline, None).await
 }
 
-pub async fn run_stage_with_resume_validator(
+pub async fn run_stage_with_validator(
     client: &NucleusClient,
     store: &Store,
     stage: Stage,
     inputs: StageInputs,
     deadline: Option<Instant>,
-    validator: &dyn Fn(&Resume) -> Result<()>,
+    validator: &dyn Fn(&StageResult) -> Result<()>,
 ) -> Result<StageResult> {
     run_stage_impl(client, store, stage, inputs, deadline, Some(validator)).await
 }
 
-type ResumeValidator<'a> = Option<&'a dyn Fn(&Resume) -> Result<()>>;
+type SubmissionValidator<'a> = Option<&'a dyn Fn(&StageResult) -> Result<()>>;
 
 async fn run_stage_impl(
     client: &NucleusClient,
@@ -220,7 +239,7 @@ async fn run_stage_impl(
     kind: Stage,
     inputs: StageInputs,
     deadline: Option<Instant>,
-    validator: ResumeValidator<'_>,
+    validator: SubmissionValidator<'_>,
 ) -> Result<StageResult> {
     let mut state = load_or_create(store, kind, inputs)?;
     let operation = run_stage_inner(client, store, &mut state, validator);
@@ -269,7 +288,8 @@ pub fn retained_request(store: &Store, run: &str, selected: Stage) -> Result<Opt
 }
 
 pub fn retained_guidance(store: &Store, run: &str) -> Result<Option<String>> {
-    retained_request(store, run, Stage::Brief)?
+    retained_request(store, run, Stage::Draft)?
+        .or(retained_request(store, run, Stage::Brief)?)
         .map(|request| {
             let prompt: Value = serde_json::from_str(&request.prompt)?;
             Ok(prompt
@@ -310,6 +330,7 @@ fn load_or_create(store: &Store, kind: Stage, inputs: StageInputs) -> Result<Sta
     };
     state.inputs = inputs;
     state.accepted = match kind {
+        Stage::Draft => retained_draft(store, &state.inputs.packet_id)?.map(StageResult::Draft),
         Stage::Brief => store
             .content(&state.inputs.packet_id, "brief")?
             .map(StageResult::Brief),
@@ -322,6 +343,27 @@ fn load_or_create(store: &Store, kind: Stage, inputs: StageInputs) -> Result<Sta
     };
     persist(store, &state)?;
     Ok(state)
+}
+
+fn retained_draft(store: &Store, run: &str) -> Result<Option<Draft>> {
+    let Some(brief) = store.content::<Brief>(run, "brief")? else {
+        return Ok(None);
+    };
+    let resume = if brief.pursue {
+        ensure!(
+            store.run_artifact(run, "resume-source")?.is_some()
+                && store.run_artifact(run, "resume-pdf")?.is_some(),
+            "accepted draft is missing rendered artifacts"
+        );
+        Some(
+            store
+                .content(run, "resume-content")?
+                .context("accepted draft is missing resume content")?,
+        )
+    } else {
+        None
+    };
+    Ok(Some(Draft { brief, resume }))
 }
 
 fn retained_review(store: &Store, run: &str) -> Result<Option<String>> {
@@ -352,6 +394,14 @@ fn writer_basis(store: &Store, inputs: &StageInputs) -> Result<JobRequestV1> {
 
 fn validate_handoff(store: &Store, stage: Stage, inputs: &StageInputs) -> Result<()> {
     match stage {
+        Stage::Draft => ensure!(
+            inputs.editorial_policy.is_some()
+                && inputs.project_resources.is_some()
+                && inputs.brief.is_none()
+                && inputs.proposed_draft.is_none()
+                && inputs.editorial_review.is_none(),
+            "draft requires editorial policy and project resources without prior stage content"
+        ),
         Stage::ResumeDraft => ensure!(
             inputs.editorial_policy.is_some()
                 && inputs.proposed_draft.is_none()
@@ -456,9 +506,12 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
     request.invocation.workspace_access = WorkspaceAccess::ReadOnly;
     request.invocation.builtin_tools.local_execution = true;
     let mut toolset = toolset_ref(stage, TOOL_NAMESPACE);
-    toolset.version += 1;
+    if stage != Stage::Draft {
+        toolset.version += 1;
+    }
     request.invocation.toolset = Some(toolset);
     let task = match stage {
+        Stage::Draft => DRAFT,
         Stage::Brief => {
             "Assess pursuit using the posting, captured career preferences and project experience. Preserve the supplied eligibility rules. Submit why_it_works (at most 45 words), role (at most 30), optional culture (at most 25), and pursue. Use at most 90 words total. Why it works explains supported fit confidently. Role and culture are flat specifics, not comparisons with the candidate. Use only the supplied posting for employer facts and omit unsupported culture. If declining, leave the text fields empty. Do not write a resume in this stage."
         }
@@ -505,6 +558,7 @@ fn build_legacy_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Resul
         .map(|entry| json!({"id":entry.id,"title":entry.title}))
         .collect();
     let task = match stage {
+        Stage::Draft => DRAFT,
         Stage::Brief => {
             "Assess whether this is a worthwhile opportunity for Joey using his preferences, recorded work history, and this posting. Read relevant career entries, including preferences and disclosure guidance, before deciding. Keep the pursuit assessment private: set pursue=false for a hard-constraint mismatch, clearly unsuitable role, or no reason to pursue in the captured posting and career entries. Otherwise submit a short, direct recommendation with submit_brief. Supply separate plain-text fields without headings or list markers: why_it_works is one or two direct sentences explaining the strongest reasons drawn from those inputs this role works for Joey (at most 45 words); role is a flat statement of the main tech stack, responsibilities, and process expectations (at most 30 words); culture is a flat statement of concrete company working norms (at most 25 words). Role and culture must each fit one or two short lines and must not compare anything with Joey's experience or preferences. Use the captured posting and existing material for employer details. Omit culture or set it to null when that material provides no substantive culture information; missing culture does not affect pursuit. Do not research it or substitute a warning, placeholder, or generic culture claim. Aim for 60-90 words across all supplied fields, with a hard maximum of 90; shorter is welcome. Explain why it works, never why it might work: no hedging, caveats, drawbacks, unknowns, or suggestions to investigate further in the displayed brief. Build the recommendation from specific details in the captured posting and career entries. If pursue=false, leave why_it_works and role empty and culture absent or null; no recommendation is needed for a declined role. Stop after a successful submission. Do not author a resume in this stage."
         }
@@ -540,6 +594,12 @@ fn build_legacy_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Resul
         "original_jackson_bullets":inputs.original_jackson_bullets,
         "accepted_brief_positioning_only":inputs.brief,
     });
+    if stage == Stage::Draft {
+        prompt
+            .as_object_mut()
+            .context("invalid draft prompt")?
+            .remove("accepted_brief_positioning_only");
+    }
     if stage == Stage::ResumeReview {
         prompt
             .as_object_mut()
@@ -631,7 +691,7 @@ async fn run_stage_inner(
     client: &NucleusClient,
     store: &Store,
     state: &mut StageState,
-    validator: ResumeValidator<'_>,
+    validator: SubmissionValidator<'_>,
 ) -> Result<StageResult> {
     if state
         .runtime
@@ -772,6 +832,7 @@ fn project_tools(state: &StageState) -> bool {
         .is_some_and(|toolset| {
             toolset.provider.as_str() == TOOL_NAMESPACE
                 && match state.stage {
+                    Stage::Draft => toolset.version == 1,
                     Stage::Brief => toolset.version == 3,
                     Stage::ResumeDraft | Stage::ResumeReview | Stage::ResumeRevision => {
                         toolset.version == 2
@@ -823,6 +884,19 @@ fn tool_definitions(
         ),
     ];
     match stage {
+        Stage::Draft => {
+            let brief = tool_definitions(Stage::Brief, TOOL_NAMESPACE, true)?;
+            let resume = project_tool_definitions(Stage::ResumeDraft)?;
+            let schema = |definitions: &ToolsetDefinitionsV1, name: &str| -> Result<Value> {
+                Ok(serde_json::from_str(definitions.tools.iter().find(|tool| tool.name == name).context("submission schema missing")?.input_schema.get())?)
+            };
+            let mut resume_schema = schema(&resume, "submit_resume")?;
+            resume_schema["type"] = json!(["object", "null"]);
+            definitions.push(("submit_draft", "Submit the finished brief and resume together for mechanical validation. A declined opportunity has empty brief text and no resume.", json!({
+                "type":"object", "additionalProperties":false, "required":["brief","resume"],
+                "properties":{"brief":schema(&brief,"submit_brief")?,"resume":resume_schema}
+            })));
+        }
         Stage::Brief if sectioned => definitions.push(("submit_brief", "Commit a concise recommendation with separate why_it_works, role, optional culture, and a private pursuit assessment. Use plain text without labels. Omit unsupported culture.", json!({
             "type":"object","additionalProperties":false,"required":["why_it_works","role","pursue"],
             "properties":{
@@ -959,7 +1033,7 @@ fn bind_tool_result_validated(
     store: &Store,
     state: &mut StageState,
     call: &ToolCallV1,
-    validator: ResumeValidator<'_>,
+    validator: SubmissionValidator<'_>,
 ) -> Result<ToolResultV1> {
     ensure!(
         call.version == 1 && call.job_id == state.request.id,
@@ -1003,6 +1077,8 @@ fn bind_tool_result_validated(
     // owns the mailbox response, including diagnostics and read-only calls.
     if !is_error && let Some(result) = &state.accepted {
         match result {
+            // The draft validator commits brief, resume content and rendered bytes together.
+            StageResult::Draft(_) => {}
             StageResult::Brief(brief) => {
                 store.put_content(&state.inputs.packet_id, "brief", brief)?;
             }
@@ -1030,7 +1106,7 @@ fn bind_tool_result_validated(
 fn execute_tool(
     state: &mut StageState,
     call: &ToolCallV1,
-    validator: ResumeValidator<'_>,
+    validator: SubmissionValidator<'_>,
 ) -> Result<Value> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
@@ -1041,6 +1117,7 @@ fn execute_tool(
         id: String,
     }
     match call.tool_name.as_str() {
+        "submit_draft" => execute_draft(state, call, validator),
         "list_career_entries" => {
             let _: Empty = serde_json::from_str(call.arguments.get())?;
             Ok(
@@ -1092,12 +1169,13 @@ fn execute_tool(
                 "projects are required only by the project-authoring toolset"
             );
             validate_resume(&resume, &state.inputs.career_entries)?;
+            let result = StageResult::Resume(resume);
             if state.accepted.is_none()
                 && let Some(validate) = validator
             {
-                validate(&resume).context("Resume rendering rejected the candidate; revise the editable resume content and submit again")?;
+                validate(&result).context("Resume rendering rejected the candidate; revise the editable resume content and submit again")?;
             }
-            accept(state, StageResult::Resume(resume))
+            accept(state, result)
         }
         "submit_review" => {
             #[derive(Deserialize)]
@@ -1115,6 +1193,47 @@ fn execute_tool(
         }
         _ => bail!("unknown tool"),
     }
+}
+
+fn execute_draft(
+    state: &mut StageState,
+    call: &ToolCallV1,
+    validator: SubmissionValidator<'_>,
+) -> Result<Value> {
+    ensure!(
+        state.stage == Stage::Draft,
+        "draft submission not allowed in this stage"
+    );
+    let submission: DraftSubmission = serde_json::from_str(call.arguments.get())?;
+    ensure!(
+        submission.brief.pursue == submission.resume.is_some(),
+        "pursued drafts require a resume; declined drafts must not contain one"
+    );
+    if !submission.brief.pursue {
+        ensure!(
+            submission.brief.why_it_works.trim().is_empty()
+                && submission.brief.role.trim().is_empty()
+                && submission
+                    .brief
+                    .culture
+                    .as_deref()
+                    .is_none_or(|text| text.trim().is_empty()),
+            "declined drafts must have empty brief text"
+        );
+    }
+    let brief = submission.brief.into_brief()?;
+    if let Some(resume) = &submission.resume {
+        ensure!(resume.projects.is_some(), "draft resume requires projects");
+        validate_resume(resume, &state.inputs.career_entries)?;
+    }
+    let result = StageResult::Draft(Draft {
+        brief,
+        resume: submission.resume,
+    });
+    if state.accepted.is_none() {
+        validator.context("draft acceptance validator is missing")?(&result)?;
+    }
+    accept(state, result)
 }
 
 fn validate_brief(brief: &Brief) -> Result<()> {
@@ -1597,6 +1716,240 @@ mod tests {
         }
     }
 
+    fn single_draft_inputs() -> StageInputs {
+        StageInputs {
+            brief: None,
+            project_resources: Some(PROJECT_RESOURCES.into()),
+            ..writing_inputs()
+        }
+    }
+
+    fn single_draft_payload() -> Value {
+        let mut resume = candidate();
+        resume.projects = Some(vec![Project {
+            name: "Cell".into(),
+            description: "Rust applications".into(),
+            dates: None,
+            bullets: vec!["Built local tools".into()],
+            sources: vec!["cell/README.md".into()],
+        }]);
+        json!({"brief":{"pursue":true,"why_it_works":"Your service ownership fits this role.","role":"Rust services and production support.","culture":null},"resume":resume})
+    }
+
+    fn retain_fixture_draft(store: &Store, result: &StageResult) -> Result<()> {
+        let StageResult::Draft(draft) = result else {
+            bail!("expected draft");
+        };
+        let rendered = draft
+            .resume
+            .as_ref()
+            .map(|_| crate::resume::RenderedResume {
+                source: "fixture LaTeX".into(),
+                pdf: b"fixture PDF".to_vec(),
+                pages: 1,
+            });
+        crate::workflow::retain_draft(store, "packet-1", draft, rendered.as_ref())
+    }
+
+    #[test]
+    fn single_draft_uses_combined_prompt_and_submission_without_handoffs() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fixture_store(dir.path());
+        let state = load_or_create(&store, Stage::Draft, single_draft_inputs()).unwrap();
+        assert!(state.request.instructions.contains(DRAFT));
+        assert!(
+            state
+                .request
+                .instructions
+                .contains("Frozen policy: explain the consequence.")
+        );
+        assert!(state.request.instructions.contains(PROJECT_RESOURCES));
+        assert!(
+            !state
+                .request
+                .prompt
+                .contains("accepted_brief_positioning_only")
+        );
+        assert_eq!(
+            state.request.invocation.workspace_access,
+            WorkspaceAccess::ReadOnly
+        );
+        assert!(state.request.invocation.builtin_tools.local_execution);
+        assert!(!state.request.invocation.builtin_tools.web_search);
+        let definitions = project_tool_definitions(Stage::Draft).unwrap();
+        assert_eq!(
+            definitions
+                .tools
+                .iter()
+                .map(|tool| tool.name.as_str())
+                .collect::<Vec<_>>(),
+            ["list_career_entries", "read_career_entry", "submit_draft"]
+        );
+        assert_eq!(
+            definitions.tools[2].input_schema_id.as_str(),
+            "platter.submit-draft.arguments.v1"
+        );
+        let schema: Value = serde_json::from_str(definitions.tools[2].input_schema.get()).unwrap();
+        assert_eq!(
+            schema["properties"]["resume"]["required"],
+            json!(["jackson_bullets", "evidence", "projects"])
+        );
+        for stage in [
+            Stage::Brief,
+            Stage::ResumeDraft,
+            Stage::ResumeReview,
+            Stage::ResumeRevision,
+        ] {
+            assert!(store.execution("packet-1", stage.name()).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn single_draft_rejects_content_and_layout_then_accepts_one_immutable_packet() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fixture_store(dir.path());
+        let mut state = load_or_create(&store, Stage::Draft, single_draft_inputs()).unwrap();
+        let original_request = state.request.clone();
+        let payload = single_draft_payload();
+        let retain = |result: &StageResult| retain_fixture_draft(&store, result);
+        for invalid in [
+            json!({"brief":payload["brief"],"resume":null}),
+            json!({"brief":{"pursue":true,"why_it_works":"","role":"Rust"},"resume":payload["resume"]}),
+            json!({"brief":payload["brief"],"resume":{"jackson_bullets":["Work"],"evidence":[],"projects":[]}}),
+        ] {
+            let submit = call(&state, "invalid", "submit_draft", &invalid);
+            assert!(
+                bind_tool_result_validated(&store, &mut state, &submit, Some(&retain))
+                    .unwrap()
+                    .is_error
+            );
+            assert!(store.run_artifact("packet-1", "brief").unwrap().is_none());
+        }
+        let submit = call(&state, "draft-submit", "submit_draft", &payload);
+        let rejected =
+            bind_tool_result_validated(&store, &mut state, &submit, Some(&|_| bail!("two pages")))
+                .unwrap();
+        assert!(rejected.is_error && rejected.result.get().contains("two pages"));
+        assert!(state.accepted.is_none());
+        assert!(store.run_artifact("packet-1", "brief").unwrap().is_none());
+        assert!(
+            bind_tool_result_validated(
+                &store,
+                &mut state,
+                &submit,
+                Some(&|_| Err(crate::resume::RendererFailure.into()))
+            )
+            .unwrap_err()
+            .is::<crate::resume::RendererFailure>()
+        );
+        assert!(
+            !bind_tool_result_validated(&store, &mut state, &submit, Some(&retain))
+                .unwrap()
+                .is_error
+        );
+        assert_eq!(state.request, original_request);
+        for kind in ["brief", "resume-content", "resume-source", "resume-pdf"] {
+            assert!(store.run_artifact("packet-1", kind).unwrap().is_some());
+        }
+        for kind in [
+            "resume-draft",
+            "resume-draft-source",
+            "resume-draft-pdf",
+            "resume-review",
+        ] {
+            assert!(store.run_artifact("packet-1", kind).unwrap().is_none());
+        }
+        let mut restored = load_or_create(&store, Stage::Draft, single_draft_inputs()).unwrap();
+        assert_eq!(restored.accepted, state.accepted);
+        assert!(
+            !bind_tool_result_validated(
+                &store,
+                &mut restored,
+                &submit,
+                Some(&|_| panic!("accepted packet must not render again"))
+            )
+            .unwrap()
+            .is_error
+        );
+        let mut changed = payload;
+        changed["brief"]["role"] = json!("Different role");
+        let conflicting = call(&restored, "conflict", "submit_draft", &changed);
+        assert!(
+            bind_tool_result(&store, &mut restored, &conflicting)
+                .unwrap()
+                .is_error
+        );
+    }
+
+    #[test]
+    fn single_draft_decline_and_failed_commit_do_not_leave_partial_packets() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = fixture_store(dir.path());
+        let mut state = load_or_create(&store, Stage::Draft, single_draft_inputs()).unwrap();
+        // Force the last artifact write to fail after the brief and resume writes.
+        store
+            .put_artifact(
+                Some("packet-1"),
+                "resume-pdf",
+                "packet-1-resume.pdf",
+                "application/pdf",
+                b"conflict",
+            )
+            .unwrap();
+        let submit = call(
+            &state,
+            "failed-commit",
+            "submit_draft",
+            &single_draft_payload(),
+        );
+        assert!(
+            bind_tool_result_validated(
+                &store,
+                &mut state,
+                &submit,
+                Some(&|result| retain_fixture_draft(&store, result))
+            )
+            .unwrap()
+            .is_error
+        );
+        for kind in ["brief", "resume-content", "resume-source"] {
+            assert!(store.run_artifact("packet-1", kind).unwrap().is_none());
+        }
+        assert!(state.accepted.is_none());
+
+        let declined_dir = tempfile::tempdir().unwrap();
+        let declined = fixture_store(declined_dir.path());
+        let mut state = load_or_create(&declined, Stage::Draft, single_draft_inputs()).unwrap();
+        let submit = call(
+            &state,
+            "decline",
+            "submit_draft",
+            &json!({"brief":{"pursue":false,"why_it_works":"","role":"","culture":null},"resume":null}),
+        );
+        assert!(
+            !bind_tool_result_validated(
+                &declined,
+                &mut state,
+                &submit,
+                Some(&|result| retain_fixture_draft(&declined, result))
+            )
+            .unwrap()
+            .is_error
+        );
+        assert_eq!(
+            load_or_create(&declined, Stage::Draft, single_draft_inputs())
+                .unwrap()
+                .accepted,
+            state.accepted
+        );
+        assert!(
+            declined
+                .run_artifact("packet-1", "resume-pdf")
+                .unwrap()
+                .is_none()
+        );
+    }
+
     #[test]
     #[allow(clippy::too_many_lines)] // Keep the complete handoff and legacy-boundary check together.
     fn project_workflow_keeps_direct_research_and_versioned_submissions() {
@@ -1960,7 +2313,7 @@ mod tests {
         let store = fixture_store(dir.path());
         let mut draft = load_or_create(&store, Stage::ResumeDraft, writing_inputs()).unwrap();
         let submit = call(&draft, "draft-call", "submit_resume", &json!(candidate()));
-        let reject = |_: &Resume| -> Result<()> { bail!("fixture overflow") };
+        let reject = |_: &StageResult| -> Result<()> { bail!("fixture overflow") };
         assert!(
             bind_tool_result_validated(&store, &mut draft, &submit, Some(&reject))
                 .unwrap()
@@ -2142,69 +2495,86 @@ mod tests {
 
     #[tokio::test]
     async fn restart_replays_committed_receipt_and_runtime_failure_preserves_success() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = fixture_store(dir.path());
-        let socket = dir.path().join("nucleus.sock");
-        let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
-        let pending = call(
-            &state,
-            "call-1",
-            "submit_brief",
-            &json!({"why_it_works":"Your production service experience fits the team's backend ownership needs.","role":"Rust services, design reviews, and production support.","culture":null,"pursue":true}),
-        );
-        let response = bind_tool_result(&path, &mut state, &pending).unwrap();
-        let running = runtime_job(&state, nucleus_core::JobState::WaitingOnRequester);
-        let failed = runtime_job(&state, nucleus_core::JobState::Failed);
-        let pending_record = nucleus_core::PendingToolCallV1 {
-            version: 1,
-            call: pending,
-            state: nucleus_core::ToolCallState::Pending,
-            created_at: "2026-09-06T21:00:00Z".into(),
-            answered_at: None,
-        };
-        let id = state.request.id.to_string();
-        let server = fake_mailbox(
-            &socket,
-            vec![
-                (format!("GET /v1/jobs/{id} "), json!(running)),
-                (format!("GET /v1/jobs/{id} "), json!(running)),
-                (
-                    format!("GET /v1/jobs/{id}/tool-calls?"),
-                    json!({"version":1,"jobId":id,"calls":[pending_record],"nextSequence":1}),
-                ),
-                (
-                    format!("POST /v1/jobs/{id}/tool-calls/call-1/result "),
-                    json!(pending_record),
-                ),
-                (format!("GET /v1/jobs/{id} "), json!(failed)),
-            ],
-        );
-        let result = run_stage(
-            &NucleusClient::new(&socket).unwrap(),
-            &path,
-            Stage::Brief,
-            inputs(),
-            Some(Instant::now() + Duration::from_secs(5)),
-        )
-        .await
-        .unwrap();
-        assert_eq!(Some(result), state.accepted);
-        let requests = server.await.unwrap();
-        assert_eq!(requests[3], serde_json::to_value(response).unwrap());
-        // With a terminal observation retained, no service or new attempt is needed.
-        fs::remove_file(&socket).unwrap();
-        assert_eq!(
-            run_stage(
+        for stage in [Stage::Brief, Stage::Draft] {
+            let dir = tempfile::tempdir().unwrap();
+            let path = fixture_store(dir.path());
+            let socket = dir.path().join("nucleus.sock");
+            let stage_inputs = if stage == Stage::Draft {
+                single_draft_inputs()
+            } else {
+                inputs()
+            };
+            let mut state = load_or_create(&path, stage, stage_inputs.clone()).unwrap();
+            let pending = call(
+                &state,
+                "call-1",
+                stage.submit_tool(),
+                &if stage == Stage::Draft {
+                    single_draft_payload()
+                } else {
+                    json!({"why_it_works":"Your production service experience fits the team's backend ownership needs.","role":"Rust services, design reviews, and production support.","culture":null,"pursue":true})
+                },
+            );
+            let response = bind_tool_result_validated(
+                &path,
+                &mut state,
+                &pending,
+                Some(&|result| retain_fixture_draft(&path, result)),
+            )
+            .unwrap();
+            let running = runtime_job(&state, nucleus_core::JobState::WaitingOnRequester);
+            let failed = runtime_job(&state, nucleus_core::JobState::Failed);
+            let pending_record = nucleus_core::PendingToolCallV1 {
+                version: 1,
+                call: pending,
+                state: nucleus_core::ToolCallState::Pending,
+                created_at: "2026-09-06T21:00:00Z".into(),
+                answered_at: None,
+            };
+            let id = state.request.id.to_string();
+            let server = fake_mailbox(
+                &socket,
+                vec![
+                    (format!("GET /v1/jobs/{id} "), json!(running)),
+                    (format!("GET /v1/jobs/{id} "), json!(running)),
+                    (
+                        format!("GET /v1/jobs/{id}/tool-calls?"),
+                        json!({"version":1,"jobId":id,"calls":[pending_record],"nextSequence":1}),
+                    ),
+                    (
+                        format!("POST /v1/jobs/{id}/tool-calls/call-1/result "),
+                        json!(pending_record),
+                    ),
+                    (format!("GET /v1/jobs/{id} "), json!(failed)),
+                ],
+            );
+            let result = run_stage(
                 &NucleusClient::new(&socket).unwrap(),
                 &path,
-                Stage::Brief,
-                inputs(),
-                None
+                stage,
+                stage_inputs.clone(),
+                Some(Instant::now() + Duration::from_secs(5)),
             )
             .await
-            .unwrap(),
-            state.accepted.unwrap()
-        );
+            .unwrap();
+            assert_eq!(Some(result), state.accepted);
+            let requests = server.await.unwrap();
+            assert_eq!(requests[3], serde_json::to_value(response).unwrap());
+            // With a terminal observation retained, no service or new attempt is needed.
+            fs::remove_file(&socket).unwrap();
+            assert_eq!(
+                run_stage(
+                    &NucleusClient::new(&socket).unwrap(),
+                    &path,
+                    stage,
+                    stage_inputs,
+                    None
+                )
+                .await
+                .unwrap(),
+                state.accepted.unwrap()
+            );
+        }
     }
 
     #[tokio::test]
@@ -2368,14 +2738,14 @@ mod tests {
         let payload = json!({"jackson_bullets":["Supported Jackson work"],"evidence":[{"bullet_index":0,"career_entry_ids":["story-1"]}]});
         let first = call(&state, "call-1", "submit_resume", &payload);
         let rejects =
-            |_resume: &Resume| -> Result<()> { bail!("two pages; shorten Jackson bullets") };
+            |_result: &StageResult| -> Result<()> { bail!("two pages; shorten Jackson bullets") };
         let response =
             bind_tool_result_validated(&path, &mut state, &first, Some(&rejects)).unwrap();
         assert!(response.is_error);
         assert!(response.result.get().contains("two pages"));
         assert!(state.accepted.is_none());
         let next = call(&state, "call-2", "submit_resume", &payload);
-        let accepts = |_resume: &Resume| -> Result<()> { Ok(()) };
+        let accepts = |_result: &StageResult| -> Result<()> { Ok(()) };
         assert!(
             !bind_tool_result_validated(&path, &mut state, &next, Some(&accepts))
                 .unwrap()
