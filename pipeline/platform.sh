@@ -10,7 +10,7 @@ suite=$1
 case "$suite" in
     pipeline)
         "$PIPELINE_ROOT/pipeline/check.sh"
-        "$PIPELINE_ROOT/pipeline/generate.sh" --check --product nucleus --product crm
+        "$PIPELINE_ROOT/pipeline/generate.sh" --check --product nucleus
         for product_id in $(pipeline_products); do
             pipeline_load_descriptor "$product_id"
             set +e

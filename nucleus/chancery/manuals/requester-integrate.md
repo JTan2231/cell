@@ -164,7 +164,7 @@ inspect domain effects before authorizing a retry. A committed domain result
 remains authoritative. Existing deadlines and daily-report selection still apply:
 expired work is not replayed automatically, and past Paperboy periods require
 selection of their retained brief. Todo keeps its existing bounded wait once a
-job is accepted. CRM retains its explicit resume operation and adds no scheduler.
+job is accepted.
 Nucleus restart keeps its existing lost-attempt rule, including pending attempts;
 a quota pause does not authorize replay across that boundary.
 

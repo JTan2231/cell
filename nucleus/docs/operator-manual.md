@@ -38,7 +38,6 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
 | Todo | Retained concerns, routing decisions, situation assessments, and designs | [Todo](/Users/joey/rust/cell/todo/README.md) |
-| CRM | Employment cases, immutable case revisions, and editable career entries | [CRM](/Users/joey/rust/cell/crm/README.md) |
 | Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/README.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
@@ -652,7 +651,7 @@ inspect domain effects before authorizing a retry. A committed domain result
 remains authoritative. Existing deadlines and daily-report selection still apply:
 expired work is not replayed automatically, and past Paperboy periods require
 selection of their retained brief. Todo keeps its existing bounded wait once a
-job is accepted. CRM retains its explicit resume operation and adds no scheduler.
+job is accepted.
 Nucleus restart keeps its existing lost-attempt rule, including pending attempts;
 a quota pause does not authorize replay across that boundary.
 
