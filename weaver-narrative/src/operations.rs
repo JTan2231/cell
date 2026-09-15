@@ -179,10 +179,9 @@ pub async fn maintenance(root: &Path, operation: &str, owner: Option<&str>) -> R
 pub async fn doctor(root: &Path) -> Result<Value> {
     let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
     let admission = gate(root);
-    let _guard = if let Some(owner) = &owner {
-        admission.enter_for(owner)?
-    } else {
-        admission.enter()?
+    let _guard = match owner.as_deref() {
+        Some(owner) if !admission.status()?.holds.is_empty() => admission.enter_for(owner)?,
+        _ => admission.enter()?,
     };
     let store = Store::open(root, true)?;
     let integrity: String = store
