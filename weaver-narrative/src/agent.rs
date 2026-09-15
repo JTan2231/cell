@@ -10,8 +10,10 @@ use nucleus_core::{
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json, value::to_raw_value};
+use std::future::Future;
 use std::path::Path;
 use std::time::Duration;
+use time::{OffsetDateTime, format_description::well_known::Rfc3339};
 
 use crate::{Config, store::Store};
 
@@ -240,7 +242,7 @@ fn pending_reply(store: &Store, id: &str) -> Result<Option<PendingReply>> {
 }
 
 fn prepare_reply(
-    store: &mut Store,
+    store: &Store,
     config: &Config,
     request: &JobRequestV1,
     call: &ToolCallV1,
@@ -300,7 +302,9 @@ fn prepare_reply(
             is_error,
         },
     };
-    let tx = store.connection.transaction()?;
+    // All job futures are polled by one runner. This transaction contains no
+    // await or source read, so another job cannot enter it before commit.
+    let tx = store.connection.unchecked_transaction()?;
     if let Some(markdown) = document {
         tx.execute(
             "UPDATE documents SET markdown=?2 WHERE id=?1 AND markdown IS NULL",
@@ -335,29 +339,66 @@ async fn post_pending(client: &NucleusClient, store: &Store, request: &JobReques
 
 pub async fn run(
     client: &NucleusClient,
-    store: &mut Store,
+    store: &Store,
     config: &Config,
     request: &JobRequestV1,
 ) -> Result<()> {
-    let result = tokio::time::timeout(
-        Duration::from_secs(1800),
-        run_inner(client, store, config, request),
-    )
-    .await;
-    if let Ok(result) = result {
-        result
-    } else {
+    let result = run_inner(client, store, config, request).await;
+    if result
+        .as_ref()
+        .err()
+        .is_some_and(anyhow::Error::is::<tokio::time::error::Elapsed>)
+    {
         let _ = client.cancel_job(&request.id).await;
         bail!(
             "Weaver wait deadline reached; cancellation requested. Resume {} to inspect its retained result",
             request.id
         )
     }
+    result
+}
+
+fn remaining_wait(job: &nucleus_core::JobV1, now: OffsetDateTime) -> Result<Option<Duration>> {
+    let attempt = job
+        .attempts
+        .iter()
+        .find(|attempt| Some(&attempt.id) == job.summary.current_attempt_id.as_ref())
+        .context("current Nucleus attempt is absent")?;
+    if attempt.state == nucleus_core::AttemptState::Pending {
+        return Ok(None);
+    }
+    let started = OffsetDateTime::parse(
+        attempt
+            .started_at
+            .as_deref()
+            .context("Nucleus attempt start is absent")?,
+        &Rfc3339,
+    )?;
+    let remaining = started + time::Duration::seconds(1800) - now;
+    Ok(Some(
+        Duration::try_from(remaining).unwrap_or(Duration::ZERO),
+    ))
+}
+
+async fn before_deadline<T>(
+    deadline: Option<tokio::time::Instant>,
+    future: impl Future<Output = Result<T>>,
+) -> Result<T> {
+    if let Some(deadline) = deadline {
+        // Check before polling: an immediately-ready operation must not bypass
+        // the deadline indefinitely.
+        if deadline <= tokio::time::Instant::now() {
+            tokio::time::timeout_at(deadline, std::future::pending::<()>()).await?;
+        }
+        tokio::time::timeout_at(deadline, future).await?
+    } else {
+        future.await
+    }
 }
 
 async fn run_inner(
     client: &NucleusClient,
-    store: &mut Store,
+    store: &Store,
     config: &Config,
     request: &JobRequestV1,
 ) -> Result<()> {
@@ -377,8 +418,12 @@ async fn run_inner(
         }
         Err(error) => return Err(error.into()),
     }
+    let mut deadline = None;
     loop {
-        let job = client.get_job_for_work(&request.id).await?;
+        let job = before_deadline(deadline, async {
+            Ok(client.get_job_for_work(&request.id).await?)
+        })
+        .await?;
         ensure!(job.request == *request, "Nucleus request changed");
         if job.summary.state.is_terminal() {
             let saved = store.document(request.id.as_str())?.markdown.is_some();
@@ -397,28 +442,36 @@ async fn run_inner(
             }
             return Ok(());
         }
-        post_pending(client, store, request).await?;
-        let pending = client
-            .pending_tool_calls(
-                &request.id,
-                &ToolCallsQueryV1 {
-                    after: 0,
-                    wait_seconds: 10,
-                },
-            )
-            .await?;
-        ensure!(
-            pending.version == 1 && pending.job_id == request.id,
-            "mailbox identity differs"
-        );
-        for pending in pending.calls {
-            ensure!(
-                Some(&pending.call.attempt_id) == job.summary.current_attempt_id.as_ref(),
-                "tool attempt differs"
-            );
-            prepare_reply(store, config, request, &pending.call)?;
-            post_pending(client, store, request).await?;
+        if deadline.is_none() {
+            deadline = remaining_wait(&job, OffsetDateTime::now_utc())?
+                .map(|remaining| tokio::time::Instant::now() + remaining);
         }
+        before_deadline(deadline, async {
+            post_pending(client, store, request).await?;
+            let pending = client
+                .pending_tool_calls(
+                    &request.id,
+                    &ToolCallsQueryV1 {
+                        after: 0,
+                        wait_seconds: 10,
+                    },
+                )
+                .await?;
+            ensure!(
+                pending.version == 1 && pending.job_id == request.id,
+                "mailbox identity differs"
+            );
+            for pending in pending.calls {
+                ensure!(
+                    Some(&pending.call.attempt_id) == job.summary.current_attempt_id.as_ref(),
+                    "tool attempt differs"
+                );
+                prepare_reply(store, config, request, &pending.call)?;
+                post_pending(client, store, request).await?;
+            }
+            Ok(())
+        })
+        .await?;
     }
 }
 

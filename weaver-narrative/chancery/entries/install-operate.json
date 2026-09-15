@@ -121,7 +121,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+        "statement": "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
       },
       {
         "status": "unspecified",

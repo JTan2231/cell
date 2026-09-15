@@ -97,8 +97,13 @@ impl Deployment {
             while !server_stop.load(Ordering::Relaxed) {
                 if let Ok((mut stream, _)) = listener.accept() {
                     let mut request = [0; 4096];
-                    let _ = stream.read(&mut request);
-                    let line = String::from_utf8_lossy(&request);
+                    let Ok(count) = stream.read(&mut request) else {
+                        continue;
+                    };
+                    if count == 0 {
+                        continue;
+                    }
+                    let line = String::from_utf8_lossy(&request[..count]);
                     let body = if line.starts_with("GET /v1/jobs?") {
                         r#"{"version":1,"jobs":[]}"#
                     } else if line.starts_with("GET /v1/maintenance ") {

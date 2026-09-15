@@ -41,6 +41,10 @@
     {
       "label": "Revise with retained caller identity",
       "invocation": "weaver revise DOCUMENT_ID --request-id REQUEST_ID DIRECTION"
+    },
+    {
+      "label": "Write independent documents concurrently",
+      "invocation": "weaver write-many --jobs N DIRECTION..."
     }
   ],
   "effects": [
@@ -55,7 +59,8 @@
   ],
   "failure_and_recovery": [
     "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds.",
-    "A caller can persist its ID before writing. Repeating matching input resumes or returns that document without a replacement attempt, even after response loss. Different input is refused. Dropping the CLI process does not cancel a Nucleus job; cancellation names the exact document/job ID."
+    "A caller can persist its ID before writing. Repeating matching input resumes or returns that document without a replacement attempt, even after response loss. Different input is refused. Dropping the CLI process does not cancel a Nucleus job; cancellation names the exact document/job ID.",
+    "A batch continues after individual job errors. Its IDs are printed to standard error when retained. After interruption, inspect list and resume exact document IDs; repeating write-many creates new assignments. Batch concurrency limits live handling loops, not execution reservations for jobs whose handling has ended."
   ],
   "privacy": [
     "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
@@ -114,7 +119,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+        "statement": "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
       },
       {
         "status": "unspecified",
@@ -167,6 +172,10 @@
       {
         "status": "declared",
         "statement": "Optional caller IDs contain one through 120 ASCII letters, digits, underscores or hyphens. A repeated ID must have identical direction and input Markdown; it reuses the saved exact invocation. Calls without an ID generate one."
+      },
+      {
+        "status": "declared",
+        "statement": "write-many accepts one or more nonblank directions and a positive jobs limit. It assigns a fresh document ID to each direction and retains all requests before execution."
       }
     ],
     "outputs": [
@@ -177,6 +186,10 @@
       {
         "status": "declared",
         "statement": "weaver::api::Client owns the installed CLI JSON views and write, revise, show, resume and doctor transport. Quota deferral returns id, outcome=quota_deferred and detail. A process error can coexist with saved Markdown; show reads that exact document."
+      },
+      {
+        "status": "declared",
+        "statement": "write-many returns ok/data with results in input order. Each item has id and exactly one of result or error. result contains a document view or quota deferral. Successful collection exits zero even when individual jobs fail; inspect every item. The library operations::write_many uses one process and one SQLite handle; api::Client::write_many invokes one installed process for the batch."
       }
     ]
   },

@@ -63,7 +63,7 @@ that ID to match its sole hold. It keeps the ID for Nucleus deployment readiness
 Maintenance returns `maintenance.protocol_version=1`, `holds`, `drained`, and
 `nonterminal_jobs`. Drain requires no admitted Weaver process and no nonterminal
 Weaver Nucleus job. An unavailable job inventory remains unknown and cannot
-prove drain. A hold blocks new writes and revisions; resume can settle an
+prove drain. A hold blocks new writes, batches, and revisions; resume can settle an
 existing exact assignment. Hold and release preserve other owners' holds.
 
 The installer uses the shared Cell content-addressed file transaction and

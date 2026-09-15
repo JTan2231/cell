@@ -105,22 +105,22 @@ fn reads_are_on_demand_with_short_pages_and_explicit_errors() -> Result<()> {
 
 #[test]
 fn output_and_reply_commit_together_and_conflicting_writes_fail() -> Result<()> {
-    let (temp, mut store, config, request) = fixture()?;
+    let (temp, store, config, request) = fixture()?;
     let first = call(
         &request,
         "c1",
         "submit_document",
         json!({"markdown":"# A story\n\nSome prose."}),
     )?;
-    let accepted = prepare_reply(&mut store, &config, &request, &first)?;
+    let accepted = prepare_reply(&store, &config, &request, &first)?;
     assert!(!accepted.reply.is_error);
     drop(store);
-    let mut reopened = Store::open(temp.path(), false)?;
+    let reopened = Store::open(temp.path(), false)?;
     assert_eq!(
         reopened.document(request.id.as_str())?.markdown.as_deref(),
         Some("# A story\n\nSome prose.")
     );
-    let replay = prepare_reply(&mut reopened, &config, &request, &first)?;
+    let replay = prepare_reply(&reopened, &config, &request, &first)?;
     assert_eq!(
         serde_json::to_value(replay.reply)?,
         serde_json::to_value(accepted.reply)?
@@ -131,7 +131,7 @@ fn output_and_reply_commit_together_and_conflicting_writes_fail() -> Result<()> 
         "submit_document",
         json!({"markdown":"Changed"}),
     )?;
-    assert!(prepare_reply(&mut reopened, &config, &request, &changed).is_err());
+    assert!(prepare_reply(&reopened, &config, &request, &changed).is_err());
     reopened
         .connection
         .execute("UPDATE documents SET pending_reply=NULL", [])?;
@@ -142,7 +142,7 @@ fn output_and_reply_commit_together_and_conflicting_writes_fail() -> Result<()> 
         json!({"markdown":"Changed"}),
     )?;
     assert!(
-        prepare_reply(&mut reopened, &config, &request, &second)?
+        prepare_reply(&reopened, &config, &request, &second)?
             .reply
             .is_error
     );
@@ -164,6 +164,8 @@ struct Mock {
     terminal: &'static str,
     unhealthy: bool,
     queued: usize,
+    started_at: Option<String>,
+    cancellations: usize,
 }
 
 async fn respond(State(state): State<Arc<Mutex<Mock>>>, request: Request) -> Response {
@@ -173,6 +175,7 @@ async fn respond(State(state): State<Arc<Mutex<Mock>>>, request: Request) -> Res
     }
 }
 
+#[allow(clippy::too_many_lines)] // Keep the small protocol fixture in one dispatcher.
 async fn respond_inner(state: Arc<Mutex<Mock>>, request: Request) -> Result<Response> {
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
@@ -227,6 +230,12 @@ async fn respond_inner(state: Arc<Mutex<Mock>>, request: Request) -> Result<Resp
         )
             .into_response());
     };
+    if path.ends_with("/cancel") {
+        mock.cancellations += 1;
+        return ok(
+            json!({"version":1,"jobId":request.id,"state":"running","cancellationRequested":true}),
+        );
+    }
     if path.ends_with("/result") {
         let id = input["callId"].as_str().context("tool call ID")?;
         if mock.replies.get(id).is_some_and(|old| *old != input) {
@@ -268,7 +277,10 @@ async fn respond_inner(state: Arc<Mutex<Mock>>, request: Request) -> Result<Resp
     ok(
         json!({"version":1,"summary":{"version":1,"id":request.id,"label":"test","requester":request.requester,
         "state":state,"requestDigest":"fixture","createdAt":"now","updatedAt":"now","currentAttemptId":"attempt-1"},
-        "request":request,"attempts":[]}),
+        "request":request,"attempts":[{"version":1,"id":"attempt-1","jobId":request.id,"ordinal":1,
+        "harness":{"harness":"codex","harnessVersion":"fixture","adapterVersion":"fixture"},
+        "state":if state == "accepted" {"pending"} else {"running"},"createdAt":"now",
+        "startedAt":if state == "accepted" {None} else {Some(mock.started_at.clone().unwrap_or(OffsetDateTime::now_utc().format(&Rfc3339)?))} }]}),
     )
 }
 
@@ -285,7 +297,7 @@ fn server(
 
 #[tokio::test]
 async fn interrupted_read_reply_replays_then_discards_source_bookkeeping() -> Result<()> {
-    let (temp, mut store, config, request) = fixture()?;
+    let (temp, store, config, request) = fixture()?;
     let state = Arc::new(Mutex::new(Mock {
         calls: vec![
             call(&request, "read", "read_decisions", json!({}))?,
@@ -302,15 +314,15 @@ async fn interrupted_read_reply_replays_then_discards_source_bookkeeping() -> Re
         ..Default::default()
     }));
     let (client, task) = server(temp.path(), Arc::clone(&state))?;
-    let interrupted = run(&client, &mut store, &config, &request).await;
+    let interrupted = run(&client, &store, &config, &request).await;
     assert!(interrupted.is_err());
     assert!(
         pending_reply(&store, request.id.as_str())?.is_some(),
         "{interrupted:?}"
     );
     drop(store);
-    let mut store = Store::open(temp.path(), false)?;
-    run(&client, &mut store, &config, &request).await?;
+    let store = Store::open(temp.path(), false)?;
+    run(&client, &store, &config, &request).await?;
     assert_eq!(
         state
             .lock()
@@ -337,7 +349,7 @@ async fn interrupted_read_reply_replays_then_discards_source_bookkeeping() -> Re
 
 #[tokio::test]
 async fn saved_document_survives_later_runtime_failure_and_no_new_attempt() -> Result<()> {
-    let (temp, mut store, config, request) = fixture()?;
+    let (temp, store, config, request) = fixture()?;
     let state = Arc::new(Mutex::new(Mock {
         calls: vec![call(
             &request,
@@ -349,14 +361,14 @@ async fn saved_document_survives_later_runtime_failure_and_no_new_attempt() -> R
         ..Default::default()
     }));
     let (client, task) = server(temp.path(), Arc::clone(&state))?;
-    let failed = run(&client, &mut store, &config, &request).await;
+    let failed = run(&client, &store, &config, &request).await;
     assert!(failed.is_err());
     assert_eq!(
         store.document(request.id.as_str())?.markdown.as_deref(),
         Some("Saved prose."),
         "{failed:?}"
     );
-    assert!(run(&client, &mut store, &config, &request).await.is_err());
+    assert!(run(&client, &store, &config, &request).await.is_err());
     assert_eq!(
         state
             .lock()
@@ -371,14 +383,14 @@ async fn saved_document_survives_later_runtime_failure_and_no_new_attempt() -> R
 #[tokio::test]
 async fn lost_or_cancelled_jobs_without_documents_stay_failed() -> Result<()> {
     for terminal in ["failed", "cancelled", "completed"] {
-        let (temp, mut store, config, request) = fixture()?;
+        let (temp, store, config, request) = fixture()?;
         let state = Arc::new(Mutex::new(Mock {
             request: Some(request.clone()),
             terminal,
             ..Default::default()
         }));
         let (client, task) = server(temp.path(), Arc::clone(&state))?;
-        assert!(run(&client, &mut store, &config, &request).await.is_err());
+        assert!(run(&client, &store, &config, &request).await.is_err());
         assert!(store.document(request.id.as_str())?.markdown.is_none());
         assert!(store.document(request.id.as_str())?.error.is_some());
         assert_eq!(
@@ -395,13 +407,13 @@ async fn lost_or_cancelled_jobs_without_documents_stay_failed() -> Result<()> {
 
 #[tokio::test]
 async fn unavailable_admission_preserves_the_exact_request_without_submission() -> Result<()> {
-    let (temp, mut store, config, request) = fixture()?;
+    let (temp, store, config, request) = fixture()?;
     let state = Arc::new(Mutex::new(Mock {
         unhealthy: true,
         ..Default::default()
     }));
     let (client, task) = server(temp.path(), Arc::clone(&state))?;
-    assert!(run(&client, &mut store, &config, &request).await.is_err());
+    assert!(run(&client, &store, &config, &request).await.is_err());
     assert_eq!(
         state
             .lock()
@@ -411,5 +423,195 @@ async fn unavailable_admission_preserves_the_exact_request_without_submission() 
     );
     assert_eq!(store.document(request.id.as_str())?.request, request);
     task.abort();
+    Ok(())
+}
+
+#[derive(Default)]
+struct BatchMock {
+    jobs: std::collections::BTreeMap<String, Arc<Mutex<Mock>>>,
+    seen: std::collections::BTreeSet<String>,
+    active: std::collections::BTreeSet<String>,
+    peak: usize,
+    first_pair: Option<Arc<tokio::sync::Barrier>>,
+}
+
+async fn batch_respond(State(state): State<Arc<Mutex<BatchMock>>>, request: Request) -> Response {
+    match batch_respond_inner(state, request).await {
+        Ok(response) => response,
+        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response(),
+    }
+}
+
+async fn batch_respond_inner(state: Arc<Mutex<BatchMock>>, request: Request) -> Result<Response> {
+    let path = request.uri().path().to_owned();
+    let Some(id) = path.split('/').nth(3) else {
+        return Ok(StatusCode::NOT_FOUND.into_response());
+    };
+    let (job, barrier) = {
+        let mut batch = state
+            .lock()
+            .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?;
+        let Some(job) = batch.jobs.get(id).cloned() else {
+            return Ok(StatusCode::NOT_FOUND.into_response());
+        };
+        let first = batch.seen.insert(id.to_owned());
+        if first {
+            batch.active.insert(id.to_owned());
+            batch.peak = batch.peak.max(batch.active.len());
+        }
+        let barrier = if first && batch.seen.len() <= 2 {
+            batch.first_pair.clone()
+        } else {
+            None
+        };
+        (job, barrier)
+    };
+    if let Some(barrier) = barrier {
+        barrier.wait().await;
+    }
+    let response = respond(State(Arc::clone(&job)), request).await;
+    let finished = {
+        let job = job
+            .lock()
+            .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?;
+        path.ends_with("/cancel")
+            || path == format!("/v1/jobs/{id}") && job.replies.len() == job.calls.len()
+    };
+    if finished {
+        state
+            .lock()
+            .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?
+            .active
+            .remove(id);
+    }
+    Ok(response)
+}
+
+#[tokio::test]
+async fn one_runner_bounds_overlap_and_keeps_each_jobs_outcome() -> Result<()> {
+    let (temp, store, config, first) = fixture()?;
+    let mut requests = vec![first];
+    for index in 1..4 {
+        let request = request(&format!("Document {index}"), None, temp.path())?;
+        store.create(&request)?;
+        requests.push(request);
+    }
+    let mut batch = BatchMock {
+        first_pair: Some(Arc::new(tokio::sync::Barrier::new(2))),
+        ..Default::default()
+    };
+    for (index, request) in requests.iter().enumerate() {
+        batch.jobs.insert(
+            request.id.to_string(),
+            Arc::new(Mutex::new(Mock {
+                request: Some(request.clone()),
+                calls: vec![call(
+                    request,
+                    "submit",
+                    "submit_document",
+                    json!({"markdown":format!("Document {index}")}),
+                )?],
+                terminal: if index == 2 { "failed" } else { "completed" },
+                started_at: Some(
+                    (OffsetDateTime::now_utc()
+                        - time::Duration::seconds(if index == 0 { 1801 } else { 0 }))
+                    .format(&Rfc3339)?,
+                ),
+                ..Default::default()
+            })),
+        );
+    }
+    let state = Arc::new(Mutex::new(batch));
+    let socket = temp.path().join("batch.sock");
+    let listener = tokio::net::UnixListener::bind(&socket)?;
+    let router = Router::new()
+        .fallback(any(batch_respond))
+        .with_state(Arc::clone(&state));
+    let server = tokio::spawn(async move { axum::serve(listener, router).await });
+    let client = NucleusClient::new(socket)?;
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        crate::operations::run_many(&client, &store, &config, &requests, 2),
+    )
+    .await?;
+    assert_eq!(result.results.len(), 4);
+    for (index, item) in result.results.iter().enumerate() {
+        assert_eq!(item.id, requests[index].id.as_str());
+        assert_eq!(item.error.is_some(), index == 0 || index == 2);
+        assert_eq!(item.result.is_some(), index == 1 || index == 3);
+        assert_eq!(
+            store.document(&item.id)?.markdown,
+            (index != 0).then(|| format!("Document {index}"))
+        );
+    }
+    assert!(
+        result.results[0]
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("deadline"))
+    );
+    {
+        let batch = state
+            .lock()
+            .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?;
+        assert_eq!(batch.peak, 2);
+        assert!(batch.active.is_empty());
+        for (index, request) in requests.iter().enumerate() {
+            let job = batch.jobs[request.id.as_str()]
+                .lock()
+                .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?;
+            assert_eq!(job.cancellations, usize::from(index == 0));
+        }
+    }
+    server.abort();
+    Ok(())
+}
+
+#[tokio::test]
+async fn queue_time_is_free_and_resume_uses_the_original_job_start() -> Result<()> {
+    let (temp, store, config, request) = fixture()?;
+    let now = OffsetDateTime::now_utc();
+    let state = Arc::new(Mutex::new(Mock {
+        request: Some(request.clone()),
+        calls: vec![call(
+            &request,
+            "submit",
+            "submit_document",
+            json!({"markdown":"Saved"}),
+        )?],
+        terminal: "completed",
+        queued: 1,
+        started_at: Some((now - time::Duration::seconds(600)).format(&Rfc3339)?),
+        ..Default::default()
+    }));
+    let (client, server) = server(temp.path(), Arc::clone(&state))?;
+    let queued = client.get_job(&request.id).await?;
+    assert_eq!(
+        remaining_wait(&queued, now + time::Duration::hours(5))?,
+        None
+    );
+    let running = client.get_job(&request.id).await?;
+    assert_eq!(
+        remaining_wait(&running, now)?,
+        Some(Duration::from_secs(1200))
+    );
+    assert_eq!(
+        remaining_wait(&running, now + time::Duration::seconds(300))?,
+        Some(Duration::from_secs(900))
+    );
+    run(&client, &store, &config, &request).await?;
+    state
+        .lock()
+        .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?
+        .started_at = Some((now - time::Duration::hours(2)).format(&Rfc3339)?);
+    run(&client, &store, &config, &request).await?;
+    assert_eq!(
+        state
+            .lock()
+            .map_err(|error| anyhow::anyhow!("fixture lock: {error}"))?
+            .cancellations,
+        0
+    );
+    server.abort();
     Ok(())
 }

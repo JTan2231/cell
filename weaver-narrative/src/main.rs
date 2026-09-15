@@ -30,6 +30,13 @@ enum Commands {
         #[arg(long)]
         id: Option<String>,
     },
+    /// Author independent new documents in one runner. Return each job outcome.
+    WriteMany {
+        #[arg(long)]
+        jobs: std::num::NonZeroUsize,
+        #[arg(required = true, num_args = 1..)]
+        directions: Vec<String>,
+    },
     /// Author a new document using saved Markdown and a free-form direction.
     Revise {
         id: String,
@@ -80,6 +87,9 @@ async fn execute(cli: &Cli) -> Result<Value> {
         Commands::Write { direction, id } => {
             weaver::operations::write_with_id(&root, direction, None, id.as_deref()).await
         }
+        Commands::WriteMany { jobs, directions } => Ok(serde_json::to_value(
+            weaver::operations::write_many(&root, directions, jobs.get()).await?,
+        )?),
         Commands::Revise {
             id,
             direction,

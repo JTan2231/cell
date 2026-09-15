@@ -16,6 +16,12 @@ failure separately from a saved document. A changed tool contract needs a new
 immutable identity; retain decoding for existing requests. The initial toolset
 is `weaver/narrative/1` and the database schema is 1.
 
+Keep batch concurrency inside one runner. Share the SQLite handle through short
+synchronous operations; never retain a transaction across an asynchronous wait.
+Assess each observation deadline from its Nucleus attempt start, including on
+resume. Test bounded overlap, independent failures and cancellation, and queue
+time separately from execution time.
+
 Run `./ci.sh` from Cell after changes. The default gate selects the changed
 products and required platform checks. Test source failures, short pages,
 duplicate and conflicting submissions, pending-call restart, quota deferral,

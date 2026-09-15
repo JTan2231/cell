@@ -10,6 +10,7 @@ It does not certify the interpretation or require citations.
 
 ```sh
 weaver write 'Cell helped me find a job'
+weaver write-many --jobs 3 'Tell the origin story' 'Explain the turning point' 'Describe what came next'
 weaver list --limit 20
 weaver show DOCUMENT_ID
 weaver --json show DOCUMENT_ID
@@ -34,6 +35,26 @@ List returns metadata for up to 100 documents, newest first. The default is 20.
 not invoke an agent or create an absent database. `finished_at` describes the
 observed end of execution; it is separate from having saved Markdown.
 
+## Write several documents
+
+Run `weaver write-many --jobs N DIRECTION...` with a positive N and one or more
+nonblank directions. Weaver saves a separate request and prints a fresh document
+ID for each direction before execution. One foreground runner handles at most N
+job loops. The loops share one SQLite handle and Nucleus client. Database
+transactions contain no asynchronous wait. Each job completes independently;
+an error in one job does not stop the others. No batch-wide timeout applies.
+
+The command returns JSON with `ok=true` and `data.results` in input order.
+Each item has `id` and exactly one of `result` or `error`. A result is a document
+view or the quota-deferred outcome below. Exit zero means all item outcomes were
+collected, not that every document succeeded. Inspect each item for an error.
+
+After interruption, use the printed IDs, or `weaver list`, to find retained work.
+Resume each exact ID. Repeating `write-many` creates new assignments. The limit
+counts live job-handling loops, including capacity waits. An interrupted or
+failed handler can leave a Nucleus job alive; inspect or cancel that exact job.
+The limit does not reserve Nucleus execution slots.
+
 ## Caller identity and Rust client
 
 A local caller can supply `weaver write --id REQUEST_ID DIRECTION` or
@@ -45,12 +66,17 @@ Different input under that ID is refused. Terminal failures receive no new
 attempt. Calls without an ID keep automatic identity generation.
 
 `weaver::api::Client` invokes the selected absolute installed executable and owns
-the JSON types for write, revise, show, resume and doctor. Platter and other Rust
+the JSON types for write, write-many, revise, show, resume and doctor. Platter and other Rust
 callers use these types instead of private Weaver storage. A deferred response
 contains `id`, `outcome=quota_deferred` and `detail`. A saved document view remains
 separate from that outcome. Process failure can coexist with saved Markdown;
 read the exact ID to inspect it. Dropping a client call stops its CLI process,
 but callers must separately cancel its exact Nucleus job when abandoning work.
+
+`weaver::operations::write_many(root, directions, jobs)` runs the batch directly
+in the calling process. `weaver::api::Client::write_many(directions, jobs)` uses
+one installed Weaver process for the whole batch and returns `BatchOutcome`.
+Its `results` contain `BatchItem` values with individual results or errors.
 
 ## Reading and execution
 
@@ -73,15 +99,20 @@ submit tool writes a document, and Weaver checks nonblank UTF-8 text and size.
 It performs no citation, language, or factual certification.
 
 Nucleus controls admission and its eight shared execution slots. The active
-attempt timeout is 1,200 seconds. Weaver observes the operation for up to 1,800
-seconds and requests cancellation on that deadline. Dependency command latency
+attempt timeout is 1,200 seconds per job. Weaver derives each job's 1,800-second
+observation deadline from its recorded Nucleus attempt start. Queue time consumes
+neither limit. Resume uses that original start; it does not reset the deadline.
+On expiry, Weaver requests cancellation of that exact job. A terminal job can
+still be collected after its deadline. Dependency command latency
 has no bound. A read page contains at most 200 documents and 4 MiB of document
 bytes; the default is five documents. Markdown is at most 1 MiB of UTF-8.
 There is no promised completion latency or comprehensive research coverage.
 
 ## Recovery
 
-One runner lock serializes write and resume operations. Weaver saves the exact
+One runner lock excludes other write, write-many, resume, and initialization
+operations. A write-many runner handles independent jobs concurrently within
+that lock. Weaver saves the exact
 Nucleus invocation before admission. Resume uses that same job and request;
 uncertain admission creates no replacement identity. A pending tool call and
 its exact reply are saved together, with Markdown when submitted. The reply

@@ -1,5 +1,6 @@
 //! Foreground authoring, document reads, and owned installation admission.
 use anyhow::{Context, Result, bail, ensure};
+use futures_util::{StreamExt, stream};
 use nucleus_client::NucleusClient;
 use serde_json::{Value, json};
 use std::io::Write as _;
@@ -7,7 +8,9 @@ use std::path::Path;
 use std::time::Duration;
 
 use crate::{
-    Config, agent, gate,
+    Config, agent,
+    api::{BatchItem, BatchOutcome},
+    gate,
     store::{self, Store},
 };
 
@@ -58,7 +61,7 @@ pub async fn write_with_id(
     };
     let _lock = store::runner_lock(root)?;
     let config = Config::read(root)?;
-    let mut store = Store::open(root, false)?;
+    let store = Store::open(root, false)?;
     let existing = revise.map(|id| store.document(id)).transpose()?;
     let markdown = if let Some(existing) = &existing {
         Some(
@@ -82,7 +85,74 @@ pub async fn write_with_id(
         return saved.view();
     }
     eprintln!("Weaver document {}", request.id);
-    execute(&mut store, &config, &request).await
+    execute(
+        &NucleusClient::for_current_user()?,
+        &store,
+        &config,
+        &request,
+    )
+    .await
+}
+
+/// Author independent new documents with at most `jobs` active job loops.
+/// One foreground runner and one database handle own the whole batch.
+pub async fn write_many(root: &Path, directions: &[String], jobs: usize) -> Result<BatchOutcome> {
+    ensure!(jobs > 0, "jobs must be greater than zero");
+    ensure!(!directions.is_empty(), "at least one direction is required");
+    ensure!(
+        directions
+            .iter()
+            .all(|direction| !direction.trim().is_empty()),
+        "a direction is required"
+    );
+    let _admission = gate(root).enter()?;
+    let _lock = store::runner_lock(root)?;
+    let config = Config::read(root)?;
+    let store = Store::open(root, false)?;
+    let client = NucleusClient::for_current_user()?;
+    let requests = directions
+        .iter()
+        .map(|direction| {
+            let request = assignment(&store, direction, None, &root.join("agent-workspace"), None)?;
+            eprintln!("Weaver document {}", request.id);
+            Ok(request)
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(run_many(&client, &store, &config, &requests, jobs).await)
+}
+
+pub(crate) async fn run_many(
+    client: &NucleusClient,
+    store: &Store,
+    config: &Config,
+    requests: &[nucleus_core::JobRequestV1],
+    jobs: usize,
+) -> BatchOutcome {
+    let mut results = stream::iter(requests.iter().enumerate())
+        .map(|(index, request)| async move {
+            let result = execute(client, store, config, request)
+                .await
+                .and_then(|value| Ok(serde_json::from_value(value)?));
+            let (result, error) = match result {
+                Ok(result) => (Some(result), None),
+                Err(error) => (None, Some(format!("{error:#}"))),
+            };
+            (
+                index,
+                BatchItem {
+                    id: request.id.to_string(),
+                    result,
+                    error,
+                },
+            )
+        })
+        .buffer_unordered(jobs)
+        .collect::<Vec<_>>()
+        .await;
+    results.sort_by_key(|(index, _)| *index);
+    BatchOutcome {
+        results: results.into_iter().map(|(_, item)| item).collect(),
+    }
 }
 
 fn assignment(
@@ -125,17 +195,23 @@ pub async fn resume(root: &Path, id: &str) -> Result<Value> {
     let request = Store::open(root, true)?.document(id)?.request;
     let _admission = gate(root).recover()?;
     let _lock = store::runner_lock(root)?;
-    let mut store = Store::open(root, false)?;
-    execute(&mut store, &Config::read(root)?, &request).await
+    let store = Store::open(root, false)?;
+    execute(
+        &NucleusClient::for_current_user()?,
+        &store,
+        &Config::read(root)?,
+        &request,
+    )
+    .await
 }
 
 async fn execute(
-    store: &mut Store,
+    client: &NucleusClient,
+    store: &Store,
     config: &Config,
     request: &nucleus_core::JobRequestV1,
 ) -> Result<Value> {
-    let client = NucleusClient::for_current_user()?;
-    let result = agent::run(&client, store, config, request).await;
+    let result = agent::run(client, store, config, request).await;
     if let Err(error) = &result
         && let Some(outcome) = nucleus_core::quota_condition(error.as_ref())
     {
