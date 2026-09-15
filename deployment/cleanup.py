@@ -205,7 +205,7 @@ def live_pins(home, installs, currents):
 def installer_locks(home, installs):
     # These are the existing product-deployer locks, not another lock scheme.
     held = []
-    file_locks = {"Clockwork", "Conversations", "CRM", "Usher", "Platter"}
+    file_locks = {"Clockwork", "Conversations", "Usher", "Platter"}
     try:
         for application, install in installs.items():
             if not install.exists() and not install.is_symlink():

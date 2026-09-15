@@ -363,12 +363,11 @@ executable/provider versions, public entry mappings and a stable content identit
 The immutable tree retains `package/install` for supported recovery. Legacy
 formats are accepted only through the product's explicit complete byte proof.
 
-Conversations, CRM, Chancery, Email, Cast, Clockwork and Platter use the common
+Conversations, Chancery, Email, Cast, Clockwork and Platter use the common
 program-selection entry point. Their product specifications supply the layout,
 legacy proof and runtime frontend where needed. Clockwork additionally validates
 its provider with the supplied Chancery reader; its runtime recognizes its own
-fully verified version-two release when pinning schedule definitions. CRM's
-coordinated route preserves admission and explicit database migration handling.
+fully verified version-two release when pinning schedule definitions.
 Platter requires the coordinated route for every mutating installation or
 recovery operation. Its shared per-user admission gate includes custom runtime
 state, and drain observes both Platter and predecessor Job Packets Nucleus

@@ -553,28 +553,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crm"
-version = "0.5.3"
-dependencies = [
- "cell-install",
- "cell-maintenance",
- "chancery-usage",
- "clap",
- "iatreion-api",
- "nucleus-client",
- "nucleus-core",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror",
- "time",
- "tokio",
- "uuid",
-]
-
-[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
