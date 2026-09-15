@@ -1,0 +1,141 @@
+{
+  "id": "clew.install.operate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install and verify Clew",
+  "summary": "Install the Clew CLI and matching provider, initialize its private ledger, and verify the retained Platter lookup interface without adding application records.",
+  "manual": "manuals/install-operate.md",
+  "interfaces": [
+    {
+      "label": "Plan deployment",
+      "invocation": "./deploy.sh plan clew"
+    },
+    {
+      "label": "Deploy Clew",
+      "invocation": "./deploy.sh clew"
+    },
+    {
+      "label": "Initialize state",
+      "invocation": "clew init"
+    },
+    {
+      "label": "Check ledger",
+      "invocation": "clew doctor"
+    },
+    {
+      "label": "Inspect installation",
+      "invocation": "clew-install inspect"
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The authorized local installer and Cell deployment coordinator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "A green committed Clew candidate and a compatible installed Platter opportunity reader are available."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Use deploy.sh plan clew then deploy.sh clew from committed local main. Clew accepts no deployment settings. Direct program installation accepts absolute --binary, --bundle and optional --home."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The selected immutable release contains clew, clew-install and the matching Chancery provider. Coordinated configure initializes empty schema-one state."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Installation is program selection and empty-ledger initialization. It creates no application entries and supplies no statuses."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Content hashes identify immutable releases; package version, provider contract and database schema are separate identities."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Verification checks the selected installed bytes, local ledger integrity and the retained Platter read interface at that invocation. It establishes no future availability."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current user owns installation selectors and private ledger state."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The shared file transaction publishes command/provider selectors atomically. Schema-one ledger rows are preserved separately through program upgrades and file recovery. No scheduler, service or state migration is installed."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "There is no completion-time guarantee. Concurrent schema-one readers and short SQLite writers can finish across program selection."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Only cell-install-v2 releases and Clew state schema one are supported. Incompatible state migration is not supplied."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Clew requires the Platter opportunity reader for first-reference admission and search.",
+        "target": "platter",
+        "kind": "readiness",
+        "contract": "platter.opportunity.explore"
+      }
+    ]
+  },
+  "dependencies": [
+    {
+      "id": "platter.opportunity.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "use_when": [
+    "Installing, checking or recovering the Clew command and private ledger."
+  ],
+  "do_not_use_when": [
+    "Recording an application update or changing Platter preparation."
+  ],
+  "outcome": "Verified installed Clew commands, provider and compatible empty or existing ledger.",
+  "effects": [
+    "Program deployment selects immutable files and initializes a missing ledger without creating entries. Existing rows remain intact."
+  ],
+  "authority": [
+    "Clew owns its installation and ledger; the shared coordinator owns deployment ordering."
+  ],
+  "success": [
+    "Installed bytes match the selected candidate, ledger integrity passes and the retained Platter read interface succeeds."
+  ],
+  "failure_and_recovery": [
+    "File recovery selects a coherent prior or candidate release without restoring or deleting the ledger. Preserve unresolved installation evidence. Unsupported or nonempty foreign state fails."
+  ],
+  "privacy": [
+    "Private ledger state is outside source and installation releases."
+  ],
+  "does_not_authorize": [
+    "Adding application records, deleting ledger history, sending mail or enabling a schedule."
+  ]
+}

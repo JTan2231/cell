@@ -25,6 +25,7 @@ members = [
     "iatreion/crates/iatreion",
     "cast",
     "platter",
+    "clew",
     "paperboy",
     "conatus",
     "mentor",

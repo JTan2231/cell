@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "product": "clew",
+  "application": "Clew",
+  "dependencies": ["platter"],
+  "runtime_versions": {"platter": {"minimum": "0.2.18", "before": "0.3.0"}},
+  "runtime_contracts": {"platter": {"platter.opportunity.explore": {"minimum": 1, "before": 2}}},
+  "description": "Install Clew and initialize its private application ledger without adding entries.",
+  "adapter_binary": "clew-install"
+}

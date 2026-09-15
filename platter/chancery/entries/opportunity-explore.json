@@ -1,0 +1,119 @@
+{
+  "id": "platter.opportunity.explore",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Find and read prepared Platter opportunities",
+  "summary": "Search retained prepared opportunities by URL, company, role or reference. Read stable opportunity references and their packet history without preparing or sending.",
+  "manual": "manuals/opportunity-explore.md",
+  "interfaces": [
+    {
+      "label": "Find prepared jobs",
+      "invocation": "platter opportunities list --query QUERY"
+    },
+    {
+      "label": "Read one prepared opportunity",
+      "invocation": "platter opportunities show REFERENCE"
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Agents and local consumers read retained Platter opportunities through the CLI or platter::api::Client."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The canonical Platter database exists at supported schema six; preparation dependencies need not be available."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "List accepts optional query text. Show requires one exact opaque opportunity reference."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Schema-one JSON contains items with reference, cast_job_id, company, title, retained urls and packets. Each packet has id, created_at, preparation_status and has_resume."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Only opportunities with a retained preparation run appear. Preparation status and resume presence are packet facts; they are not application status. Retained stale, declined, deferred and ineligible opportunities remain readable."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The opaque reference is the existing Platter opportunity key and remains stable across preparation and regeneration. Packet IDs identify runs. created_at is the stored UTC run creation timestamp; historical timestamp precision is retained."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List returns all matching retained opportunities with all their retained packets from one read transaction. No pagination or source refresh occurs. Missing capture URLs remain absent. These records do not establish current employer availability."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Use the local CLI or provider-owned Rust client. Consumers do not query Platter SQLite directly."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Reads open SQLite read-only, return one transaction view, and create no packets or editions. No Platter write admission is required."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Results contain the complete matching retained library. No size or latency guarantee is made."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Read contract and JSON output schema are one. Platter persistent schema remains six."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "The read uses retained local Platter state only and invokes no dependency."
+      }
+    ]
+  },
+  "use_when": [
+    "A caller needs to link application history to a prepared opportunity or identify its retained packets."
+  ],
+  "do_not_use_when": [
+    "A caller needs new preparation, current source retrieval, or an inferred application status."
+  ],
+  "outcome": "A complete selected read of retained prepared opportunities and packet metadata.",
+  "effects": [
+    "Reads retained local state without network requests or domain writes."
+  ],
+  "authority": [
+    "Platter owns opportunity references and packet facts. The caller owns application status."
+  ],
+  "success": [
+    "A schema-one response returns all selected retained records. An exact absent reference is an error."
+  ],
+  "failure_and_recovery": [
+    "Missing or incompatible state fails; use the Platter installation contract. An empty search proves only no retained match."
+  ],
+  "privacy": [
+    "Company, role, URLs and preparation metadata remain private; source text and resume bytes are excluded."
+  ],
+  "does_not_authorize": [
+    "Preparing, sending, applying, changing eligibility or assigning an application status."
+  ]
+}

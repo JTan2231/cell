@@ -1,0 +1,147 @@
+{
+  "id": "clew.application.track",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Record application status and notes",
+  "summary": "Find a prepared Platter opportunity and append the user\u2019s reported status or notes. Read current status and immutable history, or append a correction.",
+  "manual": "manuals/application-track.md",
+  "interfaces": [
+    {
+      "label": "Find a job",
+      "invocation": "clew find QUERY"
+    },
+    {
+      "label": "Record a report",
+      "invocation": "clew record REFERENCE --id WRITE_ID --status STATUS --notes TEXT"
+    },
+    {
+      "label": "List current reports",
+      "invocation": "clew list"
+    },
+    {
+      "label": "Read history",
+      "invocation": "clew show REFERENCE"
+    },
+    {
+      "label": "Correct a report",
+      "invocation": "clew record REFERENCE --id WRITE_ID --replaces ENTRY_ID --status STATUS --notes TEXT"
+    },
+    {
+      "label": "Retract a report",
+      "invocation": "clew retract ENTRY_ID --id WRITE_ID --notes TEXT"
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The user and their conversational agent record explicitly reported application history."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Clew schema-one state is initialized. A first record for an opportunity requires the installed Platter read interface. Existing exact references and retries remain writable while Platter is unavailable."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Record requires an exact Platter reference, a caller-supplied write ID and at least one nonblank status or notes value. Status is free text. Optional replaces selects one active record. Retract selects an active record and a new write ID."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Schema-one JSON with ok and data returns committed entries, current records, complete histories or candidate search results."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Status is user-supplied. Current status is the last status in an active record by ledger sequence; notes never assign it. A replacement is a complete new latest report, not a patch. Retractions and replacements preserve old rows and exclude the target from current reads."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Each write ID binds exact immutable content. Sequence orders committed entries. recorded_at is UTC RFC3339 recording time, not the date an application or reply occurred. Platter references identify opportunities across resume regeneration."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "List covers all active ledger records; show includes a reference history and corrections to those records. Find combines all retained Platter opportunities with matches in all Clew notes, including superseded notes. The two product reads are separate snapshots. Notes matches are clues, not identity proof."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local CLI; Clew owns its private SQLite ledger. Candidate search is read-only. The caller resolves ambiguity before invoking record."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Each append is one immediate SQLite transaction with synchronous FULL. Exact retries return the original entry; conflicting write IDs fail. SQL triggers prohibit entry updates and deletes. Existing state is never migrated implicitly."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Complete reads use memory proportional to retained history. SQLite waits up to five seconds for contention; no hard command latency or corpus size guarantee exists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Clew database and CLI output schemas are one. Unsupported database versions fail. There is no automatic retention cleanup."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Platter supplies stable retained opportunity references and packet metadata through its local read CLI.",
+        "target": "platter",
+        "kind": "data",
+        "contract": "platter.opportunity.explore"
+      }
+    ]
+  },
+  "dependencies": [
+    {
+      "id": "platter.opportunity.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "use_when": [
+    "The user reports applying, a response, rejection, or another status or note about a Platter opportunity.",
+    "The user wants application history, current supplied status, or correction of a mistaken entry."
+  ],
+  "do_not_use_when": [
+    "The caller wants automatic status inference, application submission, job discovery, employer contact or scheduled monitoring."
+  ],
+  "outcome": "A durable append-only report linked to one exact prepared opportunity, or a complete selected read.",
+  "effects": [
+    "Find, list and show read private records. Record and retract append ledger rows. No command sends, applies, collects jobs, or starts a model."
+  ],
+  "authority": [
+    "The user supplies every status. The agent resolves a target using tools and conversation, and clarifies material ambiguity before writing. Clew owns the ledger; Platter owns opportunity identity."
+  ],
+  "success": [
+    "A write succeeds only after its row commits and returns its entry ID. An exact retry returns that same entry."
+  ],
+  "failure_and_recovery": [
+    "Retry an uncertain write with the same ID and identical arguments. Conflicting IDs, unavailable new references and invalid corrections fail without appending.",
+    "An unavailable Platter search fails explicitly. Clew list/show and updates to already known exact references remain available."
+  ],
+  "privacy": [
+    "Notes, statuses and references remain in private local state and command output. Do not commit them or send them elsewhere without user authorization."
+  ],
+  "does_not_authorize": [
+    "Deriving status from employer pages, mail, delivery state or elapsed time; choosing among ambiguous jobs; editing Platter or contacting an employer."
+  ]
+}

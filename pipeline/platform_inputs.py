@@ -17,6 +17,7 @@ PRODUCT_INPUTS = (
 # Installer-invoked commands, embedded schemas, and service/maintenance entry
 # points also belong to the installation boundary, even inside product code.
 PRODUCT_RUNTIME_INPUTS = {
+    "clew": ("clew/src/store.rs", "clew/src/main.rs"),
     "annals": ("annals/crates/annals/src/db.rs", "annals/crates/annals/src/cli.rs",
                "annals/crates/annals/src/main.rs", "annals/crates/annals/src/sqlite.rs"),
     "nucleus": ("nucleus/crates/nucleus-cli/src/service.rs",
@@ -66,6 +67,7 @@ MAINTENANCE_CONSUMERS = frozenset((
     "platter", "paperboy", "mentor", "weaver",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((
+    "clew",
     "cast", "clockwork", "chancery", "email", "conversations",
 ))
 

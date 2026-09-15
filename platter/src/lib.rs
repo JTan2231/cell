@@ -2,9 +2,11 @@
 #![allow(clippy::missing_errors_doc)]
 pub mod ad_hoc;
 pub mod agent;
+pub mod api;
 pub mod installation;
 pub mod maintenance;
 pub mod migration;
+pub mod opportunities;
 pub mod projects;
 pub mod readiness;
 pub mod resume;

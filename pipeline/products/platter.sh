@@ -22,4 +22,4 @@ RELEASE_UNITS='platter|Platter|package|platter/Cargo.toml|platter-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='platter|target/release/platter|platter
 platter|target/release/platter-install|platter-install'
-PROVIDERS='platter|platter|platter/chancery|2'
+PROVIDERS='platter|platter|platter/chancery|3'

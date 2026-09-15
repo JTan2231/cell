@@ -25,6 +25,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Read retained prepared opportunities without fetching or preparing work.
+    Opportunities {
+        #[command(subcommand)]
+        command: Opportunities,
+    },
     /// Inspect prerequisites without preparing packets or sending mail.
     Doctor {
         /// Prove retained state compatibility without execution or delivery prerequisites.
@@ -114,6 +119,17 @@ enum Maintenance {
     Release { owner: String },
 }
 
+#[derive(Subcommand)]
+enum Opportunities {
+    List {
+        #[arg(long)]
+        query: Option<String>,
+    },
+    Show {
+        reference: String,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
@@ -180,6 +196,22 @@ async fn run() -> Result<()> {
             "{}",
             serde_json::json!({"ok":true,"data":{"config":workflow::config(&root)?}})
         );
+        return Ok(());
+    }
+    if let Command::Opportunities { command } = &cli.command {
+        let result = match command {
+            Opportunities::List { query } => platter::opportunities::list(&root, query.as_deref())?,
+            Opportunities::Show { reference } => {
+                let mut result = platter::opportunities::list(&root, Some(reference))?;
+                result.items.retain(|item| item.reference == *reference);
+                anyhow::ensure!(
+                    result.items.len() == 1,
+                    "Platter opportunity reference was not found"
+                );
+                result
+            }
+        };
+        println!("{}", serde_json::to_string(&result)?);
         return Ok(());
     }
     if matches!(cli.command, Command::ScheduleDefinition) {
@@ -326,6 +358,7 @@ async fn run() -> Result<()> {
         }
         Command::Status
         | Command::Config
+        | Command::Opportunities { .. }
         | Command::ScheduleDefinition
         | Command::Doctor { .. }
         | Command::Maintenance { .. }

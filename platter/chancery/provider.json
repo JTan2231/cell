@@ -3,7 +3,7 @@
   "provider": {
     "id": "platter",
     "name": "Platter",
-    "release": "0.2.17"
+    "release": "0.2.18"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -15,7 +15,7 @@
     ],
     "inventory": {
       "covers": [
-        "All Platter initialization, preparation, explicit regeneration, authorized daily and URL-selected preparation and delivery, ordinary and retained-material edition selection, explicit send, eligibility, export, local status, readiness, product-owned schedule-definition generation, migration and maintained installation outcomes."
+        "All Platter initialization, preparation, explicit regeneration, authorized daily and URL-selected preparation and delivery, ordinary and retained-material edition selection, explicit send, eligibility, export, local status, readiness, product-owned schedule-definition generation, migration and maintained installation outcomes. This includes retained opportunity search and reads."
       ],
       "completeness": "complete",
       "excludes": [
@@ -39,6 +39,7 @@
   },
   "entries": [
     "entries/packet-prepare.json",
-    "entries/install-operate.json"
+    "entries/install-operate.json",
+    "entries/opportunity-explore.json"
   ]
 }

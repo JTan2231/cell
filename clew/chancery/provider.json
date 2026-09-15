@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "clew",
+    "name": "Clew",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Clew owns user-reported application statuses and arbitrary notes in an append-only ledger, current/history reads, exact retry identity, corrections and its program installation."
+    ],
+    "not_authoritative_for": [
+      "The user supplies status and resolves ambiguity with the agent. Platter owns prepared opportunity identity and packets."
+    ],
+    "inventory": {
+      "completeness": "complete",
+      "covers": [
+        "All public Clew outcomes for initialization, local integrity checking, candidate finding, reported status/notes, current/history reads, retraction and installation."
+      ],
+      "excludes": [
+        "Help/version, implementation helpers, automatic interpretation, job discovery, application submission, employer contact and scheduling."
+      ]
+    },
+    "shared_access_and_trust": [
+      "The current user and their authorized agent invoke the local CLI. A search result does not authorize a write."
+    ],
+    "shared_privacy_and_retention": [
+      "Ledger entries and output are private. Entries are retained indefinitely without automatic pruning. Usage observation contains only command identity and task correlation, not arguments or content."
+    ],
+    "compatibility_and_retirement": [
+      "Database schema one and output schema one are independent of provider release. Unsupported state fails without implicit migration."
+    ],
+    "operational_limits": [
+      "Clew is an on-demand CLI. Full reads scale with retained history; no hard size or latency guarantee is supplied."
+    ]
+  },
+  "entries": [
+    "entries/application-track.json",
+    "entries/install-operate.json"
+  ]
+}

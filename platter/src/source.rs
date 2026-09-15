@@ -202,6 +202,22 @@ pub fn identity(job: &Job) -> Result<String> {
     cast::normalize_url(&job.url).map_err(|error| anyhow::anyhow!(error.to_string()))
 }
 
+pub(crate) fn retained_url_matches(stored: &str, query: &str) -> bool {
+    let (Ok(stored_url), Ok(query_url)) = (url::Url::parse(stored), url::Url::parse(query)) else {
+        return false;
+    };
+    if let (Some(stored), Some(query)) = (
+        AtsPosting::from_url(&stored_url),
+        AtsPosting::from_url(&query_url),
+    ) {
+        return stored == query;
+    }
+    match (cast::normalize_url(stored), cast::normalize_url(query)) {
+        (Ok(stored), Ok(query)) => stored == query,
+        _ => false,
+    }
+}
+
 #[must_use]
 pub fn eligible(job: &Job) -> bool {
     if matches!(

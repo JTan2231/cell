@@ -46,5 +46,8 @@
   "pin_inventory": [
     "--json",
     "config"
+  ],
+  "companions": [
+    "clew"
   ]
 }
