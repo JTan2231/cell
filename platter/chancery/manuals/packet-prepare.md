@@ -111,7 +111,7 @@ retrieval to download again. This does not change existing captured packets.
 New preparations capture `generation=weaver_projects_v1` and the exact Cell,
 Wrought and shortening directions. Platter calls the installed Weaver client
 sequentially before its own draft job. Each initial direction asks for at most
-three concise resume bullets, with one brief sentence per bullet. The first
+three short-form resume bullets, with one medium-length sentence per bullet. The first
 line selects “bullet points for cell” or “bullet points for wrought”. Weaver
 owns its Annals reads and authoring. Platter retains the request IDs before
 calling Weaver and stores the returned documents as private immutable artifacts.

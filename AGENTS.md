@@ -35,11 +35,12 @@ Use this workflow unless the user specifies otherwise:
 - First walk through the simplest proposal that fulfills the request: intended
   behavior, boundaries, and important tradeoffs. After agreement on the direction,
   ground it in the actual system and identify the smallest sufficient implementation.
+  Do not sacrifice technical precision in this proposal.
 - Establish the desired endpoint and wait for approval before implementing.
   Once approved, own completion through that endpoint. Keep implementation,
   review, and validation focused on the agreed change, and complete required checks.
 - For long-running CI, release, or deployment, use a heartbeat every three minutes.
-  Check for actionable failures or completion. Stay quiet while nothing needs action,
+  Check for actionable failures or completion. End your turn while nothing needs action,
   and advance through authorized stages. Resolve routine failures within scope.
   Stop and bring back any issue that requires changing the agreed scope or authority.
 - Verify the agreed endpoint, stop the heartbeat, and report the outcome.
