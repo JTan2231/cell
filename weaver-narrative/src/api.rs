@@ -15,7 +15,7 @@ pub struct DocumentView {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum AuthoringOutcome {
     Document(DocumentView),
@@ -24,6 +24,20 @@ pub enum AuthoringOutcome {
         outcome: String,
         detail: String,
     },
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BatchItem {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<AuthoringOutcome>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BatchOutcome {
+    pub results: Vec<BatchItem>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +81,15 @@ impl Client {
         Ok(serde_json::from_value(
             self.invoke(&["write", "--id", id, direction]).await?,
         )?)
+    }
+
+    /// Run a batch through one installed Weaver process. Inspect every item for
+    /// its document, quota deferral, or error.
+    pub async fn write_many(&self, directions: &[String], jobs: usize) -> Result<BatchOutcome> {
+        let jobs = jobs.to_string();
+        let mut args = vec!["write-many", "--jobs", &jobs, "--"];
+        args.extend(directions.iter().map(String::as_str));
+        Ok(serde_json::from_value(self.invoke(&args).await?)?)
     }
 
     pub async fn revise(

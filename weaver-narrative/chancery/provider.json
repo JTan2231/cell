@@ -3,7 +3,7 @@
   "provider": {
     "id": "weaver",
     "name": "Weaver",
-    "release": "0.4.0"
+    "release": "0.5.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -32,7 +32,7 @@
       "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
     ],
     "operational_limits": [
-      "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+      "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
     ]
   },
   "entries": [

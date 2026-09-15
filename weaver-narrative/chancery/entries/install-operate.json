@@ -115,13 +115,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared Cell transaction owns exact program/provider publication and recovery. Weaver gates new work, drains live commands and nonterminal Nucleus jobs, and configures schema 1 under its sole hold. Resume may settle prior work. Configuration changes preserve saved documents. Unknown drain remains incomplete; recovery preserves other holds."
+        "statement": "The shared Cell transaction owns exact program/provider publication and recovery. Weaver gates new work, drains live commands and nonterminal Nucleus jobs, and configures schema 1 under its sole hold. Doctor uses ordinary admission when Weaver has no hold, even with a caller's deployment ID. When held, doctor requires that ID to match the sole hold. It retains the ID for Nucleus deployment readiness. Resume may settle prior work. Configuration changes preserve saved documents. Unknown drain remains incomplete; recovery preserves other holds."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One foreground authoring runner, one job per document, 1200-second active attempt limit and 1800-second observation deadline subject to dependency command latency. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
+        "statement": "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
       },
       {
         "status": "unspecified",
