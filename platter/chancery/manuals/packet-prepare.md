@@ -175,7 +175,21 @@ without `generation` retain their previous brief/resume or draft/review/revision
 workflow. Their captured instructions, accepted artifacts and template references
 remain unchanged.
 
-Import a fixed project template for future runs:
+Import a complete fixed resume template for future runs:
+
+```sh
+platter import-template /absolute/private/resume.tex
+```
+
+Use this operation for an explicitly requested layout, font or fixed-content
+change. It requires initialized state, a valid Jackson bullet region, a separate
+Projects region and both fixed project bullet marker pairs. It retains a new
+immutable template and selects it atomically. Existing templates, captured runs,
+instructions, configuration and editions remain unchanged. The import does not
+compile the template, run models or send mail. Check the rendered layout before
+delivery. Keep private resume sources outside the repository.
+
+To limit a template update to the Projects section:
 
 ```sh
 platter import-projects-template /absolute/private/resume.tex

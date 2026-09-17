@@ -54,6 +54,10 @@ enum Command {
     ImportProjectsTemplate {
         path: PathBuf,
     },
+    /// Replace the full fixed resume template for future runs; preserve prior artifacts.
+    ImportTemplate {
+        path: PathBuf,
+    },
     Prepare {
         job_id: String,
         /// Restart incomplete preparation with new source capture and no prior model context.
@@ -248,6 +252,10 @@ async fn run() -> Result<()> {
         Command::ImportProjectsTemplate { path } => {
             workflow::import_projects_template(&root, &path)?;
             println!("fixed projects template imported");
+        }
+        Command::ImportTemplate { path } => {
+            workflow::import_template(&root, &path)?;
+            println!("fixed resume template imported");
         }
         Command::Prepare { job_id, fresh } => {
             let result = if fresh {

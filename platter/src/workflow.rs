@@ -58,11 +58,24 @@ pub fn import_projects_template(root: &Path, path: &Path) -> Result<()> {
     store
         .template()?
         .validate_project_template_import(&candidate)?;
+    select_template(&store, &candidate, "projects-resume.tex")
+}
+
+pub fn import_template(root: &Path, path: &Path) -> Result<()> {
+    ensure!(path.is_absolute(), "resume template path must be absolute");
+    let candidate = ResumeTemplate::load(path)?;
+    candidate.validate_fixed_projects()?;
+    let store = Store::open(root)?;
+    store.template()?;
+    select_template(&store, &candidate, "resume-template.tex")
+}
+
+fn select_template(store: &Store, candidate: &ResumeTemplate, filename: &str) -> Result<()> {
     let tx = store.connection.unchecked_transaction()?;
     let artifact = store.put_artifact(
         None,
         "template",
-        "projects-resume.tex",
+        filename,
         "application/x-tex",
         candidate.source.as_bytes(),
     )?;

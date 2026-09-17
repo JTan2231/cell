@@ -12,11 +12,12 @@
     "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
     "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
     "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient.",
-    "The user wants another packet for a previously prepared job, including one already used in an edition, without re-enabling it or sending email."
+    "The user wants another packet for a previously prepared job, including one already used in an edition, without re-enabling it or sending email.",
+    "The user wants to replace the fixed resume template for future preparations while retaining earlier templates and packets."
   ],
   "do_not_use_when": [
     "The request is job discovery, source-library editing, employer outreach or application submission.",
-    "The caller expects stored delivery settings or installation alone to enable a schedule, or wants a change to fixed resume content."
+    "The caller expects stored delivery settings or installation alone to enable a schedule, or expects preparation to change fixed content outside its editable regions."
   ],
   "outcome": "Stored brief, Jackson and Weaver project bullets, fixed presentation and validated one-page resume. Preview freezes ready packets; authorized send records provider acceptance.",
   "interfaces": [
@@ -87,6 +88,10 @@
     {
       "label": "Import fixed project template for future runs",
       "invocation": "platter import-projects-template /absolute/private/resume.tex"
+    },
+    {
+      "label": "Import a complete fixed resume template for future runs",
+      "invocation": "platter import-template /absolute/private/resume.tex"
     }
   ],
   "effects": [
@@ -99,7 +104,8 @@
     "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
     "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite.",
     "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts.",
-    "Regenerate captures a new ordinary run with current inputs and writing instructions. It leaves earlier runs and editions intact and does not enable the job or send mail. Availability, compensation, posting retrieval and pursuit checks still apply; retrieval failure or decline can set eligibility false."
+    "Regenerate captures a new ordinary run with current inputs and writing instructions. It leaves earlier runs and editions intact and does not enable the job or send mail. Availability, compensation, posting retrieval and pursuit checks still apply; retrieval failure or decline can set eligibility false.",
+    "Explicit full-template import validates Jackson and fixed project regions, retains a new immutable template and selects it for future runs. It preserves prior templates, captured runs, instructions, configuration and deliveries; it performs no rendering, model work or sending."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -356,7 +362,7 @@
       },
       {
         "status": "unspecified",
-        "statement": "No arbitrary incompatible rollback, model support interval or deprecation window is promised. Projects-only template import is supported for future captures."
+        "statement": "No arbitrary incompatible rollback, model support interval or deprecation window is promised. Full-template and projects-only imports select templates for future captures; historical captures retain their exact template references."
       }
     ],
     "reliances": [
