@@ -33,6 +33,8 @@ conatus want add 'I want more time to write.' --source 'conversation reference'
 conatus want add --file want.txt --source 'conversation reference'
 conatus want add --stdin --source 'conversation reference'
 conatus want list --limit 20
+conatus want list --archived
+conatus want list --all
 conatus want show ID
 conatus decision list --limit 20
 conatus decision show ID
@@ -48,7 +50,10 @@ intake; `update` forwards pending inputs for Annals retention and interpretation
 The caller must select an actual source statement expressing the user's want,
 rather than an assistant suggestion or a hypothetical example.
 
-Want and decision lists select Conatus intake records by source kind. `show`
+Want lists select active wants by default. `--archived` selects archived wants;
+`--all` selects both states. These options conflict. State selection precedes
+the limit and `has_more` calculation. Decision lists select all decision intake.
+`show`
 selects one intake identity and reports its retained source and available Annals
 evidence. The graph and history read the selected Annals library. A concept's
 label need not match the full source statement. Source wording remains the
@@ -59,6 +64,9 @@ use `want-` plus UUIDv7. Decision IDs use `decision-` plus SHA-256 of source
 library ID, colon, and event ID. A record contains `id`, `kind`, `source`,
 `wording`, `source_data`, `work_name`, `captured_at`, `queued_at`, `receipt`, and
 `error`. The work name is the intake ID; the outgoing filename adds `.md`.
+Want records also contain `state`, either `active` or `archived`. Decision
+records have no lifecycle state. Status reports `local.wants.active` and
+`local.wants.archived`; existing intake and handoff counts include both states.
 `wording` is exact want text or the complete supplied decision document; `source_data` preserves the
 source-reference object or original typed feed event. A nullable handoff time
 or receipt describes enqueue, not successful model integration.
@@ -82,6 +90,31 @@ Intake timestamps are UTC Unix seconds recording Conatus capture. The feed's
 `accepted_at` records Annals acceptance, not when a decision occurred. Annals revision and
 delivery times describe those Annals operations. The feed cursor describes
 intake coverage; it does not describe graph freshness.
+
+## Archive and unarchive
+
+```sh
+conatus want archive WANT_ID
+conatus want unarchive WANT_ID
+```
+
+Use either command only after the user directly requests that transition for
+the selected want. New and existing wants default to `active`. Archive makes a
+want inactive; unarchive restores the same want to active. Neither state asserts
+completion. A repeated command succeeds with `changed:false`. An unknown ID or
+a decision ID fails. The result contains `changed` and the saved `record`.
+
+Both commands change only local current state and work without Annals. They
+preserve identity, wording, source, capture time and outgoing document bytes.
+An archived want remains readable. Its only lifecycle change is unarchive.
+Conatus stores no archival reasons, timestamps, actors or transition history.
+Product maintenance holds block both commands.
+
+Archive state stays in Conatus. Pending handoffs, receipts, interpretation,
+re-examination and Annals associations continue independently. Archival never
+rewrites or removes retained sources or propagates to related wants or decisions.
+The default want list and newly rendered emails exclude archived wants. A frozen
+email occurrence keeps its original bytes for retained preview and explicit retry.
 
 ## Update and recover
 

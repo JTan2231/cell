@@ -2,10 +2,13 @@ use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use serde_json::{Value, json};
 use std::io::Read as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use conatus::{operations, store::Store};
+use conatus::{
+    operations,
+    store::{Store, WantState},
+};
 
 #[derive(Parser)]
 #[command(
@@ -39,7 +42,7 @@ enum Command {
     Want(WantCommand),
     #[command(subcommand)]
     Decision(ReadCommand),
-    /// Preview or send the complete captured wants list without model work.
+    /// Preview or send the complete active wants list without model work.
     #[command(subcommand)]
     Email(EmailCommand),
     /// Consume new accounts, forward captured sources, and run the Annals inbox.
@@ -82,11 +85,21 @@ enum Command {
 enum WantCommand {
     /// Capture source wording exactly without invoking a model.
     Add(WantArgs),
-    /// List captured wants; the limit selects local intake records.
+    /// List active wants by default; the limit applies after state selection.
     List {
         #[arg(long, default_value_t = 20)]
         limit: usize,
+        /// Select only archived wants.
+        #[arg(long, conflicts_with = "all")]
+        archived: bool,
+        /// Include active and archived wants.
+        #[arg(long)]
+        all: bool,
     },
+    /// Archive one want only when directly requested by the user.
+    Archive { id: String },
+    /// Restore one want to active only when directly requested by the user.
+    Unarchive { id: String },
     /// Read one captured want and its available Annals evidence and associations.
     Show { id: String },
 }
@@ -150,7 +163,9 @@ fn execute(cli: Cli) -> Result<Value> {
     let mutation = matches!(
         &cli.command,
         Command::Init { .. }
-            | Command::Want(WantCommand::Add(_))
+            | Command::Want(
+                WantCommand::Add(_) | WantCommand::Archive { .. } | WantCommand::Unarchive { .. }
+            )
             | Command::Update
             | Command::Instructions(InstructionsCommand::Set { .. })
             | Command::Retry { .. }
@@ -198,21 +213,7 @@ fn execute(cli: Cli) -> Result<Value> {
             annals_state_dir.as_deref(),
             &library,
         ),
-        Command::Want(WantCommand::Add(args)) => {
-            let wording = if let Some(wording) = args.wording {
-                wording
-            } else if let Some(file) = args.file {
-                std::fs::read_to_string(file)
-                    .context("want file must contain UTF-8 source wording")?
-            } else {
-                let mut wording = String::new();
-                std::io::stdin().read_to_string(&mut wording)?;
-                wording
-            };
-            operations::capture_want(&root, &wording, &args.source)
-        }
-        Command::Want(WantCommand::List { limit }) => Store::open(&root)?.list("want", limit),
-        Command::Want(WantCommand::Show { id }) => operations::show(&root, &id, "want"),
+        Command::Want(command) => execute_want(&root, command),
         Command::Decision(ReadCommand::List { limit }) => {
             Store::open(&root)?.list("decision", limit)
         }
@@ -236,6 +237,41 @@ fn execute(cli: Cli) -> Result<Value> {
         Command::Reexamine { id } => operations::reexamine(&root, &id),
         Command::Pause => operations::pause(&root, true),
         Command::Resume => operations::pause(&root, false),
+    }
+}
+
+fn execute_want(root: &Path, command: WantCommand) -> Result<Value> {
+    match command {
+        WantCommand::Add(args) => {
+            let wording = if let Some(wording) = args.wording {
+                wording
+            } else if let Some(file) = args.file {
+                std::fs::read_to_string(file)
+                    .context("want file must contain UTF-8 source wording")?
+            } else {
+                let mut wording = String::new();
+                std::io::stdin().read_to_string(&mut wording)?;
+                wording
+            };
+            operations::capture_want(root, &wording, &args.source)
+        }
+        WantCommand::List {
+            limit,
+            archived,
+            all,
+        } => {
+            let state = if all {
+                None
+            } else if archived {
+                Some(WantState::Archived)
+            } else {
+                Some(WantState::Active)
+            };
+            Store::open(root)?.list_wants(limit, state)
+        }
+        WantCommand::Archive { id } => Store::open(root)?.set_want_state(&id, WantState::Archived),
+        WantCommand::Unarchive { id } => Store::open(root)?.set_want_state(&id, WantState::Active),
+        WantCommand::Show { id } => operations::show(root, &id, "want"),
     }
 }
 

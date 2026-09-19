@@ -87,7 +87,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON {ok:true,data:...} returns the committed intake record. Errors use {ok:false,error:string}."
+        "statement": "JSON {ok:true,data:...} returns the committed intake record. Errors use {ok:false,error:string}. New wants include record.state: active."
       }
     ],
     "data_semantics": [
@@ -111,7 +111,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Capture commits local intake and its frozen outgoing document. A later update forwards pending documents. Capture runs no model and does not change the Annals graph."
+        "statement": "Capture commits local intake and its frozen outgoing document. A later update forwards pending documents. Capture runs no model and does not change the Annals graph. The want starts active. Archive state is never included in outgoing document bytes."
       }
     ],
     "reliances": [

@@ -1,30 +1,30 @@
 {
   "id": "conatus.digest.email",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Preview or send the complete Conatus wants email",
-  "summary": "Copy every captured want and up to two existing direct decision quotations into a deterministic personal email, without invoking a model.",
+  "title": "Preview or send the active Conatus wants email",
+  "summary": "Copy every active want and up to two existing direct decision quotations into a deterministic personal email, without invoking a model.",
   "use_when": [
     "Preview, explicitly send, inspect a retained occurrence, or explicitly retry the daily wants email."
   ],
   "do_not_use_when": [
     "Want capture, model processing, progress measurement, arbitrary recipients, or public publication is requested."
   ],
-  "outcome": "A complete wants preview or a retained exact email occurrence with provider submission acceptance or explicit uncertainty.",
+  "outcome": "A complete active wants preview or a retained exact email occurrence with provider submission acceptance or explicit uncertainty.",
   "effects": [
-    "Reads all local intake and existing Annals associations at a fixed revision.",
+    "Reads active wants, all decision intake and existing Annals associations at a fixed revision.",
     "Send retains a frozen message and invokes Email. No model or update is invoked."
   ],
   "authority": [
     "Conatus owns content and occurrences; Annals owns stored associations and evidence; Email owns transport; Clockwork owns scheduled admission."
   ],
   "success": [
-    "Preview returns all captured wants. A send acceptance ID establishes provider submission only."
+    "A new preview returns all active wants. A retained occurrence preview returns its original bytes. A send acceptance ID establishes provider submission only."
   ],
   "failure_and_recovery": [
-    "Unavailable supporting context leaves the complete wants list with a footer. Local read failure stops the send.",
+    "Unavailable supporting context leaves the complete active wants list with a footer. Local read failure stops the send.",
     "An attempted occurrence without an acceptance receipt requires provider inspection before explicit retry within 23 hours, using unchanged bytes and key. Scheduled failures halt until explicitly approved in Clockwork."
   ],
   "privacy": [
@@ -98,7 +98,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "All captured wants appear verbatim, newest capture first. At most two distinct directly serving decision sources contribute one stored exact quotation each, ordered by Conatus capture time and ID. Associations do not prove progress."
+        "statement": "All active wants appear verbatim, newest capture first. At most two distinct directly serving decision sources contribute one stored exact quotation each, ordered by Conatus capture time and ID. Associations do not prove progress."
       }
     ],
     "identity_and_units": [
@@ -110,7 +110,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "All intake is read in one SQLite query. Annals roots, children and evidence are fully paged at a fixed revision. These snapshots are separate, and pending interpretation can leave context absent. Provider submission is not final delivery."
+        "statement": "All active wants and decision intake are read in one SQLite query. Annals roots, children and evidence are fully paged at a fixed revision. These snapshots are separate, and pending interpretation can leave context absent. Provider submission is not final delivery."
       }
     ],
     "access": [
@@ -122,7 +122,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Preview does not change domain state. Send holds product admission and a separate email lock, freezes bytes before submission, and records attempt admission before transport. Accepted scheduled occurrences are skipped; uncertain ones require explicit bounded retry. Existing schema-one settings hold occurrence records."
+        "statement": "Preview does not change domain state. Send holds product admission and a separate email lock, freezes bytes before submission, and records attempt admission before transport. Accepted scheduled occurrences are skipped; uncertain ones require explicit bounded retry. Existing schema-one settings hold occurrence records. Archive and unarchive affect only newly rendered messages. An already frozen occurrence keeps its bytes, including archived wants, for retained preview and explicit retry."
       }
     ],
     "operational_limits": [
@@ -132,6 +132,10 @@
       }
     ],
     "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Contract 2 filters new messages to active wants. Retained occurrences preserve their original content. Older releases ignore archive markers and do not provide lifecycle filtering."
+      },
       {
         "status": "unspecified",
         "statement": "No general cross-release support interval or external-provider retention guarantee is promised."

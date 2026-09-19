@@ -40,6 +40,17 @@ Neither a direct edge nor a path establishes measured progress. No completion,
 priority, deadline, or formal want lifecycle is derived. Later corrections can
 be captured as further source statements; retained wording remains unchanged.
 
+Conatus owns a separate `active` or `archived` state for each want. Only a direct
+user request can archive or unarchive it. Archive makes the want inactive in
+default lists and new emails. Its identity and captured content stay immutable.
+Unarchive restores the same want. Annals sources, graph and ongoing processing
+do not receive the state and can continue to evolve independently.
+
+The existing schema-one settings table stores only a current archive marker
+for the selected want ID. Absence means active, including for all existing
+wants. Unarchive removes the marker. No migration or transition history is
+needed. Each transition and its returned state share one local transaction.
+
 ## Processing
 
 1. Capture a want locally, or consume new accepted decision-feed events.

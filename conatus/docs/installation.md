@@ -28,6 +28,11 @@ conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
 Release recovery does not roll back the Conatus database, Annals library, or
 Clockwork binding. Read the retained records and active binding independently.
 
+Want lifecycle state uses the existing schema-one settings table. Existing
+wants default to active without a migration. Older releases ignore archive
+markers and can include archived wants in lists and new emails. Use a release
+that supports lifecycle state when archive filtering is required.
+
 Initialize Conatus with the desired state directory and existing Annals
 decisions configuration as described in [CLI and operation](cli.md). A selected
 binary or valid provider bundle does not establish Annals or model readiness.
@@ -112,6 +117,6 @@ maintenance. The optional boolean `daily_email_enabled` selects email intent
 separately from update `enabled`. An omitted value preserves prior email intent;
 an absent binding remains absent. Neither operation clears Clockwork incidents.
 
-Email must be installed. The renderer copies all captured wants and at most two
+Email must be installed. The renderer copies all active wants and at most two
 stored quotations from directly associated decisions. Preview starts no send.
 See [daily email](email.md) for disclosure and uncertain-send recovery.

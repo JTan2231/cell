@@ -5,6 +5,11 @@ source wording and later related to decisions. Do not capture assistant
 suggestions or hypothetical examples as the user's wants. Capture does not
 derive qualifications, priorities, deadlines, lifecycle state, or further wants.
 
+Each new want starts active. The capture response includes `record.state` as
+`active`. Only the separate `want archive ID` and `want unarchive ID` commands,
+directly requested by the user, change its local lifecycle state. State never
+becomes part of the frozen outgoing source document.
+
 Conatus state must already be initialized. Select it with the global
 `--state-dir ABS_PATH` when using a nondefault location. The default is
 `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`.

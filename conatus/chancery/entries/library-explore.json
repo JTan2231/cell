@@ -1,11 +1,11 @@
 {
   "id": "conatus.library.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Read wants and their decision associations",
-  "summary": "Read captured wants, accepted decision projections, Annals evidence and graph history, and the progress of intake handoffs.",
+  "summary": "Read active or archived wants, accepted decisions, Annals evidence and graph history, and intake handoff progress.",
   "use_when": [
     "Captured wants, their associated decisions, source evidence, history, or outstanding processing should be inspected."
   ],
@@ -33,6 +33,14 @@
     {
       "label": "List wants",
       "invocation": "/Users/joey/.local/bin/conatus want list --limit 20"
+    },
+    {
+      "label": "List archived wants",
+      "invocation": "/Users/joey/.local/bin/conatus want list --archived"
+    },
+    {
+      "label": "List all wants",
+      "invocation": "/Users/joey/.local/bin/conatus want list --all"
     },
     {
       "label": "Read input",
@@ -64,7 +72,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Contract version 1 describes Conatus 0.1.0 public semantics independently of Annals, feed, library schema, or Clockwork versions."
+        "statement": "Contract 2 makes want lists active-only by default, adds --archived and --all, adds want record.state and status local.wants counts. The database remains schema 1; existing wants default to active."
       },
       {
         "status": "unspecified",
@@ -92,19 +100,23 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "want or decision list selects a source kind with --limit; show selects one intake ID. graph selects the current Annals graph. history selects a bounded Annals revision history. status selects current local intake and available inbox state."
+        "statement": "want or decision list selects a source kind with --limit; show selects one intake ID. graph selects the current Annals graph. history selects a bounded Annals revision history. status selects current local intake and available inbox state. Want lists default to active; mutually exclusive --archived and --all select archived or both states."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON uses {ok:true,data:...} or {ok:false,error:string}. Lists default to 20 records and allow 1 through 100. A selected intake show separates record, retention, interpretation, and associations; each remote read has available data or its own error. Annals unavailability is reported separately from locally retained input."
+        "statement": "JSON uses {ok:true,data:...} or {ok:false,error:string}. Lists default to 20 records and allow 1 through 100. A selected intake show separates record, retention, interpretation, and associations; each remote read has available data or its own error. Annals unavailability is reported separately from locally retained input. Want records include state: active or archived. Status local.wants contains active and archived counts, including zero."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
         "statement": "Captured wants are input assertions. Decision rows are deterministic projections of accepted feed fields, not raw account Markdown or retrieved conversation quotations. Graph edges express interpretation under the selected library instructions, not measured progress or current force."
+      },
+      {
+        "status": "declared",
+        "statement": "Lifecycle state belongs only to the Conatus want. Archived means inactive, not completed. Its captured content stays immutable; Annals processing and associations remain independent and can evolve."
       }
     ],
     "identity_and_units": [
@@ -116,7 +128,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Lists select retained Conatus intake by source kind. Status counts name the intake kind and queued or pending handoff selection. The stored cursor marks consumed decision-feed coverage, not interpreted coverage. Graph bounds and Annals current reads retain Annals semantics; a recent graph revision does not prove all captured inputs were interpreted."
+        "statement": "Lists select retained Conatus intake by source kind. Status counts name the intake kind and queued or pending handoff selection. The stored cursor marks consumed decision-feed coverage, not interpreted coverage. Graph bounds and Annals current reads retain Annals semantics; a recent graph revision does not prove all captured inputs were interpreted. Want state selection precedes limits and has_more. Existing intake and handoff counts include both states. Show can select either state."
       }
     ],
     "lifecycle_and_consistency": [

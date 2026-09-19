@@ -1,9 +1,9 @@
 # Daily wants email
 
-Conatus sends every captured want in a plain-text email. It copies `wording`
+Conatus sends every active want in a plain-text email. It copies `wording`
 and `source` unchanged and formats the capture time in UTC. Items are ordered
-by capture time and ID, newest first. The email has no want limit, lifecycle
-filter, inferred priority, rewritten title, or model invocation.
+by capture time and ID, newest first. The email has no want limit, inferred
+priority, rewritten title, or model invocation.
 
 For each want, Conatus reads concepts grounded by its work and their direct
 children through Annals' supported read interface. It follows every root,
@@ -15,11 +15,15 @@ concept ID order, then Annals evidence order. A path through intermediate
 concepts does not qualify. Acceptance and associations do not prove progress.
 
 The complete local intake read and the Annals revision are separate snapshots.
-A captured want appears even if interpretation is pending. Failure to read
-supporting material produces the full wants list with one context-unavailable
-footer. Failure to read local intake stops rendering. An empty list says
-`No captured wants.` Stored wording and quotations are never truncated.
+An active want appears even if interpretation is pending. Failure to read
+supporting material produces the full active wants list with one
+context-unavailable footer. Failure to read local intake stops rendering. An empty list says
+`No active wants.` Stored wording and quotations are never truncated.
 Provider message-size limits can reject a send; they do not authorize omission.
+
+Archive and unarchive affect newly rendered messages. Selection uses the local
+state snapshot at rendering. A frozen occurrence keeps its original bytes for
+retained preview and explicit retry, even if a want is archived afterward.
 
 ## Preview and send
 
