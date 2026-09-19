@@ -17,6 +17,7 @@ PRODUCT_INPUTS = (
 # Installer-invoked commands, embedded schemas, and service/maintenance entry
 # points also belong to the installation boundary, even inside product code.
 PRODUCT_RUNTIME_INPUTS = {
+    "conatus": ("conatus/src/main.rs", "conatus/src/store.rs"),
     "clew": ("clew/src/store.rs", "clew/src/main.rs"),
     "annals": ("annals/crates/annals/src/db.rs", "annals/crates/annals/src/cli.rs",
                "annals/crates/annals/src/main.rs", "annals/crates/annals/src/sqlite.rs"),
@@ -24,8 +25,6 @@ PRODUCT_RUNTIME_INPUTS = {
                 "nucleus/crates/nucleus-cli/src/main.rs",
                 "nucleus/crates/nucleus-store/src/lib.rs",
                 "nucleus/crates/nucleus-daemon/src/lib.rs"),
-    "todo": ("todo/crates/todo/src/todo_store.rs", "todo/crates/todo/src/cli.rs",
-             "todo/crates/todo/src/main.rs"),
     "decisions": ("decisions/crates/decisions/src/store.rs",
                   "decisions/crates/decisions/src/cli.rs",
                   "decisions/crates/decisions/src/main.rs"),
@@ -63,7 +62,7 @@ SHARED_INPUTS = {
 # cell-install is the common installer for every current product. A newly
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
-    "nucleus", "annals", "todo", "decisions", "semantics",
+    "nucleus", "annals", "decisions", "semantics",
     "platter", "paperboy", "mentor", "weaver",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((

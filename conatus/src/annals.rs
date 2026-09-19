@@ -222,6 +222,11 @@ impl Annals {
         }
     }
 
+    /// Read all existing evidence and direct associations at one fixed revision.
+    pub fn email_context(&self) -> Result<EmailContext> {
+        email_context(&self.reader()?)
+    }
+
     fn snapshot(&self) -> Result<Snapshot> {
         let reader = self.reader()?;
         let overview = reader.overview(None)?;
@@ -279,6 +284,71 @@ impl Annals {
                 .collect(),
         })
     }
+}
+
+#[derive(Debug, Default)]
+pub struct EmailContext {
+    pub revision: i64,
+    /// Want work -> directly serving source work -> first stored quotation.
+    pub quotes: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+fn collect_pages<T>(
+    mut read: impl FnMut(Option<&str>) -> Result<::annals::api::Page<T>>,
+) -> Result<Vec<T>> {
+    let mut items = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = read(cursor.as_deref())?;
+        items.extend(page.items);
+        cursor = page.page.next_cursor;
+        if cursor.is_none() {
+            return Ok(items);
+        }
+    }
+}
+
+pub fn email_context(reader: &LibraryReader) -> Result<EmailContext> {
+    let overview = reader.overview(None)?;
+    let at = Some(overview.revision);
+    let roots = collect_pages(|cursor| Ok(reader.roots(at, 200, cursor)?.roots))?;
+    let mut queue: VecDeque<_> = roots.into_iter().map(|root| root.id).collect();
+    let mut nodes = BTreeMap::new();
+    while let Some(id) = queue.pop_front() {
+        if nodes.contains_key(&id) {
+            continue;
+        }
+        let children = collect_pages(|cursor| Ok(reader.children(at, id, 200, cursor)?.children))?;
+        let evidence = collect_pages(|cursor| Ok(reader.evidence(at, id, 200, cursor)?.evidence))?;
+        queue.extend(children.iter().map(|child| child.id));
+        nodes.insert(id, (children, evidence));
+    }
+    anyhow::ensure!(
+        nodes.len() as u64 == overview.concept_count,
+        "incomplete Annals concept read"
+    );
+    let mut context = EmailContext {
+        revision: overview.revision,
+        ..EmailContext::default()
+    };
+    for (children, evidence) in nodes.values() {
+        for want in evidence
+            .iter()
+            .filter(|entry| entry.work.starts_with("want-"))
+        {
+            let quotes = context.quotes.entry(want.work.clone()).or_default();
+            for child in children {
+                if let Some((_, supporting)) = nodes.get(&child.id) {
+                    for entry in supporting {
+                        quotes
+                            .entry(entry.work.clone())
+                            .or_insert_with(|| entry.quote.clone());
+                    }
+                }
+            }
+        }
+    }
+    Ok(context)
 }
 
 #[derive(Serialize)]

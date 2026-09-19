@@ -2,6 +2,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod annals;
+pub mod digest;
 pub mod installation;
 pub mod operations;
 pub mod store;
