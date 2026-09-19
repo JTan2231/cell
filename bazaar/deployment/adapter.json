@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "product": "bazaar",
+  "application": "Bazaar",
+  "dependencies": [],
+  "description": "Install Bazaar and initialize its private versioned string store without adding content.",
+  "adapter_binary": "bazaar-install"
+}

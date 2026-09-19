@@ -38,6 +38,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
 | Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/README.md) |
+| Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/bazaar/README.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/README.md) |

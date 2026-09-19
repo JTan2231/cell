@@ -25,6 +25,7 @@ members = [
     "cast",
     "platter",
     "clew",
+    "bazaar",
     "paperboy",
     "conatus",
     "mentor",
