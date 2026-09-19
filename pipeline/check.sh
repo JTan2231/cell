@@ -19,8 +19,7 @@ for script_path in \
     pipeline/recognition.sh \
     pipeline/platform.sh \
     pipeline/extras/decisions-catalog.sh \
-    pipeline/extras/semantics-catalog.sh \
-    pipeline/extras/todo-catalog.sh
+    pipeline/extras/semantics-catalog.sh
 do
     sh -n "$PIPELINE_ROOT/$script_path"
 done

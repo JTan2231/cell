@@ -1,0 +1,164 @@
+{
+  "id": "conatus.digest.email",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Preview or send the complete Conatus wants email",
+  "summary": "Copy every captured want and up to two existing direct decision quotations into a deterministic personal email, without invoking a model.",
+  "use_when": [
+    "Preview, explicitly send, inspect a retained occurrence, or explicitly retry the daily wants email."
+  ],
+  "do_not_use_when": [
+    "Want capture, model processing, progress measurement, arbitrary recipients, or public publication is requested."
+  ],
+  "outcome": "A complete wants preview or a retained exact email occurrence with provider submission acceptance or explicit uncertainty.",
+  "effects": [
+    "Reads all local intake and existing Annals associations at a fixed revision.",
+    "Send retains a frozen message and invokes Email. No model or update is invoked."
+  ],
+  "authority": [
+    "Conatus owns content and occurrences; Annals owns stored associations and evidence; Email owns transport; Clockwork owns scheduled admission."
+  ],
+  "success": [
+    "Preview returns all captured wants. A send acceptance ID establishes provider submission only."
+  ],
+  "failure_and_recovery": [
+    "Unavailable supporting context leaves the complete wants list with a footer. Local read failure stops the send.",
+    "An attempted occurrence without an acceptance receipt requires provider inspection before explicit retry within 23 hours, using unchanged bytes and key. Scheduled failures halt until explicitly approved in Clockwork."
+  ],
+  "privacy": [
+    "Exact wants, sources, capture times and selected evidence leave the machine through Email. Conatus retains frozen messages privately."
+  ],
+  "interfaces": [
+    {
+      "label": "Preview",
+      "invocation": "/Users/joey/.local/bin/conatus email preview"
+    },
+    {
+      "label": "Send",
+      "invocation": "/Users/joey/.local/bin/conatus email send"
+    },
+    {
+      "label": "Retained preview",
+      "invocation": "/Users/joey/.local/bin/conatus email preview --occurrence ID"
+    },
+    {
+      "label": "Explicit retry",
+      "invocation": "/Users/joey/.local/bin/conatus email send --retry ID"
+    }
+  ],
+  "does_not_authorize": [
+    "Preview does not authorize send. Only explicit manual send authority or enabled daily-product authority permits disclosure.",
+    "No model invocation, inferred completion or direct Annals database access."
+  ],
+  "manual": "manuals/digest-email.md",
+  "dependencies": [
+    {
+      "id": "annals.corpus.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The local user previews or authorizes an ad hoc send; an enabled Conatus daily binding supplies standing authority for its fixed personal digest."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Initialized readable Conatus state is required. Supporting reads require the configured Annals library. Sending requires installed Email, credentials and network availability."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "email preview accepts an optional retained occurrence. email send accepts either --scheduled or --retry ID. Global --state-dir selects Conatus state."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Text preview prints From, To, Subject and body; --json returns data.digest with want_count, context_available and context_revision. Send returns occurrence and accepted_id or an error."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "All captured wants appear verbatim, newest capture first. At most two distinct directly serving decision sources contribute one stored exact quotation each, ordered by Conatus capture time and ID. Associations do not prove progress."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Want and decision identities retain intake namespaces. Occurrences are manual/UUIDv7 or daily/YYYY-MM-DD for the latest local 09:00. Capture times display UTC; Annals revision is corpus identity. Idempotency keys include the library identity."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "All intake is read in one SQLite query. Annals roots, children and evidence are fully paged at a fixed revision. These snapshots are separate, and pending interpretation can leave context absent. Provider submission is not final delivery."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local commands access private state. Send uses Email fixed addresses; read authority alone does not grant disclosure."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Preview does not change domain state. Send holds product admission and a separate email lock, freezes bytes before submission, and records attempt admission before transport. Accepted scheduled occurrences are skipped; uncertain ones require explicit bounded retry. Existing schema-one settings hold occurrence records."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Supporting selection is capped at two decision quotations per want; the wants list is uncapped. The scheduled activation timeout is 180 seconds. Provider size limits apply and cause failure rather than truncation. No latency or capacity guarantee is made."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release support interval or external-provider retention guarantee is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Existing graph and evidence are read through Annals public interfaces.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.corpus.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Email submits exact retained plain-text bytes and returns provider acceptance.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork activates the daily runner and owns failure halts.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  }
+}

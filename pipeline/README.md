@@ -83,8 +83,8 @@ their affected consumers. There is no general dependency expansion.
 | Command | Coverage |
 | --- | --- |
 | `./ci.sh` | Changed products, plus platform coverage selected from the same changes |
-| `./ci.sh todo` or `todo/ci.sh` | Todo product tests, plus selected platform coverage |
-| `./ci.sh --platform todo` or `todo/ci.sh --platform` | Todo product and platform tests, plus shared installation primitives |
+| `./ci.sh conatus` or `conatus/ci.sh` | Conatus product tests, plus selected platform coverage |
+| `./ci.sh --platform conatus` or `conatus/ci.sh --platform` | Conatus product and platform tests, plus shared installation primitives |
 | `./ci.sh --all` | Every product and shared platform suite, including integrated catalog validation |
 | `./ci.sh --platform` | Explicit full coverage, equivalent to `--all` |
 | `pipeline/test.sh broker` | Explicit broker regression suite |
