@@ -23,7 +23,7 @@ HEAD revision.
 ```
 
 The result includes stable concept IDs, canonical labels, full meanings,
-active or retired state, replacements, and distinctions. The schema 3 view also
+active or retired state, replacements, and distinctions. The schema 2 view also
 includes project identity and the selected revision. Search returns the same
 view with only matching concepts. Use stable concept IDs to follow terms across revisions.
 
@@ -38,6 +38,12 @@ For change analysis:
 
 `diff` returns the immutable revisions in the selected range. It is not a
 synthetic textual diff.
+
+Rust callers use `semantics::api::Client` for the same read-only operations.
+Ordinary reads return `RepositoryView`; `Client::repository_provenance` returns
+the full replay representation. Output selection changes neither the persistent
+schema nor replay behavior. Project and intake operations have separate
+operational contracts.
 
 ## Interpret authority
 
@@ -56,20 +62,9 @@ decision provenance and repository meanings inside the local project boundary.
 If replay fails, stop. Run Semantics doctor and use the project operation
 contract; do not edit SQLite or skip a revision.
 
-Rust callers may import `semantics::api` repository types and use its typed
-`Client` for repository show, search, log, and diff. The client invokes the
-same local CLI and preserves its read-only effects and project authority.
-Project and intake operations are separately documented operational actions.
-
-Project lists return stable ID, canonical current path, status, and HEAD.
-`show --provenance` returns the full replay representation. Rust callers use
-`RepositoryView` for ordinary reads and `Client::repository_provenance` for full
-replay. These output selections do not change the persistent schema or replay behavior.
-
 ## Command usage
 
-CLI dispatch separately attempts to append system/command identity, observation
-time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
-records invocation only, retains no arguments or output, and preserves product
-results after recording errors. `--register-usage` is the separate post-install
-step that adds the program's complete command inventory without product work.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time, and thread ID, not arguments, output,
+or outcomes. Internal product calls are excluded. Recording errors do not
+change command results.

@@ -22,8 +22,13 @@ semantics --database DATABASE --json maintenance release RUN_ID
 ```
 
 Each database has a private durable sibling gate,
-`<canonical-database>.cell-maintenance`. These commands do not open, initialize, or
-migrate SQLite. Status does not create an absent gate and returns
+`<canonical-database>.cell-maintenance`. Gate identity follows the canonical
+database path, including a symbolic-link alias. For a new database, it follows
+the canonical existing ancestor. Semantics rejects hard-linked databases
+before admission.
+
+Maintenance commands do not open, initialize, or migrate SQLite. Status does
+not create an absent gate and returns
 `protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
 describes live command admission. Before deployment, the product must also
 verify that durable intake and dependency jobs have stopped.
@@ -57,6 +62,8 @@ semantics project pause ID
 semantics project resume ID
 semantics project retire ID
 ```
+
+Project lists return stable ID, canonical current path, status, and HEAD.
 
 IDs start with a lowercase letter and contain only lowercase ASCII letters,
 digits, and `-`. Register and move canonicalize a directory and require the
@@ -98,6 +105,13 @@ semantics repository seed-markdown PROJECT PATH
 case-insensitive label or meaning text. `log` and `diff` return immutable
 revision records rather than a mutable projection.
 
+Ordinary `show` and `search` use output schema 2. They return project identity,
+revision, and concepts with ID, label, full meaning, active state, replacement,
+and full distinctions. `show --provenance` returns the full replay representation.
+Rust callers use `RepositoryView` for ordinary reads and
+`Client::repository_provenance` for full replay. These output selections do not
+change the persistent schema or replay behavior.
+
 Seed commands are bootstrap-only and refuse a project that already has a
 revision. `seed-markdown` accepts a project-local definition-list source,
 records its project-relative source label and SHA-256 digest, and commits one
@@ -117,11 +131,19 @@ Statuses are `unassigned`, `pending`, `awaiting_review`, `paused`,
 `processing`, `applied`, `ignored`, and `failed`. Assignment is an audited
 manual routing correction and revalidates the target marker. Retry applies to
 failed intake and refuses an active or ambiguous prior Nucleus job.
+
 `intake status` returns separate `annals_decision_accounts` and
-`legacy_decisions` collections. New documents never use `awaiting_review`;
-legacy rows retain all old states and decoding. New account rows expose a
-fixed `routing_outcome` and project assignment, never the transient resolved
-cwd or raw dependency diagnostics.
+`legacy_decisions` collections. The name `annals_decision_accounts` remains for
+compatibility. New documents never use `awaiting_review`; legacy rows retain
+all old states and decoding. New account rows expose a fixed `routing_outcome`
+and project assignment. They do not expose the transient resolved cwd or raw
+dependency diagnostics.
+
+New document intake uses a separate local ID per project. The embedded event
+retains Annals' original identity and full text. A document result with no
+effects ends as `ignored`, with no `applied_revision` or repository revision.
+The configured reconciliation instructions determine relevance. No source
+lookup is required.
 
 `semantics --json intake run` is the private one-shot worker interface selected
 by the installed Clockwork `semantics/worker` definition. It is intentionally
@@ -138,33 +160,15 @@ semantics --json doctor
 Doctor checks SQLite schema 3, every non-retired project's exact marker, the
 explicit Annals decisions config and exchange-2 feed/library identity, and
 Nucleus health, capabilities, historical schemas, and the document toolset.
-Conversation lookup is not a document-processing prerequisite. It captures one
-fixed Annals watermark and, from every distinct installed scan cursor, reads
-and identically replays each bounded page until an unchanged empty page. It
-rejects page cycles, nonadvancement, duplicate identities, changed replay, and
-more than 1,000 pages from one cursor. A migrated
-database with an active or paused project fails readiness until every such
-project has the selected Annals identity and activation/scan cursors. An empty
-database may report `activation pending; no active or paused projects` because
-there is no consumer cursor to skip; its first project registration captures
-the then-current watermark. Doctor exits nonzero if any check fails.
+Conversation lookup is not a document-processing prerequisite.
 
-Deployment gate identity follows the canonical database path (including a
-symlink alias), or the canonical existing ancestor for a new database.
-Hardlinked databases are rejected before admission. Maintenance status still
-does not open or initialize the database.
+Doctor captures one fixed Annals watermark. From each distinct installed scan
+cursor, it reads and identically replays each bounded page until an unchanged
+empty page. It rejects page cycles, nonadvancement, duplicate identities,
+changed replay, and more than 1,000 pages from one cursor.
 
-Project lists return stable ID, canonical current path, status, and HEAD.
-Ordinary repository show and search use schema 3. They return project identity,
-revision, and concepts with ID, label, full meaning, active state, replacement,
-and full distinctions. `show --provenance` returns the full replay representation.
-Rust callers use `RepositoryView` for ordinary reads and
-`Client::repository_provenance` for full replay. These output selections do not
-change the persistent schema or replay behavior.
-
-New document intake uses a separate local ID per project. The embedded event
-retains Annals' original identity and full text. `annals_decision_accounts` is
-retained as the status collection name for compatibility. A document result
-with no effects ends as `ignored`, with no `applied_revision`; it creates no
-repository revision. Relevance is decided by the configured reconciliation
-instructions, not a required source lookup.
+Every active or paused project must have the selected Annals identity and
+activation/scan cursors. An empty database may report
+`activation pending; no active or paused projects`. It has no consumer cursor
+to skip. Its first project registration captures the then-current watermark.
+Doctor exits nonzero if any check fails.

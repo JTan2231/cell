@@ -121,5 +121,4 @@ An interrupted append may have committed; recover with its unchanged write ID.
 Keep notes, statuses and job interests private. Commands print them only to the
 caller. Clew stores no credentials and makes no network requests. Agent dispatch
 attempts metadata-only Chancery usage recording; errors preserve the operation.
-Dependency reads are marked internal. `clew --register-usage` registers commands
-separately after installation without adding ledger entries.
+Dependency reads are marked internal and excluded from recording.

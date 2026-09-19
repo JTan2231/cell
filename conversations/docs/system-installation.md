@@ -10,6 +10,9 @@ Then install those exact tested artifacts:
   --bundle /Users/joey/rust/cell/conversations/chancery
 ```
 
+Run `conversations --register-usage` after each installation or update. This
+registers the command inventory in Chancery without reading conversation history.
+
 The deployment has no service to start and no credential to source. Each CLI
 invocation owns and cleans up its private App Server process group, including
 descendants created by a Codex wrapper; it does not inspect or terminate other

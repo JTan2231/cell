@@ -47,8 +47,7 @@ Provider references: [domain list](https://resend.com/docs/api-reference/domains
 
 ## Command usage
 
-CLI dispatch separately attempts to append system/command identity, observation
-time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
-records invocation only, retains no arguments or output, and preserves product
-results after recording errors. `--register-usage` is the separate post-install
-step that adds the program's complete command inventory without product work.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time, and thread ID, not arguments, output,
+or outcomes. Internal product calls are excluded. Recording errors do not
+change command results.

@@ -65,15 +65,6 @@ intact. Future examinations use the selection captured when they start.
 
 ## Global options
 
-Read commands need no filesystem write permission. Read access must include
-the selected config, catalog, library, prepared SQLite sidecars, and any spool
-records and locks used by the command. Query scratch storage stays in memory.
-Initialization and migration prepare persistent WAL files; migration also
-prepares a configured spool's control lock. For existing state, perform the
-authorized update before removing writer access. A missing required sidecar or
-lock requires setup or recovery; a read does not create it. Usage-journal errors
-do not change the command result.
-
 ```text
 annals [--config PATH] [--library PATH] [--expected-library-id ID] [--json] [--quiet] [-v...] COMMAND
 ```
@@ -130,7 +121,17 @@ retry children, and leaves files in `incoming/` unregistered. A generic config
 also cannot admit to or run a spool that already carries the decision-library
 binding.
 
-The primary inbox keeps its existing behavior.
+### Read access
+
+Read commands need no filesystem write permission. Read access must include
+the selected config, catalog, library, prepared SQLite sidecars, and any spool
+records and locks used by the command. Query scratch storage stays in memory.
+
+Initialization, migration, and recovery prepare persistent WAL files.
+Migration also prepares a configured spool's control lock. For existing state,
+perform the authorized update before removing writer access. A missing required
+sidecar or lock requires setup or recovery; a read does not create it.
+Usage-journal errors do not change the command result.
 
 ## Deployment maintenance
 
@@ -142,9 +143,14 @@ annals --library DATABASE --json maintenance release RUN_ID
 
 The usual explicit config or library selection chooses the maintenance boundary.
 Its private durable gate is the sibling directory
-`<canonical-database>.cell-maintenance`. Each library has its own gate. These
-commands do not open, initialize, or migrate the database. Status leaves an absent
-gate absent. The standard success envelope contains `protocol_version: 1`,
+`<canonical-database>.cell-maintenance`. Each library has its own gate. Gate
+identity follows the canonical database path, including a symbolic-link alias.
+For a new database, it follows the canonical existing ancestor. Annals rejects
+hard-linked databases before admission.
+
+Maintenance commands do not open, initialize, or migrate the database. Status
+leaves an absent gate absent. It opens existing locks read-only and does not
+repair incomplete gates. The standard success envelope contains `protocol_version: 1`,
 `contract_version: 1`, all `holds`, and `drained`. Drain reports whether live
 participating commands have released admission; deployment must separately
 account for durable unfinished work and dependency jobs.
@@ -720,11 +726,6 @@ Exit categories are:
 | 5 | SQLite, integrity, or history failure |
 
 Human rendering escapes control characters from retained text and labels.
-
-Deployment gate identity follows the canonical database path (including a
-symlink alias), or the canonical existing ancestor for a new database.
-Hardlinked databases are rejected before admission. Maintenance status still
-does not open or initialize the database.
 
 ## Selection and receipt output
 

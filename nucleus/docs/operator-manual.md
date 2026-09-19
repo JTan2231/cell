@@ -74,94 +74,37 @@ installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report
 ```
 
-Conversations preserves empty message text and turns with no normalized messages.
-Krisis requires nonblank user text in the selected exchange to identify user
-decisions. Empty assistant text and earlier empty turns remain valid context.
-Krisis and Paperboy embed Conversations, so normalization changes require
-rebuilding and deploying those consumers as well as the standalone CLI.
-
-On macOS, Conversations defaults to the ChatGPT app's bundled Codex at
-`/Applications/ChatGPT.app/Contents/Resources/codex`. The CLI `--codex` option,
-`CONVERSATIONS_CODEX`, and explicit library configuration can override that
-selection. Consumer pins remain explicit. The app owns bundled Codex updates;
-Conversations fails if its selected executable cannot start. Rebuild embedded
-consumers to apply a changed library default.
-
-Krisis uses `krisis/decision-document/1` for its sole active observer production
-path. It freezes full normalized conversation through a completed exchange,
-accepts a yes/no verdict and summary, and renders the source into Markdown.
-The saved run protects request and result recovery; the observer commits
-coverage and a target-bound document outbox. Local `document build` and
-`document render` use the same builder without delivery or observer coverage.
-Krisis marks an observation failed on its first processing error. A saved
-conversation read failure returns zero and permits later scheduled work. Other
-processing failures halt its Clockwork schedule. Explicit observation retry
-preserves uncertain Nucleus request identity and pending Annals document identity.
-`krisis health` reports worker
-activity and its age; retained observation failures do not make the worker
-unhealthy. See [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
-
-Annals exchange contract 2 accepts the handed text without a decision schema
-or source lookup. It owns ordinary storage metadata and returns complete accepted
-documents through its dedicated feed. Paperboy reads that feed on demand and
-reports documents selected by Annals acceptance time. Conatus forwards those exact bytes to its
-library. Semantics supplies each post-activation document to each participating
-project's reconciliation agent. Its `semantic-document-reconciliation/1` toolset
-allows an empty result without creating a semantic revision. Interpretation and
-connections belong to the agents and their instructions. Historical account
-jobs retain their original immutable tool contracts. Persistent schemas are
-Krisis 6, Annals 7, and Semantics 3; these migrations preserve accepted history
-and cursors. Krisis refuses the document cutover while old handoffs or
-classification jobs are in flight.
-
-Conatus pins its Annals executable and its Clockwork definition pins Conatus.
-Coordinated deployment rebinds those pins, verifies both existing library
-identities, and preserves its cursor, operator pause and schedule intent.
-
 Each product owns its data and success rules. Nucleus owns execution. A completed
 model turn does not establish a product result. A later runtime failure does
 not erase an already committed domain result.
 
-Weaver runs one authoring job per free-form direction. Its agent reads accepted
-Annals documents on demand and submits Markdown. Weaver stores documents and
-the minimum Nucleus recovery state in SQLite. A pending tool reply is cleared
-after Nucleus acknowledges it. Editorial choices belong to the prompt; Weaver
-retains no source inventory, citation graph, or feed consumer cursor. It runs
-on demand and has no scheduled publishing or email stage.
+Nucleus owns its private Codex credentials. Requesters do not copy or refresh
+them. Conversations reads normal-user history through App Server. Annals Usage
+reads Nucleus output and Annals attribution records without owning either store.
 
-Weaver embeds the Annals and Nucleus clients, Iatreion status types, and
-Chancery usage support. It is a deployment companion of those products.
-Companion declarations also cover embedded usage libraries, so a provider
-deployment rebuilds its installed consumers with the selected source.
+Krisis sends decision documents to Annals. Annals owns accepted text, library
+identity, and the document feed. Paperboy selects documents by acceptance time;
+Conatus forwards their exact text; Semantics reconciles them for participating
+projects; Weaver reads them for authoring. Interpretation belongs to each
+consumer. See [the document exchange](/Users/joey/rust/cell/annals/chancery/annals/manuals/decision-account-exchange.md)
+and [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
 
-Cast collection stores jobs without a title substring requirement. Configured
-provider queries still limit discovery. Downstream consumers own selection by
-title, seniority, location and other preferences.
+Cast owns discovery and stored job records. Platter owns job selection, packet
+preparation, and delivery. It reads career material from the Annals `vita`
+library and obtains project prose from Weaver. Platter and Weaver retain their
+own Nucleus requests. Platter cancellation and drain include its recorded Weaver
+jobs, but exclude unrelated Weaver work. See
+[Platter preparation](/Users/joey/rust/cell/platter/chancery/manuals/packet-prepare.md)
+for collection, authoring, and acceptance rules.
 
-Cast's `automatic_excluded_ats` defaults to Ashby for ordinary collection,
-including existing configuration that omits the field. Platter's ad-hoc URL
-path uses Cast collection contract 5 to retrieve one selected job despite that
-exclusion or a disabled source. Cast preserves source enrollment and board-scan
-state and retains only the selected posting within its ordinary budgets.
+Email owns transport and credential loading. Its receipt means provider
+acceptance, not final inbox delivery. Todo's daily email uses its own direct
+Resend path and does not depend on Nucleus execution.
 
-Platter `run-ad-hoc` uses Cast's exact `job collect` operation, then reuses
-Platter's normal preparation, freshness, edition and send records. URL-selected
-work creates no separate workflow state. Cast still owns the resulting source
-and job records; Platter owns packet eligibility and delivery.
+Source colocation and a shared Cargo workspace do not merge product databases,
+credentials, release units, or runtime authority.
 
-Platter reads career material from the fixed Annals library `vita` through
-`~/.local/bin/annals library vita work list/show`. Annals owns the retained
-works; Platter uses their full text as its career entries. Platter does not
-call CRM or store a configurable career-source executable. See the
-[Vita guide](/Users/joey/rust/cell/platter/chancery/manuals/vita.md).
-
-Platter obtains Cell and Wrought bullets from Weaver through its typed local
-client, then runs its brief/Jackson draft job. Platter owns request correlation,
-fixed resume presentation, mechanical acceptance and retained packet bytes.
-Weaver owns project authoring and Annals reads. Each provider retains its exact
-Nucleus requests. Platter cancellation and drain include its recorded Weaver job
-IDs without taking authority over unrelated Weaver work. Historical Platter
-runs keep their captured workflow and toolset.
+## Scheduled failures
 
 Clockwork owns activation, direct-process history, and the configured response
 to an abend. Products own definition configuration, work, locks, idempotency,
@@ -200,17 +143,34 @@ when rebinding. Todo's installer retires its fully attributed legacy LaunchAgent
 before selecting its Clockwork successor. Follow the Clockwork installation
 contract for compatible binary/state recovery and notification retry limits.
 
-Nucleus owns its private Codex credentials. Requesters do not copy or refresh
-them. Conversations reads normal-user history through App Server; it does not
-read the isolated Nucleus job store. Annals Usage reads supported Nucleus output
-and Annals attribution records without owning either store.
+## EMT incident correspondence
 
-Email owns its transport and credential loading. Its receipt means provider
-acceptance, not final inbox delivery. Todo's daily email uses its own direct
-Resend path and does not depend on Nucleus execution.
+EMT retains incident and exchange records with Nucleus job references. Agents
+discover Cell operations through Chancery and write diagnostic emails. EMT
+instructs diagnosis agents to leave recovery changes for the user's reply.
+This is an agent instruction, not a separate tool restriction. Each recognized
+reply starts one bounded intervention under the affected product's authority
+and recovery rules.
+Nucleus owns execution; Email owns transport. See
+[EMT incident response](/Users/joey/rust/cell/emt/chancery/manuals/incident-respond.md)
+for reply recognition, permissions, deadlines, and retained records.
 
-Source colocation and a shared Cargo workspace do not merge product databases,
-credentials, release units, or runtime authority.
+Clockwork's optional EMT preference defers a basic alert for 120 seconds.
+EMT freezes its email before claiming initial-notification ownership. Claim
+and basic-send admission are serialized. A claim does not expire or clear
+the halt; EMT owns the delegated send outcome. A basic alert can precede a
+late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
+
+Refresh every active pinned Clockwork broker before enabling EMT preference.
+Keep Clockwork's version-one notification-routing metadata with its incident
+database during backup and recovery. Older brokers ignore claims. Read the
+Clockwork and EMT installed contracts before cutover or rollback.
+
+Hold and drain EMT before holding Nucleus during coordinated deployment.
+Already admitted exchanges retain their job and email identities; installers
+do not retry product work or clear halts. Disable emt/worker for program
+replacement. Coordinated deployment restores its intended enabled selection
+only after all holds are released and its broker uses the selected Clockwork.
 
 ## Inspect Cell operational status
 
@@ -259,6 +219,25 @@ hold and complete drain. Ordinary health remains strict.
 Do not maintain a dated installed-version table here. A source checkout or
 catalog entry does not establish the currently running release.
 
+## Codex weekly quota admission
+
+Read `nucleus quota` to inspect admission without starting a model turn. The
+default policy pauses new main-Codex work at 10% remaining or less. Admission
+resumes only after a fresh observation exceeds 15%. Unknown quota also pauses
+admission. Started attempts drain. API-key jobs have no subscription quota gate.
+
+Requesters retain pending work and exact request identity on `quota_deferred`.
+Scheduled deferral is an expected outcome, not a Clockwork abend. Existing
+deadlines and restart rules still apply. After `quota_exhausted`, inspect domain
+effects before authorizing another attempt. Quota recovery clears no deployment
+hold, operator pause, or incident halt.
+
+EMT sends one retained notice per quota condition through Email without a model
+job. Upgrade requester clients before enabling the gate. Use coordinated
+maintenance and retain the quota policy, state, and EMT notices in private
+product backups. See [Quota admission](/Users/joey/rust/cell/nucleus/docs/quota-admission.md)
+for the complete policy, protocol, and recovery rules.
+
 ## Compatibility model
 
 | Boundary | Required treatment |
@@ -279,6 +258,14 @@ effect of either rollback.
 A decoder repair may expose output from an old completed job without another
 model attempt. Missing observations remain a gap. The repair does not change
 requester terminal records or authorize a retry.
+
+Rebuild embedded consumers when their provider's behavior changes. Krisis and
+Paperboy embed Conversations, including its normalization and executable
+defaults. Weaver embeds Annals, Nucleus, Iatreion, and Chancery usage interfaces.
+Deployment companion declarations select these installed consumers for rebuild.
+Keep explicit executable pins and library identities aligned during deployment.
+See [Conversations installation](/Users/joey/rust/cell/conversations/docs/system-installation.md)
+and each consumer's installation contract for the exact selection rules.
 
 ## Shared CI, release, and deployment coordination
 
@@ -456,6 +443,27 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
+## Shared command usage
+
+Product CLIs record agent command invocations in Chancery's private usage
+journal. New rows require thread attribution. They contain command identity
+and observation time, but no arguments or output. A row does not prove success.
+
+After installing or updating a program, run its `--register-usage` mode. This
+separate step initializes only an empty Chancery journal and idempotently adds
+the full declared command inventory. Run both Annals programs. Source presence,
+binary selection and catalog publication alone do not register commands.
+
+Recording errors preserve product results. Product dependency processes and
+hooks mark internal calls with `CHANCERY_USAGE_INTERNAL=1`; wrappers preserve
+that marker and thread attribution. Nucleus clears both for each new agent,
+which supplies its own attribution. Rebuild participating binaries and update
+their wrappers, hooks, and pinned brokers when these rules change.
+
+Use `chancery usage commands` or `chancery usage events` to read recorded
+activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,
+registration, privacy, compatibility and backup behavior.
+
 ## Guarded change playbooks
 
 Identify the owning product before changing a boundary. Update its behavior,
@@ -544,13 +552,6 @@ private prompts, sources, and tool values.
 | Runtime completion without the required record | Follow the product's failure policy. |
 | Unresolved deployment hold | Use that product's retained recovery procedure. |
 
-Platter cancels its exact model job and stops daily preparation on a renderer
-execution failure. After repair and terminal job status, an authorized
-`platter prepare CAST_JOB_ID --fresh` creates new source capture and model jobs.
-It retains old runs without passing their outputs or error context to the new
-preparation. See [Platter preparation](/Users/joey/rust/cell/platter/chancery/manuals/packet-prepare.md)
-for eligibility and accepted-resume limits.
-
 After a shared change, verify matching programs, service status, exact harness,
 account access, and affected product readiness. Release only holds and pauses
 owned by the operation. Preserve pre-existing disabled schedules.
@@ -566,149 +567,3 @@ Use short active sentences and descriptive headings. State which records or
 operation a count, timestamp, or failure describes. Remove duplicate explanations,
 completed-work narratives, test-result reports, and obsolete change commentary.
 Git retains source history.
-
-## EMT incident correspondence
-
-EMT retains incident and exchange records with Nucleus job references. Agents
-discover Cell operations through Chancery, investigate freely and author their
-emails through emt send. Diagnosis is instructed to leave recovery changes for
-the user's reply. Each recognized reply starts one bounded intervention.
-Sender verification is explicitly deferred. Nucleus owns all execution and
-tool activity; EMT has no operation ledger or product adapters.
-
-EMT jobs use local execution and read-write workspace access. Their default
-cwd is the user's home; Cell source is supplied separately. This permits
-user-owned operational state and EMT mail writes, subject to Nucleus's actual
-sandbox. The agent must observe its deadline and the affected product's
-authority, maintenance and recovery contracts.
-
-Clockwork's optional EMT preference defers a basic alert for 120 seconds.
-EMT freezes its email before claiming initial-notification ownership. Claim
-and basic-send admission are serialized. A claim does not expire or clear
-the halt; EMT owns the delegated send outcome. A basic alert can precede a
-late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
-
-Refresh every active pinned Clockwork broker before enabling EMT preference.
-Keep Clockwork's version-one notification-routing metadata with its incident
-database during backup and recovery. Older brokers ignore claims. Read the
-Clockwork and EMT installed contracts before cutover or rollback.
-
-Hold and drain EMT before holding Nucleus during coordinated deployment.
-Already admitted exchanges retain their job and email identities; installers
-do not retry product work or clear halts. Disable emt/worker for program
-replacement. Coordinated deployment restores its intended enabled selection
-only after all holds are released and its broker uses the selected Clockwork.
-
-## Codex weekly quota admission
-
-`nucleus quota` and `GET /v1/quota` read the cached admission condition without
-starting a model turn. Nucleus reads Codex App Server `account/rateLimits/read`
-through its own credential authority every 60 seconds. It selects
-`rateLimitsByLimitId.codex` and the single primary or secondary window whose
-`windowDurationMins` is `10080`. It calculates remaining percent as
-`100 - usedPercent`. It never substitutes the Spark bucket. Null, absent,
-ambiguous, expired, or malformed weekly data is unknown, not zero or unlimited.
-An explicitly identified legacy `rateLimits.limitId=codex` bucket is used only
-when the map is absent. API-key authentication has no subscription weekly gate.
-
-The default policy pauses new main-Codex work at 10% remaining or less. It
-reopens only after a fresh observation exceeds 15%. An observation is usable
-for at most 120 seconds and never past its reported reset. Failed reads can
-use a still-fresh observation; otherwise admission pauses as `unknown`.
-The reset time alone does not reopen admission. Quota is account-wide: use by
-other CLI and desktop sessions can exhaust it between samples. The threshold
-is a reserve, not a token reservation or a guarantee that active work finishes.
-
-`quota-policy.json`, beside `nucleus.db`, configures the gate at daemon startup:
-
-```json
-{"enabled":true,"pauseAtRemainingPercent":10,"resumeAboveRemainingPercent":15}
-```
-
-Require `0 <= pause < resume < 100`. Keep this file and `quota-state.json` private
-regular files with mode 0600. Invalid files fail startup. Nucleus writes the
-state atomically. It contains the policy, account-identity digest, `limitId`,
-`state`, remaining percentage, observation and reset times, and one condition ID
-for a continuous pause. Times are Unix seconds. Missing numeric values remain
-null. State and condition identity survive restart; account changes require a
-new observation. Do not edit state to simulate recovery.
-
-A rejected new submission returns HTTP 429 with code `quota_deferred` and the
-quota snapshot in the response `details`. It creates no job or attempt. The Rust client
-returns `ClientError::QuotaDeferred`. An exact replay of an admitted request
-remains available. Accepted jobs recheck quota before execution and retain their
-pending attempt while paused. They do not hold execution slots or start their
-execution timeout while waiting. Job reads attach the quota condition to pending
-main-Codex jobs. `get_job_for_work` yields a typed deferral for those jobs; raw
-`get_job`, mailbox reads, cancellation, status and authentication remain available.
-Started attempts drain. A structured Codex `usageLimitExceeded` becomes terminal
-reason `quota_exhausted`; Nucleus pauses further admission immediately.
-
-Requesters preserve pending work and immutable request identity on deferral.
-Scheduled activations return success with an explicit quota outcome and do not
-report an abend. Quota exhaustion after a start remains a retained failed attempt;
-inspect domain effects before authorizing a retry. A committed domain result
-remains authoritative. Existing deadlines and daily-report selection still apply:
-expired work is not replayed automatically, and past Paperboy periods require
-selection of their retained brief. Todo keeps its existing bounded wait once a
-job is accepted.
-Nucleus restart keeps its existing lost-attempt rule, including pending attempts;
-a quota pause does not authorize replay across that boundary.
-
-Health separates runtime readiness from quota admission: a healthy daemon can
-report `status=ok`, `acceptingJobs=false`, and a blocked `quota`. Deployment holds,
-operator pauses, and Clockwork failure halts are independent. Fresh quota recovery
-releases only the quota condition; it clears none of those other controls.
-
-EMT checks this condition in its existing worker. It freezes one deterministic
-quota notice per condition ID and sends it directly through Email, without a
-Nucleus invocation. Unknown quota has distinct wording. Notice identity and
-transport progress survive restart under EMT's `quota-notifications/` directory.
-At most two transport invocations use the same key and payload, five minutes
-apart and within 23 hours. An unresolved send then remains uncertain and requires
-inspection; it does not create a replacement message or model job. This prevents
-per-service quota failure notices, but does not suppress unrelated incidents.
-
-Upgrade all requester clients before enabling this gate on Nucleus. The new
-clients tolerate a daemon without the optional quota health fields; EMT also
-tolerates the old quota endpoint's 404. Use coordinated maintenance for cutover.
-Keep the policy, state and EMT notice files with their private product backups.
-No rollout, quota reset, or clearance of existing service halts is implicit.
-
-## Shared command usage
-
-Annals read commands require only read access to their selected state and
-prepared SQLite sidecars and spool locks. Query scratch storage stays in memory.
-Annals initialization, migration, and recovery prepare persistent WAL files;
-migration prepares the configured spool lock. Shared maintenance status opens
-existing lock files read-only and never repairs incomplete gates. Mutating
-operations retain responsibility for setup and recovery.
-
-Product CLI dispatches import `chancery-usage` and record agent command entries
-in the private Chancery journal. New rows require a nonempty `CODEX_THREAD_ID`
-and record system and command identity, local insertion ID and whole Unix-second
-observation time. Missing attribution and `CHANCERY_USAGE_INTERNAL=1` skip the
-write before storage access.
-The row observes handler entry; it establishes neither completion nor domain
-success. Arguments, outputs, token counts and execution trees are absent.
-
-After installing or updating a program, run its `--register-usage` mode. This
-separate step initializes only an empty Chancery journal and idempotently adds
-the full declared command inventory. Run both Annals programs. Source presence,
-binary selection and catalog publication alone do not register commands.
-
-Recording errors produce bounded diagnostics and preserve product results.
-No automatic retry or migration runs. Services supply a nonempty thread to the
-explicit request-scoped API. Product dependency processes set
-`CHANCERY_USAGE_INTERNAL=1`; wrappers preserve it and thread correlation through
-credential scrubbing. Clockwork excludes private entries and marks its product
-child internal. The Krisis Stop hook marks its invocation internal. Nucleus
-clears the inherited internal marker and caller thread when launching a fresh
-agent. That agent supplies its own command attribution. CI's separate
-`CHANCERY_USAGE_DISABLED=1` remains in effect. Journal tests use isolated databases.
-Rebuild participating binaries and update wrappers, hooks and pinned Clockwork
-brokers before relying on the new recording policy.
-
-Use `chancery usage commands` or `chancery usage events` to read recorded
-activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,
-registration, privacy, compatibility and backup behavior.

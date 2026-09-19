@@ -28,6 +28,9 @@ cd /Users/joey/rust/cell/email
   --bundle /Users/joey/rust/cell/email/chancery
 ```
 
+Run `email --register-usage` after each installation or update. This registers
+the command inventory in Chancery without reading or sending mail.
+
 The installed layout is:
 
 ```text

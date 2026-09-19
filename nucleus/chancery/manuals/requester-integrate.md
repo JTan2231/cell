@@ -85,6 +85,45 @@ canonical credential refresh, and attended login is excluded until all active
 job and account sessions have ended; requesters never read, refresh, or copy
 the canonical credential themselves.
 
+## Codex weekly quota admission
+
+Treat quota deferral as an expected admission pause. A healthy daemon can report
+`status=ok`, `acceptingJobs=false`, and a blocked `quota`. The default gate pauses
+main-Codex work at 10% remaining or less and reopens above 15% after a fresh
+observation. If no valid weekly observation remains, admission pauses as `unknown`.
+API-key authentication has no subscription weekly gate.
+
+Use Nucleus's cached quota condition; do not read its credential or duplicate its
+allowance checks. `GET /v1/quota` returns that condition without model work.
+Quota recovery clears no deployment hold, operator pause, or Clockwork failure
+halt.
+
+A rejected new submission returns HTTP 429 `quota_deferred`, with the quota
+snapshot in response `details`. It creates no job or attempt. The Rust client
+returns `ClientError::QuotaDeferred`. Preserve pending domain work and its exact
+request identity. An exact replay of an admitted request remains available.
+
+Accepted jobs recheck quota before execution. While paused, they retain their
+pending attempt without a slot or a running execution timeout. Job reads attach
+the condition to pending main-Codex jobs. `get_job_for_work` returns a typed
+deferral; raw `get_job`, mailbox reads, cancellation, status, and authentication
+remain available. Started attempts continue.
+
+Return success with an explicit quota outcome for a deferred scheduled
+activation. Do not report an abend. Keep existing deadlines and selection rules;
+do not replay expired work automatically. EMT owns the shared condition notice
+and sends it through Email without a Nucleus job.
+
+A structured Codex `usageLimitExceeded` ends the attempt with `quota_exhausted`
+and pauses new admission. Inspect domain effects before authorizing a retry;
+a committed result remains authoritative. A Nucleus restart marks unfinished
+attempts lost, including pending attempts. A quota pause does not authorize replay
+after restart.
+
+Upgrade all requester clients before enabling the gate on Nucleus. Clients must
+tolerate a daemon without optional quota health fields. Use coordinated
+maintenance for cutover.
+
 ## Required checks
 
 Test these behaviors:
@@ -112,86 +151,9 @@ application work. Shared protocol, store, authentication, service, and
 compatibility changes follow the guarded Nucleus playbooks and may require
 coordinated requester work.
 
-## Codex weekly quota admission
-
-`nucleus quota` and `GET /v1/quota` read the cached admission condition without
-starting a model turn. Nucleus reads Codex App Server `account/rateLimits/read`
-through its own credential authority every 60 seconds. It selects
-`rateLimitsByLimitId.codex` and the single primary or secondary window whose
-`windowDurationMins` is `10080`. It calculates remaining percent as
-`100 - usedPercent`. It never substitutes the Spark bucket. Null, absent,
-ambiguous, expired, or malformed weekly data is unknown, not zero or unlimited.
-An explicitly identified legacy `rateLimits.limitId=codex` bucket is used only
-when the map is absent. API-key authentication has no subscription weekly gate.
-
-The default policy pauses new main-Codex work at 10% remaining or less. It
-reopens only after a fresh observation exceeds 15%. An observation is usable
-for at most 120 seconds and never past its reported reset. Failed reads can
-use a still-fresh observation; otherwise admission pauses as `unknown`.
-The reset time alone does not reopen admission. Quota is account-wide: use by
-other CLI and desktop sessions can exhaust it between samples. The threshold
-is a reserve, not a token reservation or a guarantee that active work finishes.
-
-`quota-policy.json`, beside `nucleus.db`, configures the gate at daemon startup:
-
-```json
-{"enabled":true,"pauseAtRemainingPercent":10,"resumeAboveRemainingPercent":15}
-```
-
-Require `0 <= pause < resume < 100`. Keep this file and `quota-state.json` private
-regular files with mode 0600. Invalid files fail startup. Nucleus writes the
-state atomically. It contains the policy, account-identity digest, `limitId`,
-`state`, remaining percentage, observation and reset times, and one condition ID
-for a continuous pause. Times are Unix seconds. Missing numeric values remain
-null. State and condition identity survive restart; account changes require a
-new observation. Do not edit state to simulate recovery.
-
-A rejected new submission returns HTTP 429 with code `quota_deferred` and the
-quota snapshot in the response `details`. It creates no job or attempt. The Rust client
-returns `ClientError::QuotaDeferred`. An exact replay of an admitted request
-remains available. Accepted jobs recheck quota before execution and retain their
-pending attempt while paused. They do not hold execution slots or start their
-execution timeout while waiting. Job reads attach the quota condition to pending
-main-Codex jobs. `get_job_for_work` yields a typed deferral for those jobs; raw
-`get_job`, mailbox reads, cancellation, status and authentication remain available.
-Started attempts drain. A structured Codex `usageLimitExceeded` becomes terminal
-reason `quota_exhausted`; Nucleus pauses further admission immediately.
-
-Requesters preserve pending work and immutable request identity on deferral.
-Scheduled activations return success with an explicit quota outcome and do not
-report an abend. Quota exhaustion after a start remains a retained failed attempt;
-inspect domain effects before authorizing a retry. A committed domain result
-remains authoritative. Existing deadlines and daily-report selection still apply:
-expired work is not replayed automatically, and past Paperboy periods require
-selection of their retained brief. Todo keeps its existing bounded wait once a
-job is accepted.
-Nucleus restart keeps its existing lost-attempt rule, including pending attempts;
-a quota pause does not authorize replay across that boundary.
-
-Health separates runtime readiness from quota admission: a healthy daemon can
-report `status=ok`, `acceptingJobs=false`, and a blocked `quota`. Deployment holds,
-operator pauses, and Clockwork failure halts are independent. Fresh quota recovery
-releases only the quota condition; it clears none of those other controls.
-
-EMT checks this condition in its existing worker. It freezes one deterministic
-quota notice per condition ID and sends it directly through Email, without a
-Nucleus invocation. Unknown quota has distinct wording. Notice identity and
-transport progress survive restart under EMT's `quota-notifications/` directory.
-At most two transport invocations use the same key and payload, five minutes
-apart and within 23 hours. An unresolved send then remains uncertain and requires
-inspection; it does not create a replacement message or model job. This prevents
-per-service quota failure notices, but does not suppress unrelated incidents.
-
-Upgrade all requester clients before enabling this gate on Nucleus. The new
-clients tolerate a daemon without the optional quota health fields; EMT also
-tolerates the old quota endpoint's 404. Use coordinated maintenance for cutover.
-Keep the policy, state and EMT notice files with their private product backups.
-No rollout, quota reset, or clearance of existing service halts is implicit.
-
 ## Command usage
 
-CLI dispatch separately attempts to append system/command identity, observation
-time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
-records invocation only, retains no arguments or output, and preserves product
-results after recording errors. `--register-usage` is the separate post-install
-step that adds the program's complete command inventory without product work.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time, and thread ID, not arguments, output,
+or outcomes. Internal product calls are excluded. Recording errors do not
+change command results.

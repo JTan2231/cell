@@ -26,7 +26,7 @@
     ],
     "shared_privacy_and_retention": [
       "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
-      "Chancery usage observes command identity and optional task correlation, never arguments or output. Recording failure does not change the product result."
+      "CLI usage recording requires a nonempty CODEX_THREAD_ID. Chancery records command identity, time, and thread ID in its private journal. Arguments, output, outcomes, and internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
       "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."

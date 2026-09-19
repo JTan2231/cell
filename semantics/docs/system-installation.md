@@ -9,16 +9,21 @@ logs without content bodies.
 ## Prerequisites
 
 - Installed Annals with one provisioned decisions library and
-  `annals.decision-account.exchange` contract 1. Its explicit config is
+  `annals.decision-account.exchange` contract 2. Its explicit config is
   `~/Library/Application Support/Annals/decisions/config.toml` by default.
-- Installed Conversations with `conversations.history.explore` contract 4
-  and exact thread-summary cwd lookup.
 - A healthy Nucleus service satisfying `nucleus.execution.operate` contract 3
   and all capabilities checked by Semantics doctor.
 - An installed Clockwork command satisfying `clockwork.schedule.operate`
-  contract 2 for the same macOS user.
+  contract 3 for the same macOS user.
 - Chancery for discovery and provider publication. Semantics runtime does not
   call it.
+
+Document processing requires no Conversations lookup. Historical jobs retain
+their original routing and recovery contracts, including Conversations
+`conversations.history.explore` contract 4 for exact thread-summary cwd lookup.
+See [legacy intake and reconciliation](data-model.md#intake-and-reconciliation).
+
+## Install a candidate
 
 Build and validate the candidate first:
 

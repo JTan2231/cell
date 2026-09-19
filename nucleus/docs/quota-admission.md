@@ -1,23 +1,30 @@
 # Quota admission
 
+This reference defines the main-Codex weekly admission gate. API-key
+authentication has no subscription weekly gate.
+
+## Observation and policy
 
 `nucleus quota` and `GET /v1/quota` read the cached admission condition without
-starting a model turn. Nucleus reads Codex App Server `account/rateLimits/read`
-through its own credential authority every 60 seconds. It selects
-`rateLimitsByLimitId.codex` and the single primary or secondary window whose
-`windowDurationMins` is `10080`. It calculates remaining percent as
-`100 - usedPercent`. It never substitutes the Spark bucket. Null, absent,
-ambiguous, expired, or malformed weekly data is unknown, not zero or unlimited.
-An explicitly identified legacy `rateLimits.limitId=codex` bucket is used only
-when the map is absent. API-key authentication has no subscription weekly gate.
+starting a model turn. Every 60 seconds, Nucleus reads Codex App Server
+`account/rateLimits/read` through its own credential authority. It selects
+`rateLimitsByLimitId.codex` and the single primary or secondary window with
+`windowDurationMins=10080`. Remaining percent is `100 - usedPercent`. Nucleus
+uses the legacy `rateLimits.limitId=codex` bucket only when the map is absent.
+It never substitutes the Spark bucket. Null, absent, ambiguous, expired, or
+malformed weekly data is unknown, not zero or unlimited.
 
-The default policy pauses new main-Codex work at 10% remaining or less. It
-reopens only after a fresh observation exceeds 15%. An observation is usable
-for at most 120 seconds and never past its reported reset. Failed reads can
-use a still-fresh observation; otherwise admission pauses as `unknown`.
-The reset time alone does not reopen admission. Quota is account-wide: use by
-other CLI and desktop sessions can exhaust it between samples. The threshold
-is a reserve, not a token reservation or a guarantee that active work finishes.
+The default policy pauses new work at 10% remaining or less. Admission reopens
+only after a fresh observation exceeds 15%. An observation is valid for at most
+120 seconds and never past its reported reset. A failed read can use a valid
+cached observation; otherwise admission pauses as `unknown`. The reset time
+alone does not reopen admission.
+
+Quota applies to the whole account. Other CLI and desktop sessions can exhaust
+it between samples. The threshold does not reserve tokens or guarantee that
+active work finishes.
+
+## Configuration and retained state
 
 `quota-policy.json`, beside `nucleus.db`, configures the gate at daemon startup:
 
@@ -25,52 +32,63 @@ is a reserve, not a token reservation or a guarantee that active work finishes.
 {"enabled":true,"pauseAtRemainingPercent":10,"resumeAboveRemainingPercent":15}
 ```
 
-Require `0 <= pause < resume < 100`. Keep this file and `quota-state.json` private
-regular files with mode 0600. Invalid files fail startup. Nucleus writes the
-state atomically. It contains the policy, account-identity digest, `limitId`,
-`state`, remaining percentage, observation and reset times, and one condition ID
-for a continuous pause. Times are Unix seconds. Missing numeric values remain
-null. State and condition identity survive restart; account changes require a
-new observation. Do not edit state to simulate recovery.
+Set `0 <= pause < resume < 100`. Keep this file and `quota-state.json` as private
+regular files with mode 0600. Invalid files prevent startup. Include both files
+in private Nucleus backups.
+
+Nucleus writes state atomically. State contains the policy, account-identity
+digest, `limitId`, `state`, remaining percentage, observation and reset times,
+and one condition ID for a continuous pause. Times are Unix seconds. Missing
+numeric values remain null. State and condition identity survive restart.
+Account changes require a new observation. Do not edit state to simulate recovery.
+
+## Admission and execution
 
 A rejected new submission returns HTTP 429 with code `quota_deferred` and the
-quota snapshot in the response `details`. It creates no job or attempt. The Rust client
-returns `ClientError::QuotaDeferred`. An exact replay of an admitted request
-remains available. Accepted jobs recheck quota before execution and retain their
-pending attempt while paused. They do not hold execution slots or start their
-execution timeout while waiting. Job reads attach the quota condition to pending
-main-Codex jobs. `get_job_for_work` yields a typed deferral for those jobs; raw
-`get_job`, mailbox reads, cancellation, status and authentication remain available.
-Started attempts drain. A structured Codex `usageLimitExceeded` becomes terminal
-reason `quota_exhausted`; Nucleus pauses further admission immediately.
+quota snapshot in response `details`. It creates no job or attempt. The Rust
+client returns `ClientError::QuotaDeferred`. An exact replay of an admitted
+request remains available.
+
+Accepted jobs recheck quota before execution. While paused, they retain their
+pending attempt without an execution slot or a running execution timeout.
+Job reads attach the quota condition to pending main-Codex jobs.
+`get_job_for_work` returns a typed deferral for those jobs. Raw `get_job`,
+mailbox reads, cancellation, status, and authentication remain available.
+
+Started attempts continue. A structured Codex `usageLimitExceeded` becomes
+terminal reason `quota_exhausted`. Nucleus pauses further admission immediately.
+
+## Requester recovery
 
 Requesters preserve pending work and immutable request identity on deferral.
 Scheduled activations return success with an explicit quota outcome and do not
-report an abend. Quota exhaustion after a start remains a retained failed attempt;
-inspect domain effects before authorizing a retry. A committed domain result
-remains authoritative. Existing deadlines and daily-report selection still apply:
-expired work is not replayed automatically, and past Paperboy periods require
-selection of their retained brief. Todo keeps its existing bounded wait once a
-job is accepted.
-Nucleus restart keeps its existing lost-attempt rule, including pending attempts;
-a quota pause does not authorize replay across that boundary.
+report an abend. Existing deadlines and daily-report selection still apply.
+Expired work is not replayed automatically. Past Paperboy periods require
+selection of their retained brief. Todo keeps its bounded wait after acceptance.
 
-Health separates runtime readiness from quota admission: a healthy daemon can
-report `status=ok`, `acceptingJobs=false`, and a blocked `quota`. Deployment holds,
-operator pauses, and Clockwork failure halts are independent. Fresh quota recovery
-releases only the quota condition; it clears none of those other controls.
+Quota exhaustion after a start remains a retained failed attempt. Inspect domain
+effects before authorizing a retry. A committed domain result remains
+authoritative. Nucleus restart marks unfinished attempts lost, including pending
+attempts. A quota pause does not authorize replay after restart.
 
-EMT checks this condition in its existing worker. It freezes one deterministic
-quota notice per condition ID and sends it directly through Email, without a
-Nucleus invocation. Unknown quota has distinct wording. Notice identity and
-transport progress survive restart under EMT's `quota-notifications/` directory.
-At most two transport invocations use the same key and payload, five minutes
-apart and within 23 hours. An unresolved send then remains uncertain and requires
-inspection; it does not create a replacement message or model job. This prevents
-per-service quota failure notices, but does not suppress unrelated incidents.
+A healthy daemon can report `status=ok`, `acceptingJobs=false`, and a blocked
+`quota`. Quota recovery clears only its own condition. Deployment holds, operator
+pauses, and Clockwork failure halts remain independent.
 
-Upgrade all requester clients before enabling this gate on Nucleus. The new
-clients tolerate a daemon without the optional quota health fields; EMT also
-tolerates the old quota endpoint's 404. Use coordinated maintenance for cutover.
-Keep the policy, state and EMT notice files with their private product backups.
-No rollout, quota reset, or clearance of existing service halts is implicit.
+## Notifications and rollout
+
+EMT's worker freezes one deterministic notice per condition ID. It sends the
+notice directly through Email without a Nucleus job. Unknown quota has distinct
+wording. Notice identity and transport progress survive restart in EMT's private
+`quota-notifications/` directory. Include these files in EMT backups.
+
+EMT permits at most two transport invocations with the same key and payload,
+five minutes apart and within 23 hours. An unresolved send remains uncertain
+and requires inspection. It does not create a replacement message or model job.
+This prevents quota failure notices from each service without suppressing
+unrelated incidents.
+
+Upgrade all requester clients before enabling the gate. Use coordinated
+maintenance for cutover. Clients tolerate a daemon without optional quota health
+fields; EMT also tolerates the old quota endpoint's 404. This procedure does not
+authorize rollout, a quota reset, or clearance of existing service halts.

@@ -497,11 +497,10 @@ do not erase claims to force another send after uncertain acceptance.
 
 ## Command usage
 
-Public agent CLI dispatch attempts to append system/command identity, observation
-time and `CODEX_THREAD_ID` to Chancery's private usage journal. Missing attribution
-and internal calls are skipped. `__launchd` and `__exec` are never observed.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time, and thread ID, not arguments, output,
+or outcomes. Recording errors do not change command results.
+
+Internal calls, `__launchd`, and `__exec` are excluded.
 Clockwork adds `CHANCERY_USAGE_INTERNAL=1` to the product child environment
-after applying the definition environment. Recording retains no arguments or
-output and preserves product
-results after recording errors. `--register-usage` is the separate post-install
-step that adds the program's complete command inventory without product work.
+after applying the definition environment.

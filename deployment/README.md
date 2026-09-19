@@ -308,57 +308,20 @@ and atomic push. The coordinator does not treat an installed version as a Git
 tag or impose a release cadence. Release and deployment share build artifacts.
 They neither reuse nor enforce completed CI results.
 
-## Usher's Rust installer
-
-Usher's separate `usher-install` executable uses the shared `cell-install`
-library for local installation mechanics. It owns Usher's product policy and
-the version-one coordinator adapter; the `usher` recognition command remains
-read-only. `cell-install` is workspace infrastructure with no separate product
-identity or release publication. Usher retains its compatible version-one file format. The other products use
-the version-two transaction format described below.
-
-Prepare both executables with the shared release builder, then install them:
-
-```sh
-python3 /absolute/cell/deployment/build.py --source-root /absolute/cell \
-  --product usher --output /absolute/cell-build
-/absolute/cell-build/candidates/usher/bin/usher-install install \
-  --binary /absolute/cell-build/candidates/usher/bin/usher \
-  --bundle /absolute/cell/usher/chancery
-```
-
-The installer verifies version alignment, content integrity and ownership,
-takes the product lock before the Chancery writer lock, and publishes one
-atomic `current` selector. It supports an exact `--expected-current
-absent|releases/HASH` precondition and intentional `--home ABSOLUTE_PATH`.
-The immutable release contains `bin/usher`, `bin/usher-install`, the exact
-recovery executable at `package/install`, and `share/chancery/usher`. Its
-`manifest.json` uses format `cell-install-v1`, records product/provider versions
-and each retained file's SHA-256 and mode, and identifies the complete release
-by content. Both public command selectors and the provider selector follow
-that release.
-
-`inspect` reports owned installed state. `verify --binary ABSOLUTE_PATH
---bundle ABSOLUTE_PATH` proves the installed exact candidate using the executing
-installer; `verify-release ABSOLUTE_RELEASE_DIR` checks retained release
-integrity without changing selectors. `recover --release ABSOLUTE_RELEASE_DIR`
-restores a supported retained release under the same ownership and expected
-selection checks. The retained Rust `package/install` also reads and restores
-the supported legacy `manifest.txt` shell release format. Legacy recovery
-detaches the owned public `usher-install` selector; inspection accepts its
-absence while that release is current. Keep the retained Rust recovery
-executable to reselect its release later. The legacy `package/deploy-user.sh`
-is archived release evidence and cannot handle a new-format current release.
-Recovery does not edit immutable release bytes.
-See [Usher installation](../usher/chancery/manuals/install-operate.md) for
-the exact operational boundary.
-
 ## Shared Rust installation transactions
 
 Every product builds a dedicated `PRODUCT-install` executable alongside its
 runtime executables in the release builder's single Cargo invocation. Product
 versions remain independent; Annals Usage remains a separate release unit.
-The `cell-install-v2` manifest records exact file digests and modes, independent
+
+Product installers use the shared `cell-install` library for file transactions.
+Each installer owns its product policy and version-one coordinator adapter.
+The library has no separate product identity or release publication.
+
+Usher retains the `cell-install-v1` format. See
+[Usher installation](../usher/chancery/manuals/install-operate.md) for its
+commands, verification and supported legacy recovery. Other products use
+`cell-install-v2`. Its manifest records exact file digests and modes, independent
 executable/provider versions, public entry mappings and a stable content identity.
 The immutable tree retains `package/install` for supported recovery. Legacy
 formats are accepted only through the product's explicit complete byte proof.
@@ -368,15 +331,13 @@ program-selection entry point. Their product specifications supply the layout,
 legacy proof and runtime frontend where needed. Clockwork additionally validates
 its provider with the supplied Chancery reader; its runtime recognizes its own
 fully verified version-two release when pinning schedule definitions.
-Platter requires the coordinated route for every mutating installation or
-recovery operation. Its shared per-user admission gate includes custom runtime
-state, and drain observes both Platter and predecessor Job Packets Nucleus
-identities. The initial release preserves schema 1 and existing artifact paths,
-checks dependencies and backs up the database without creating domain work.
-Its installer creates no daily delivery schedule.
 Stateful products provide typed lifecycle code around the same file transaction.
 See each installed product's installation contract for its exact arguments and
 recovery limits.
+
+Platter permits mutating installation and recovery only through coordinated
+deployment. See [Platter installation](../platter/chancery/manuals/install-operate.md)
+for its admission, migration, backup and activation rules.
 
 Publication rechecks the captured selection under the product lock and holds
 the Chancery writer lock through validation and compensation. Suspended public

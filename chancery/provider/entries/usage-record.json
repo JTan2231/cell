@@ -28,7 +28,7 @@
     "No automatic append retry, migration, update, delete or pruning. Preserve compatible private backups and database-local cursor scope."
   ],
   "privacy": [
-    "Retains only opaque system, command and optional Codex thread identities, invocation IDs and observation times in a private current-user database. No arguments, credentials, output, model context or network disclosure."
+    "Retains opaque system, command and Codex thread identities, invocation IDs, and observation times in a private current-user database. New invocations require thread attribution; existing unattributed rows remain readable. The journal excludes arguments, credentials, output, and model context. It makes no network requests."
   ],
   "interfaces": [
     {

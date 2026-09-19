@@ -48,4 +48,3 @@ retained library; no size or latency guarantee is supplied.
 
 Keep returned URLs and job interests private. CLI dispatch attempts metadata-only
 Chancery usage observation. It preserves the read result if observation fails.
-Run `platter --register-usage` separately after installation to register commands.

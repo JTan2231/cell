@@ -82,11 +82,10 @@ for setup fields, fresh initialization and recovery.
 ## Scheduled failure policy
 
 Conatus generates Clockwork definition schema 2 for `conatus/update`, with
-`[failure] on_abend = "halt-until-approved"`. An update stops admitting work on
-its first feed or handoff error. Annals dispatch uses `inbox run
---stop-on-failure`, so a failed source also stops its batch. The update retains
-completed stage results before returning nonzero. A failed feed no longer starts
-pending handoffs, and a failed handoff no longer starts inbox processing.
+`[failure] on_abend = "halt-until-approved"`. On the first feed or handoff error,
+the update retains completed results and returns nonzero. It starts no further
+stage. Annals dispatch uses `inbox run --stop-on-failure`, so the first failed
+source also stops its batch.
 
 Clockwork owns the durable scheduling halt and one retained email notification
 through `HOME/.local/bin/email`. Inspect `clockwork incident list conatus/update`

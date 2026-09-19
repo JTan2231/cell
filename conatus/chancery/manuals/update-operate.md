@@ -159,11 +159,10 @@ bytes before reaching the requested count; update continues until an empty page.
 ## Scheduled failure policy
 
 Conatus generates Clockwork definition schema 2 for `conatus/update`, with
-`[failure] on_abend = "halt-until-approved"`. An update stops admitting work on
-its first feed or handoff error. Annals dispatch uses `inbox run
---stop-on-failure`, so a failed source also stops its batch. The update retains
-completed stage results before returning nonzero. A failed feed no longer starts
-pending handoffs, and a failed handoff no longer starts inbox processing.
+`[failure] on_abend = "halt-until-approved"`. On the first feed or handoff error,
+the update retains completed results and returns nonzero. It starts no further
+stage. Annals dispatch uses `inbox run --stop-on-failure`, so the first failed
+source also stops its batch.
 
 Clockwork owns the durable scheduling halt and one retained email notification
 through `HOME/.local/bin/email`. Inspect `clockwork incident list conatus/update`
@@ -206,8 +205,10 @@ configuration for a coherent selected release before releasing its own hold.
 
 ## Command usage
 
-CLI dispatch separately attempts to append system/command identity, observation
-time and optional `CODEX_THREAD_ID` to Chancery's private usage journal. It
-records invocation only, retains no arguments or output, and preserves product
-results after recording errors. `--register-usage` is the separate post-install
-step that adds the program's complete command inventory without product work.
+After each installation or update, run `conatus --register-usage`.
+This registers command inventory without product work.
+
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time, and thread ID, not arguments, output,
+or outcomes. Internal product calls are excluded. Recording errors do not
+change command results.

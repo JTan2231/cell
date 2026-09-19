@@ -74,7 +74,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the Semantics system installation manual and inspect the dedicated Annals decisions library, Conversations, Nucleus, Clockwork, retained state, and Chancery publication readiness.",
+    "Read the Semantics system installation manual. Inspect the dedicated Annals decisions library, Nucleus, Clockwork, retained state, and Chancery publication readiness. Inspect Conversations only for historical jobs whose retained routing or recovery contract requires it.",
     "For deployment, build a green candidate and run the content-addressed deployer; verify doctor and all owned selectors before registering projects.",
     "Add the exact Semantics-Project marker to the project's root AGENTS.md, register the canonical folder at the current watermark, and seed only existing authoritative vocabulary when needed; after verifying HEAD, the source file may be separately removed under normal project authority.",
     "Inspect repository HEAD, intake state, the one-shot worker report, Clockwork binding and activation history, and body-free product logs before relying on periodic maintenance.",

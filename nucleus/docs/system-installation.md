@@ -52,11 +52,13 @@ Authentication is excluded from rollback.
 After installation:
 
 ```sh
+nucleus --register-usage
 nucleus service status
 nucleus health
 nucleus account --wait 0
 ```
 
+Registration adds the command inventory to Chancery without product work.
 Verify the expected CLI, daemon, harness, and account before restoring requester
 admission. `health` exits nonzero unless the service is compatible, authenticated,
 and accepting jobs. The deployment owner's held-health interface is separate.
