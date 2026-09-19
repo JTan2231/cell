@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "bazaar",
+    "name": "Bazaar",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Bazaar owns exact opaque string content and append-only per-ID versions, its local read/write API, database initialization, and program installation."
+    ],
+    "not_authoritative_for": [
+      "Callers own identifier meaning, content formats, prompt roles, templates, model configuration interpretation, agent invocation, and domain success."
+    ],
+    "inventory": {
+      "completeness": "complete",
+      "covers": [
+        "All public string reads, version-history reads, appends, initialization, integrity checks, and program installation/recovery outcomes."
+      ],
+      "excludes": [
+        "Help/version, implementation helpers, templating, content interpretation, model execution, caller migration, and arbitrary direct SQL access."
+      ]
+    },
+    "shared_access_and_trust": [
+      "The current user owns private local state. The Rust API operates in process. Agent readers have read-only database access; explicit writers append. No daemon, network listener, or application-level authentication is supplied."
+    ],
+    "shared_privacy_and_retention": [
+      "Content and IDs may be sensitive. Every committed version is retained without automatic deletion. CLI command usage recording omits arguments and content and preserves results after recording errors."
+    ],
+    "compatibility_and_retirement": [
+      "String versions, database schema one, output schema one, capability versions and product releases are independent. Unsupported or foreign state fails without automatic migration."
+    ],
+    "operational_limits": [
+      "Each update changes one ID. Reads of different IDs have separate snapshots. The service stores whole strings and returns whole version-number histories; no capacity, throughput or latency guarantee is supplied."
+    ]
+  },
+  "entries": [
+    "entries/string-read.json",
+    "entries/string-update.json",
+    "entries/install-operate.json"
+  ]
+}
