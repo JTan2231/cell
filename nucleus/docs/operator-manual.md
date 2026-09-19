@@ -37,11 +37,10 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
-| Todo | Retained concerns, routing decisions, situation assessments, and designs | [Todo](/Users/joey/rust/cell/todo/README.md) |
 | Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/README.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
-| Conatus | Exact want intake and associations with accepted decisions | [Conatus](/Users/joey/rust/cell/conatus/README.md) |
+| Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/README.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/README.md) |
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/README.md) |
 | Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
@@ -98,8 +97,8 @@ jobs, but exclude unrelated Weaver work. See
 for collection, authoring, and acceptance rules.
 
 Email owns transport and credential loading. Its receipt means provider
-acceptance, not final inbox delivery. Todo's daily email uses its own direct
-Resend path and does not depend on Nucleus execution.
+acceptance, not final inbox delivery. Conatus submits its deterministic daily
+email through Email. The email path invokes no model.
 
 Source colocation and a shared Cargo workspace do not merge product databases,
 credentials, release units, or runtime authority.
@@ -133,14 +132,13 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `mentor/worker` | Preserve frozen message/key limits; cleanup-only expiry remains available while scheduling is halted. |
 | `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
-| `todo/daily-email` | Preserve digest occurrence keys and credential loading; skip deliberate deployment holds. |
+| `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip deliberate deployment holds. |
 
 Before migrating Clockwork runtime state, capture and disable existing bindings,
 settle activations, and use its explicit backup-bearing migration. Old schema-one
 definitions retain their historical policy until products generate and select
 schema-two definitions. Preserve each captured enabled state and operator pause
-when rebinding. Todo's installer retires its fully attributed legacy LaunchAgent
-before selecting its Clockwork successor. Follow the Clockwork installation
+when rebinding. Follow the Clockwork installation
 contract for compatible binary/state recovery and notification retry limits.
 
 ## EMT incident correspondence
@@ -390,8 +388,8 @@ Inspect Clockwork bindings before disabling them. Never enable a disabled bindin
 or load a legacy scheduler beside its Clockwork successor. A retained source or
 an empty process list does not prove that durable work has settled.
 
-Todo's daily-email timer is not a Nucleus requester. Do not pause it merely to
-quiesce Nucleus. Preserve Krisis coverage and outbox state, Semantics cursors,
+Conatus's daily-email timer does not invoke Nucleus. Its rendering reads
+existing wants and Annals evidence. Preserve Krisis coverage and outbox state, Semantics cursors,
 and every requester's recovery records.
 
 Graceful shutdown requests cancellation. Startup marks unfinished Nucleus

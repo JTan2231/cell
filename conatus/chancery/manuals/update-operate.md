@@ -212,3 +212,17 @@ CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
+
+## Daily-email binding
+
+Conatus also owns `conatus/daily-email`. Add `--daily-email` to
+`conatus-install schedule-definition` to prepare its separate daily local 09:00
+definition. It starts no model. Deployment captures and suspends both bindings,
+retargets selected definitions, and restores each saved enabled intent after
+maintenance. The optional boolean `daily_email_enabled` selects email intent
+separately from update `enabled`. An omitted value preserves prior email intent;
+an absent binding remains absent. Neither operation clears Clockwork incidents.
+
+Email must be installed. The renderer copies all captured wants and at most two
+stored quotations from directly associated decisions. Preview starts no send.
+See [daily email](digest-email.md) for disclosure and uncertain-send recovery.

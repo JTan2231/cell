@@ -15,7 +15,7 @@ use conatus::{operations, store::Store};
 struct Cli {
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
-    /// All output is JSON; this flag is accepted for explicit selection.
+    /// Select JSON, including for the otherwise plain-text email preview.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -39,6 +39,9 @@ enum Command {
     Want(WantCommand),
     #[command(subcommand)]
     Decision(ReadCommand),
+    /// Preview or send the complete captured wants list without model work.
+    #[command(subcommand)]
+    Email(EmailCommand),
     /// Consume new accounts, forward captured sources, and run the Annals inbox.
     Update,
     /// Inspect intake, latest update results, and Annals processing state.
@@ -122,6 +125,22 @@ enum InstructionsCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum EmailCommand {
+    Preview {
+        /// Read an exact retained email instead of rendering current state.
+        #[arg(long)]
+        occurrence: Option<String>,
+    },
+    Send {
+        #[arg(long, conflicts_with = "retry")]
+        scheduled: bool,
+        /// Retry retained bytes only after inspecting uncertain provider acceptance.
+        #[arg(long)]
+        retry: Option<String>,
+    },
+}
+
 fn execute(cli: Cli) -> Result<Value> {
     let root = match cli.state_dir {
         Some(root) => root,
@@ -199,6 +218,12 @@ fn execute(cli: Cli) -> Result<Value> {
         }
         Command::Decision(ReadCommand::Show { id }) => operations::show(&root, &id, "decision"),
         Command::Update => operations::update(&root),
+        Command::Email(EmailCommand::Preview { occurrence }) => {
+            conatus::digest::preview(&root, occurrence.as_deref())
+        }
+        Command::Email(EmailCommand::Send { scheduled, retry }) => {
+            conatus::digest::send(&root, scheduled, retry.as_deref())
+        }
         Command::Status => operations::status(&root),
         Command::Config => Ok(json!({"config":Store::open(&root)?.config()?})),
         Command::Graph => Store::open(&root)?.config()?.library().graph(),
@@ -218,22 +243,44 @@ fn main() -> ExitCode {
     if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
         "conatus",
         env!("CARGO_PKG_VERSION"),
-        vec![iatreion_api::declared_unit(
-            "conatus",
-            "conatus/update",
-            Some("conatus/update"),
-            iatreion_api::Intent::Active,
-            "conatus.update.operate",
-        )],
+        vec![
+            iatreion_api::declared_unit(
+                "conatus",
+                "conatus/update",
+                Some("conatus/update"),
+                iatreion_api::Intent::Active,
+                "conatus.update.operate",
+            ),
+            iatreion_api::declared_unit(
+                "conatus",
+                "conatus/daily-email",
+                Some("conatus/daily-email"),
+                iatreion_api::Intent::Active,
+                "conatus.digest.email",
+            ),
+        ],
         false,
     ) {
         chancery_usage::observe("conatus", "status-snapshot");
         println!("{snapshot}");
         return ExitCode::SUCCESS;
     }
-    match execute(chancery_usage::cli::parse::<Cli>("conatus", "")) {
+    let cli = chancery_usage::cli::parse::<Cli>("conatus", "");
+    let text_preview =
+        !cli.json && matches!(&cli.command, Command::Email(EmailCommand::Preview { .. }));
+    match execute(cli) {
         Ok(data) => {
-            println!("{}", json!({"ok":true,"data":data}));
+            if text_preview {
+                println!(
+                    "From: {}\nTo: {}\nSubject: {}\n\n{}",
+                    data["from"].as_str().unwrap_or_default(),
+                    data["to"].as_str().unwrap_or_default(),
+                    data["digest"]["subject"].as_str().unwrap_or_default(),
+                    data["digest"]["body"].as_str().unwrap_or_default()
+                );
+            } else {
+                println!("{}", json!({"ok":true,"data":data}));
+            }
             ExitCode::SUCCESS
         }
         Err(error) => {

@@ -1,6 +1,6 @@
 [package]
 name = "conatus"
-version = "0.2.2"
+version = "0.3.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -14,6 +14,8 @@ annals-api.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true
 clockwork = { path = "../clockwork/crates/clockwork" }
+chrono = "0.4"
+email = { path = "../email/crates/email" }
 clap.workspace = true
 fs2.workspace = true
 iatreion-api.workspace = true
@@ -22,6 +24,7 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 toml.workspace = true
+tokio.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

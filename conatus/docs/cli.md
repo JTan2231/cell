@@ -1,6 +1,6 @@
 # CLI and operation
 
-All commands return JSON `{ "ok": true, "data": ... }` or
+Commands return JSON `{ "ok": true, "data": ... }` or
 `{ "ok": false, "error": "..." }`. `--json` is accepted but not required. Use the global
 `--state-dir PATH` to select Conatus state explicitly. Paths in examples are
 operator selections, not a request to initialize or activate a deployment.
@@ -138,3 +138,10 @@ completed stage report and starts no successor stage. Its Annals batch selects
 update halts future scheduling until `clockwork binding resume conatus/update
 INCIDENT_ID` is explicitly approved. `conatus resume` only clears the product's
 operator pause; it does not clear a scheduling incident.
+
+## Daily email
+
+Use `conatus email preview` to read the complete plain-text message, or add
+`--json` for structured output. `conatus email send` sends an ad hoc occurrence.
+See [daily email](email.md) for exact content, daily scheduling, retained
+occurrences, submission recovery and privacy. These commands start no model.

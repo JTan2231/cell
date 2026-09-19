@@ -48,6 +48,9 @@ pub struct ScheduleDefinitionArgs {
     /// New private TOML file; existing files are not replaced.
     #[arg(long)]
     output: PathBuf,
+    /// Prepare the daily email instead of the update runner.
+    #[arg(long)]
+    daily_email: bool,
     /// Current-user installation home; defaults to HOME.
     #[arg(long)]
     home: Option<PathBuf>,
@@ -65,16 +68,40 @@ struct Definition {
     arguments: Vec<String>,
     cwd: PathBuf,
     schedule: Schedule,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timeout_seconds: Option<u64>,
     launch: Launch,
     environment: BTreeMap<&'static str, String>,
     output: Output,
 }
 
 #[derive(Serialize)]
-struct Schedule {
-    kind: &'static str,
-    seconds: u64,
-    run_at_load: bool,
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum Schedule {
+    Interval {
+        seconds: u64,
+        run_at_load: bool,
+    },
+    LocalCalendar {
+        hour: u8,
+        minute: u8,
+        run_at_load: bool,
+    },
+}
+
+fn schedule_kind(daily_email: bool) -> Schedule {
+    if daily_email {
+        Schedule::LocalCalendar {
+            hour: 9,
+            minute: 0,
+            run_at_load: false,
+        }
+    } else {
+        Schedule::Interval {
+            seconds: 300,
+            run_at_load: true,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -126,28 +153,41 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     if !fs::symlink_metadata(&logs)?.is_dir() {
         bail!("Conatus logs path must be a regular directory");
     }
+    let log_name = if args.daily_email {
+        "daily-email"
+    } else {
+        "update"
+    };
     let definition = Definition {
         schema_version: 2,
-        key: "conatus/update",
+        key: if args.daily_email {
+            "conatus/daily-email"
+        } else {
+            "conatus/update"
+        },
         release_id: release.release_id,
         release_root: release_root.clone(),
         authority: "current-user-background",
         overlap: "skip",
         failure: clockwork::api::FailurePolicy::default(),
-        arguments: vec![
-            "--state-dir".to_owned(),
-            state_dir
-                .to_str()
-                .context("state directory must be UTF-8")?
-                .to_owned(),
-            "update".to_owned(),
-        ],
+        arguments: [
+            vec![
+                "--state-dir".to_owned(),
+                state_dir
+                    .to_str()
+                    .context("state directory must be UTF-8")?
+                    .to_owned(),
+            ],
+            if args.daily_email {
+                vec!["email".into(), "send".into(), "--scheduled".into()]
+            } else {
+                vec!["update".into()]
+            },
+        ]
+        .concat(),
         cwd: state_dir,
-        schedule: Schedule {
-            kind: "interval",
-            seconds: 300,
-            run_at_load: true,
-        },
+        schedule: schedule_kind(args.daily_email),
+        timeout_seconds: args.daily_email.then_some(180),
         launch: Launch {
             kind: "direct",
             program: release_root.join("bin/conatus"),
@@ -161,8 +201,8 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
             ("PATH", "/usr/bin:/bin:/usr/sbin:/sbin".to_owned()),
         ]),
         output: Output {
-            stdout: logs.join("update.out.log"),
-            stderr: logs.join("update.err.log"),
+            stdout: logs.join(format!("{log_name}.out.log")),
+            stderr: logs.join(format!("{log_name}.err.log")),
         },
     };
     let mut output = OpenOptions::new()
@@ -190,6 +230,7 @@ struct Settings {
     annals_state_dir: Option<PathBuf>,
     library: Option<String>,
     enabled: Option<bool>,
+    daily_email_enabled: Option<bool>,
 }
 
 fn configuration(root: &std::path::Path) -> Result<Option<crate::Config>> {
@@ -219,6 +260,7 @@ fn lifecycle_inner(
     use cell_install::adapter::Operation;
     use clockwork::deployment::ScheduleState;
     const KEY: &str = "conatus/update";
+    const EMAIL_KEY: &str = "conatus/daily-email";
     let settings: Settings = serde_json::from_value(
         context
             .request
@@ -265,7 +307,7 @@ fn lifecycle_inner(
                 .as_deref()
                 == Some("true");
         return Ok(
-            json!({"state_dir":root,"initialized":present,"config":config,"paused":paused,"schedule":ScheduleState::capture(&clockwork,KEY)?}),
+            json!({"state_dir":root,"initialized":present,"config":config,"paused":paused,"schedule":ScheduleState::capture(&clockwork,KEY)?,"email_schedule":ScheduleState::capture(&clockwork,EMAIL_KEY)?}),
         );
     }
     let prior = context
@@ -277,18 +319,22 @@ fn lifecycle_inner(
         "Conatus state root changed after inspection"
     );
     let schedule: ScheduleState = serde_json::from_value(prior["schedule"].clone())?;
+    let email_schedule: ScheduleState = serde_json::from_value(prior["email_schedule"].clone())?;
     if operation == Operation::Hold {
         gate.hold(&context.request.run_id)?;
         if present {
             crate::operations::pause(&root, true)?;
         }
         if context.request.recovery.is_some() {
-            let now = ScheduleState::capture(&clockwork, KEY)?;
-            if now.binding.is_some() {
-                clockwork.disable(KEY, None)?;
+            for key in [KEY, EMAIL_KEY] {
+                let now = ScheduleState::capture(&clockwork, key)?;
+                if now.binding.is_some() {
+                    clockwork.disable(key, None)?;
+                }
             }
         } else {
             schedule.suspend(&clockwork, KEY)?;
+            email_schedule.suspend(&clockwork, EMAIL_KEY)?;
         }
     }
     if operation == Operation::Drain {
@@ -373,13 +419,30 @@ fn lifecycle_inner(
                 "Conatus rebind changed library identity or feed cursor"
             );
         }
-        if schedule.binding.is_some() || settings.enabled.is_some() {
-            let path = context.request.run_dir.join("conatus-definition.toml");
+        for (saved, enabled, daily_email, filename) in [
+            (
+                &schedule,
+                settings.enabled,
+                false,
+                "conatus-definition.toml",
+            ),
+            (
+                &email_schedule,
+                settings.daily_email_enabled,
+                true,
+                "conatus-email-definition.toml",
+            ),
+        ] {
+            if saved.binding.is_none() && enabled.is_none() {
+                continue;
+            }
+            let path = context.request.run_dir.join(filename);
             if path.exists() {
                 fs::remove_file(&path)?;
             }
             schedule_definition(ScheduleDefinitionArgs {
                 state_dir: root.clone(),
+                daily_email,
                 output: path.clone(),
                 home: Some(context.home.clone()),
             })?;
@@ -389,7 +452,7 @@ fn lifecycle_inner(
                 .parent()
                 .and_then(std::path::Path::parent)
                 .context("Conatus release missing")?;
-            let definition = schedule.retarget(
+            let definition = saved.retarget(
                 fallback,
                 release,
                 &executable,
@@ -424,6 +487,12 @@ fn lifecycle_inner(
             settings.enabled
         };
         schedule.activate(&clockwork, KEY, enabled)?;
+        let email_enabled = if context.request.recovery.is_some() && !forward {
+            None
+        } else {
+            settings.daily_email_enabled
+        };
+        email_schedule.activate(&clockwork, EMAIL_KEY, email_enabled)?;
     }
     Ok(json!({"configured":operation == Operation::Configure,"safe_to_release":true}))
 }

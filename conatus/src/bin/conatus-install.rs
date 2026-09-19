@@ -26,7 +26,7 @@ fn main() -> ExitCode {
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "conatus-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nschedule-definition --state-dir ABS --output ABS [--home ABS]\n\nProgram installation does not initialize runtime state or activate schedules.",
+            "conatus-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nschedule-definition --state-dir ABS --output ABS [--daily-email] [--home ABS]\n\nProgram installation does not initialize runtime state or activate schedules.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::SUCCESS;

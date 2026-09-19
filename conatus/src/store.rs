@@ -226,6 +226,16 @@ impl Store {
             .collect::<rusqlite::Result<_>>()?)
     }
 
+    /// Read all intake in one `SQLite` statement, without the interactive list limit.
+    pub fn email_records(&self) -> Result<Vec<Record>> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT * FROM records ORDER BY captured_at DESC, id DESC")?;
+        Ok(statement
+            .query_map([], decode_record)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
     pub fn queued(&self, id: &str, receipt: &Value) -> Result<()> {
         self.connection.execute(
             "UPDATE records SET queued_at = ?, receipt = ?, error = NULL WHERE id = ?",

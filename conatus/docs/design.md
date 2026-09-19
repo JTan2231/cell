@@ -97,7 +97,8 @@ relevant corpus context through Annals to Nucleus and its configured model.
 These files and databases have no automatic pruning or remote sharing surface.
 
 The supported product scope is capture, association, inspection, and explicit
-recovery. It does not include task planning, automatic conversation scanning for
-wants, historical feed import, progress measurement, notifications, or public
-sharing. Current live readiness and successful deployment require separate
+recovery, and deterministic personal daily email. It does not include task
+planning, automatic conversation scanning for wants, historical feed import,
+progress measurement, or public sharing. [Daily email](email.md) defines the
+complete wants selection and retained submission records. Current live readiness and successful deployment require separate
 operational evidence.

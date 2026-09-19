@@ -4,7 +4,8 @@
   "application": "Conatus",
   "dependencies": [
     "annals",
-    "clockwork"
+    "clockwork",
+    "email"
   ],
   "description": "Initialize and rebind Conatus libraries under held admission; prepare its disabled runner and restore saved intent.",
   "adapter_binary": "conatus-install",
@@ -16,10 +17,15 @@
     "clockwork": {
       "minimum": "0.6.0",
       "before": "0.7.0"
+    },
+    "email": {
+      "minimum": "0.6.0",
+      "before": "0.7.0"
     }
   },
   "activation_bindings": [
-    "conatus/update"
+    "conatus/update",
+    "conatus/daily-email"
   ],
   "pin_inventory": [
     "--json",
