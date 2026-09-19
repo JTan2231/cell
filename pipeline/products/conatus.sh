@@ -21,4 +21,4 @@ RELEASE_UNITS='conatus|Conatus|package|conatus/Cargo.toml|conatus-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='conatus|target/release/conatus|conatus
 conatus|target/release/conatus-install|conatus-install'
-PROVIDERS='conatus|conatus|conatus/chancery|4'
+PROVIDERS='conatus|conatus|conatus/chancery|5'

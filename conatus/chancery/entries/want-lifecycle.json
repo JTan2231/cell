@@ -1,0 +1,121 @@
+{
+  "id": "conatus.want.lifecycle",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Archive or unarchive a want on direct request",
+  "summary": "Set one want inactive or restore it to active without changing its captured content, propagating state to Annals, or retaining transition history.",
+  "use_when": [
+    "The user directly requests archival or unarchival of one identified captured want."
+  ],
+  "do_not_use_when": [
+    "Completion, inactivity or decision associations merely suggest a lifecycle change.",
+    "The request concerns deleting or editing source content, freezing Annals associations, or changing decision records."
+  ],
+  "outcome": "The selected want has the requested durable local state and remains readable under the same identity.",
+  "interfaces": [
+    {
+      "label": "Archive a want",
+      "invocation": "/Users/joey/.local/bin/conatus want archive <WANT_ID>"
+    },
+    {
+      "label": "Unarchive a want",
+      "invocation": "/Users/joey/.local/bin/conatus want unarchive <WANT_ID>"
+    }
+  ],
+  "effects": [
+    "Sets or removes only the selected want's current archive marker in private Conatus settings.",
+    "Runs no Annals command, model, email send, or scheduler operation."
+  ],
+  "authority": [
+    "The user directly chooses the transition. Conatus owns lifecycle state; Annals owns independent source interpretation and associations."
+  ],
+  "success": [
+    "The local transaction commits and returns changed plus record with the resulting state. A repeated transition succeeds with changed:false."
+  ],
+  "failure_and_recovery": [
+    "Unknown IDs, decision IDs, maintenance holds and storage errors fail without a successful transition receipt. Inspect want show ID after uncertain command completion; repeating the same transition is safe."
+  ],
+  "privacy": [
+    "State remains private and local. No archival reason, timestamp, actor or transition history is stored. Ordinary metadata-only command usage observation remains separate."
+  ],
+  "does_not_authorize": [
+    "Automatic or inferred lifecycle transitions, source edits, deletion, Annals mutation, publication or sending email."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The local user or an agent acting on the user's direct archive or unarchive request selects one want."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Conatus state is initialized and writable, the ID identifies a captured want, and product maintenance admission is open. Annals need not be available."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "want archive WANT_ID or want unarchive WANT_ID selects one exact existing want. Global --state-dir ABS_PATH selects private local state."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON {ok:true,data:{changed,record}} returns the saved record and whether state changed. Errors use {ok:false,error:string}. record.state is active or archived."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Archived means inactive, not completed. Captured identity, wording, source, capture time and outgoing document stay unchanged. Only unarchive changes an archived want's lifecycle. Processing receipts and Annals associations remain independent."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The existing want-UUIDv7 identity is preserved. No archival timestamps or units are introduced."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The receipt describes one selected want at the local transaction commit. New and existing wants without an archive marker are active. No archival history is retained."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local CLI operations require a direct user request for each transition. Background processing and models do not infer archive or unarchive actions."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "A transaction changes only the current archive marker. Repeated commands are no-ops. State never propagates to Annals, other records, frozen documents or frozen email occurrences. Active lists and newly rendered emails omit archived wants."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One exact want is selected per command. No bulk or automatic lifecycle operation is provided."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Existing schema-one settings hold current archive markers. Absence means active, so no migration is required. Older releases ignore markers and can show or email archived wants."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "The transition uses Conatus local storage and admission only; it invokes no external product or service."
+      }
+    ]
+  },
+  "manual": "manuals/want-lifecycle.md"
+}

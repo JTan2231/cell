@@ -7,7 +7,7 @@ use std::io::Write as _;
 use std::os::unix::fs::OpenOptionsExt as _;
 use std::path::{Path, PathBuf};
 
-use crate::store::{Record, Store, private_directory, runner_lock};
+use crate::store::{Record, Store, WantState, private_directory, runner_lock};
 use crate::{Config, LIBRARIAN_INSTRUCTIONS, now};
 
 pub fn initialize(
@@ -100,6 +100,7 @@ pub fn capture_want(root: &Path, wording: &str, source: &str) -> Result<Value> {
         work_name: id.clone(),
         id,
         kind: "want".to_owned(),
+        state: Some(WantState::Active),
         source: source.to_owned(),
         wording: wording.to_owned(),
         source_data: json!({"source":source}),
@@ -237,6 +238,7 @@ fn decision_record(
         work_name: id.clone(),
         id,
         kind: "decision".to_owned(),
+        state: None,
         source,
         wording: event.document.clone(),
         source_data: serde_json::to_value(event)?,

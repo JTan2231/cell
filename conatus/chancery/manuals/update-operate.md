@@ -204,6 +204,11 @@ only after all holds release. No deployment clears a Clockwork incident.
 owner-scoped admission gate. Holds survive interruption. Recovery completes
 configuration for a coherent selected release before releasing its own hold.
 
+Want archival uses the existing schema-one settings table. Existing wants
+default to active without a migration. Older releases ignore archive markers
+and can include archived wants in lists and new emails. Use a lifecycle-aware
+release when archive filtering is required.
+
 ## Command usage
 
 CLI dispatch separately attempts to append system/command identity, observation
@@ -222,6 +227,6 @@ maintenance. The optional boolean `daily_email_enabled` selects email intent
 separately from update `enabled`. An omitted value preserves prior email intent;
 an absent binding remains absent. Neither operation clears Clockwork incidents.
 
-Email must be installed. The renderer copies all captured wants and at most two
+Email must be installed. The renderer copies all active wants and at most two
 stored quotations from directly associated decisions. Preview starts no send.
 See [daily email](digest-email.md) for disclosure and uncertain-send recovery.

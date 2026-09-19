@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use fs2::FileExt as _;
-use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions};
@@ -12,6 +12,18 @@ use crate::Config;
 
 pub struct Store {
     connection: Connection,
+}
+
+// Lifecycle is local metadata. Frozen documents and Annals handoffs never include it.
+const RECORD_SELECT: &str = "SELECT records.*, EXISTS(
+    SELECT 1 FROM settings WHERE key = 'archived-want/' || records.id
+) AS archived FROM records";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WantState {
+    Active,
+    Archived,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,6 +38,8 @@ pub struct Record {
     pub queued_at: Option<i64>,
     pub receipt: Option<Value>,
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<WantState>,
     #[serde(skip)]
     pub document: String,
 }
@@ -185,7 +199,11 @@ impl Store {
 
     pub fn record(&self, id: &str) -> Result<Record> {
         self.connection
-            .query_row("SELECT * FROM records WHERE id = ?", [id], decode_record)
+            .query_row(
+                &format!("{RECORD_SELECT} WHERE id = ?"),
+                [id],
+                decode_record,
+            )
             .optional()?
             .context("unknown Conatus record")
     }
@@ -194,7 +212,7 @@ impl Store {
         Ok(self
             .connection
             .query_row(
-                "SELECT * FROM records WHERE work_name = ?",
+                &format!("{RECORD_SELECT} WHERE work_name = ?"),
                 [name],
                 decode_record,
             )
@@ -202,35 +220,79 @@ impl Store {
     }
 
     pub fn list(&self, kind: &str, limit: usize) -> Result<Value> {
+        self.list_records(kind, limit, (kind == "want").then_some(WantState::Active))
+    }
+
+    pub fn list_wants(&self, limit: usize, state: Option<WantState>) -> Result<Value> {
+        self.list_records("want", limit, state)
+    }
+
+    fn list_records(&self, kind: &str, limit: usize, state: Option<WantState>) -> Result<Value> {
         ensure!(
             (1..=100).contains(&limit),
             "limit must be between 1 and 100"
         );
-        let mut statement = self.connection.prepare(
-            "SELECT * FROM records WHERE kind = ? ORDER BY captured_at DESC, id DESC LIMIT ?",
-        )?;
+        let mut statement = self.connection.prepare(&format!(
+            "{RECORD_SELECT} WHERE kind = ?1 AND (?2 IS NULL OR archived = ?2)
+             ORDER BY captured_at DESC, id DESC LIMIT ?3"
+        ))?;
         let mut records: Vec<Record> = statement
-            .query_map(params![kind, i64::try_from(limit + 1)?], decode_record)?
+            .query_map(
+                params![
+                    kind,
+                    state.map(|s| s == WantState::Archived),
+                    i64::try_from(limit + 1)?
+                ],
+                decode_record,
+            )?
             .collect::<rusqlite::Result<_>>()?;
         let has_more = records.len() > limit;
         records.truncate(limit);
         Ok(json!({"kind":kind,"items":records,"has_more":has_more}))
     }
 
-    pub fn pending(&self) -> Result<Vec<Record>> {
-        let mut statement = self
+    pub fn set_want_state(&mut self, id: &str, state: WantState) -> Result<Value> {
+        let transaction = self
             .connection
-            .prepare("SELECT * FROM records WHERE queued_at IS NULL ORDER BY captured_at, id")?;
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let mut record = transaction
+            .query_row(
+                &format!("{RECORD_SELECT} WHERE id = ?"),
+                [id],
+                decode_record,
+            )
+            .optional()?
+            .context("unknown Conatus record")?;
+        ensure!(record.kind == "want", "record is not a want");
+        let key = format!("archived-want/{id}");
+        let changed = match state {
+            WantState::Archived => transaction.execute(
+                "INSERT INTO settings(key, value) VALUES (?, 'true') ON CONFLICT(key) DO NOTHING",
+                [&key],
+            )?,
+            WantState::Active => {
+                transaction.execute("DELETE FROM settings WHERE key = ?", [&key])?
+            }
+        };
+        record.state = Some(state);
+        transaction.commit()?;
+        Ok(json!({"changed":changed != 0,"record":record}))
+    }
+
+    pub fn pending(&self) -> Result<Vec<Record>> {
+        let mut statement = self.connection.prepare(&format!(
+            "{RECORD_SELECT} WHERE queued_at IS NULL ORDER BY captured_at, id"
+        ))?;
         Ok(statement
             .query_map([], decode_record)?
             .collect::<rusqlite::Result<_>>()?)
     }
 
-    /// Read all intake in one `SQLite` statement, without the interactive list limit.
+    /// Read active wants and all decisions in one `SQLite` statement, without a list limit.
     pub fn email_records(&self) -> Result<Vec<Record>> {
         let mut statement = self
             .connection
-            .prepare("SELECT * FROM records ORDER BY captured_at DESC, id DESC")?;
+            .prepare(&format!("{RECORD_SELECT} WHERE kind = 'decision' OR NOT archived ORDER BY captured_at DESC, id DESC"))?;
         Ok(statement
             .query_map([], decode_record)?
             .collect::<rusqlite::Result<_>>()?)
@@ -269,8 +331,17 @@ impl Store {
                 }))
             })?
             .collect::<rusqlite::Result<_>>()?;
+        let wants = self.connection.query_row(
+            &format!(
+                "SELECT COUNT(*) FILTER (WHERE NOT archived), COUNT(*) FILTER (WHERE archived)
+                      FROM ({RECORD_SELECT}) WHERE kind = 'want'"
+            ),
+            [],
+            |row| Ok(json!({"active":row.get::<_, i64>(0)?,"archived":row.get::<_, i64>(1)?})),
+        )?;
         Ok(json!({
             "intake":counts,
+            "wants":wants,
             "cursor":self.setting("cursor")?,
             "paused":self.setting("paused")?.as_deref() == Some("true"),
             "last_feed_read_at":self.setting("last_feed_read_at")?.map(|s| s.parse::<i64>()).transpose()?,
@@ -298,9 +369,20 @@ fn decode_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<Record> {
         })
     }
     let receipt: Option<String> = row.get("receipt")?;
+    let kind: String = row.get("kind")?;
+    let state = if kind == "want" {
+        Some(if row.get("archived")? {
+            WantState::Archived
+        } else {
+            WantState::Active
+        })
+    } else {
+        None
+    };
     Ok(Record {
         id: row.get("id")?,
-        kind: row.get("kind")?,
+        kind,
+        state,
         source: row.get("source")?,
         wording: row.get("wording")?,
         source_data: json_column(row, "source_data")?,

@@ -6,6 +6,8 @@ commands start no model and change no domain records.
 
 ```sh
 /Users/joey/.local/bin/conatus want list --limit 20
+/Users/joey/.local/bin/conatus want list --archived
+/Users/joey/.local/bin/conatus want list --all
 /Users/joey/.local/bin/conatus want show ID
 /Users/joey/.local/bin/conatus decision list --limit 20
 /Users/joey/.local/bin/conatus decision show ID
@@ -22,6 +24,19 @@ is `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Output is JSO
 They select local intake by source kind. A show selects one exact intake ID and
 separates its `record`, `retention`, `interpretation`, and `associations`. Each
 Annals read reports available data or its own error.
+
+Want lists select active wants by default. `--archived` selects only archived
+wants; `--all` selects both states. These options conflict. Selection precedes
+the limit and `has_more` calculation. Want records contain `state`, either
+`active` or `archived`; decision records have no lifecycle state. `want show`
+reads a want in either state. Status adds `local.wants.active` and
+`local.wants.archived`. Existing intake and handoff counts include both states.
+
+Archive state is local to Conatus. It never propagates to Annals or related
+records. Archived source content remains unchanged while processing receipts
+and Annals associations can evolve. Only a direct user request can change the
+state through `want archive ID` or `want unarchive ID`. These reads do not
+authorize either transition.
 
 Want wording is the supplied source assertion. A decision document is a
 deterministic rendering of accepted feed fields, not original account Markdown

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::annals::EmailContext;
-use crate::store::{Record, Store};
+use crate::store::{Record, Store, WantState};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Digest {
@@ -36,7 +36,7 @@ struct Delivery {
 pub fn render(records: &[Record], context: Option<&EmailContext>) -> Result<Digest> {
     let wants: Vec<_> = records
         .iter()
-        .filter(|record| record.kind == "want")
+        .filter(|record| record.kind == "want" && record.state != Some(WantState::Archived))
         .collect();
     let mut body = String::new();
     for (index, want) in wants.iter().enumerate() {
@@ -74,9 +74,9 @@ pub fn render(records: &[Record], context: Option<&EmailContext>) -> Result<Dige
         }
     }
     if wants.is_empty() {
-        body.push_str("No captured wants.\n");
+        body.push_str("No active wants.\n");
     } else if context.is_none() {
-        body.push_str("\nSupporting context was unavailable. All captured wants are included.\n");
+        body.push_str("\nSupporting context was unavailable. All active wants are included.\n");
     }
     Ok(Digest {
         subject: format!("Conatus — {} wants", wants.len()),
@@ -102,7 +102,7 @@ fn prepare(store: &Store) -> Result<Digest> {
     let context = store.config()?.library().email_context();
     if context.is_err() {
         eprintln!(
-            "Conatus email: supporting context unavailable; using the complete captured wants list"
+            "Conatus email: supporting context unavailable; using the complete active wants list"
         );
     }
     render(&records, context.as_ref().ok())
@@ -241,6 +241,7 @@ mod tests {
         Record {
             id: id.into(),
             kind: kind.into(),
+            state: (kind == "want").then_some(WantState::Active),
             source: "exact source".into(),
             wording: wording.into(),
             work_name: id.into(),
@@ -301,7 +302,13 @@ mod tests {
                 .body
                 .contains("Supporting context was unavailable")
         );
-        assert_eq!(render(&[], None)?.body, "No captured wants.\n");
+        assert_eq!(render(&[], None)?.body, "No active wants.\n");
+        let mut archived_records = records.clone();
+        for want in archived_records.iter_mut().filter(|r| r.kind == "want") {
+            want.state = Some(WantState::Archived);
+        }
+        assert_eq!(render(&archived_records, Some(&context))?.want_count, 0);
+        assert_eq!(render(&archived_records, None)?.body, "No active wants.\n");
         Ok(())
     }
 }
