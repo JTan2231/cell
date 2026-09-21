@@ -2607,7 +2607,11 @@ mod tests {
         let socket = dir.path().join("nucleus.sock");
         let mut state = load_or_create(&path, Stage::Brief, inputs()).unwrap();
         use_legacy_identity(&mut state);
-        let definitions = tool_definitions(Stage::Brief, LEGACY_TOOL_NAMESPACE, false).unwrap();
+        let mut definitions = tool_definitions(Stage::Brief, LEGACY_TOOL_NAMESPACE, false).unwrap();
+        let prompts = cell_prompts::Prompts::at("platter", 1).unwrap();
+        for tool in &mut definitions.tools {
+            tool.description = prompts.expand(&tool.description).unwrap();
+        }
         let mut exchanges = Vec::new();
         for tool in &definitions.tools {
             exchanges.push((
@@ -2922,51 +2926,59 @@ mod tests {
     }
     #[test]
     fn weaver_draft_has_no_project_write_authority() {
-        let root = tempfile::tempdir().unwrap();
-        let store = fixture_store(root.path());
-        let mut input = writing_inputs();
-        input.brief = None;
-        let fixed = crate::projects::ProjectBullets {
-            cell: vec!["Built Cell".into()],
-            wrought: vec!["Built Wrought".into()],
-        };
-        input.fixed_projects = Some(fixed.clone());
-        let mut state = load_or_create(&store, Stage::Draft, input).unwrap();
-        assert!(fixed_project_tools(&state));
-        assert!(!state.request.invocation.builtin_tools.local_execution);
-        assert_eq!(
-            state.request.invocation.workspace_access,
-            WorkspaceAccess::None
-        );
-        let definitions = fixed_draft_definitions().unwrap();
-        let tool = definitions
-            .tools
-            .iter()
-            .find(|t| t.name == "submit_draft")
-            .unwrap();
-        let schema: Value = serde_json::from_str(tool.input_schema.get()).unwrap();
-        assert!(
-            schema["properties"]["resume"]["properties"]
-                .get("projects")
-                .is_none()
-        );
-        let mut payload = single_draft_payload();
-        payload["resume"]
-            .as_object_mut()
-            .unwrap()
-            .remove("projects");
-        let validate = |result: &StageResult| retain_fixture_draft(&store, result);
-        let mut invalid = payload.clone();
-        invalid["resume"]["projects"] = json!(null);
-        let bad_call = call(&state, "bad", "submit_draft", &invalid);
-        assert!(execute_draft(&mut state, &bad_call, Some(&validate)).is_err());
-        let submission = call(&state, "good", "submit_draft", &payload);
-        execute_draft(&mut state, &submission, Some(&validate)).unwrap();
-        let retained: Resume = store
-            .content("packet-1", "resume-content")
-            .unwrap()
-            .unwrap();
-        assert_eq!(retained.project_bullets, Some(fixed));
-        assert!(retained.projects.is_none());
+        for selection in [None, Some(1)] {
+            let root = tempfile::tempdir().unwrap();
+            let store = fixture_store(root.path());
+            let mut input = writing_inputs();
+            input.brief = None;
+            input.prompt_selection = selection;
+            let fixed = crate::projects::ProjectBullets {
+                cell: vec!["Built Cell".into()],
+                wrought: vec!["Built Wrought".into()],
+            };
+            input.fixed_projects = Some(fixed.clone());
+            let mut state = load_or_create(&store, Stage::Draft, input).unwrap();
+            assert!(fixed_project_tools(&state));
+            assert_eq!(
+                state.request.invocation.toolset.as_ref().unwrap().version,
+                if selection.is_some() { 4 } else { 2 }
+            );
+            assert!(!state.request.instructions.contains("<bazaar:"));
+            assert!(!state.request.invocation.builtin_tools.local_execution);
+            assert_eq!(
+                state.request.invocation.workspace_access,
+                WorkspaceAccess::None
+            );
+            let definitions = fixed_draft_definitions().unwrap();
+            let tool = definitions
+                .tools
+                .iter()
+                .find(|t| t.name == "submit_draft")
+                .unwrap();
+            let schema: Value = serde_json::from_str(tool.input_schema.get()).unwrap();
+            assert!(
+                schema["properties"]["resume"]["properties"]
+                    .get("projects")
+                    .is_none()
+            );
+            let mut payload = single_draft_payload();
+            payload["resume"]
+                .as_object_mut()
+                .unwrap()
+                .remove("projects");
+            let validate = |result: &StageResult| retain_fixture_draft(&store, result);
+            let mut invalid = payload.clone();
+            invalid["resume"]["projects"] = json!(null);
+            let bad_call = call(&state, "bad", "submit_draft", &invalid);
+            assert!(execute_draft(&mut state, &bad_call, Some(&validate)).is_err());
+            let submission = call(&state, "good", "submit_draft", &payload);
+            execute_draft(&mut state, &submission, Some(&validate)).unwrap();
+            let retained: Resume = store
+                .content("packet-1", "resume-content")
+                .unwrap()
+                .unwrap();
+            assert_eq!(retained.project_bullets, Some(fixed));
+            assert!(retained.projects.is_none());
+        }
     }
 }

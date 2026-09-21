@@ -26,13 +26,14 @@ def main() -> int:
         ["cargo", "metadata", *common, "--no-deps", "--format-version", "1"],
         capture_output=True, text=True, check=True,
     )
-    packages = {package["name"]: package for package in json.loads(metadata.stdout)["packages"]}
+    workspace = json.loads(metadata.stdout)
+    packages = {package["name"]: package for package in workspace["packages"]}
     prompt_consumers = {"annals", "decisions", "semantics", "paperboy", "platter", "weaver", "mentor", "emt", "conatus", "cell-prompts"}
     with tempfile.TemporaryDirectory(prefix="cell-prompt-tests-") as temporary:
         environment = os.environ.copy()
         if prompt_consumers.intersection(args.packages):
             database = Path(temporary) / "private" / "bazaar.sqlite3"
-            root = Path(args.manifest_path).resolve().parent
+            root = Path(workspace["workspace_root"])
             subprocess.run(["cargo", "run", *common, "--quiet", "--package", "cell-prompts", "--", str(database), str(root / "prompting" / "seed.json")], check=True)
             environment["CELL_BAZAAR_DATABASE"] = str(database)
         return run_tests(args, common, packages, environment)

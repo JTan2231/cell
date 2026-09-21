@@ -22,7 +22,7 @@ dependencies = [
 
 [[package]]
 name = "annals"
-version = "0.20.5"
+version = "0.20.6"
 dependencies = [
  "annals-api",
  "base64",
@@ -53,7 +53,7 @@ dependencies = [
 
 [[package]]
 name = "annals-api"
-version = "0.20.5"
+version = "0.20.6"
 dependencies = [
  "rusqlite",
  "serde",
@@ -233,7 +233,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bazaar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "cell-install",
@@ -534,7 +534,7 @@ dependencies = [
 
 [[package]]
 name = "conatus"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "annals",
  "annals-api",
@@ -643,7 +643,7 @@ dependencies = [
 
 [[package]]
 name = "decisions"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "annals-api",
  "cell-install",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "emt"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "cell-install",
  "cell-maintenance",
@@ -1422,7 +1422,7 @@ dependencies = [
 
 [[package]]
 name = "krisis-api"
-version = "0.9.6"
+version = "0.9.7"
 dependencies = [
  "serde",
  "serde_json",
@@ -1537,7 +1537,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mentor"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "cell-install",
  "cell-maintenance",
@@ -1786,7 +1786,7 @@ dependencies = [
 
 [[package]]
 name = "paperboy"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "annals-api",
  "anyhow",
@@ -1924,7 +1924,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platter"
-version = "0.2.18"
+version = "0.2.20"
 dependencies = [
  "annals",
  "anyhow",
@@ -2439,7 +2439,7 @@ dependencies = [
 
 [[package]]
 name = "semantics"
-version = "0.6.3"
+version = "0.6.5"
 dependencies = [
  "annals-api",
  "cell-install",
@@ -3267,7 +3267,7 @@ dependencies = [
 
 [[package]]
 name = "weaver"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "annals-api",
  "anyhow",

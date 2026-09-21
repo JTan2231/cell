@@ -418,27 +418,7 @@ impl Store {
             ));
         }
         if status == ProjectStatus::Retired {
-            let legacy_outstanding: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM intake_events
-                 WHERE project_id = ?1
-                   AND status IN ('pending', 'awaiting_review', 'paused', 'processing', 'failed')",
-                [id],
-                |row| row.get(0),
-            )?;
-            let account_outstanding: i64 = transaction.query_row(
-                "SELECT COUNT(*) FROM account_intake_events
-                 WHERE project_id = ?1
-                   AND status IN ('pending', 'paused', 'processing', 'failed')",
-                [id],
-                |row| row.get(0),
-            )?;
-            let outstanding = legacy_outstanding + account_outstanding;
-            if outstanding != 0 {
-                return Err(Error::domain(
-                    "project_intake_outstanding",
-                    format!("project {id} has {outstanding} unresolved assigned intake events"),
-                ));
-            }
+            retire_unstarted_intake(&transaction, id)?;
         }
         transaction.execute(
             "UPDATE projects SET status = ?2, updated_at = ?3 WHERE id = ?1",
@@ -2544,6 +2524,51 @@ fn revisions_with_connection(
     Ok(revisions)
 }
 
+fn retire_unstarted_intake(transaction: &Transaction<'_>, id: &str) -> Result<()> {
+    transaction.execute(
+        "UPDATE intake_events
+         SET status = 'ignored', terminal_reason = 'project_retired', updated_at = ?2
+         WHERE project_id = ?1 AND status IN ('pending', 'paused') AND attempts = 0
+           AND NOT EXISTS (
+               SELECT 1 FROM request_correlations
+               WHERE event_id = intake_events.event_id
+           )",
+        params![id, now()],
+    )?;
+    transaction.execute(
+        "UPDATE account_intake_events
+         SET status = 'ignored', terminal_reason = 'project_retired', updated_at = ?2
+         WHERE project_id = ?1 AND status IN ('pending', 'paused') AND attempts = 0
+           AND NOT EXISTS (
+               SELECT 1 FROM account_request_correlations
+               WHERE event_id = account_intake_events.event_id
+           )",
+        params![id, now()],
+    )?;
+    let legacy_outstanding: i64 = transaction.query_row(
+        "SELECT COUNT(*) FROM intake_events
+         WHERE project_id = ?1
+           AND status IN ('pending', 'awaiting_review', 'paused', 'processing', 'failed')",
+        [id],
+        |row| row.get(0),
+    )?;
+    let account_outstanding: i64 = transaction.query_row(
+        "SELECT COUNT(*) FROM account_intake_events
+         WHERE project_id = ?1
+           AND status IN ('pending', 'paused', 'processing', 'failed')",
+        [id],
+        |row| row.get(0),
+    )?;
+    let outstanding = legacy_outstanding + account_outstanding;
+    if outstanding != 0 {
+        return Err(Error::domain(
+            "project_intake_outstanding",
+            format!("project {id} has {outstanding} unresolved assigned intake events"),
+        ));
+    }
+    Ok(())
+}
+
 fn project_with_connection(connection: &Connection, id: &str) -> Result<Project> {
     connection
         .query_row(
@@ -3916,7 +3941,7 @@ mod tests {
     }
 
     #[test]
-    fn retirement_requires_pause_and_no_unresolved_intake() {
+    fn retirement_requires_pause_and_resolved_attempts() {
         let (temporary, store) = fixture();
         assert_eq!(
             store
@@ -3930,6 +3955,7 @@ mod tests {
         store
             .insert_intake(&event, Some("cell"), Some(&root))
             .expect("intake");
+        store.mark_processing("event-1").expect("processing");
         store
             .set_project_status("cell", ProjectStatus::Paused)
             .expect("pause");
@@ -3939,6 +3965,153 @@ mod tests {
                 .expect_err("unresolved intake must block retirement")
                 .code(),
             "project_intake_outstanding"
+        );
+    }
+
+    #[test]
+    fn retirement_preserves_unstarted_intake_and_repository_history() {
+        let (temporary, store) = fixture();
+        let event = decision_event("event-1", "decision-1", "decision_admitted", "high", None);
+        store
+            .insert_intake(&event, Some("cell"), None)
+            .expect("legacy intake");
+        let account = account_event();
+        store
+            .activate_account_feed(&account.library_id, "account-cursor-0")
+            .expect("feed");
+        store
+            .record_account_observation(
+                "cell",
+                "account-cursor-0",
+                &account,
+                Some("cell"),
+                AccountRoutingOutcome::ProjectAssigned,
+                true,
+            )
+            .expect("account intake");
+        store
+            .commit_revision(
+                "cell",
+                0,
+                "Seed concern",
+                None,
+                &[SemanticEffect::Define {
+                    concept_id: "c000001".to_owned(),
+                    label: "Concern".to_owned(),
+                    meaning: "A retained concern.".to_owned(),
+                }],
+            )
+            .expect("repository history");
+        let repository = store.repository("cell", None).expect("repository");
+        store
+            .set_project_status("cell", ProjectStatus::Paused)
+            .expect("pause");
+        let before = store.project("cell").expect("project");
+        fs::remove_dir(temporary.path().join("project")).expect("retired folder removed");
+
+        store
+            .set_project_status("cell", ProjectStatus::Retired)
+            .expect("retirement");
+        store
+            .set_project_status("cell", ProjectStatus::Retired)
+            .expect("idempotent retirement");
+
+        let after = store.project_detail("cell").expect("retired project");
+        assert_eq!(after.project.status, ProjectStatus::Retired);
+        assert_eq!(after.project.current_revision, before.current_revision);
+        assert_eq!(
+            store.repository("cell", None).expect("retained repository"),
+            repository
+        );
+        assert_eq!(after.project.scan_cursor, before.scan_cursor);
+        assert_eq!(after.project.annals_scan_cursor, before.annals_scan_cursor);
+        assert!(after.paths.iter().all(|path| path.closed_at.is_some()));
+        let retained = store.intake("event-1").expect("retained legacy intake");
+        assert_eq!(retained.status, IntakeStatus::Ignored);
+        assert_eq!(retained.terminal_reason.as_deref(), Some("project_retired"));
+        assert_eq!(retained.decision, event);
+        assert_eq!(retained.attempts, 0);
+        let retained = store
+            .account_intake(&account.event_id)
+            .expect("retained account intake");
+        assert_eq!(retained.status, IntakeStatus::Ignored);
+        assert_eq!(retained.terminal_reason.as_deref(), Some("project_retired"));
+        assert_eq!(retained.account, account);
+        assert_eq!(retained.attempts, 0);
+        assert!(retained.applied_revision.is_none());
+        assert_eq!(
+            store
+                .set_project_status("cell", ProjectStatus::Active)
+                .expect_err("retirement is permanent")
+                .code(),
+            "project_transition_invalid"
+        );
+    }
+
+    #[test]
+    fn retirement_with_a_retained_request_rolls_back_unstarted_intake_changes() {
+        let (_temporary, store) = fixture();
+        let event = decision_event("event-1", "decision-1", "decision_admitted", "high", None);
+        store
+            .insert_intake(&event, Some("cell"), None)
+            .expect("legacy intake");
+        let account = account_event();
+        store
+            .activate_account_feed(&account.library_id, "account-cursor-0")
+            .expect("feed");
+        store
+            .record_account_observation(
+                "cell",
+                "account-cursor-0",
+                &account,
+                Some("cell"),
+                AccountRoutingOutcome::ProjectAssigned,
+                true,
+            )
+            .expect("account intake");
+        let correlation = Correlation {
+            event_id: account.event_id.clone(),
+            requester_id: "request-1".to_owned(),
+            job_id: "job-1".to_owned(),
+            request_json: "{}".to_owned(),
+            request_sha256: "digest".to_owned(),
+            tool_after: 0,
+            admitted: false,
+        };
+        store
+            .put_account_correlation(&correlation)
+            .expect("retained request");
+        store
+            .set_project_status("cell", ProjectStatus::Paused)
+            .expect("pause");
+
+        assert_eq!(
+            store
+                .set_project_status("cell", ProjectStatus::Retired)
+                .expect_err("retained request blocks retirement")
+                .code(),
+            "project_intake_outstanding"
+        );
+
+        assert_eq!(
+            store.project("cell").expect("project").status,
+            ProjectStatus::Paused
+        );
+        let retained = store.intake("event-1").expect("legacy intake");
+        assert_eq!(retained.status, IntakeStatus::Paused);
+        assert!(retained.terminal_reason.is_none());
+        assert_eq!(
+            store
+                .account_intake(&account.event_id)
+                .expect("account intake")
+                .status,
+            IntakeStatus::Paused
+        );
+        assert_eq!(
+            store
+                .account_correlation(&account.event_id)
+                .expect("correlation"),
+            Some(correlation)
         );
     }
 

@@ -592,7 +592,10 @@ mod decision_report_tests {
         let request = request(&brief, directory.path())?;
         assert_eq!(
             request.invocation.toolset,
-            Some(toolset(ReportKind::Decisions))
+            Some(ToolsetRef {
+                version: 2,
+                ..toolset(ReportKind::Decisions)
+            })
         );
         let prompt: Value = serde_json::from_str(&request.prompt)?;
         assert_eq!(prompt["sources"]["time_basis"], "accepted_at");

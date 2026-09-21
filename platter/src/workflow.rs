@@ -292,6 +292,15 @@ async fn capture_packet(
         directory: String::new(),
     };
     let prompts = cell_prompts::Prompts::load("platter")?;
+    let resume_editorial = prompts.expand(agent::RESUME_EDITORIAL)?;
+    let mut project_directions = [
+        prompts.expand(crate::projects::CELL_DIRECTION)?,
+        prompts.expand(crate::projects::WROUGHT_DIRECTION)?,
+        prompts.expand(crate::projects::SHORTEN_DIRECTION)?,
+    ];
+    for direction in &mut project_directions {
+        *direction = format!("{direction}\n\n{resume_editorial}");
+    }
     let captured = Captured {
         prompt_selection: Some(prompts.selection.version),
         job: job.clone(),
@@ -307,15 +316,11 @@ async fn capture_packet(
         template_artifact: store
             .setting("template")?
             .context("original resume is not initialized")?,
-        resume_editorial: Some(prompts.expand(agent::RESUME_EDITORIAL)?),
+        resume_editorial: Some(resume_editorial),
         project_resources: None,
         regeneration_id: regeneration_id.map(str::to_owned),
         generation: Some(Generation::WeaverProjectsV1),
-        project_directions: Some([
-            prompts.expand(crate::projects::CELL_DIRECTION)?,
-            prompts.expand(crate::projects::WROUGHT_DIRECTION)?,
-            prompts.expand(crate::projects::SHORTEN_DIRECTION)?,
-        ]),
+        project_directions: Some(project_directions),
     };
     store.insert_run(&record, &captured)?;
     Ok(record)
@@ -335,7 +340,7 @@ async fn prepare_record(
             ("0", captured.company.clone()),
             ("1", captured.job.title.clone()),
             ("2", captured.posting.url.clone()),
-            ("3", captured.posting.retrieved_at.to_string()),
+            ("3", captured.posting.retrieved_at.clone()),
             ("4", captured.posting.text.clone()),
         ],
     )?;

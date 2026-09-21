@@ -112,7 +112,13 @@ fn malformed_results_explain_the_error_and_allow_a_corrected_call() -> TestResul
 #[test]
 fn request_uses_new_contract_and_only_one_generated_summary() {
     let run = fixture();
-    assert_eq!(run.request.invocation.toolset, Some(toolset()));
+    assert_eq!(
+        run.request.invocation.toolset,
+        Some(nucleus_core::ToolsetRef {
+            version: 2,
+            ..toolset()
+        })
+    );
     assert_eq!(
         run.request.invocation.workspace_access,
         WorkspaceAccess::None

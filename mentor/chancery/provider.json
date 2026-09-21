@@ -3,7 +3,7 @@
   "provider": {
     "id": "mentor",
     "name": "Mentor",
-    "release": "0.1.6"
+    "release": "0.1.7"
   },
   "promise_scope": {
     "authoritative_for": [
