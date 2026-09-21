@@ -223,7 +223,7 @@
       },
       {
         "status": "declared",
-        "statement": "Each run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
+        "statement": "Each run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. New captures append the same resume editorial policy used for Jackson to all three directions; historical captures retain their original directions. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
       },
       {
         "status": "declared",

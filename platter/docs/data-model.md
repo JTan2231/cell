@@ -20,9 +20,11 @@ the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
 New runs capture `generation=weaver_projects_v1`, the editorial policy and
-three exact directions: Cell, Wrought and optional shortening. Executions retain
-caller-owned Weaver IDs before authoring starts. `weaver-cell`, `weaver-wrought`
-and optional `weaver-cell-short` / `weaver-wrought-short` artifacts store the
+three exact directions: Cell, Wrought and optional shortening. New captures append
+the same captured editorial policy to all three directions. Historical captures
+retain their original directions. Executions retain caller-owned Weaver IDs before
+authoring starts. `weaver-cell`, `weaver-wrought` and optional `weaver-cell-short` /
+`weaver-wrought-short` artifacts store the
 provider document views with exact Markdown. `project-bullets` stores the accepted
 plain-text pair. Each project contains one through three bullets.
 
