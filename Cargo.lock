@@ -2432,7 +2432,7 @@ dependencies = [
 
 [[package]]
 name = "semantics"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "annals-api",
  "cell-install",
