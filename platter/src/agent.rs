@@ -869,10 +869,9 @@ fn fixed_project_tools(state: &StageState) -> bool {
         && state.request.invocation.toolset.as_ref().is_some_and(|t| {
             t.provider.as_str() == TOOL_NAMESPACE
                 && t.name.as_str() == "draft"
-                && (t.version == 2
-                    || state.inputs.prompt_selection.is_some_and(|version| {
-                        i64::from(t.version) == version + 3 && state.inputs.fixed_projects.is_some()
-                    }))
+                // Inputs are reconstructed after recovery validation. The frozen
+                // toolset identifies fixed-project drafts: legacy 2 or selection + 3.
+                && (t.version == 2 || t.version >= 4)
         })
 }
 
@@ -2937,7 +2936,13 @@ mod tests {
                 wrought: vec!["Built Wrought".into()],
             };
             input.fixed_projects = Some(fixed.clone());
-            let mut state = load_or_create(&store, Stage::Draft, input).unwrap();
+            let mut state = load_or_create(&store, Stage::Draft, input.clone()).unwrap();
+            let retained = retained_request(&store, "packet-1", Stage::Draft)
+                .unwrap()
+                .unwrap();
+            assert_eq!(retained, state.request);
+            state = load_or_create(&store, Stage::Draft, input).unwrap();
+            assert_eq!(state.request, retained);
             assert!(fixed_project_tools(&state));
             assert_eq!(
                 state.request.invocation.toolset.as_ref().unwrap().version,
