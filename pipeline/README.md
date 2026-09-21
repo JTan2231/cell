@@ -91,7 +91,7 @@ their affected consumers. There is no general dependency expansion.
 | `pipeline/test.sh` | All shared platform suites |
 
 The shared suite names are `pipeline`, `broker`, `deployment`, `build`,
-`cleanup`, `install`, `maintenance`, and `catalog`. `--all` cannot be combined
+`cleanup`, `install`, `maintenance`, `prompts`, and `catalog`. `--all` cannot be combined
 with product arguments. `--verbose` works with each mode. A root run with no
 selected products still checks structure and recognition. Its success does
 not establish full repository validation.
@@ -165,3 +165,12 @@ the release tag. On macOS, `shlock` replaces a lock if its recorded process no
 longer exists. Other hosts use a `mkdir` fallback that fails closed. On those
 hosts, confirm that no release is active before removing a stale
 `.git/cell-release-publication.lock.d`.
+
+## Prompt test state
+
+The shared `prompts` gate checks `cell-prompts`. Changes below `prompting/`
+also select all nine prompt consumers in root CI. Each consumer test gate
+imports `prompting/seed.json` into a private temporary Bazaar database and
+sets `CELL_BAZAAR_DATABASE` for its tests. Tests never use the live database.
+The importer runs inside the admitted heavy gate. Keep source prompt text in
+the explicit seed, not in a test-only runtime fallback.

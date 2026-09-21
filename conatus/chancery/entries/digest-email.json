@@ -1,6 +1,6 @@
 {
   "id": "conatus.digest.email",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -28,7 +28,7 @@
     "An attempted occurrence without an acceptance receipt requires provider inspection before explicit retry within 23 hours, using unchanged bytes and key. Scheduled failures halt until explicitly approved in Clockwork."
   ],
   "privacy": [
-    "Exact wants, sources, capture times and selected evidence leave the machine through Email. Conatus retains frozen messages privately."
+    "Exact wants, selected quotations and their capture dates leave the machine through Email. Retrying an older frozen message also discloses any source fields and capture timestamps in its retained bytes. Conatus retains frozen messages privately."
   ],
   "interfaces": [
     {
@@ -98,13 +98,13 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "All active wants appear verbatim, newest capture first. At most two distinct directly serving decision sources contribute one stored exact quotation each, ordered by Conatus capture time and ID. Associations do not prove progress."
+        "statement": "All active wants appear verbatim, newest capture first. At most two distinct directly serving decision sources contribute one stored exact quotation each, ordered by Conatus capture time and ID. New messages omit source-reference fields. Stored wording, quotations, sources and capture times remain unchanged. Associations do not prove progress."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Want and decision identities retain intake namespaces. Occurrences are manual/UUIDv7 or daily/YYYY-MM-DD for the latest local 09:00. Capture times display UTC; Annals revision is corpus identity. Idempotency keys include the library identity."
+        "statement": "Want and decision identities retain intake namespaces. Occurrences are manual/UUIDv7 or daily/YYYY-MM-DD for the latest local 09:00. New messages show want and quotation capture dates as YYYY-MM-DD in UTC, without a label or time. Annals revision is corpus identity. Idempotency keys include the library identity."
       }
     ],
     "completeness_and_freshness": [
@@ -134,7 +134,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Contract 2 filters new messages to active wants. Retained occurrences preserve their original content. Older releases ignore archive markers and do not provide lifecycle filtering."
+        "statement": "Contract 3 omits source-reference fields and displays bare UTC capture dates in new messages. Retained occurrences preserve their original content, including any source fields and capture timestamps from an older format. Contract 2 introduced active-want filtering; earlier releases ignore archive markers."
       },
       {
         "status": "unspecified",

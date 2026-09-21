@@ -70,7 +70,7 @@ pub struct HistoryEntry {
     pub superseded_by: Option<String>,
 }
 
-fn private_file(path: &Path) -> Result<()> {
+pub(crate) fn private_file(path: &Path) -> Result<()> {
     let metadata =
         std::fs::symlink_metadata(path).context("Clew is not initialized; run clew init")?;
     ensure!(
@@ -277,15 +277,8 @@ impl Store {
 
     pub fn current(&self) -> Result<Vec<Current>> {
         let entries = self.entries()?;
-        let replaced: BTreeSet<_> = entries
-            .iter()
-            .filter_map(|entry| entry.replaces.as_deref())
-            .collect();
         let mut current: BTreeMap<String, Current> = BTreeMap::new();
-        for entry in &entries {
-            if entry.kind != "record" || replaced.contains(entry.id.as_str()) {
-                continue;
-            }
+        for entry in active_entries(&entries) {
             let item = current
                 .entry(entry.platter_job_ref.clone())
                 .or_insert_with(|| Current {
@@ -331,6 +324,17 @@ impl Store {
             })
             .collect())
     }
+}
+
+/// Entries arrive in ledger sequence order from a single SQLite read.
+pub(crate) fn active_entries(entries: &[Entry]) -> impl Iterator<Item = &Entry> {
+    let replaced: BTreeSet<_> = entries
+        .iter()
+        .filter_map(|e| e.replaces.as_deref())
+        .collect();
+    entries
+        .iter()
+        .filter(move |entry| entry.kind == "record" && !replaced.contains(entry.id.as_str()))
 }
 
 fn validate_target(connection: &Connection, target: &str) -> Result<String> {

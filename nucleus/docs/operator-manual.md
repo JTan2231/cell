@@ -40,6 +40,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/README.md) |
 | Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/bazaar/README.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
+| Clew | User-reported application history and daily application snapshots | [Clew](/Users/joey/rust/cell/clew/README.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/README.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/README.md) |
@@ -61,6 +62,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 ```text
 requesting products --> Nucleus --> isolated Codex app-server
+       +-- Bazaar (exact selected prompt and tool-description versions)
        |                   |
        |                   +-- authentication, jobs, output, tool mailbox
        +-- domain records, validation, retries, and recovery
@@ -69,7 +71,8 @@ Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy, Weaver
 Cast --> Platter <-- Vita career works in Annals
-Platter, Mentor, Paperboy, EMT --> Email --> Resend
+Platter --> Clew application history
+Platter, Clew, Conatus, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report
 ```
@@ -512,6 +515,20 @@ Publish new immutable identities when registered meaning changes. Keep historica
 decoders. The requester owns prompt, model, reasoning, timeout, workspace, tools,
 and launch-context policy. Use new job IDs for new attempts and check the
 required Nucleus capabilities and domain behavior.
+
+Cell requesters retrieve authored text through Bazaar. Each `cell.prompts.OWNER`
+string pins exact component versions. Publish components before the complete
+selection; resolve that set before admission. Keep exact requests or selection
+versions for recovery. Nucleus receives the resolved request and does not read
+Bazaar. Library instruction revisions and assignment captures remain domain
+snapshots under their existing retention rules.
+
+Import the reviewed prompt seed before deploying these callers. Runtime reads
+use `~/.local/share/bazaar/bazaar.sqlite3`, or an absolute `CELL_BAZAAR_DATABASE`
+override. They fail when required state is missing and never initialize it.
+An interactive override does not change a scheduled process environment. Keep
+the migration selection and historical component versions. See the
+[prompt migration procedure](/Users/joey/rust/cell/prompting/README.md).
 
 ### Authentication or service-ownership change
 

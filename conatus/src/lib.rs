@@ -16,7 +16,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-pub const LIBRARIAN_INSTRUCTIONS: &str = include_str!("../librarian.md");
+pub const LIBRARIAN_INSTRUCTIONS: &str = "<bazaar:conatus.library.instructions>";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {

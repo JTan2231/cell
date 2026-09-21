@@ -66,3 +66,9 @@ pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Error {
         source,
     }
 }
+
+impl From<cell_prompts::Error> for Error {
+    fn from(error: cell_prompts::Error) -> Self {
+        Self::domain("bazaar_prompt_unavailable", error.to_string())
+    }
+}

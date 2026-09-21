@@ -94,3 +94,30 @@ CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
+
+## Bazaar prompt selection
+
+Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+
+Read `cell.prompts.annals` with Bazaar's supported `get` interface. Its content
+is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
+pinned to a positive integer version. Publish component text first, then publish
+the complete selection. A text append alone does not change the selected set.
+Missing or invalid selections stop new request preparation before model admission.
+
+Import the migration seed before deploying these callers. Preserve selection
+version 1 and all referenced text versions for compatibility. Runtime reads never
+perform this import. Deployment does not supply missing prompt contents.
+
+The caller freezes resolved instructions with the existing request or domain
+snapshot. Retries retain that selection. Later edits do not rewrite saved work.
+Models, permissions, schemas, tool execution, domain commits, and recovery remain
+product-owned. Annals library instructions and Mentor assignment text remain
+immutable domain captures selected through their existing product operations.
+
+For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
+returned version, and publish a complete selection with `bazaar update
+cell.prompts.annals --file /absolute/selection.json`. Use an explicit
+`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
+`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
+private text out of logs and retain historical versions.

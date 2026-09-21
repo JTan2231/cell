@@ -1,6 +1,6 @@
 {
   "id": "weaver.narrative.write",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -76,6 +76,11 @@
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -114,6 +119,10 @@
       {
         "status": "declared",
         "statement": "Save the exact request before admission. Resume the same job after uncertainty. Save Markdown and a pending tool reply atomically, and clear the reply after Nucleus acknowledgement. A saved document survives later runtime failure. New revisions are separate requests without a stored revision relationship."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.weaver to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -129,11 +138,15 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolsets: historical version 1 and new selection version plus 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
       },
       {
         "status": "unspecified",
         "statement": "No future compatibility lifetime or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -150,6 +163,13 @@
         "target": "nucleus",
         "kind": "control",
         "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ],
     "consumers": [
@@ -162,6 +182,10 @@
       {
         "status": "declared",
         "statement": "Configured readable Annals decisions state, initialized Weaver schema 1, and compatible authenticated Nucleus admission for new work."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.weaver selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [

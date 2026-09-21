@@ -1,6 +1,6 @@
 {
   "id": "annals.library.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -71,7 +71,8 @@
     ],
     "preconditions": [
       {"status": "declared", "statement": "The caller explicitly selects the target library and holds authority for the requested mutation; initialization and backup require absent destination paths, and initialization chooses the immutable library role explicitly with general as the default."},
-      {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base and instruction revision are current, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."}
+      {"status": "declared", "statement": "Reconciliation application requires a valid pending result whose base and instruction revision are current, shake confirmation requires the exact preview context, and revert requires relevant facts not to have conflicted."},
+      {"status": "declared", "statement": "Library initialization requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Names have 1–64 lowercase ASCII letters, digits, underscores or hyphens, start with a letter, and exclude list, create, and help. Instruction set requires exactly one nonblank UTF-8 document supplied inline, from --file, or from --stdin."},
@@ -112,7 +113,8 @@
       {"status": "declared", "statement": "Instruction replacement and selection are one transaction. Material application checks the stored instruction revision with HEAD. Shake confirmation also binds its instruction selection; reachability preservation does not guarantee preservation of application meaning for a direct edge."},
       {"status": "declared", "statement": "Supported migrations and all corpus mutations are transactional; failure or conflict leaves no partial transition."},
       {"status": "declared", "statement": "Application requires unchanged base HEAD and instruction selection, confirmed shake binds to exact library identity, HEAD, and instruction revision, and revert appends an inverse commit while preserving unrelated intervening facts."},
-      {"status": "declared", "statement": "Initialization and backup refuse replacement, and migration rejects unsupported older or newer schemas without partial reinterpretation."}
+      {"status": "declared", "statement": "Initialization and backup refuse replacement, and migration rejects unsupported older or newer schemas without partial reinterpretation."},
+      {"status": "declared", "statement": "Callers resolve cell.prompts.annals to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."}
     ],
     "operational_limits": [
       {"status": "unsupported", "statement": "Library rename, deletion, combined queries, cross-library transactions, and automatic adoption of existing operator-selected libraries are not supplied by these commands."},
@@ -123,11 +125,26 @@
       {"status": "declared", "statement": "Schema 6 seeds the default instruction revision for supported migrations, preserves existing library kind and corpus history, and leaves old model-run and reconciliation instruction provenance null. Legacy pending proposals cannot be applied as if their instruction basis were current."},
       {"status": "declared", "statement": "Capability contract version 4, provider release, library schema, reconciliation shape, and installed package generation are distinct; migrations cover only explicitly supported prior schemas."},
       {"status": "declared", "statement": "Revert and commit history are append-only compatibility records; older history is not rewritten to current meaning."},
-      {"status": "unspecified", "statement": "No universal forward-compatibility, migration window, or deprecation period is promised."}
+      {"status": "unspecified", "statement": "No universal forward-compatibility, migration window, or deprecation period is promised."},
+      {"status": "declared", "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."}
     ],
     "reliances": [
-      {"status": "not_applicable", "statement": "Deterministic library operations invoke no Nucleus, model, network, or other product; filesystem storage is inside the selected Annals operating boundary."}
+      {"status": "not_applicable", "statement": "Deterministic library operations invoke no Nucleus, model, network, or other product; filesystem storage is inside the selected Annals operating boundary."},
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      }
     ]
   },
-  "manual": "manuals/library-operate.md"
+  "manual": "manuals/library-operate.md",
+  "dependencies": [
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
 }

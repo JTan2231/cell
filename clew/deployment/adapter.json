@@ -2,9 +2,18 @@
   "schema": 1,
   "product": "clew",
   "application": "Clew",
-  "dependencies": ["platter"],
-  "runtime_versions": {"platter": {"minimum": "0.2.18", "before": "0.3.0"}},
-  "runtime_contracts": {"platter": {"platter.opportunity.explore": {"minimum": 1, "before": 2}}},
-  "description": "Install Clew and initialize its private application ledger without adding entries.",
+  "dependencies": ["platter", "email", "clockwork"],
+  "runtime_versions": {
+    "platter": {"minimum": "0.2.18", "before": "0.3.0"},
+    "email": {"minimum": "0.6.0", "before": "0.7.0"},
+    "clockwork": {"minimum": "0.6.0", "before": "0.7.0"}
+  },
+  "runtime_contracts": {
+    "platter": {"platter.opportunity.explore": {"minimum": 1, "before": 2}},
+    "email": {"email.message.send": {"minimum": 4, "before": 5}},
+    "clockwork": {"clockwork.schedule.operate": {"minimum": 3, "before": 4}}
+  },
+  "activation_bindings": ["clew/daily-email"],
+  "description": "Install Clew under email admission maintenance, preserve application history, and restore the daily email schedule intent.",
   "adapter_binary": "clew-install"
 }

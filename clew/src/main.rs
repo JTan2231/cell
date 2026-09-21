@@ -12,7 +12,7 @@ use std::{collections::BTreeSet, path::PathBuf};
 struct Cli {
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
-    /// All results use JSON; this flag is accepted for explicit callers.
+    /// Print JSON, including for email previews.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -52,19 +52,47 @@ enum Command {
     List,
     /// Read the full recorded history for an exact opportunity reference.
     Show { reference: String },
+    /// Preview or explicitly send the daily application snapshot.
+    #[command(subcommand)]
+    Email(EmailCommand),
+}
+
+#[derive(Subcommand)]
+enum EmailCommand {
+    Preview {
+        /// Read the frozen message for a retained occurrence.
+        #[arg(long)]
+        occurrence: Option<String>,
+    },
+    Send {
+        #[arg(long, conflicts_with = "retry")]
+        scheduled: bool,
+        /// Retry retained bytes after inspecting provider acceptance.
+        #[arg(long)]
+        retry: Option<String>,
+    },
 }
 
 fn main() {
     if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
         "clew",
         env!("CARGO_PKG_VERSION"),
-        vec![iatreion_api::declared_unit(
-            "clew",
-            "clew/ledger",
-            None,
-            iatreion_api::Intent::OnDemand,
-            "clew.application.track",
-        )],
+        vec![
+            iatreion_api::declared_unit(
+                "clew",
+                "clew/ledger",
+                None,
+                iatreion_api::Intent::OnDemand,
+                "clew.application.track",
+            ),
+            iatreion_api::declared_unit(
+                "clew",
+                "clew/daily-email",
+                Some("clew/daily-email"),
+                iatreion_api::Intent::Active,
+                "clew.digest.email",
+            ),
+        ],
         false,
     ) {
         chancery_usage::observe("clew", "status-snapshot");
@@ -82,6 +110,8 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = chancery_usage::cli::parse::<Cli>("clew", "");
+    let text_preview =
+        !cli.json && matches!(&cli.command, Command::Email(EmailCommand::Preview { .. }));
     let root = cli.state_dir.unwrap_or(clew::state_dir(&clew::home()?));
     ensure!(root.is_absolute(), "Clew state directory must be absolute");
     let data = match cli.command {
@@ -135,8 +165,26 @@ fn run() -> Result<()> {
             ensure!(store.knows(&reference)?, "opportunity has no Clew history");
             json!({"platter_job_ref":reference,"current":store.current()?.into_iter().find(|item| item.platter_job_ref == reference),"history":store.history(&reference)?})
         }
+        Command::Email(EmailCommand::Preview { occurrence }) => {
+            clew::digest::preview(&root, occurrence.as_deref())?
+        }
+        Command::Email(EmailCommand::Send { scheduled, retry }) => {
+            clew::digest::send(&root, scheduled, retry.as_deref())?
+        }
     };
-    println!("{}", json!({"ok":true,"schema_version":1,"data":data}));
+    if text_preview {
+        println!(
+            "From: {}\nTo: {}\nSubject: {}\n\n{}",
+            data["from"].as_str().context("preview sender")?,
+            data["to"].as_str().context("preview recipient")?,
+            data["digest"]["subject"]
+                .as_str()
+                .context("preview subject")?,
+            data["digest"]["body"].as_str().context("preview body")?
+        );
+    } else {
+        println!("{}", json!({"ok":true,"schema_version":1,"data":data}));
+    }
     Ok(())
 }
 

@@ -295,7 +295,10 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
     assert_eq!(captured["career"][0]["markdown"], "Current career evidence");
     assert_eq!(
         captured["resume_editorial"],
-        include_str!("../prompts/resume-editorial.md")
+        cell_prompts::Prompts::at("platter", 1)
+            .unwrap()
+            .text("platter.resume.editorial")
+            .unwrap()
     );
     assert!(captured["project_resources"].is_null());
     assert_eq!(

@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -76,6 +76,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release compatibility or deprecation window is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "operational_limits": [
@@ -94,6 +98,10 @@
       {
         "status": "declared",
         "statement": "Initialization requires the Annals executable, an explicit decisions-library config, and writable Conatus and named-library state. Updates require those pinned identities and Annals inbox readiness; model integration requires Annals' configured Nucleus path. Retry start requires the Annals inbox paused and no active processing job; Conatus pause is a separate local gate. Re-examination requires a retained work. Scheduling additionally requires a staged release and Clockwork."
+      },
+      {
+        "status": "declared",
+        "statement": "Library initialization requires initialized private Bazaar state and a complete cell.prompts.conatus selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -150,6 +158,10 @@
       {
         "status": "declared",
         "statement": "Cell deployment holds admission, suspends the runner, initializes absent state or rebinds the final Annals executable while preserving both library IDs, cursor, records and instructions, registers a disabled exact definition, and restores captured pause and enabled intent after all holds release."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.conatus to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "reliances": [
@@ -187,6 +199,13 @@
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },
@@ -195,7 +214,7 @@
     {
       "id": "annals.library.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -205,17 +224,22 @@
     {
       "id": "annals.inbox.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.work.integrate",
       "min_contract": 3,
-      "max_contract_exclusive": 4
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ]
 }

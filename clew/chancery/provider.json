@@ -7,35 +7,42 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Clew owns user-reported application statuses and arbitrary notes in an append-only ledger, current/history reads, exact retry identity, corrections and its program installation."
+      "Clew owns user-reported application statuses and arbitrary notes in an append-only ledger, current/history reads, exact retry identity, corrections and its program installation.",
+      "Clew owns deterministic application email selection, frozen message occurrences, submission recovery, email admission maintenance and its product schedule definition."
     ],
     "not_authoritative_for": [
-      "The user supplies status and resolves ambiguity with the agent. Platter owns prepared opportunity identity and packets."
+      "The user supplies status and resolves ambiguity with the agent. Platter owns prepared opportunity identity and packets.",
+      "Clockwork owns activation and failure halts. Email and Resend own submission acceptance; Gmail owns final inbox delivery."
     ],
     "inventory": {
       "completeness": "complete",
       "covers": [
-        "All public Clew outcomes for initialization, local integrity checking, candidate finding, reported status/notes, current/history reads, retraction and installation."
+        "All public Clew outcomes for initialization, local integrity checking, candidate finding, reported status/notes, current/history reads, retraction and installation.",
+        "Daily application email previews, explicit sends and retries, retained occurrences, schedule definition generation and coordinated schedule lifecycle."
       ],
       "excludes": [
-        "Help/version, implementation helpers, automatic interpretation, job discovery, application submission, employer contact and scheduling."
+        "Help/version, implementation helpers, automatic interpretation, job discovery, application submission, employer contact, model execution and inbox delivery tracking."
       ]
     },
     "shared_access_and_trust": [
-      "The current user and their authorized agent invoke the local CLI. A search result does not authorize a write."
+      "The current user and their authorized agent invoke the local CLI. A search result does not authorize a write.",
+      "Explicit manual send authority or enabled daily binding authority is required to disclose the digest."
     ],
     "shared_privacy_and_retention": [
-      "Ledger entries and output are private. Entries are retained indefinitely without automatic pruning. Usage observation contains only command identity and task correlation, not arguments or content."
+      "Ledger entries and output are private. Entries are retained indefinitely without automatic pruning. Usage observation contains only command identity and task correlation, not arguments or content.",
+      "Frozen mail is retained privately without automatic pruning. Authorized sends disclose complete selected notes, statuses, job details and links through Email."
     ],
     "compatibility_and_retirement": [
-      "Database schema one and output schema one are independent of provider release. Unsupported state fails without implicit migration."
+      "Database schema one and output schema one are independent of provider release. Unsupported state fails without implicit migration.",
+      "Email storage uses a separate schema-one database. Old programs do not support the daily binding; disable it before rollback and preserve delivery state."
     ],
     "operational_limits": [
-      "Clew is an on-demand CLI. Full reads scale with retained history; no hard size or latency guarantee is supplied."
+      "Local full reads scale with retained history. The optional daily activation has a 180-second limit; no scheduling latency or inbox-delivery guarantee is supplied."
     ]
   },
   "entries": [
     "entries/application-track.json",
-    "entries/install-operate.json"
+    "entries/install-operate.json",
+    "entries/digest-email.json"
   ]
 }

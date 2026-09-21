@@ -103,7 +103,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolsets: historical version 1 and new selection version plus 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
       },
       {
         "status": "unspecified",

@@ -305,9 +305,9 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(set(gates[2:-1]), {
             "alpha", "beta", "krisis", "shared-pipeline", "shared-broker",
             "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
-            "shared-maintenance",
+            "shared-maintenance", "shared-prompts",
         })
-        self.assertEqual(len(gates), 13)
+        self.assertEqual(len(gates), 14)
         self.assertEqual(gates[-1], "integrated")
 
     def test_explicitly_listing_every_project_does_not_request_integrated_check(self):
@@ -324,7 +324,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual([gate["gate"] for gate in self.gates()],
                          ["preflight", "recognition", "shared-pipeline", "shared-broker",
                           "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
-                          "shared-maintenance", "alpha"])
+                          "shared-maintenance", "shared-prompts", "alpha"])
 
     def test_preflight_failure_stops_before_recognition(self):
         result = self.ci("--all", FIXTURE_FAIL_AT="preflight")

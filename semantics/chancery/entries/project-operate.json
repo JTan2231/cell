@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -65,6 +65,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "session_surfaces": [
@@ -155,12 +160,16 @@
       {
         "status": "declared",
         "statement": "Retirement requires a paused project with no unresolved assigned intake, and retained-state deletion is outside this operation."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.semantics selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected database and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. CELL_DEPLOYMENT_RUN_ID permits a controlled command only under the same sole hold and exclusive drained activity; absent holds use ordinary admission."
+        "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. CELL_DEPLOYMENT_RUN_ID permits a controlled command only under the same sole hold and exclusive drained activity; absent holds use ordinary admission."
       },
       {
         "status": "declared",
@@ -202,7 +211,10 @@
       }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."},
+      {
+        "status": "declared",
+        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."
+      },
       {
         "status": "declared",
         "statement": "The durable gate is the private sibling <database>.cell-maintenance. Hold atomically fences every other public CLI command and typed client before SQLite access, including reads and doctor because opening state may migrate it. Existing commands may settle and holds survive process exit. Repeated hold and release are idempotent; release removes only its owner and preserves project pause, activation, and cursor state."
@@ -218,6 +230,10 @@
       {
         "status": "declared",
         "statement": "Deployment quiesces the worker and database, backs up database plus sidecars, restores at most one prior active scheduler, and keeps prior absent or disabled state disabled. When rollback cannot be proved, it retains the release-independent maintenance gate before releasing the worker lock, attempts both scheduler cleanups, and removes public selectors; the gate is the domain-admission guarantee even when scheduler cleanup cannot be proved."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.semantics to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -234,6 +250,10 @@
       {
         "status": "declared",
         "statement": "Operation contract 7 uses schema 3, Annals exchange 2, Nucleus execution 3, and Clockwork schedule 3. New semantic-document-reconciliation/1 schemas allow empty effects and document grounding. Historical schemas, bytes, correlations, and cursors remain unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -261,6 +281,13 @@
       {
         "status": "unspecified",
         "statement": "Semantics promises no launchd availability or worker wake-up latency beyond observations exposed by Clockwork."
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

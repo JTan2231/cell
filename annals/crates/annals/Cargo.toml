@@ -5,6 +5,7 @@ edition.workspace = true
 default-run = "annals"
 
 [dependencies]
+cell-prompts.workspace = true
 chancery-usage.workspace = true
 cell-install.workspace = true
 cell-maintenance.workspace = true

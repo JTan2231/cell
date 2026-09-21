@@ -1,6 +1,6 @@
 {
   "id": "emt.incident.respond",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -79,6 +79,11 @@
       "id": "nucleus.execution.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -95,6 +100,10 @@
       {
         "status": "declared",
         "statement": "Compatible installed Clockwork feed and notification handoff, Email send/receive, and Nucleus local-execution capabilities; configured receiving account and explicit operation authority."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.emt selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -141,6 +150,10 @@
       {
         "status": "declared",
         "statement": "Persist exact request before submission; retain job ID and digest after admission. Freeze outgoing mail before claiming initial delivery. One basic sender or EMT claim owns the initial alert. No automatic replacement agent job. Uncertain external actions require inspection through Nucleus and the owning product."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.emt to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -157,6 +170,10 @@
       {
         "status": "unspecified",
         "statement": "No future support lifetime or retention horizon is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -193,6 +210,13 @@
         "statement": "Agents select the affected product contracts through Chancery; those products own recovery and success.",
         "target": "affected-product",
         "kind": "authority"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

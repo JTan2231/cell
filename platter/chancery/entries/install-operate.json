@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -131,7 +131,12 @@
     {
       "id": "weaver.narrative.write",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -158,6 +163,10 @@
       {
         "status": "declared",
         "statement": "Weaver must support authoring contract 2 and caller request identity before the Platter candidate is admitted. Initialized readiness checks Weaver doctor without writing. Maintenance includes exactly the Weaver jobs recorded in Platter runs."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -224,6 +233,10 @@
       {
         "status": "declared",
         "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.platter to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -240,6 +253,10 @@
       {
         "status": "declared",
         "statement": "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -281,6 +298,13 @@
         "target": "weaver",
         "kind": "control",
         "contract": "weaver.narrative.write"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

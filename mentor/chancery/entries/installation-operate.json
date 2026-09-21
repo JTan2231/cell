@@ -1,6 +1,6 @@
 {
   "id": "mentor.installation.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -93,7 +93,7 @@
     {
       "id": "mentor.practice.use",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "clockwork.schedule.operate",
@@ -107,6 +107,11 @@
     },
     {
       "id": "email.account.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
     }
@@ -152,6 +157,10 @@
       {
         "status": "declared",
         "statement": "Administrative authority is separate from practice execution. A first install requires uninitialized state; initialized update/recovery requires coordinated maintenance and a disabled Mentor worker. Scheduling requires the canonical root and a selected immutable installed release."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.mentor selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -198,6 +207,10 @@
       {
         "status": "declared",
         "statement": "Initialization is separate from install. Schedule enable selects current exact release and leaves admission pause unchanged. Initialized deployment requires the supported maintained coordinator, which suspends the worker and restores its intent; direct recovery is rejected. Backup requires drained work and no pending text. Holds persist until the same owner releases them."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.mentor to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -214,6 +227,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release compatibility window or deployment duration is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -250,6 +267,13 @@
         "statement": "Initialized installation and recovery use Cell maintained deployment and shared content-addressed file transactions.",
         "target": "cell-deployment",
         "kind": "control"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

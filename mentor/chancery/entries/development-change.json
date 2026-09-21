@@ -51,12 +51,12 @@
     {
       "id": "mentor.practice.use",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "mentor.installation.operate",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.repository.explore",

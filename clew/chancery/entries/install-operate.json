@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and verify Clew",
-  "summary": "Install the Clew CLI and matching provider, initialize its private ledger, and verify the retained Platter lookup interface without adding application records.",
+  "summary": "Install and verify Clew under email admission maintenance, preserve its application ledger, and prepare or restore the daily email schedule.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -27,6 +27,10 @@
     {
       "label": "Inspect installation",
       "invocation": "clew-install inspect"
+    },
+    {
+      "label": "Prepare daily definition",
+      "invocation": "clew-install schedule-definition --state-dir ABS_STATE --output ABS_NEW_FILE"
     }
   ],
   "promise": {
@@ -39,13 +43,13 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A green committed Clew candidate and a compatible installed Platter opportunity reader are available."
+        "statement": "A validated committed candidate and compatible Platter, Email and Clockwork interfaces are available. Coordinated mutations require drained run-owned email maintenance."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Use deploy.sh plan clew then deploy.sh clew from committed local main. Clew accepts no deployment settings. Direct program installation accepts absolute --binary, --bundle and optional --home."
+        "statement": "Use deploy.sh plan clew then deploy.sh clew from committed local main. The boolean daily_email_enabled setting changes daily intent; omission preserves it. Direct install accepts absolute --binary, --bundle and optional --home. schedule-definition requires existing state and a new absolute output file."
       }
     ],
     "outputs": [
@@ -81,7 +85,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared file transaction publishes command/provider selectors atomically. Schema-one ledger rows are preserved separately through program upgrades and file recovery. No scheduler, service or state migration is installed."
+        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends and drains email work, prepares the exact disabled definition, then restores enabled intent after releasing its hold. Failure halts and both databases are preserved. Ledger writers remain compatible across program selection."
       }
     ],
     "operational_limits": [
@@ -93,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 releases and Clew state schema one are supported. Incompatible state migration is not supplied."
+        "statement": "Only cell-install-v2 releases, ledger schema one and email schema one are supported. Contract two adds guarded daily schedule lifecycle. Disable the daily binding before rollback to a program without email support and preserve all delivery records."
       }
     ],
     "reliances": [
@@ -103,6 +107,20 @@
         "target": "platter",
         "kind": "readiness",
         "contract": "platter.opportunity.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Email submits the unchanged payload and stable key to the fixed recipient.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork activates the installed runner and enforces scheduling failure halts.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
       }
     ]
   },
@@ -111,6 +129,16 @@
       "id": "platter.opportunity.explore",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "use_when": [
@@ -121,21 +149,24 @@
   ],
   "outcome": "Verified installed Clew commands, provider and compatible empty or existing ledger.",
   "effects": [
-    "Program deployment selects immutable files and initializes a missing ledger without creating entries. Existing rows remain intact."
+    "Program deployment selects immutable files and initializes a missing ledger without creating entries. Existing rows remain intact.",
+    "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
   ],
   "authority": [
-    "Clew owns its installation and ledger; the shared coordinator owns deployment ordering."
+    "Clew owns its installation and ledger; the shared coordinator owns deployment ordering.",
+    "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
     "Installed bytes match the selected candidate, ledger integrity passes and the retained Platter read interface succeeds."
   ],
   "failure_and_recovery": [
-    "File recovery selects a coherent prior or candidate release without restoring or deleting the ledger. Preserve unresolved installation evidence. Unsupported or nonempty foreign state fails."
+    "File recovery selects a coherent prior or candidate release without restoring or deleting the ledger. Preserve unresolved installation evidence. Unsupported or nonempty foreign state fails.",
+    "Retain email occurrences and uncertain acceptance across recovery. Resolve product and schedule selection before releasing run-owned admission; never erase or approve existing failure incidents."
   ],
   "privacy": [
     "Private ledger state is outside source and installation releases."
   ],
   "does_not_authorize": [
-    "Adding application records, deleting ledger history, sending mail or enabling a schedule."
+    "Adding application records, deleting history, immediate test mail, implicit first-time schedule enablement, or approval of a failure halt."
   ]
 }

@@ -1,8 +1,10 @@
 # Daily wants email
 
 Conatus sends every active want in a plain-text email. It copies `wording`
-and `source` unchanged and formats the capture time in UTC. Items are ordered
-by capture time and ID, newest first. The email has no want limit, inferred
+unchanged. New messages omit source-reference fields and show the capture date
+for each want and quotation as `YYYY-MM-DD`, with no label or time. Dates use
+UTC. Stored sources and capture times remain unchanged. Items are ordered by
+capture time and ID, newest first. The email has no want limit, inferred
 priority, rewritten title, or model invocation.
 
 For each want, Conatus reads concepts grounded by its work and their direct
@@ -23,7 +25,8 @@ Provider message-size limits can reject a send; they do not authorize omission.
 
 Archive and unarchive affect newly rendered messages. Selection uses the local
 state snapshot at rendering. A frozen occurrence keeps its original bytes for
-retained preview and explicit retry, even if a want is archived afterward.
+retained preview and explicit retry, including any source fields and capture
+timestamps from an older format or wants archived afterward.
 
 ## Preview and send
 
@@ -43,8 +46,9 @@ content to Email's fixed personal recipient.
 
 Send uses the installed `$HOME/.local/bin/email` client. Email owns credential
 loading, its fixed sender and recipient, and bounded transport retries. Sending
-discloses complete want wording, source references, capture times, selected
-quotations and their source references to Resend and the recipient provider.
+discloses complete want wording, selected quotations and their capture dates
+to Resend and the recipient provider. Retrying an older frozen message also
+discloses any source fields and capture timestamps in its retained bytes.
 No attachments are sent. A returned `accepted_id` proves provider acceptance,
 not inbox delivery. The email command never runs `conatus update`.
 

@@ -15,7 +15,7 @@ conatus --state-dir STATE init --annals ANNALS_BIN --decisions-config DECISIONS_
 
 `--annals-state-dir PATH` selects the Annals named-library catalog when needed.
 The library name defaults to `conatus`. Initialization creates or selects a
-named general library, selects [the bundled instructions](../librarian.md), pins its persistent
+named general library, selects the Bazaar `conatus.library.instructions` document, pins its persistent
 identity and that of the decisions library, and stores the current feed
 watermark. It starts no model and installs no timer. The decisions configuration
 must explicitly select the existing dedicated decisions library.

@@ -4,7 +4,8 @@ PRODUCT_NAME=Clew
 PRODUCT_DIR=clew
 STATUS_SCHEMA=1
 STATUS_COMMAND=clew
-STATUS_UNITS='clew/ledger|on_demand||clew.application.track'
+STATUS_UNITS='clew/ledger|on_demand||clew.application.track
+clew/daily-email|active|clew/daily-email|clew.digest.email'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1
@@ -19,4 +20,4 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='clew|Clew|package|clew/Cargo.toml|clew-|1'
 RELEASE_BINARY_CHECKS='clew|target/release/clew|clew
 clew|target/release/clew-install|clew-install'
-PROVIDERS='clew|clew|clew/chancery|2'
+PROVIDERS='clew|clew|clew/chancery|3'

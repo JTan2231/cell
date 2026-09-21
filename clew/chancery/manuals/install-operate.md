@@ -1,8 +1,9 @@
 # Install and verify Clew
 
-Clew is an on-demand local CLI with an independent private application ledger.
+Clew has an independent private application ledger and an optional daily email.
 It requires Platter opportunity read contract one for candidate search and first
-reference admission. It installs no service, schedule or model requester.
+reference admission. Email contract four supplies mail submission. Clockwork
+contract three supplies scheduled activation. Clew runs no model requester.
 
 ## Deploy
 
@@ -15,11 +16,21 @@ candidate to local main. Preview and run the authorized deployment:
 ./deploy.sh clew
 ```
 
-Clew accepts no deployment settings. The coordinator installs a compatible
-Platter reader first when necessary. Configure initializes an empty Clew ledger
-or checks the existing schema. Verify checks the ledger's integrity and reads
-retained Platter opportunity metadata. Deployment creates no application reports
-and performs no preparation or send.
+Clew accepts the boolean deployment setting `daily_email_enabled`. Omission
+preserves existing schedule intent; an absent binding remains absent. Explicit
+true authorizes daily submission of the content in the
+[email contract](digest-email.md). Explicit false prepares a disabled selection.
+The coordinator installs compatible Platter, Email and Clockwork dependencies
+first when necessary. Configure initializes an empty ledger or checks its schema.
+Verify checks ledger integrity and reads retained Platter opportunity metadata.
+Deployment creates no application reports and performs no preparation or send.
+
+The lifecycle captures `clew/daily-email`, holds email admission, suspends the
+binding and drains admitted sends. Configure prepares a disabled definition for
+the exact installed release. Activation restores captured or explicit enabled
+intent after releasing maintenance. Existing schedule policy, disabled intent
+and failure halts are preserved. No lifecycle operation approves an incident.
+Application ledger reads and short writes can continue during email maintenance.
 
 The immutable release contains `clew`, `clew-install`, the recovery installer,
 and the matching Chancery provider. They live under
@@ -41,6 +52,17 @@ The installer accepts `--home ABSOLUTE_PATH` and an exact
 `--expected-current absent|releases/HASH` condition. Direct installation selects
 program files only; initialize state separately. Registration records command
 identities in Chancery and adds no Clew reports.
+
+Prepare a definition without registration or activation:
+
+```sh
+clew-install schedule-definition --state-dir ABS_STATE --output ABS_NEW_FILE
+```
+
+The definition uses local 09:00, no run-at-load, skipped overlap, a 180-second
+limit and `halt-until-approved`. The output must be a new absolute file. The
+selected release and initialized ledger must already exist. Schedule generation
+creates private logs but does not send. Actual timing depends on login and sleep.
 
 ## State and inspection
 
@@ -82,11 +104,21 @@ installation format or incompatible state migration is supported. Preserve
 unresolved installation evidence if recovery fails. Coordinator recovery checks
 any existing ledger before reporting safe program recovery.
 
-For a filesystem backup or restore, stop Clew invocations and wait for all current
-commands to finish. Preserve the database and any SQLite sidecars together in a
+Preserve `email.sqlite3`, its SQLite sidecars and `deployment-maintenance/` with
+the ledger. The first send creates email schema one separately. Program recovery
+does not erase occurrences or retry uncertain sends. Older Clew releases do not
+understand daily email state: disable the daily binding and settle admitted sends
+before an explicit rollback to such a release. Preserve all delivery records.
+Coordinated recovery keeps email admission held until program and schedule
+selection are coherent. Keep unresolved holds for coordinator recovery.
+
+For a filesystem backup or restore, disable the daily schedule, stop Clew
+invocations and wait for current commands to finish. Preserve both databases,
+maintenance state and SQLite sidecars together in a
 private backup. Keep the previous complete backup when restoring a compatible
 history. Restoring an older history changes which write IDs are known; reconcile
-uncertain writes from their retained receipts before replaying them. Clew supplies
+uncertain writes and email acceptance before replaying them. Restoring older
+delivery history can permit duplicate mail. Clew supplies
 no automatic backup, pruning or deletion operation.
 
 Compatible schema-one commands can finish across program selection. An

@@ -27,7 +27,7 @@ case "$suite" in
     deployment) python3 -m unittest -q deployment.test_coordinator ;;
     build) python3 -m unittest -q deployment.test_build ;;
     cleanup) python3 -m unittest -q deployment.test_cleanup ;;
-    install|maintenance)
+    install|maintenance|prompts)
         CARGO_PATH_PREFIX=
         pipeline_bootstrap_cargo
         package=cell-$suite

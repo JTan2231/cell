@@ -100,6 +100,12 @@ impl AppError {
     }
 }
 
+impl From<cell_prompts::Error> for AppError {
+    fn from(error: cell_prompts::Error) -> Self {
+        Self::unexpected("bazaar_prompt_unavailable", error.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::AppError;

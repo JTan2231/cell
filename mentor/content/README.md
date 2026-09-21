@@ -1,18 +1,18 @@
 # Bundled Mentor exercises
 
-`corpus.json` is a retained snapshot of the authored problems and shared
-evaluation contract from `/Users/joey/ts/mentor`, generated on 2026-09-07. It
-contains all 58 direct problem Markdown files except `problems/README.md`, plus
-`rubric/system-design.md`. The source repository remains the authoring location.
-The mail service uses the bundled snapshot without requiring the desktop app,
-its database, the source checkout, Python, or Bun at runtime.
+`corpus.json` contains the stable problem index and Bazaar references. Mentor
+resolves those references through `cell.prompts.mentor` before initializing its
+corpus. The 58 problem documents and shared rubric live in Bazaar. The initial
+import in `prompting/seed.json` preserves the authored snapshot from
+`/Users/joey/ts/mentor`, exported on 2026-09-07. The source repository remains
+the authoring location. Runtime reads require Bazaar, with no embedded fallback.
 
 The source checkout had existing uncommitted edits when this snapshot was
 created. A package version or Git revision would not identify those exact
 authored bytes. `source_version` records the source package's descriptive
 version; the digest identifies the retained content.
 
-Canonical corpus SHA-256:
+Initial resolved corpus SHA-256:
 
 ```text
 6bcb880eb2bfb371d069738a6a1a5b4b56f52f80172e90baf4b4e360486e463a
@@ -27,7 +27,7 @@ the desktop corpus loader. Other problem and rubric text is retained unchanged.
 
 ## Artifact contract
 
-Schema version 1 contains:
+A resolved export uses schema version 1 and contains:
 
 - `schema_version`: the bundle format version, currently `1`.
 - `source_product`: `mentor`, identifying the authoring product.
@@ -62,7 +62,7 @@ From the `mentor` product directory, create a new artifact with:
 ```sh
 python3 scripts/export-corpus.py \
   --source-root /Users/joey/ts/mentor \
-  --output content/corpus.json
+  --output /absolute/private/corpus.json
 ```
 
 The exporter reads only the source package version, authored problems, and
@@ -71,3 +71,9 @@ state. Its current expected collection size is 58. A deliberate source corpus
 expansion requires updating that expectation. When refreshing the artifact,
 update the snapshot date and digest above to describe the newly retained
 content. Generation reports the digest; it does not run a test suite or build.
+
+Keep `content/corpus.json` as the reference index. Publish revised Markdown under
+its existing Bazaar IDs, then publish one complete `cell.prompts.mentor`
+selection. Import a resolved export with `mentor import-corpus` to refresh the
+selected domain corpus. Existing assignments retain their exact problem and
+rubric. A prompt publication alone does not replace that retained corpus.

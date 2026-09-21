@@ -45,11 +45,10 @@ pub fn render(records: &[Record], context: Option<&EmailContext>) -> Result<Dige
         }
         writeln!(
             body,
-            "{}.\n\n{}\n\nCaptured: {}\nSource: {}",
+            "{}.\n\n{}\n\n{}",
             index + 1,
             want.wording,
-            capture_date(want.captured_at)?,
-            want.source
+            capture_date(want.captured_at)?
         )?;
         if let Some(quotes) = context.and_then(|c| c.quotes.get(&want.work_name)) {
             let mut count = 0;
@@ -59,12 +58,7 @@ pub fn render(records: &[Record], context: Option<&EmailContext>) -> Result<Dige
                     if count == 0 {
                         body.push_str("\nRelated:\n");
                     }
-                    writeln!(
-                        body,
-                        "\n{quote}\nCaptured: {}\nSource: {}",
-                        capture_date(decision.captured_at)?,
-                        decision.source
-                    )?;
+                    writeln!(body, "\n{quote}\n{}", capture_date(decision.captured_at)?)?;
                     count += 1;
                     if count == 2 {
                         break;
@@ -90,7 +84,7 @@ pub fn render(records: &[Record], context: Option<&EmailContext>) -> Result<Dige
 fn capture_date(timestamp: i64) -> Result<String> {
     Ok(DateTime::<Utc>::from_timestamp(timestamp, 0)
         .context("invalid Conatus capture timestamp")?
-        .format("%Y-%m-%d %H:%M UTC")
+        .format("%Y-%m-%d")
         .to_string())
 }
 
@@ -291,7 +285,12 @@ mod tests {
         for want in records.iter().filter(|r| r.kind == "want") {
             assert!(digest.body.contains(&want.wording));
         }
-        assert!(digest.body.starts_with("1.\n\n  want 104\nsecond line\n"));
+        assert!(digest.body.starts_with(concat!(
+            "1.\n\n  want 104\nsecond line\n\n\n1970-01-01\n",
+            "\nRelated:\n\nnew quote\n1970-01-01\n",
+            "\n exact quote\nwith newline \n1970-01-01\n",
+            "\n----------------------------------------\n\n"
+        )));
         assert!(digest.body.contains(" exact quote\nwith newline "));
         assert!(!digest.body.contains("old quote"));
         assert!(!digest.body.contains("full decision document"));

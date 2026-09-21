@@ -1,0 +1,173 @@
+{
+  "id": "clew.digest.email",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Preview or send the daily Clew application email",
+  "summary": "Show every tracked application except current rejections, with retained job details and verbatim saved notes, in a deterministic personal email.",
+  "manual": "manuals/digest-email.md",
+  "use_when": [
+    "Preview, explicitly send, inspect a retained occurrence, or explicitly retry the daily application snapshot."
+  ],
+  "do_not_use_when": [
+    "Recording statuses, inferring responses, contacting employers, preparing applications, or sending to other recipients."
+  ],
+  "outcome": "A complete qualifying application snapshot or a frozen email occurrence with provider acceptance or explicit uncertainty.",
+  "effects": [
+    "Reads one Clew ledger snapshot and retained Platter opportunity metadata.",
+    "Send creates private delivery state, freezes the message and invokes Email. It changes no application records and invokes no model."
+  ],
+  "authority": [
+    "The user supplies statuses. Clew owns selection, content, occurrence identity and recovery; Platter owns opportunity metadata; Email owns transport; Clockwork owns activation and failure halts."
+  ],
+  "success": [
+    "Preview returns all qualifying applications and active notes. An acceptance receipt proves provider submission only."
+  ],
+  "failure_and_recovery": [
+    "Ledger read failure stops rendering. Missing Platter context leaves all qualifying references visible with a footer.",
+    "Uncertain acceptance requires provider inspection and explicit retry of retained bytes within 23 hours; scheduled failures halt until explicitly approved."
+  ],
+  "privacy": [
+    "Complete selected statuses, notes, company, role and URLs are disclosed through Email to Resend and Gmail. Frozen occurrences remain private and are not automatically pruned."
+  ],
+  "interfaces": [
+    {
+      "label": "Preview",
+      "invocation": "clew email preview"
+    },
+    {
+      "label": "JSON preview",
+      "invocation": "clew --json email preview"
+    },
+    {
+      "label": "Send",
+      "invocation": "clew email send"
+    },
+    {
+      "label": "Retained preview",
+      "invocation": "clew email preview --occurrence ID"
+    },
+    {
+      "label": "Explicit retry",
+      "invocation": "clew email send --retry ID"
+    }
+  ],
+  "does_not_authorize": [
+    "Preview and installation do not authorize mail. An explicit send request or enabled daily binding authorizes this exact content to the fixed personal recipient.",
+    "No application status inference, employer contact, ledger mutation or model invocation."
+  ],
+  "dependencies": [
+    {
+      "id": "clew.application.track",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "platter.opportunity.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The local user and authorized agent, or the enabled clew/daily-email binding with standing authority for its fixed digest."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "New rendering needs readable initialized Clew schema-one state. Context needs the Platter reader. Sending needs a private state directory and installed Email with credentials and network access."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "email preview accepts --occurrence ID. email send accepts either --scheduled or --retry ID. Global --state-dir selects private state and --json selects JSON previews."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Text previews show From, To, Subject and body. JSON returns data.digest with application_count, context_available and ledger_sequence. Send returns occurrence and accepted_id or an error."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active notes are copied in ledger sequence order. Items sort by company, role and opaque reference. No application-age or response inference occurs."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Platter references identify opportunities. Occurrences use manual/UUIDv7 or daily/YYYY-MM-DD for the most recent local 09:00. A random UUID key identifies each frozen payload; attempted_at is UTC Unix seconds. ledger_sequence is the last observed append, not an application date."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The full ledger is read once. Platter is a separate retained-data snapshot. Rejected records contribute no counts or notes. Missing metadata does not omit qualifying applications. Frozen occurrences retain their original content after corrections. Provider acceptance is not inbox receipt."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current user reads private state. Only authorized sends disclose content to the fixed Email recipient."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Preview creates no domain state. Sends hold maintenance admission and an email lock, retain payload bytes and attempt admission before transport, and save acceptance afterward. Accepted daily occurrences are not resubmitted. Uncertain attempts require explicit bounded retry. email.sqlite3 uses schema one separately from ledger.sqlite3."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Every qualifying application and active note is included without truncation. An empty snapshot is sent. Daily runs have a 180-second bound; no backlog replay, start-delay, message-size, throughput or final-delivery guarantee is supplied."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Ledger schema remains one. Email storage starts at schema one. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Clew reads retained opportunity metadata through the supported Platter reader.",
+        "target": "platter",
+        "kind": "data",
+        "contract": "platter.opportunity.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Email submits the unchanged payload and stable key to the fixed recipient.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork activates the installed runner and enforces scheduling failure halts.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  }
+}

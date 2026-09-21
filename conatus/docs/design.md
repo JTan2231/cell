@@ -29,7 +29,7 @@ concepts, exact quotation evidence, parent edges, reconciliations, and revisions
 The graph connects concepts grounded in works. It does not connect intake rows
 directly. Labels are navigation text; concept IDs identify graph records.
 
-[The bundled librarian instructions](../librarian.md) define a child-to-parent relationship as
+The Bazaar `conatus.library.instructions` document define a child-to-parent relationship as
 the child appearing to serve the parent want. Several parents and unassociated
 decisions are allowed. Source wants constrain the interpretation: new desires
 and qualifications must not be invented. A model-created concept is not another

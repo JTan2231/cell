@@ -1,6 +1,6 @@
 {
   "id": "mentor.practice.use",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -83,6 +83,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -100,6 +105,10 @@
       {
         "status": "declared",
         "statement": "Initialized private state, an active corpus, practice authority, a compatible Email wrapper with send and receiving capabilities, and ready exact Nucleus capabilities are required. Scheduled activation separately requires the selected Clockwork binding."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.mentor selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -154,6 +163,10 @@
       {
         "status": "declared",
         "statement": "Pending incoming-derived content expires 24 hours after provider receipt; problem payloads expire 24 hours after reservation. Cleanup runs on ticks or explicit cleanup-only passes. A halted worker cannot enforce wall-clock content expiry; cleanup can expire content and cancel expired jobs without practice admission. Eligible terminal metadata expires after 35 days from incoming receipt or outgoing creation, while unresolved cancellation and assignment/corpus records remain."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.mentor to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -174,6 +187,10 @@
       {
         "status": "unspecified",
         "statement": "No future support lifetime, deployment cadence or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -207,9 +224,16 @@
       },
       {
         "status": "declared",
-        "statement": "The desktop Mentor repository authors the problem and rubric snapshot. The bundled artifact is consumed without running or reading desktop state; there is no installed authoring-export contract.",
+        "statement": "The desktop Mentor repository authors the problem and rubric snapshot. The Bazaar-selected artifact is consumed without running or reading desktop state; there is no installed authoring-export contract.",
         "target": "mentor-authoring",
         "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

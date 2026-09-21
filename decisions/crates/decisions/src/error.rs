@@ -39,3 +39,9 @@ impl<T, E: std::error::Error + 'static> Context<T> for Result<T, E> {
         })
     }
 }
+
+impl From<cell_prompts::Error> for AppError {
+    fn from(error: cell_prompts::Error) -> Self {
+        Self::new("bazaar_prompt_unavailable", error.to_string())
+    }
+}

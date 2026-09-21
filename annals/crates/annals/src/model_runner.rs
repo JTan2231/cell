@@ -39,15 +39,16 @@ pub(crate) fn instruction_context_sha256(
     prompt: &str,
     instruction_revision: i64,
     library_instructions: &str,
+    prompts: &cell_prompts::Prompts,
 ) -> AppResult<String> {
     let context = json!({
         "prompt_version": prompt_version,
-        "system_instructions": tool_server::instructions(),
+        "system_instructions": prompts.expand(tool_server::instructions())?,
         "prompt": prompt,
         "instruction_revision": instruction_revision,
         "developer_instructions": library_instructions,
-        "toolset_version": TOOLSET_VERSION,
-        "tools": tool_server::tool_definitions(),
+        "toolset_version": prompts.toolset(toolset_ref(), TOOLSET_VERSION)?.version,
+        "tools": resolved_definitions(prompts)?,
         "result_schema_id": TOOL_RESULT_SCHEMA,
         "result_schema": TOOL_RESULT_SCHEMA_DOCUMENT,
     });
@@ -114,6 +115,7 @@ impl Default for ModelSettings {
 
 #[derive(Debug, Clone)]
 pub(crate) struct Runner {
+    prompt_selection: Option<i64>,
     socket: Option<PathBuf>,
     timeout: Duration,
 }
@@ -122,12 +124,19 @@ impl Default for Runner {
     fn default() -> Self {
         Self {
             socket: None,
+            prompt_selection: None,
             timeout: DEFAULT_TIMEOUT,
         }
     }
 }
 
 impl Runner {
+    pub(crate) fn with_prompt_selection(&self, selection: Option<i64>) -> Self {
+        let mut runner = self.clone();
+        runner.prompt_selection = selection;
+        runner
+    }
+
     #[must_use]
     pub(crate) fn for_socket(socket: Option<&Path>) -> Self {
         Self {
@@ -141,6 +150,7 @@ impl Runner {
     pub(crate) fn new(socket: impl Into<PathBuf>, timeout: Duration) -> Self {
         Self {
             socket: Some(socket.into()),
+            prompt_selection: None,
             timeout,
         }
     }
@@ -239,7 +249,20 @@ impl Runner {
         cancellation_requested: &dyn Fn() -> bool,
         deadline: Instant,
     ) -> AppResult<String> {
-        register_runtime_contract(client, deadline, cancellation_requested).await?;
+        let prompts = cell_prompts::Prompts::at("annals", self.prompt_selection.unwrap_or(1))?;
+        let reference = if self.prompt_selection.is_some() {
+            prompts.toolset(toolset_ref(), TOOLSET_VERSION)?
+        } else {
+            toolset_ref()
+        };
+        register_runtime_contract(
+            client,
+            deadline,
+            cancellation_requested,
+            &prompts,
+            reference.clone(),
+        )
+        .await?;
         ensure_before_deadline(deadline)?;
 
         let job_id = JobId::new(format!("annals-{model_run_token}"));
@@ -260,12 +283,12 @@ impl Runner {
             TimeoutSeconds::new(timeout_seconds),
         );
         invocation.reasoning_effort = Some(settings.reasoning_effort);
-        invocation.toolset = Some(toolset_ref());
+        invocation.toolset = Some(reference.clone());
         let mut request = JobRequestV1::new(
             job_id.clone(),
             format!("Annals examination {model_run_token}"),
             requester.clone(),
-            tool_server::instructions(),
+            prompts.expand(tool_server::instructions())?,
             prompt,
             invocation,
         );
@@ -350,6 +373,7 @@ impl Runner {
                     &call.job_id,
                     &call.tool_name,
                     &call.arguments_schema_id,
+                    reference.version,
                 ) {
                     return Err(runtime_error(
                         "model_runner_protocol",
@@ -594,6 +618,8 @@ async fn register_runtime_contract(
     client: &NucleusClient,
     deadline: Instant,
     cancellation_requested: &dyn Fn() -> bool,
+    prompts: &cell_prompts::Prompts,
+    reference: ToolsetRef,
 ) -> AppResult<()> {
     let result_schema = LogSchemaV1::new(
         TOOL_RESULT_SCHEMA,
@@ -617,7 +643,7 @@ async fn register_runtime_contract(
     )
     .await
     .map_err(|error| client_call_error(error, "model_runner_tool_schema"))?;
-    let toolset = toolset_registration()?;
+    let toolset = toolset_registration(prompts, reference)?;
     await_client_call(
         client,
         None,
@@ -630,8 +656,19 @@ async fn register_runtime_contract(
     Ok(())
 }
 
-fn toolset_registration() -> AppResult<ToolsetRegistrationV1> {
-    let tools = tool_server::tool_definitions()
+fn resolved_definitions(prompts: &cell_prompts::Prompts) -> AppResult<Vec<Value>> {
+    let mut definitions = tool_server::tool_definitions();
+    for definition in &mut definitions {
+        prompts.descriptions(definition)?;
+    }
+    Ok(definitions)
+}
+
+fn toolset_registration(
+    prompts: &cell_prompts::Prompts,
+    reference: ToolsetRef,
+) -> AppResult<ToolsetRegistrationV1> {
+    let tools = resolved_definitions(prompts)?
         .into_iter()
         .map(|definition| {
             let name = definition
@@ -661,13 +698,13 @@ fn toolset_registration() -> AppResult<ToolsetRegistrationV1> {
             Ok(ToolDefinitionV1 {
                 name: name.to_owned(),
                 description: description.to_owned(),
-                input_schema_id: SchemaId::new(format!("annals.{name}.input.v2")),
+                input_schema_id: SchemaId::new(tool_input_schema_id(name, reference.version)),
                 input_schema: to_raw_value(input_schema)?,
             })
         })
         .collect::<AppResult<Vec<_>>>()?;
     ToolsetRegistrationV1::new(
-        toolset_ref(),
+        reference,
         TOOLSET_DEFINITIONS_SCHEMA,
         ToolsetDefinitionsV1 {
             version: PROTOCOL_VERSION_V1,
@@ -685,15 +722,27 @@ fn toolset_ref() -> ToolsetRef {
     }
 }
 
+fn tool_input_schema_id(name: &str, version: u32) -> String {
+    if version <= TOOLSET_VERSION {
+        format!("annals.{name}.input.v2")
+    } else {
+        format!(
+            "annals.{name}.input.v2.bazaar.{}",
+            version - TOOLSET_VERSION
+        )
+    }
+}
+
 fn tool_call_matches_contract(
     admitted_job_id: &JobId,
     call_job_id: &JobId,
     tool_name: &str,
     arguments_schema_id: &SchemaId,
+    toolset_version: u32,
 ) -> bool {
     admitted_job_id == call_job_id
         && Tool::from_name(tool_name).is_some()
-        && arguments_schema_id.as_str() == format!("annals.{tool_name}.input.v2")
+        && arguments_schema_id.as_str() == tool_input_schema_id(tool_name, toolset_version)
 }
 
 async fn read_final_response(
@@ -898,7 +947,8 @@ mod tests {
 
     #[test]
     fn toolset_is_derived_from_the_nine_authoritative_definitions() -> AppResult<()> {
-        let registration = toolset_registration()?;
+        let registration =
+            toolset_registration(&cell_prompts::Prompts::at("annals", 1)?, toolset_ref())?;
         assert_eq!(registration.definitions.tools.len(), 9);
         assert_eq!(registration.toolset, toolset_ref());
         assert_eq!(
@@ -925,24 +975,28 @@ mod tests {
             &job,
             "work_read",
             &SchemaId::new("annals.work_read.input.v2"),
+            TOOLSET_VERSION,
         ));
         assert!(!super::tool_call_matches_contract(
             &job,
             &JobId::new("annals-other"),
             "work_read",
             &SchemaId::new("annals.work_read.input.v2"),
+            TOOLSET_VERSION,
         ));
         assert!(!super::tool_call_matches_contract(
             &job,
             &job,
             "work_read",
             &SchemaId::new("annals.other.input.v1"),
+            TOOLSET_VERSION,
         ));
         assert!(!super::tool_call_matches_contract(
             &job,
             &job,
             "unknown",
             &SchemaId::new("annals.unknown.input.v1"),
+            TOOLSET_VERSION,
         ));
     }
 

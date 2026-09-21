@@ -19,7 +19,8 @@ PRODUCT_INPUTS = (
 PRODUCT_RUNTIME_INPUTS = {
     "bazaar": ("bazaar/src/api.rs",),
     "conatus": ("conatus/src/main.rs", "conatus/src/store.rs"),
-    "clew": ("clew/src/store.rs", "clew/src/main.rs"),
+    "clew": ("clew/src/store.rs", "clew/src/main.rs", "clew/src/lib.rs",
+             "clew/src/delivery.rs"),
     "annals": ("annals/crates/annals/src/db.rs", "annals/crates/annals/src/cli.rs",
                "annals/crates/annals/src/main.rs", "annals/crates/annals/src/sqlite.rs"),
     "nucleus": ("nucleus/crates/nucleus-cli/src/service.rs",
@@ -56,6 +57,7 @@ SHARED_INPUTS = {
     "cleanup": ("deployment/cleanup.py", "deployment/__init__.py", "deployment/test_cleanup.py"),
     "install": ("deployment/crates/cell-install/*", "deployment/tests/simple_fixture.rs"),
     "maintenance": ("deployment/crates/cell-maintenance/*",),
+    "prompts": ("prompting/*",),
     "catalog": ("pipeline/integrated.sh", "pipeline/extras/*", "*/chancery/*.json",
                 "*/chancery-*/*.json", "chancery/provider/*.json"),
 }
@@ -64,7 +66,7 @@ SHARED_INPUTS = {
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
     "nucleus", "annals", "decisions", "semantics",
-    "platter", "paperboy", "mentor", "weaver",
+    "platter", "paperboy", "mentor", "weaver", "clew",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((
     "bazaar",
