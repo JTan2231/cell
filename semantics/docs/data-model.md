@@ -16,6 +16,12 @@ one open path per non-retired project and records both activation histories.
 A move closes the old path and opens the new one without changing identity or
 either cursor history.
 
+Retirement requires a paused project. In the retirement transaction, pending or
+paused intake with zero attempts and no request correlation becomes `ignored`
+with `terminal_reason = 'project_retired'`. It retains the source bytes and
+identity and creates no revision or model receipt. Other unresolved intake
+causes the entire transaction to roll back. The retired path can be absent.
+
 ## Repository
 
 `semantic_revisions` has a contiguous per-project revision number, summary,

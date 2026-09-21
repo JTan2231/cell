@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -13,7 +13,7 @@
   ],
   "do_not_use_when": [
     "Only repository terminology should be read; use semantics.repository.explore.",
-    "A project folder lacks an exact root AGENTS.md participation marker.",
+    "Registration or a move targets a folder without an exact root AGENTS.md participation marker.",
     "Retained state should be deleted; uninstall intentionally retains it."
   ],
   "outcome": "A managed installation and explicit project registry whose repositories are maintained by agents interpreting post-activation documents from one Annals decisions library.",
@@ -90,7 +90,7 @@
     "Registration captures the current Annals watermark; moves preserve cursor histories. Each new document becomes separate intake for each participating project after its own activation point, with relevance decided by its agent.",
     "Deploy and uninstall share one update lock and the release-independent maintenance gate; an unreceipted existing gate is validated, preserved, and never claimed, while --keep-maintenance retains an authenticated Semantics-owned hold that a later successful same-release invocation can release. Existing product logs are accepted only as current-user-owned non-hard-linked regular files and restricted to mode 0600 without truncation. Deployment registers the inactive candidate definition, disables the prior binding and any owned legacy LaunchAgent, suspends the CLI, holds the exact worker flock, and proves SQLite quiescent before database-plus-sidecars backup and scrubbed candidate doctor. Doctor fails closed when an active or paused project lacks its selected Annals decisions-library identity or activation and scan cursors.",
     "Nucleus receives the handed document and repository with workspace none, no shell, and no web. No additional source lookup or metadata is required. Semantics owns the commit transaction.",
-    "Retirement is allowed only from paused and only after all assigned nonterminal or failed intake is resolved."
+    "Retirement requires a paused project. Pending or paused intake with zero attempts and no retained Nucleus request becomes ignored with reason project_retired in the same transaction. Other unresolved intake blocks retirement without changing state. Source bytes, repository history, and cursors remain retained; the old folder may be absent."
   ],
   "adaptation": [
     "Manual assignment remains for historical unassigned intake. New documents are offered to project agents, which can return no change.",
@@ -159,7 +159,7 @@
       },
       {
         "status": "declared",
-        "statement": "Retirement requires a paused project with no unresolved assigned intake, and retained-state deletion is outside this operation."
+        "statement": "Retirement requires a paused project whose unresolved intake is exclusively pending or paused with zero attempts and no retained Nucleus request. Retirement closes that unstarted intake as ignored with reason project_retired; attempted, processing, failed, correlated, or awaiting-review intake blocks the whole transaction. Retained-state deletion is outside this operation."
       },
       {
         "status": "declared",
@@ -243,6 +243,10 @@
       }
     ],
     "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Operation contract 9 permits permanent retirement to close unstarted intake atomically while preserving source records and history. SQLite schema 3 and request identities are unchanged."
+      },
       {
         "status": "declared",
         "statement": "Only doctor may prove deliberately held Nucleus readiness through health_for_deployment for the same sole run hold with runtime drain, authentication, and harness readiness. Required Semantics capabilities and protocol checks remain; ordinary reconciliation requires public Nucleus admission."

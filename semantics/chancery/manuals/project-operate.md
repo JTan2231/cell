@@ -220,8 +220,13 @@ semantics project resume PROJECT
 
 The new root must carry the exact marker. A move preserves stable identity and
 both Annals and legacy cursor histories. Pausing prevents pending and late in-flight proposals from
-committing. Retirement is permanent, is allowed only while paused, and refuses
-unresolved assigned intake.
+committing. Retirement is permanent, is allowed only while paused, and does not
+require the old folder to exist. It marks pending or paused intake with zero
+attempts and no retained Nucleus request as `ignored` with reason
+`project_retired`. Retirement and these changes commit together, preserving
+source bytes, repository history, and cursors. Attempted, processing, failed,
+correlated, or awaiting-review intake blocks retirement and leaves all state
+unchanged.
 
 For failed intake, inspect the error and Nucleus job first. `intake retry`
 refuses a nonterminal prior job or an admitted job whose terminal state cannot

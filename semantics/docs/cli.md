@@ -74,7 +74,12 @@ the Annals and legacy Decisions cursor histories.
 
 Pause prevents new semantic commits and changes assigned pending intake to
 paused. Resume revalidates the marker. Retirement is permanent, is allowed
-only from paused, and refuses unresolved assigned intake.
+only from paused, and does not require the old folder to exist. It marks pending
+or paused intake with zero attempts and no retained Nucleus request as `ignored`
+with reason `project_retired`. This occurs in the same transaction as retirement
+and preserves intake contents, repository history, and cursors. Attempted,
+processing, failed, correlated, or awaiting-review intake still blocks retirement;
+a refusal leaves the project and all intake unchanged.
 
 For a retained schema-one database, activation is requested only through the
 deployer's explicit `--final-decisions-watermark OPAQUE_CURSOR` option after

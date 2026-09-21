@@ -36,6 +36,11 @@ therefore require separate agent calls for several projects. No mechanical
 origin-based filter silently discards it before those agents can interpret it.
 Paused projects retain intake but cannot commit until resumed.
 
+Permanent retirement closes only unstarted pending or paused intake with no
+retained Nucleus request. It records `project_retired` without interpreting the
+document or changing repository history. Retirement and these intake changes
+commit together. Other unresolved intake blocks the entire transition.
+
 The job uses a neutral temporary directory, workspace `none`, no shell, and no
 web. It receives the supplied document rather than resolving a source thread.
 Ambiguous transport recovery reuses the same requester and job. Retry creates a
