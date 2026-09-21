@@ -28,24 +28,25 @@ const RESULT_SCHEMA_ID: &str = "semantics.tool.commit-reconciliation.result.v1";
 const TOOL_NAME: &str = "commit_semantic_reconciliation";
 const MODEL: &str = "gpt-5.6-terra";
 const TOOLSET_NAME: &str = "semantic-reconciliation";
+#[cfg(test)]
 const TOOLSET_VERSION: u32 = 1;
 const ACCOUNT_INPUT_SCHEMA_ID: &str = "semantics.tool.commit-account-reconciliation.input.v1";
 const ACCOUNT_RESULT_SCHEMA_ID: &str = "semantics.tool.commit-account-reconciliation.result.v1";
 const ACCOUNT_TOOL_NAME: &str = "commit_account_semantic_reconciliation";
 const ACCOUNT_TOOLSET_NAME: &str = "semantic-account-reconciliation";
-const ACCOUNT_TOOLSET_VERSION: u32 = 1;
 const DOCUMENT_INPUT_SCHEMA_ID: &str = "semantics.tool.commit-document-reconciliation.input.v1";
 const DOCUMENT_RESULT_SCHEMA_ID: &str = "semantics.tool.commit-document-reconciliation.result.v1";
-const DOCUMENT_INSTRUCTIONS: &str = include_str!("../document-reconciliation.md");
+const DOCUMENT_INSTRUCTIONS: &str = "<bazaar:semantics.document.instructions>";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
-const INSTRUCTIONS: &str = r"Maintain one project's authoritative semantic repository from one normalized Decisions lifecycle event. You have exactly one managed tool. For an admitted decision or an effective confirmation, submit a complete atomic reconciliation that includes at least one ground effect citing the exact supplied event_id and decision_id, even when the meaning is already represented. For a dismissal review, withdraw every active grounding whose decision_id is dismissed using unground; preserve history. Define only durable project terms, not incidental implementation nouns. Prefer revise, differentiate, retire, reopen, ground, or unground over duplicate definitions. Active canonical labels must remain unique. Use only the supplied decision and repository snapshot. Call commit_semantic_reconciliation; if it returns a validation error, correct the proposal and retry. Never finish without an accepted tool result.";
+const INSTRUCTIONS: &str = "<bazaar:semantics.legacy.lifecycle.instructions>";
 
-const DEVELOPER_INSTRUCTIONS: &str = r"Treat identifiers as opaque and copy them exactly. New concept IDs must use the supplied next_concept_ids in order. Do not invent source material, paths, conversation text, or implementation evidence. Do not use shell, web, local files, or any tool except commit_semantic_reconciliation. The repository snapshot is complete for the selected revision.";
+const DEVELOPER_INSTRUCTIONS: &str = "<bazaar:semantics.legacy.lifecycle.developer-instructions>";
 
-const ACCOUNT_INSTRUCTIONS: &str = r"Maintain one project's authoritative semantic repository from one normalized, durably accepted Annals decision account. You have exactly one managed tool. Submit a complete atomic reconciliation that includes at least one ground effect citing the exact supplied library_id, event_id, and account_id, even when the meaning is already represented. Define only durable project terms, not incidental implementation nouns. Prefer revise, differentiate, retire, reopen, or ground over duplicate definitions. Active canonical labels must remain unique. Use only the supplied decision-account projection and repository snapshot. Call commit_account_semantic_reconciliation; if it returns a validation error, correct the proposal and retry. Never finish without an accepted tool result.";
+const ACCOUNT_INSTRUCTIONS: &str = "<bazaar:semantics.legacy.account.instructions>";
 
-const ACCOUNT_DEVELOPER_INSTRUCTIONS: &str = r"Treat identifiers as opaque and copy them exactly. New concept IDs must use the supplied next_concept_ids in order. Use the supplied account statement, captured context/action/result, and source identities for the reconciliation. Do not invent source material, paths, conversation text, or implementation evidence. Do not use shell, web, local files, or any tool except commit_account_semantic_reconciliation. The repository snapshot is complete for the selected revision.";
+const ACCOUNT_DEVELOPER_INSTRUCTIONS: &str =
+    "<bazaar:semantics.legacy.account.developer-instructions>";
 
 #[derive(Debug, Clone)]
 pub struct NucleusReconciler {
@@ -72,9 +73,9 @@ impl NucleusReconciler {
         runtime.block_on(async {
             let client = self.client()?;
             require_health(&client, deployment_run_id.as_deref()).await?;
-            register_contract(&client).await?;
-            register_account_contract(&client).await?;
-            register_document_contract(&client).await?;
+            register_contract(&client, None).await?;
+            register_account_contract(&client, None).await?;
+            register_document_contract(&client, None).await?;
             Ok(())
         })
     }
@@ -183,8 +184,10 @@ impl NucleusReconciler {
         runtime.block_on(async {
             let client = self.client()?;
             require_health(&client, None).await?;
-            let toolset = register_contract(&client).await?;
-            let correlation = match store.correlation(&intake.event_id)? {
+            let existing = store.correlation(&intake.event_id)?;
+            let version = correlation_toolset_version(existing.as_ref())?;
+            let toolset = register_contract(&client, version).await?;
+            let correlation = match existing {
                 Some(value) => value,
                 None => {
                     let suffix = Uuid::now_v7();
@@ -303,12 +306,14 @@ impl NucleusReconciler {
             .block_on(async {
                 let client = self.client()?;
                 require_health(&client, None).await?;
+                let existing = store.account_correlation(&intake.event_id)?;
+                let version = correlation_toolset_version(existing.as_ref())?;
                 let toolset = if intake.account.is_document() {
-                    register_document_contract(&client).await?
+                    register_document_contract(&client, version).await?
                 } else {
-                    register_account_contract(&client).await?
+                    register_account_contract(&client, version).await?
                 };
-                let correlation = match store.account_correlation(&intake.event_id)? {
+                let correlation = match existing {
                     Some(value) => value,
                     None => {
                         let suffix = Uuid::now_v7();
@@ -950,6 +955,7 @@ fn build_request(
     toolset: ToolsetRef,
     neutral_cwd: &Path,
 ) -> Result<JobRequestV1> {
+    let prompts = cell_prompts::Prompts::for_toolset("semantics", &toolset, 1)?;
     let prompt = reconciliation_prompt(intake, repository, next_concept_number)?;
     let mut invocation = AgentInvocationV1::new(
         "codex",
@@ -976,6 +982,7 @@ fn build_request(
         invocation,
     );
     request.developer_instructions = Some(DEVELOPER_INSTRUCTIONS.to_owned());
+    prompts.instructions(&mut request)?;
     Ok(request)
 }
 
@@ -988,6 +995,7 @@ fn build_account_request(
     toolset: ToolsetRef,
     neutral_cwd: &Path,
 ) -> Result<JobRequestV1> {
+    let prompts = cell_prompts::Prompts::for_toolset("semantics", &toolset, 1)?;
     let prompt = account_reconciliation_prompt(intake, repository, next_concept_number)?;
     let mut invocation = AgentInvocationV1::new(
         "codex",
@@ -1017,9 +1025,15 @@ fn build_account_request(
         prompt,
         invocation,
     );
-    request.developer_instructions = Some(if intake.account.is_document() {
-        "Treat source identifiers as opaque. Use next_concept_ids in order. The repository snapshot is complete for the selected revision. Interpret the supplied document under the task instructions; no conversation origin or source lookup is required."
-    } else { ACCOUNT_DEVELOPER_INSTRUCTIONS }.to_owned());
+    request.developer_instructions = Some(
+        if intake.account.is_document() {
+            "<bazaar:semantics.document.developer-instructions>"
+        } else {
+            ACCOUNT_DEVELOPER_INSTRUCTIONS
+        }
+        .to_owned(),
+    );
+    prompts.instructions(&mut request)?;
     Ok(request)
 }
 
@@ -1085,7 +1099,45 @@ fn account_reconciliation_prompt(
     serde_json::to_string(&prompt).map_err(Into::into)
 }
 
-async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
+fn correlation_toolset_version(correlation: Option<&Correlation>) -> Result<Option<u32>> {
+    correlation
+        .map(|correlation| {
+            let request: JobRequestV1 = serde_json::from_str(&correlation.request_json)?;
+            request
+                .invocation
+                .toolset
+                .map(|toolset| toolset.version)
+                .ok_or_else(|| {
+                    Error::domain(
+                        "correlation_toolset_missing",
+                        "saved request has no toolset",
+                    )
+                })
+        })
+        .transpose()
+}
+
+async fn register_contract(
+    client: &NucleusClient,
+    version: Option<u32>,
+) -> Result<ToolsetRegistrationV1> {
+    let prompts = match version {
+        Some(version) => {
+            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+        }
+        None => cell_prompts::Prompts::load("semantics")?,
+    };
+    let selected_version = version.unwrap_or(
+        u32::try_from(prompts.selection.version)
+            .ok()
+            .and_then(|version| version.checked_add(1))
+            .ok_or_else(|| {
+                Error::domain(
+                    "prompt_version_invalid",
+                    "prompt version exceeds toolset range",
+                )
+            })?,
+    );
     let input = input_schema();
     let result = result_schema();
     for (id, title, schema) in [
@@ -1112,9 +1164,8 @@ async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistration
         version: PROTOCOL_VERSION_V1,
         tools: vec![ToolDefinitionV1 {
             name: TOOL_NAME.to_owned(),
-            description:
-                "Atomically append one validated semantic revision. Retry after a validation error."
-                    .to_owned(),
+            description: prompts
+                .expand("<bazaar:semantics.legacy.tools.commit_lifecycle.description>")?,
             input_schema_id: SchemaId::new(INPUT_SCHEMA_ID),
             input_schema: to_raw_value(&input)
                 .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
@@ -1124,7 +1175,7 @@ async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistration
         ToolsetRef {
             provider: "semantics".to_owned(),
             name: TOOLSET_NAME.to_owned(),
-            version: TOOLSET_VERSION,
+            version: selected_version,
         },
         TOOLSET_DEFINITIONS_SCHEMA_ID,
         definitions,
@@ -1134,7 +1185,27 @@ async fn register_contract(client: &NucleusClient) -> Result<ToolsetRegistration
     Ok(registration)
 }
 
-async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
+async fn register_account_contract(
+    client: &NucleusClient,
+    version: Option<u32>,
+) -> Result<ToolsetRegistrationV1> {
+    let prompts = match version {
+        Some(version) => {
+            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+        }
+        None => cell_prompts::Prompts::load("semantics")?,
+    };
+    let selected_version = version.unwrap_or(
+        u32::try_from(prompts.selection.version)
+            .ok()
+            .and_then(|version| version.checked_add(1))
+            .ok_or_else(|| {
+                Error::domain(
+                    "prompt_version_invalid",
+                    "prompt version exceeds toolset range",
+                )
+            })?,
+    );
     let input = account_input_schema();
     let result = result_schema();
     for (id, title, schema) in [
@@ -1165,8 +1236,8 @@ async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegi
         version: PROTOCOL_VERSION_V1,
         tools: vec![ToolDefinitionV1 {
             name: ACCOUNT_TOOL_NAME.to_owned(),
-            description: "Atomically append one decision-account-grounded semantic revision. Retry after a validation error."
-                .to_owned(),
+            description: prompts
+                .expand("<bazaar:semantics.legacy.tools.commit_account.description>")?,
             input_schema_id: SchemaId::new(ACCOUNT_INPUT_SCHEMA_ID),
             input_schema: to_raw_value(&input)
                 .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
@@ -1176,7 +1247,7 @@ async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegi
         ToolsetRef {
             provider: "semantics".to_owned(),
             name: ACCOUNT_TOOLSET_NAME.to_owned(),
-            version: ACCOUNT_TOOLSET_VERSION,
+            version: selected_version,
         },
         TOOLSET_DEFINITIONS_SCHEMA_ID,
         definitions,
@@ -1186,7 +1257,27 @@ async fn register_account_contract(client: &NucleusClient) -> Result<ToolsetRegi
     Ok(registration)
 }
 
-async fn register_document_contract(client: &NucleusClient) -> Result<ToolsetRegistrationV1> {
+async fn register_document_contract(
+    client: &NucleusClient,
+    version: Option<u32>,
+) -> Result<ToolsetRegistrationV1> {
+    let prompts = match version {
+        Some(version) => {
+            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+        }
+        None => cell_prompts::Prompts::load("semantics")?,
+    };
+    let selected_version = version.unwrap_or(
+        u32::try_from(prompts.selection.version)
+            .ok()
+            .and_then(|version| version.checked_add(1))
+            .ok_or_else(|| {
+                Error::domain(
+                    "prompt_version_invalid",
+                    "prompt version exceeds toolset range",
+                )
+            })?,
+    );
     let input = document_input_schema();
     let result = document_result_schema();
     for (id, title, schema) in [
@@ -1217,8 +1308,7 @@ async fn register_document_contract(client: &NucleusClient) -> Result<ToolsetReg
         version: PROTOCOL_VERSION_V1,
         tools: vec![ToolDefinitionV1 {
             name: ACCOUNT_TOOL_NAME.to_owned(),
-            description: "Atomically append one document reconciliation or record no change. Retry after a validation error."
-                .to_owned(),
+            description: prompts.expand("<bazaar:semantics.tools.commit_document.description>")?,
             input_schema_id: SchemaId::new(DOCUMENT_INPUT_SCHEMA_ID),
             input_schema: to_raw_value(&input)
                 .map_err(|error| Error::domain("nucleus_schema_invalid", error.to_string()))?,
@@ -1228,7 +1318,7 @@ async fn register_document_contract(client: &NucleusClient) -> Result<ToolsetReg
         ToolsetRef {
             provider: "semantics".to_owned(),
             name: "semantic-document-reconciliation".to_owned(),
-            version: ACCOUNT_TOOLSET_VERSION,
+            version: selected_version,
         },
         TOOLSET_DEFINITIONS_SCHEMA_ID,
         definitions,
@@ -2427,7 +2517,7 @@ mod tests {
         let registration: Value = serde_json::from_slice(&body)?;
         assert_eq!(registration["toolset"]["provider"], "semantics");
         assert_eq!(registration["toolset"]["name"], "semantic-reconciliation");
-        assert_eq!(registration["toolset"]["version"], 1);
+        assert_eq!(registration["toolset"]["version"], 2);
         assert_eq!(
             registration["definitionsSchemaId"],
             "nucleus.toolset-definitions.v1"

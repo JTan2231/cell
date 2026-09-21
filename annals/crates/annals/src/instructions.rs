@@ -8,7 +8,7 @@ use crate::error::AppError;
 
 /// The initial interpretation for a library. Updates to Annals do not replace
 /// a library's stored selection.
-pub const DEFAULT_LIBRARY_INSTRUCTIONS: &str = "Organize the retained sources into an evidence-grounded map of ideas. Inspect each work broadly, using multiple access paths when bounded or repetitive source structure prevents sequential traversal. Choose a coherent granularity relative to the work and corpus. Group related source material into concepts while preserving distinctions. Represent assertions, qualifications, exceptions, examples, limitations, relationships, contradictions, and reported states and results without mechanically creating one concept per sentence. Do not omit material because it appears familiar, minor, speculative, redundant, obvious, low-signal, or unlikely to be useful. Consolidate equivalent meanings, but preserve distinctions in modality and source stance. Associate represented meaning with an existing concept and exact evidence, or create an appropriately scoped grounded concept. Parent edges express broader conceptual scope to narrower conceptual scope. Several parents are symmetric; none is primary. Do not invent a canonical path or sibling ordering. Express each mapping even when its effect appears already satisfied; Annals determines corpus effects mechanically.";
+pub const DEFAULT_LIBRARY_INSTRUCTIONS: &str = "<bazaar:annals.library.seed.instructions>";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstructionRevision {
@@ -126,7 +126,12 @@ pub fn set(connection: &mut Connection, content: &str) -> Result<InstructionSetR
 }
 
 pub(crate) fn initialize(connection: &Connection) -> Result<(), AppError> {
-    insert_revision(connection, 1, DEFAULT_LIBRARY_INSTRUCTIONS)?;
+    let prompts = cell_prompts::Prompts::load("annals")?;
+    insert_revision(
+        connection,
+        1,
+        &prompts.expand(DEFAULT_LIBRARY_INSTRUCTIONS)?,
+    )?;
     connection.execute(
         "INSERT INTO library_instruction_selection(singleton, current_revision) VALUES(1, 1)",
         [],

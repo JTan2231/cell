@@ -34,12 +34,19 @@ pub struct Corpus {
 }
 
 impl Corpus {
-    /// Read the embedded authored problem collection.
+    /// Read the bundled problem index and its selected Bazaar contents.
     ///
     /// # Errors
-    /// Rejects an invalid or unsupported embedded corpus.
+    /// Rejects unavailable Bazaar content or an invalid corpus.
     pub fn bundled() -> crate::Result<Self> {
-        Self::from_json(include_str!("../content/corpus.json"))
+        let prompts = cell_prompts::Prompts::load("mentor")?;
+        let mut corpus: Self = serde_json::from_str(include_str!("../content/corpus.json"))?;
+        corpus.rubric.markdown = prompts.expand(&corpus.rubric.markdown)?;
+        for problem in &mut corpus.problems {
+            problem.markdown = prompts.expand(&problem.markdown)?;
+        }
+        corpus.validate()?;
+        Ok(corpus)
     }
 
     /// Decode and validate one bounded corpus document.

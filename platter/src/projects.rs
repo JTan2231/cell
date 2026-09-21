@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use weaver::api::{AuthoringOutcome, Client, DocumentView};
 
-pub const CELL_DIRECTION: &str = "bullet points for cell. Editorial direction: Creator wants to convey how developing cell has accelerated and made easier the job search process. Write a maximum of 3 resume bullet points. Keep each bullet short in form, with one medium-length sentence. Return only the bullet list.";
-pub const WROUGHT_DIRECTION: &str = "bullet points for wrought. Editorial direction: Creator wanted a shareable, dynamic tabletop experience to enjoy with his friends. Write a maximum of 3 resume bullet points. Keep each bullet short in form, with one medium-length sentence. Return only the bullet list.";
-pub const SHORTEN_DIRECTION: &str = "Shorten these resume bullets to fit a one-page resume. Use at most 3 short bullets, one brief sentence each. Keep the strongest contributions and return only the bullet list.";
+pub const CELL_DIRECTION: &str = "<bazaar:platter.weaver.cell.direction>";
+pub const WROUGHT_DIRECTION: &str = "<bazaar:platter.weaver.wrought.direction>";
+pub const SHORTEN_DIRECTION: &str = "<bazaar:platter.weaver.shorten.direction>";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

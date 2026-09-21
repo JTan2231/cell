@@ -56,6 +56,7 @@ SHARED_INPUTS = {
     "cleanup": ("deployment/cleanup.py", "deployment/__init__.py", "deployment/test_cleanup.py"),
     "install": ("deployment/crates/cell-install/*", "deployment/tests/simple_fixture.rs"),
     "maintenance": ("deployment/crates/cell-maintenance/*",),
+    "prompts": ("prompting/*",),
     "catalog": ("pipeline/integrated.sh", "pipeline/extras/*", "*/chancery/*.json",
                 "*/chancery-*/*.json", "chancery/provider/*.json"),
 }

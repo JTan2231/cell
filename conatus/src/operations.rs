@@ -78,7 +78,9 @@ pub fn initialize(
         decisions_config,
         decisions_library_id: watermark.library_id,
     };
-    let instructions = config.library().instructions(LIBRARIAN_INSTRUCTIONS)?;
+    let instructions = config
+        .library()
+        .instructions(&cell_prompts::Prompts::load("conatus")?.expand(LIBRARIAN_INSTRUCTIONS)?)?;
     store.configure(&config, &watermark.watermark)?;
     Ok(json!({
         "initialized":true,"config":config,"cursor":watermark.watermark,

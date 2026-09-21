@@ -271,6 +271,7 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
     let run = |job: &str, id: &str| -> Result<Output> {
         Ok(Command::new(env!("CARGO_BIN_EXE_platter"))
             .env_clear()
+            .env("CELL_BAZAAR_DATABASE", cell_prompts::database_path()?)
             .env("HOME", &fixture.home)
             .env("PATH", "/usr/bin:/bin")
             .env(
@@ -295,15 +296,17 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
     assert_eq!(captured["career"][0]["markdown"], "Current career evidence");
     assert_eq!(
         captured["resume_editorial"],
-        include_str!("../prompts/resume-editorial.md")
+        cell_prompts::Prompts::at("platter", 1)?.text("platter.resume.editorial")?
     );
     assert!(captured["project_resources"].is_null());
+    assert_eq!(captured["prompt_selection"], 1);
+    let prompts = cell_prompts::Prompts::at("platter", 1)?;
     assert_eq!(
         captured["project_directions"],
         json!([
-            platter::projects::CELL_DIRECTION,
-            platter::projects::WROUGHT_DIRECTION,
-            platter::projects::SHORTEN_DIRECTION
+            prompts.expand(platter::projects::CELL_DIRECTION)?,
+            prompts.expand(platter::projects::WROUGHT_DIRECTION)?,
+            prompts.expand(platter::projects::SHORTEN_DIRECTION)?
         ])
     );
     assert!(store.run_artifact(&new.id, "brief")?.is_none());

@@ -5,7 +5,8 @@
   "dependencies": [
     "annals",
     "clockwork",
-    "email"
+    "email",
+    "bazaar"
   ],
   "description": "Initialize and rebind Conatus libraries under held admission; prepare its disabled runner and restore saved intent.",
   "adapter_binary": "conatus-install",
@@ -21,6 +22,10 @@
     "email": {
       "minimum": "0.6.0",
       "before": "0.7.0"
+    },
+    "bazaar": {
+      "minimum": "0.1.0",
+      "before": "0.2.0"
     }
   },
   "activation_bindings": [

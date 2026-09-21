@@ -23,7 +23,7 @@ Semantics maintains terminology and its history.
    is local; the embedded event ID remains Annals' original ID.
 4. One Nucleus job receives the document and the complete selected repository
    snapshot. `semantic-document-reconciliation/1` exposes one managed commit
-   tool. The instructions in `document-reconciliation.md` govern interpretation.
+   tool. The instructions in the Bazaar `semantics.document.instructions` document govern interpretation.
    An empty effect list means no repository change is needed.
 5. Semantics checks project state, base revision, effect structure, concept
    identities, and replay consistency. Any Annals document grounding must name

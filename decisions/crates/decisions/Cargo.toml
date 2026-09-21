@@ -13,6 +13,7 @@ name = "krisis-install"
 path = "src/bin/krisis-install.rs"
 
 [dependencies]
+cell-prompts.workspace = true
 chancery-usage.workspace = true
 cell-maintenance.workspace = true
 cell-install.workspace = true

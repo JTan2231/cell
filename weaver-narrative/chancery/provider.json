@@ -29,7 +29,7 @@
       "CLI usage recording requires a nonempty CODEX_THREAD_ID. Chancery records command identity, time, and thread ID in its private journal. Arguments, output, outcomes, and internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
-      "Independent release, SQLite schema 1, and weaver/narrative toolset 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
+      "Independent release, SQLite schema 1, and weaver/narrative toolsets: historical version 1 and new selection version plus 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
     ],
     "operational_limits": [
       "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."

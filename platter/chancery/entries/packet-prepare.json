@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 12,
+  "contract_version": 13,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -170,7 +170,12 @@
     {
       "id": "weaver.narrative.write",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -193,6 +198,10 @@
       {
         "status": "declared",
         "statement": "Retained-material preview needs completed artifacts only. It makes no source, model or rendering calls."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -335,6 +344,10 @@
       {
         "status": "declared",
         "statement": "Mutation admission serializes regeneration lookup, source capture and execution. The request ID commits atomically with the new run's immutable inputs. Reuse resumes or returns that run without recapture; a different job is refused. Terminal stage failures require an explicit new request ID. No prior packet or delivery payload is rewritten."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.platter to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -363,6 +376,10 @@
       {
         "status": "unspecified",
         "statement": "No arbitrary incompatible rollback, model support interval or deprecation window is promised. Full-template and projects-only imports select templates for future captures; historical captures retain their exact template references."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -439,6 +456,13 @@
         "target": "weaver",
         "kind": "control",
         "contract": "weaver.narrative.write"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

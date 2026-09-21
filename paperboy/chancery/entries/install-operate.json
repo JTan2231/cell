@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -97,6 +97,11 @@
       "id": "annals.decision-account.exchange",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -113,6 +118,10 @@
       {
         "status": "declared",
         "statement": "Cell coordinated deployment uses committed local main, compatible candidate and Nucleus requester maintenance closure. Schedule enable requires the selected installed Paperboy executable. Explicit installation and schedule authority are separate from discovery."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.paperboy selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
       }
     ],
     "inputs": [
@@ -175,6 +184,10 @@
       {
         "status": "declared",
         "statement": "Cell configuration initializes or backs up supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.paperboy to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
       }
     ],
     "operational_limits": [
@@ -190,11 +203,15 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Private schema 1, paperboy/daily-report toolset 1, and paperboy/decision-report toolset 1. Existing conversation requests retain their meaning. No database migration is required for decision source pointers."
+        "statement": "Private schema 1, daily-report and decision-report toolsets: historical version 1 and new selection version plus 1. Existing conversation requests retain their meaning. No database migration is required for decision source pointers."
       },
       {
         "status": "unspecified",
         "statement": "No general future compatibility window or deprecation period."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -238,6 +255,13 @@
         "target": "annals",
         "kind": "data",
         "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
       }
     ]
   },

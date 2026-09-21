@@ -365,6 +365,7 @@ fn toolset() -> ToolsetRef {
 }
 
 fn build_request(snapshot: &Snapshot) -> AppResult<JobRequestV1> {
+    let prompts = cell_prompts::Prompts::load("krisis")?;
     let prompt = snapshot.prompt().context(
         "document_prompt_invalid",
         "cannot prepare full conversation",
@@ -382,8 +383,8 @@ fn build_request(snapshot: &Snapshot) -> AppResult<JobRequestV1> {
         TimeoutSeconds::new(1_200),
     );
     invocation.reasoning_effort = Some(ReasoningEffort::Medium);
-    invocation.toolset = Some(toolset());
-    Ok(JobRequestV1::new(
+    invocation.toolset = Some(prompts.toolset(toolset(), 1)?);
+    let mut request = JobRequestV1::new(
         JobId::new(&id),
         "Classify one exchange for a Krisis document",
         Requester {
@@ -393,10 +394,13 @@ fn build_request(snapshot: &Snapshot) -> AppResult<JobRequestV1> {
         decisions::document::INSTRUCTIONS,
         prompt,
         invocation,
-    ))
+    );
+    prompts.instructions(&mut request)?;
+    Ok(request)
 }
 
-async fn register(client: &NucleusClient) -> AppResult<()> {
+async fn register(client: &NucleusClient, reference: &ToolsetRef) -> AppResult<()> {
+    let prompts = cell_prompts::Prompts::for_toolset("krisis", reference, 1)?;
     let input = classification_schema();
     let output = json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -424,14 +428,13 @@ async fn register(client: &NucleusClient) -> AppResult<()> {
         )?;
     }
     let registration = ToolsetRegistrationV1::new(
-        toolset(),
+        reference.clone(),
         "nucleus.toolset-definitions.v1",
         ToolsetDefinitionsV1 {
             version: PROTOCOL_VERSION_V1,
             tools: vec![ToolDefinitionV1 {
                 name: TOOL_NAME.to_owned(),
-                description: "Submit the decision verdict and brief summary for this exchange."
-                    .to_owned(),
+                description: prompts.text("krisis.tools.submit_decision.description")?,
                 input_schema_id: SchemaId::new(INPUT_SCHEMA),
                 input_schema: to_raw_value(&input)
                     .context("document_contract_invalid", "cannot encode input schema")?,
@@ -456,7 +459,8 @@ pub(crate) fn doctor() -> AppResult<()> {
         let client = NucleusClient::for_current_user()
             .context("nucleus_unavailable", "cannot connect to Nucleus")?;
         require_health(&client, deployment_run_id.as_deref()).await?;
-        register(&client).await
+        let prompts = cell_prompts::Prompts::load("krisis")?;
+        register(&client, &prompts.toolset(toolset(), 1)?).await
     })
 }
 
@@ -475,7 +479,15 @@ fn classify(run: &mut Run, directory: &Path) -> AppResult<()> {
 #[allow(clippy::too_many_lines)]
 async fn execute(client: &NucleusClient, run: &mut Run, directory: &Path) -> AppResult<()> {
     require_health(client, None).await?;
-    register(client).await?;
+    register(
+        client,
+        run.request
+            .invocation
+            .toolset
+            .as_ref()
+            .ok_or_else(|| AppError::new("document_contract_invalid", "saved toolset is absent"))?,
+    )
+    .await?;
     let accepted = client.submit_job(&run.request).await.context(
         "nucleus_submit_failed",
         "admission unresolved; resume the same directory",

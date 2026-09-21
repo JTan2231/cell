@@ -8,7 +8,8 @@
     "email",
     "nucleus",
     "clockwork",
-    "weaver"
+    "weaver",
+    "bazaar"
   ],
   "maintenance_products": [],
   "description": "Migrate and configure Platter under held admission; update its disabled daily definition and restore saved intent.",
@@ -38,6 +39,10 @@
     "weaver": {
       "minimum": "0.4.0",
       "before": "0.6.0"
+    },
+    "bazaar": {
+      "minimum": "0.1.0",
+      "before": "0.2.0"
     }
   },
   "activation_bindings": [

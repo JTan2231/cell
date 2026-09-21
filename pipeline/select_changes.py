@@ -247,6 +247,10 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
         owners = [product for product, (directory, _) in products.items()
                   if path == directory or path.startswith(directory + "/")
                   or path == f"pipeline/products/{product}.sh"]
+        if path == "prompting" or path.startswith("prompting/"):
+            owners = [product for product in products if product in {
+                "annals", "decisions", "semantics", "paperboy", "platter", "weaver", "mentor", "emt", "conatus"
+            }]
         if owners:
             for owner in owners:
                 reasons[owner].append(path)
@@ -383,7 +387,7 @@ def broker(root: Path, gate: str, lane: str, body: list[str], *, verbose: bool,
 
 
 def shared_gate(root: Path, suite: str, verbose: bool, environment: dict[str, str]) -> None:
-    lane = "heavy" if suite in ("install", "maintenance", "catalog") else "light"
+    lane = "heavy" if suite in ("install", "maintenance", "prompts", "catalog") else "light"
     broker(root, f"cell.platform.{suite}", lane,
            ["sh", str(root / "pipeline/platform.sh"), suite],
            verbose=verbose, environment=environment)

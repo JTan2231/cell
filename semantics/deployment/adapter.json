@@ -6,7 +6,8 @@
     "annals",
     "nucleus",
     "clockwork",
-    "conversations"
+    "conversations",
+    "bazaar"
   ],
   "description": "Deploy Semantics with owned admission, retained project pauses, exact worker control and dependency readiness.",
   "adapter_binary": "semantics-install",
@@ -28,6 +29,10 @@
     "conversations": {
       "minimum": "0.5.1",
       "before": "0.6.0"
+    },
+    "bazaar": {
+      "minimum": "0.1.0",
+      "before": "0.2.0"
     }
   },
   "activation_bindings": [

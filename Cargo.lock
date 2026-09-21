@@ -28,6 +28,7 @@ dependencies = [
  "base64",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -336,6 +337,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cell-prompts"
+version = "0.1.0"
+dependencies = [
+ "bazaar",
+ "nucleus-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -521,6 +534,7 @@ dependencies = [
  "anyhow",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "chrono",
  "clap",
@@ -627,6 +641,7 @@ dependencies = [
  "annals-api",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -750,6 +765,7 @@ version = "0.1.5"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -1518,6 +1534,7 @@ version = "0.1.6"
 dependencies = [
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "chrono",
  "chrono-tz",
@@ -1768,6 +1785,7 @@ dependencies = [
  "anyhow",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "chrono",
  "clap",
@@ -1907,6 +1925,7 @@ dependencies = [
  "cast",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "chrono",
  "chrono-tz",
@@ -2418,6 +2437,7 @@ dependencies = [
  "annals-api",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -3247,6 +3267,7 @@ dependencies = [
  "axum",
  "cell-install",
  "cell-maintenance",
+ "cell-prompts",
  "chancery-usage",
  "clap",
  "fs2",
