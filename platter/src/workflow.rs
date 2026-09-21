@@ -293,13 +293,14 @@ async fn capture_packet(
     };
     let prompts = cell_prompts::Prompts::load("platter")?;
     let resume_editorial = prompts.expand(agent::RESUME_EDITORIAL)?;
+    let project_editorial = prompts.expand(crate::projects::EDITORIAL)?;
     let mut project_directions = [
         prompts.expand(crate::projects::CELL_DIRECTION)?,
         prompts.expand(crate::projects::WROUGHT_DIRECTION)?,
         prompts.expand(crate::projects::SHORTEN_DIRECTION)?,
     ];
     for direction in &mut project_directions {
-        *direction = format!("{direction}\n\n{resume_editorial}");
+        *direction = format!("{direction}\n\n{project_editorial}");
     }
     let captured = Captured {
         prompt_selection: Some(prompts.selection.version),

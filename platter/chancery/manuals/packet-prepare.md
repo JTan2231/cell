@@ -109,9 +109,10 @@ is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
 New preparations capture `generation=weaver_projects_v1` and the exact Cell,
-Wrought and shortening directions. Platter appends the captured resume editorial
-policy to each direction, so initial project writing, shortening and Jackson
-use the same policy. Historical captures retain their original directions.
+Wrought and shortening directions. Platter appends the captured project editorial
+policy to each direction, so initial project writing and shortening use the
+same project policy. Jackson uses the separate resume editorial policy.
+Historical captures retain their original directions.
 Platter calls the installed Weaver client sequentially before its own draft job.
 Each initial direction asks for at most
 three short-form resume bullets, with one medium-length sentence per bullet. The first

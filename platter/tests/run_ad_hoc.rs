@@ -301,7 +301,8 @@ fn regeneration_captures_a_new_packet_and_retries_without_reenabling_or_sending(
     assert!(captured["project_resources"].is_null());
     assert_eq!(captured["prompt_selection"], 1);
     let prompts = cell_prompts::Prompts::at("platter", 1)?;
-    let editorial = prompts.text("platter.resume.editorial")?;
+    let editorial = prompts.expand(platter::projects::EDITORIAL)?;
+    assert_ne!(editorial, prompts.text("platter.resume.editorial")?);
     assert_eq!(
         captured["project_directions"],
         json!([

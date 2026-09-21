@@ -275,3 +275,13 @@ cell.prompts.platter --file /absolute/selection.json`. Use an explicit
 `bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
 `CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
 private text out of logs and retain historical versions.
+
+## Separate project editorial policy
+
+Before installing a caller that uses the separate project policy, publish
+`platter.projects.editorial`, `platter.projects.cell.direction`,
+`platter.projects.wrought.direction`, and `platter.projects.shorten.direction`.
+Append a complete `cell.prompts.platter` selection that includes these IDs and
+all existing entries. Keep selection version 1 and its components unchanged.
+Jackson continues to use `platter.resume.editorial`. New captures require the
+project entries; historical runs use their retained directions.

@@ -9,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use weaver::api::{AuthoringOutcome, Client, DocumentView};
 
-pub const CELL_DIRECTION: &str = "<bazaar:platter.weaver.cell.direction>";
-pub const WROUGHT_DIRECTION: &str = "<bazaar:platter.weaver.wrought.direction>";
-pub const SHORTEN_DIRECTION: &str = "<bazaar:platter.weaver.shorten.direction>";
+pub const EDITORIAL: &str = "<bazaar:platter.projects.editorial>";
+pub const CELL_DIRECTION: &str = "<bazaar:platter.projects.cell.direction>";
+pub const WROUGHT_DIRECTION: &str = "<bazaar:platter.projects.wrought.direction>";
+pub const SHORTEN_DIRECTION: &str = "<bazaar:platter.projects.shorten.direction>";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

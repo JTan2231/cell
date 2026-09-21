@@ -5,8 +5,9 @@ stores opaque strings. This library owns Cell's selection format and rendering.
 Products still own permissions, models, schemas, tool implementations, input
 data, and recovery. No prompt grants execution authority.
 
-The migration input `seed.json` preserves 172 catalogued text components. It
-includes instructions, templates, tool and schema descriptions, Mentor's
+The import input `seed.json` preserves the original migration components and
+adds separately named project-writing prompts. It includes instructions,
+templates, tool and schema descriptions, Mentor's
 problems and rubric, selected library documents, and compatibility prompts.
 It is an explicit import artifact, never a runtime fallback.
 
@@ -70,9 +71,10 @@ Chancery bundles, start agents, send mail, or deploy services.
 
 For a later edit, append text with Bazaar's `update` command, then append a
 complete selection with the new returned version numbers. To roll back, append
-the previous selection content. Do not overwrite history. The importer expects
-complete per-owner content sets; a partial set would remove omitted keys from
-that owner's next selection.
+the previous selection content. Do not overwrite history. New IDs in the seed
+do not replace the original component text. The importer expects complete
+per-owner content sets; a partial set would remove omitted keys from that
+owner's next selection.
 
 ## Execution compatibility
 

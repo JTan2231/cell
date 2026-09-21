@@ -24,7 +24,7 @@ fn migration_preserves_all_text_and_repeated_imports_add_no_versions()
     let reader = Reader::open(&database)?;
     let input: Value = serde_json::from_slice(&std::fs::read(seed)?)?;
     let entries = input["entries"].as_array().ok_or("seed entries missing")?;
-    assert_eq!(entries.len(), 172);
+    assert_eq!(entries.len(), 176);
     for entry in entries {
         let id = entry["id"].as_str().ok_or("seed ID missing")?;
         let content = entry["content"].as_str().ok_or("seed content missing")?;
