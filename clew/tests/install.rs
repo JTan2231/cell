@@ -69,7 +69,9 @@ fn daily_definition_pins_the_release_without_activating_or_sending() {
             );
             assert!(program.starts_with(&definition.release_root));
         }
-        _ => panic!("expected a direct release image"),
+        clockwork::api::LaunchImage::Interpreted { .. } => {
+            panic!("expected a direct release image");
+        }
     }
     assert!(!fixture.run("schedule-definition", &args).status.success());
     assert!(!root.join("email.sqlite3").exists());
