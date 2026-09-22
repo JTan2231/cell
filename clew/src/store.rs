@@ -326,7 +326,7 @@ impl Store {
     }
 }
 
-/// Entries arrive in ledger sequence order from a single SQLite read.
+/// Entries arrive in ledger sequence order from a single `SQLite` read.
 pub(crate) fn active_entries(entries: &[Entry]) -> impl Iterator<Item = &Entry> {
     let replaced: BTreeSet<_> = entries
         .iter()
