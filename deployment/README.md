@@ -9,8 +9,10 @@ Select systems from the Cell checkout:
 ./deploy.sh start nucleus annals semantics krisis
 ```
 
-`plan` reads committed declarations without runtime changes. At admission, a
-run selects the exact **local `main` commit**. It ignores uncommitted edits,
+`plan` reads committed declarations without runtime changes. By default, a
+run selects the exact **local `main` commit** at admission. Supply
+`--source-commit FULL_COMMIT_ID` to select another exact commit. The value must
+be a complete lowercase commit ID. The run ignores uncommitted edits,
 other branches, and later commits. It never fetches, changes versions, commits,
 tags, or pushes. Selecting Annals also selects Annals Usage. `decisions` is an
 alias for `krisis`. Dependency declarations set the installation order. The plan
@@ -55,8 +57,57 @@ job, or conversation continuation.
 
 At startup, deployment pins its Python executable and complete source archive.
 The host needs Python 3.11 or newer, Git, product build tools, and the current
-macOS user session. Commit the coordinator on `main` before use. There is no
+macOS user session. Commit the coordinator in the selected source before use. There is no
 background daemon or detached deployment API.
+
+## Caller-correlated deployment
+
+Use one stable request ID when a durable caller owns deployment:
+
+```sh
+./deploy.sh start usher --source-commit FULL_COMMIT_ID --request-id ci:JOB_ID:deployment:1
+./deploy.sh status --request-id ci:JOB_ID:deployment:1
+./deploy.sh reconcile --request-id ci:JOB_ID:deployment:1
+```
+
+`start --request-id` requires `--source-commit`. Admission records the logical
+Git repository, exact commit, canonical requested product set, and captured
+settings. Settings identity uses the JSON values, not the settings file path.
+The admitted deployment plan records its expanded product set. Presentation
+flags do not change request identity.
+
+An exact replay returns the existing operation. Reuse of the same ID with a
+different request stops. A terminal replay does not run installation again.
+An active or interrupted replay does not start another worker. A different
+active or unresolved operation blocks admission. Resolve that operation first.
+Calls without a request ID retain their existing recovery-then-start behavior.
+
+`status` reads one observation without runtime changes. `reconcile` operates
+only on the named admitted operation. It waits for no surviving worker: if a
+worker or descendant still owns the deployment lock, it reports active work.
+After the lock becomes available, reconciliation uses the retained pinned
+coordinator and product recovery procedure. It never creates a new deployment.
+A missing request returns `not_found` and causes no deployment.
+
+Results retain the ordinary deployment fields and add `request_id` and
+`operation_state`. The operation state is `active`, `needs_reconciliation`,
+`terminal`, `not_found`, or `blocked`. A blocked result can name its
+`blocking_run_id`. Status observations have exit code zero unless they return
+a terminal failed result. Active, interrupted, or blocked `start` replies and
+active `reconcile` replies use exit code 75. Callers must inspect the structured
+operation state and installation, maintenance, recovery, and cleanup outcomes.
+
+Compact operation records remain under `deployments/operations`, outside the
+temporary active workspace. The coordinator records the installation outcome
+there before removing active evidence. A crash during cleanup does not authorize
+another installation. Reconciliation completes or reports cleanup using the
+recorded outcome. Receipts and request identities are retained without automatic
+pruning. Keep them with deployment state backups. Their absence is not proof
+that an operation never ran if storage was removed or restored incompletely.
+
+CI owns its validation receipt and checks the exact source commit before this
+handoff. Deployment does not determine CI coverage or turn a caller ID into
+permission to deploy.
 
 The coordinator and release builder use Python. Product installation and
 deployment adapters are Rust executables backed by `cell-install`; retained
@@ -122,6 +173,13 @@ All candidates are prepared before maintenance begins. The coordinator then:
 
 Replacing Nucleus holds its installed requesters, as declared by each product's
 `requester_service`. Replacing one requester leaves Nucleus admission open.
+When `~/.local/bin/cell-ci` is installed, the coordinator also captures that
+command and holds its model admission before holding Nucleus. The CI manager
+reports drained when no admitted or unresolved model attempt remains. Its
+current CI job may still be waiting for deployment. The coordinator releases
+only its own CI hold after product activation or coherent recovery. This shared
+infrastructure hook does not install or update the CI manager. Explicit manager
+upgrades must preserve its captured command during a deployment.
 Affected-only installations must provide compatible maintenance operations.
 Mentor and EMT capture worker intent during inspection, suspend their bindings,
 select disabled definitions during configuration, and restore enabled state
@@ -152,8 +210,9 @@ Private active state is under
 it contains operation inputs/outcomes, logs, sealed source, executable candidates,
 and the detached preparation worktree. These files may contain private paths
 and baseline state; adapters must exclude credentials and domain document bodies.
-There is no retained deployment history or public status, wait, resume, or
-recover interface.
+Uncorrelated deployments have no retained completed history. Caller-correlated
+operations retain compact receipts and support the status and reconciliation
+commands above. There is no public wait or detached execution interface.
 
 The foreground process acquires one host-wide deployment lock before creating
 that workspace and passes its descriptor to the pinned worker. Every adapter

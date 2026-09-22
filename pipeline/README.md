@@ -33,6 +33,25 @@ contains it. An edit to `pipeline/products/PRODUCT.sh` selects that product.
 Deletions and both paths of a rename count. Committed branch changes do not
 count as outstanding changes.
 
+Use the root gate's committed-range mode to validate a queued candidate:
+
+```sh
+./ci.sh --base BASE_COMMIT --candidate CANDIDATE_COMMIT --json
+```
+
+Supply both full commit hashes. The worktree and index must be clean, and
+`HEAD` must equal `CANDIDATE_COMMIT`. A mismatch returns stale state before
+gate admission. The gate compares the two committed trees. It uses the same
+base for changed paths, platform classification, and descriptor introductions
+and removals. Both paths of a rename count. The gate does not read `main` or
+`refs/ci/accepted` to choose either commit.
+
+Keep the base fixed across a job's repair attempts. Commit each repaired
+candidate before validation. The comparison then includes the submitted changes
+and every retained repair. Existing calls without `--base` and `--candidate`
+continue to select outstanding changes. Product arguments and explicit full
+coverage options keep their existing meanings in committed-range mode.
+
 Use `./ci.sh` for routine validation. Agents use `--all` only when the user
 explicitly requests full CI.
 
@@ -98,7 +117,9 @@ not establish full repository validation.
 
 Root CI binds the selection and every gate to one source candidate and rejects
 source, Git status, or HEAD changes during planning or execution as stale. The
-same comparison to HEAD controls product, platform, and new-product selection.
+same baseline controls product, platform, and new-product selection. The baseline
+is the initial `HEAD` for outstanding changes or the explicit `--base` commit
+for committed-range validation.
 The plan names that baseline and reports platform run/skip reasons. Usher reads
 the descriptors' literal assignments without executing them. It checks each
 product's identity, Semantics marker, and Chancery introduction. Root CI runs
@@ -131,6 +152,29 @@ Use `./ci.sh --verbose [PRODUCT...]`, `./ci.sh --all --verbose`,
 only the success summary for an enclosing caller. These options change
 presentation only.
 See [the broker](../ci_broker/README.md) for log bounds and retention.
+
+Use root `--json` to receive one aggregate JSON receipt on stdout. Progress and
+diagnostics remain on stderr, including with `--verbose`. The receipt uses
+`schema_version: 1` and contains `state`, `base_commit`, `candidate_commit`,
+`observed_head`, `source_key`, `selection`, `gates`, and `failure`. Fields that
+could not be established are null. Without committed-range arguments,
+`candidate_commit` names the initial `HEAD`; `source_key` also identifies any
+outstanding changes.
+
+The selection records its change mode, coverage mode, product tests, platform
+products, shared suites, selection reasons, and ordered `required_gates`.
+Each required gate names its gate ID, lane, and command. The `gates` array
+contains the broker receipts for gates that ran. A required gate absent from
+that array did not complete. The dispatcher stops after the first unsuccessful
+gate and checks candidate integrity before it returns the aggregate result.
+
+Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, and
+`error`. A failed gate does not by itself establish a source-code defect.
+The `failure` object records its kind, message, gate, and execution ID when
+available. Planning, configuration, or invalid broker receipts produce `error`
+with exit code 78. Other states retain the broker's exit-code rules. Missing
+terminal JSON after process interruption is incomplete validation, never a
+pass. The caller owns receipt retention, retry decisions, and deployment.
 
 Use `--stage-candidate ABSOLUTE_DIRECTORY` with a public product gate to prepare
 a candidate through full CI. The gate runs all checks, seals the release

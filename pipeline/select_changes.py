@@ -132,6 +132,27 @@ def changed_paths(status: bytes) -> set[str]:
     return paths
 
 
+def commit_id(root: Path, value: str) -> str:
+    if not re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", value):
+        raise SelectionError("committed-range inputs must be full commit hashes")
+    return output([
+        "git", "-C", str(root), "rev-parse", "--verify", f"{value}^{{commit}}",
+    ]).decode("ascii").strip()
+
+
+def committed_paths(root: Path, base: str, candidate: str) -> set[str]:
+    raw = output([
+        "git", "-C", str(root), "diff", "--name-only", "-z", "--no-renames",
+        base, candidate, "--",
+    ])
+    if not raw:
+        return set()
+    records = raw.split(b"\0")
+    if records.pop() != b"" or any(not path for path in records):
+        raise SelectionError("invalid committed Git diff output")
+    return {os.fsdecode(path) for path in records}
+
+
 def check(root: Path, expected_source: str, expected_status: str) -> None:
     before = git_status(root)
     observed_source = source_key(root)
@@ -157,6 +178,8 @@ class Plan:
     source: str
     status: str
     head: str
+    base: str
+    committed: bool
     products: dict[str, tuple[str, list[str]]]
     selected: list[str]
     platform: dict[str, list[str]]
@@ -164,18 +187,19 @@ class Plan:
     stage_candidate: str | None
 
 
-def at_head(root: Path, path: str) -> bytes | None:
+def at_revision(root: Path, revision: str, path: str) -> bytes | None:
     result = subprocess.run(
-        ["git", "-C", str(root), "show", f"HEAD:{path}"], capture_output=True, check=False,
+        ["git", "-C", str(root), "show", f"{revision}:{path}"],
+        capture_output=True, check=False,
     )
     return result.stdout if result.returncode == 0 else None
 
 
-def platform_change(root: Path, path: str) -> bool:
+def platform_change(root: Path, path: str, base: str) -> bool:
     """Ignore prose and release-version-only edits, not operational metadata."""
     if Path(path).suffix.lower() in (".md", ".txt"):
         return False
-    previous = at_head(root, path)
+    previous = at_revision(root, base, path)
     current_path = root / path
     if previous is None or not current_path.is_file() or current_path.is_symlink():
         return True
@@ -211,8 +235,14 @@ def platform_change(root: Path, path: str) -> bool:
     return True
 
 
-def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Plan:
-    parser = argparse.ArgumentParser(
+class SelectionParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise SelectionError(message)
+
+
+def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse.Namespace:
+    parser_type = SelectionParser if not direct and "--json" in arguments else argparse.ArgumentParser
+    parser = parser_type(
         prog=f"{direct}/ci.sh" if direct else "./ci.sh",
         description="Run product tests; add platform tests for platform inputs or on request.",
     )
@@ -223,6 +253,10 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
     parser.add_argument("--quiet-result", action="store_true", help=argparse.SUPPRESS)
     if direct:
         parser.add_argument("--stage-candidate", metavar="ABSOLUTE_DIRECTORY")
+    else:
+        parser.add_argument("--base", metavar="COMMIT", help="compare against this full commit hash")
+        parser.add_argument("--candidate", metavar="COMMIT", help="require this clean committed HEAD")
+        parser.add_argument("--json", action="store_true", help="emit one aggregate JSON receipt")
     parser.add_argument("products", nargs="*", metavar="PRODUCT")
     args = parser.parse_intermixed_args(arguments)
     if direct:
@@ -234,12 +268,28 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
         parser.error("candidate staging directory must be absolute")
     if args.all and args.products:
         parser.error("--all cannot be combined with product arguments")
+    if not direct and bool(args.base) != bool(args.candidate):
+        parser.error("--base and --candidate are required together")
+    return args
 
+
+def make_plan(root: Path, arguments: list[str], direct: str | None = None,
+              options: argparse.Namespace | None = None) -> Plan:
+    args = options if options is not None else parse_arguments(arguments, direct)
+    stage_candidate = getattr(args, "stage_candidate", None)
     head = output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip()
     before = git_status(root)
+    committed = bool(getattr(args, "base", None))
+    base = commit_id(root, args.base) if committed else head
+    if committed:
+        candidate = commit_id(root, args.candidate)
+        if head != candidate:
+            raise StaleSelection("HEAD does not match the requested candidate commit")
+        if before:
+            raise StaleSelection("committed-range validation requires a clean worktree and index")
     expected_source = source_key(root)
     products = inventory(root)
-    changes = changed_paths(before)
+    changes = committed_paths(root, base, head) if committed else changed_paths(before)
     reasons: dict[str, list[str]] = {product: [] for product in products}
     shared = []
     retired_descriptors = []
@@ -257,7 +307,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
         else:
             if path.startswith("pipeline/products/") and path.endswith(".sh"):
                 current = root / path
-                if current.exists() or current.is_symlink() or at_head(root, path) is None:
+                if current.exists() or current.is_symlink() or at_revision(root, base, path) is None:
                     raise SelectionError(f"changed descriptor has no product owner: {path!r}")
                 retired_descriptors.append(path)
             shared.append(path)
@@ -269,7 +319,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
         selected = []
         for requested in args.products:
             if requested not in aliases:
-                parser.error(f"unknown product: {requested}")
+                raise SelectionError(f"unknown product: {requested}")
             product = aliases[requested]
             if product not in selected:
                 selected.append(product)
@@ -280,7 +330,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
     suites: dict[str, list[str]] = {suite: [] for suite in SHARED_INPUTS}
     suites["catalog"].extend(retired_descriptors)
     for path in sorted(changes):
-        if not platform_change(root, path):
+        if not platform_change(root, path, base):
             continue
         for suite, patterns in SHARED_INPUTS.items():
             if any(fnmatchcase(path, pattern) for pattern in patterns):
@@ -307,8 +357,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
                     platform[product].append(f"shared {suite}: {describe(suites[suite], args.verbose)}")
 
     for product in products:
-        if at_head(root, f"pipeline/products/{product}.sh") is None:
-            platform[product].append("new product descriptor relative to HEAD")
+        if at_revision(root, base, f"pipeline/products/{product}.sh") is None:
+            platform[product].append("new product descriptor relative to baseline")
             suites["pipeline"].append(f"new product: {product}")
             suites["catalog"].append(f"new product: {product}")
 
@@ -333,8 +383,11 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
     check(root, expected_source, expected_status)
     if output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip() != head:
         raise StaleSelection("HEAD changed during CI selection")
-    print(f"ci: baseline=HEAD {head[:12]}; staged, unstaged, and nonignored untracked changes; "
-          "committed branch changes excluded", file=sys.stderr)
+    if committed:
+        print(f"ci: baseline={base}; candidate={head}; committed tree changes", file=sys.stderr)
+    else:
+        print(f"ci: baseline=HEAD {head[:12]}; staged, unstaged, and nonignored untracked changes; "
+              "committed branch changes excluded", file=sys.stderr)
     print(f"ci: mode={mode}; selected={','.join(selected) or 'none'}; "
           f"skipped={len(products) - len(selected)}", file=sys.stderr)
     if mode == "changed":
@@ -357,7 +410,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None) -> Pl
     if outside:
         print(f"ci: affected platform products outside requested scope: {','.join(outside)}", file=sys.stderr)
     return Plan(mode, args.verbose, args.quiet_result, expected_source, expected_status,
-                head, products, selected, platform, suites, stage_candidate)
+                head, base, committed, products, selected, platform, suites, stage_candidate)
 
 
 def plan(root: Path, arguments: list[str]) -> None:
@@ -375,15 +428,39 @@ def run_command(command: list[str], environment: dict[str, str]) -> None:
 
 
 def broker(root: Path, gate: str, lane: str, body: list[str], *, verbose: bool,
-           environment: dict[str, str], receipt: bool = False) -> None:
+           environment: dict[str, str], receipt: bool = False,
+           capture_receipt: bool = False) -> dict | None:
     command = [sys.executable, str(root / "ci_broker/client.py"), "run", "--quiet-result",
                "--env", "CHANCERY_USAGE_DISABLED=1"]
     if verbose:
         command.append("--verbose")
-    if receipt:
+    if receipt or capture_receipt:
         command.append("--verbose-receipt")
-    run_command([*command, "--repo-root", str(root), "--gate", gate, "--lane", lane,
-                 "--", *body], environment)
+    command.extend(["--repo-root", str(root), "--gate", gate, "--lane", lane, "--", *body])
+    if not capture_receipt:
+        run_command(command, environment)
+        return None
+    result = subprocess.run(command, env=environment, stdout=subprocess.PIPE, check=False)
+    try:
+        value = json.loads(result.stdout)
+    except (ValueError, UnicodeError) as error:
+        raise SelectionError(f"CI broker returned no valid receipt for {gate}") from error
+    if (not isinstance(value, dict) or value.get("protocol_version") != 1
+            or value.get("gate") != gate
+            or value.get("source_key") != environment["CELL_CI_EXPECTED_SOURCE_KEY"]
+            or value.get("state") not in ("passed", "failed", "stale", "lost", "cancelled")):
+        raise SelectionError(f"CI broker returned an incompatible receipt for {gate}")
+    if result.returncode != gate_exit_code(value):
+        raise SelectionError(f"CI broker exit status disagrees with its receipt for {gate}")
+    return value
+
+
+def gate_exit_code(receipt: dict) -> int:
+    state = receipt["state"]
+    if state == "failed":
+        code = receipt.get("exit_code")
+        return code if type(code) is int and 1 <= code <= 125 else 1
+    return {"passed": 0, "stale": 75, "lost": 70, "cancelled": 130}[state]
 
 
 def shared_gate(root: Path, suite: str, verbose: bool, environment: dict[str, str]) -> None:
@@ -393,39 +470,144 @@ def shared_gate(root: Path, suite: str, verbose: bool, environment: dict[str, st
            verbose=verbose, environment=environment)
 
 
-def run(root: Path, arguments: list[str], direct: str | None = None) -> None:
-    selection = make_plan(root, arguments, direct)
-    environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
-                   "PYTHONDONTWRITEBYTECODE": "1"}
+def gate_plan(root: Path, selection: Plan,
+              direct: str | None = None) -> list[tuple[str, str, list[str]]]:
+    gates = []
     if not direct:
-        broker(root, "cell.structure", "light", [str(root / "pipeline/check.sh")],
-               verbose=selection.verbose, environment=environment)
-        broker(root, "cell.recognition", "heavy", [str(root / "pipeline/recognition.sh")],
-               verbose=selection.verbose, environment=environment)
+        gates.append(("cell.structure", "light", [str(root / "pipeline/check.sh")]))
+        gates.append(("cell.recognition", "heavy", [str(root / "pipeline/recognition.sh")]))
     # Each suite and product obtains admission separately. There is no outer
     # lease, and selection is part of each product's brokered command identity.
     for suite, why in selection.shared.items():
         if why and suite != "catalog":
-            shared_gate(root, suite, selection.verbose, environment)
+            lane = "heavy" if suite in ("install", "maintenance", "prompts") else "light"
+            gates.append((f"cell.platform.{suite}", lane,
+                          ["sh", str(root / "pipeline/platform.sh"), suite]))
     for product in selection.selected:
-        gate, lane = output(["sh", "-eu", "-c", '''
+        fields = output(["sh", "-eu", "-c", '''
 PIPELINE_ROOT=$1
 export PIPELINE_ROOT
 . "$PIPELINE_ROOT/pipeline/lib.sh"
 pipeline_load_descriptor "$2"
 printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
 ''', "ci-product", str(root), product]).decode().splitlines()
+        if len(fields) != 2 or not fields[0] or fields[1] not in ("heavy", "light"):
+            raise SelectionError(f"invalid CI gate descriptor for {product}")
+        gate, lane = fields
         group = "all" if selection.platform[product] else "product"
         body = [str(root / "pipeline/ci.sh"), product, "--tests", group]
         if selection.stage_candidate:
             body.extend(["--stage-candidate", selection.stage_candidate])
-        broker(root, gate, lane, body, verbose=selection.verbose, environment=environment,
-               receipt=bool(selection.stage_candidate))
+        gates.append((gate, lane, body))
     if selection.shared["catalog"]:
-        shared_gate(root, "catalog", selection.verbose, environment)
+        gates.append(("cell.platform.catalog", "heavy",
+                      ["sh", str(root / "pipeline/platform.sh"), "catalog"]))
+    return gates
+
+
+def check_plan(root: Path, selection: Plan) -> None:
     check(root, selection.source, selection.status)
     if output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip() != selection.head:
         raise StaleSelection("HEAD changed during CI; results are stale")
+
+
+def run_json(root: Path, arguments: list[str]) -> int:
+    result = {
+        "schema_version": 1, "state": "error", "base_commit": None,
+        "candidate_commit": None, "observed_head": None, "source_key": None,
+        "selection": None, "gates": [], "failure": None,
+    }
+    phase = "planning"
+    active_gate = None
+    code = 78
+    try:
+        options = parse_arguments(arguments)
+        result["base_commit"] = options.base
+        result["candidate_commit"] = options.candidate
+        result["observed_head"] = output([
+            "git", "-C", str(root), "rev-parse", "HEAD",
+        ]).decode().strip()
+        selection = make_plan(root, arguments, options=options)
+        gates = gate_plan(root, selection)
+        result.update({
+            "base_commit": selection.base, "candidate_commit": selection.head,
+            "source_key": selection.source,
+            "selection": {
+                "mode": "committed-range" if selection.committed else "working-tree",
+                "coverage_mode": selection.mode,
+                "product_tests": selection.selected,
+                "platform_products": [p for p in selection.selected if selection.platform[p]],
+                "shared_suites": [s for s, why in selection.shared.items() if why],
+                "platform_reasons": selection.platform,
+                "shared_reasons": selection.shared,
+                "required_gates": [
+                    {"gate": gate, "lane": lane, "command": body}
+                    for gate, lane, body in gates
+                ],
+            },
+        })
+        check_plan(root, selection)
+        environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
+                       "PYTHONDONTWRITEBYTECODE": "1"}
+        phase = "broker"
+        result["state"] = "passed"
+        code = 0
+        for gate, lane, body in gates:
+            active_gate = gate
+            receipt = broker(root, gate, lane, body, verbose=selection.verbose,
+                             environment=environment, capture_receipt=True)
+            result["gates"].append(receipt)
+            if receipt["state"] != "passed":
+                result["state"] = receipt["state"]
+                result["failure"] = {
+                    "kind": "gate_" + receipt["state"],
+                    "message": receipt.get("detail"), "gate": gate,
+                    "execution_id": receipt.get("execution_id"),
+                }
+                code = gate_exit_code(receipt)
+                break
+        phase = "candidate_check"
+        check_plan(root, selection)
+        result["observed_head"] = selection.head
+    except StaleSelection as error:
+        result["state"] = "stale"
+        try:
+            result["observed_head"] = output([
+                "git", "-C", str(root), "rev-parse", "HEAD",
+            ]).decode().strip()
+        except (SelectionError, UnicodeError, OSError):
+            result["observed_head"] = None
+        result["failure"] = {"kind": "candidate_stale", "message": str(error),
+                             "gate": active_gate, "execution_id": None}
+        code = 75
+    except (SelectionError, UnicodeError, OSError, subprocess.SubprocessError) as error:
+        result["state"] = "error"
+        result["failure"] = {"kind": phase + "_error", "message": str(error),
+                             "gate": active_gate, "execution_id": None}
+        code = 78
+    except KeyboardInterrupt:
+        result["state"] = "cancelled"
+        result["failure"] = {"kind": "interrupted", "message": "CI caller interrupted",
+                             "gate": active_gate, "execution_id": None}
+        code = 130
+    if result["failure"]:
+        print(f"ci.sh: {result['failure']['message']}", file=sys.stderr)
+    print(json.dumps(result, sort_keys=True), flush=True)
+    return code
+
+
+def run(root: Path, arguments: list[str], direct: str | None = None) -> int:
+    if not direct and "--json" in arguments:
+        return run_json(root, arguments)
+    selection = make_plan(root, arguments, direct)
+    gates = gate_plan(root, selection, direct)
+    check_plan(root, selection)
+    environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
+                   "PYTHONDONTWRITEBYTECODE": "1"}
+    for gate, lane, body in gates:
+        broker(root, gate, lane, body, verbose=selection.verbose, environment=environment,
+               receipt=bool(selection.stage_candidate and body[0] == str(root / "pipeline/ci.sh")))
+    check_plan(root, selection)
     if not selection.quiet and not selection.stage_candidate:
         platform = [product for product in selection.selected if selection.platform[product]]
         shared = [suite for suite, why in selection.shared.items() if why]
@@ -434,6 +616,7 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
               f"platform-shared={','.join(shared) or 'none'}; "
               f"products-skipped={len(selection.products) - len(selection.selected)}; "
               f"platform-products-skipped={len(selection.products) - len(platform)}")
+    return 0
 
 
 def run_shared(root: Path, arguments: list[str]) -> None:
@@ -464,9 +647,9 @@ def main() -> int:
         if len(sys.argv) >= 2 and sys.argv[1] == "plan":
             plan(root, sys.argv[2:])
         elif len(sys.argv) >= 2 and sys.argv[1] == "run":
-            run(root, sys.argv[2:])
+            return run(root, sys.argv[2:])
         elif len(sys.argv) >= 3 and sys.argv[1] == "product":
-            run(root, sys.argv[3:], sys.argv[2])
+            return run(root, sys.argv[3:], sys.argv[2])
         elif len(sys.argv) >= 2 and sys.argv[1] == "shared":
             run_shared(root, sys.argv[2:])
         elif len(sys.argv) == 4 and sys.argv[1] == "check":

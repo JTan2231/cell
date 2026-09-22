@@ -51,6 +51,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 | "weaver"
                 | "mentor"
                 | "emt"
+                | "ci-manager"
         ) || !seen.insert(entry.id.clone())
         {
             return Err("unknown prompt owner or duplicate ID".into());

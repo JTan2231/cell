@@ -20,7 +20,9 @@ selection formats, and invalid templates stop request preparation.
 
 Each product reads `cell.prompts.OWNER` once, then reads the exact component
 versions named in that string. Owners are `annals`, `conatus`, `krisis`,
-`semantics`, `paperboy`, `platter`, `weaver`, `mentor`, and `emt`. For example:
+`semantics`, `paperboy`, `platter`, `weaver`, `mentor`, `emt`, and `ci-manager`.
+CI Manager freezes its selected repair instructions and template before its
+first model request, then retains every rendered request for recovery. For example:
 
 ```json
 {"schema_version":1,"entries":{"weaver.narrative.instructions":1,"weaver.tools.read_decisions.description":1,"weaver.tools.submit_document.description":1}}
@@ -62,7 +64,7 @@ The importer initializes only the selected Bazaar path. It preserves unrelated
 IDs, reuses identical latest content, and publishes selections after every
 component exists. An interrupted import may leave unused component versions.
 Repeat the same import to finish; inspect history after an uncertain write.
-Publication is per product, not an atomic cutover of all nine products.
+Publication is per owner, not an atomic cutover of all requesters.
 
 Selection version 1 is the immutable migration baseline for historical jobs.
 Import the original seed before publishing edits. Keep that baseline and all

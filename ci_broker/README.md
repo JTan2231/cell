@@ -28,6 +28,12 @@ result, including on success. Use both flags to keep stdout machine-readable.
 These flags change presentation only. `--attribution-json` adds caller-owned
 correlation metadata without changing execution identity.
 
+Machine receipts include `diagnostic_path` when a retained transcript exists.
+The field is null when no transcript is available, including after successful
+execution. Consumers must handle log retention and unavailable files. The path
+does not establish that the transcript is complete; preserve its truncation
+marker when copying diagnostics.
+
 The broker captures output once per execution. Owning and joined callers receive
 the same failure diagnostics. Logs use mode `0600` in a private directory under
 the broker state directory, outside the worktree. Each log has an 8 MiB limit.

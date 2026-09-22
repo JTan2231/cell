@@ -445,6 +445,63 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
+## Serial CI delivery
+
+The installed `cell-ci` manager owns one durable FIFO queue for one configured
+Cell Git common directory. Linked worktrees submit immutable commits to this
+queue. Development continues on `main`. The manager owns `refs/ci/accepted`,
+private input and candidate refs, and its private worktrees. Ordinary `./ci.sh`
+remains a foreground check. Its submission and operation subcommands use the
+installed manager.
+
+At dequeue, the manager records the current accepted commit as the job's base.
+It merges the submitted commit into a private candidate. Each repair produces
+a new commit before validation. Every validation compares the same accepted
+base with the current candidate and retains aggregate gate receipts. Acceptance
+uses a guarded ref update. Deployment selects that exact accepted candidate,
+with a stable caller request ID and a retained operation receipt. Development
+changes made after submission do not change the job.
+
+Only one delivery lifecycle is active. The manager does not hold a CI broker
+slot while it waits for a model, deployment, or email. Individual gates still
+use the existing broker. A surviving model or deployment remains associated
+with the active job after a manager restart. Unknown execution or lost-process
+ownership blocks admission; a timeout does not prove termination.
+
+CI is an ordinary Nucleus requester. It uses read-only workspace access and
+built-in shell execution, with no requester tools or response schema. The
+completed response must contain only a raw text patch. The manager retains,
+checks, applies, and commits that patch. The initial policy permits three
+`gpt-5.6-luna` low attempts and one `gpt-5.6-terra` medium attempt. Attempts
+accumulate within the job. Quota deferral preserves the same request identity.
+Infrastructure failures do not select a stronger model. Bazaar supplies the
+`cell.prompts.ci-manager` selection; import its components before activation.
+
+Deployment holds the installed manager's Nucleus admission before replacing
+Nucleus. CI reports drained when no admitted or unresolved model invocation
+remains and the admission hold prevents another. Its delivery job can continue
+to supervise deployment while that hold is present. Waiting for the delivery
+job to finish at this boundary would cause a circular wait. The coordinator
+releases only its own manager hold after coherent activation or recovery.
+
+Email receives a retained program-authored outcome and idempotency key. The
+manager permits two transport invocations, at least five minutes apart and
+within 23 hours. Provider acceptance completes notification; uncertain delivery
+blocks the queue. An email failure never restarts deployment. Validation,
+acceptance, installation, cleanup, and notification retain separate outcomes.
+
+Manager replacement uses explicit maintenance, outside its own delivery queue.
+Pause admission and finish or recover the active job before replacement. The
+installer selects a fixed release and compatible journal schema under exclusive
+ownership. It preserves queued jobs and starts the replacement paused. It does
+not load worker code from mutable development source or clear existing holds.
+The CI manager is shared infrastructure; the product deployment inventory does
+not deploy the manager itself.
+
+Use the [CI operation contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
+for initialization, controls, supported patch limits, retained evidence, and
+recovery outcomes. Installation and queue activation are separate operations.
+
 ## Shared command usage
 
 Product CLIs record agent command invocations in Chancery's private usage

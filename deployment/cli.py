@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy selected Cell systems from one committed main snapshot."""
+"""Deploy selected Cell systems from one exact committed snapshot."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import datetime as dt
 import fcntl
+import hashlib
 import io
 import json
 import os
@@ -39,6 +40,8 @@ EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
             "recover": "recovered", "configure": "configured", "activate": "activated"}
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 RUN_ID = re.compile(r"[0-9a-f]{32}")
+REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}")
+COMMIT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 MAX_REPLY = 1024 * 1024
 MAX_DETAIL = 1024
 MAX_DIAGNOSTICS = 4096
@@ -47,6 +50,10 @@ HEARTBEAT_SECONDS = 60
 
 class DeploymentError(RuntimeError):
     """A deployment cannot safely advance."""
+
+
+class DeploymentBusy(DeploymentError):
+    """A deployment or one of its descendants still owns admission."""
 
 
 def now() -> str:
@@ -321,9 +328,16 @@ def setup_settings(path: Path | None) -> dict[str, Any]:
     return value
 
 
-def plan(root: Path, requested: Sequence[str]) -> dict[str, Any]:
-    revision = git(root, "rev-parse", "--verify", "refs/heads/main^{commit}")
-    products = catalog(root, revision)
+def source_commit(root: Path, selected: str | None = None) -> str:
+    if selected is not None and not COMMIT_ID.fullmatch(selected):
+        raise DeploymentError("source commit must be a complete lowercase commit ID")
+    revision = git(root, "rev-parse", "--verify", f"{selected or 'refs/heads/main'}^{{commit}}")
+    if selected is not None and revision != selected:
+        raise DeploymentError("source commit does not identify that exact commit")
+    return revision
+
+
+def requested_products(products: dict[str, dict[str, Any]], requested: Sequence[str]) -> list[str]:
     aliases: dict[str, str] = {}
     for name, item in products.items():
         for alias in [name, *item["aliases"]]:
@@ -337,11 +351,18 @@ def plan(root: Path, requested: Sequence[str]) -> dict[str, Any]:
         if name is None:
             raise DeploymentError(f"unknown system: {value}; available: {', '.join(sorted(products))}")
         if products[name]["metadata"] is None:
-            raise DeploymentError(f"{name} has no deployment adapter in committed main")
+            raise DeploymentError(f"{name} has no deployment adapter in the selected commit")
         if name not in selected:
             selected.append(name)
     if not selected:
         raise DeploymentError("select at least one system")
+    return selected
+
+
+def plan(root: Path, requested: Sequence[str], selected_commit: str | None = None) -> dict[str, Any]:
+    revision = source_commit(root, selected_commit)
+    products = catalog(root, revision)
+    selected = requested_products(products, requested)
     roots = list(selected)
     reasons = {name: "requested" for name in roots}
     pending = list(selected)
@@ -379,7 +400,8 @@ def plan(root: Path, requested: Sequence[str]) -> dict[str, Any]:
     return {"schema": SCHEMA, "source_commit": revision,
             "products": ordered(selected, dependencies), "requested_products": roots,
             "selection_reasons": reasons, "catalog": products,
-            "publication": "none", "source_policy": "committed local main; working edits excluded"}
+            "publication": "none", "source_policy": "exact caller commit; working edits excluded" if selected_commit
+                else "committed local main; working edits excluded"}
 
 
 def archive_source(root: Path, revision: str, destination: Path) -> dict[str, Any]:
@@ -407,15 +429,17 @@ def archive_source(root: Path, revision: str, destination: Path) -> dict[str, An
 
 
 def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
-               *, verbose: bool = False, settings: dict[str, Any] | None = None) -> Path:
+               *, verbose: bool = False, settings: dict[str, Any] | None = None,
+               selected_commit: str | None = None, chosen_plan: dict[str, Any] | None = None,
+               request_id: str | None = None, run_id: str | None = None) -> Path:
     if sys.version_info < (3, 11):
         raise DeploymentError("deployment requires Python 3.11 or newer")
-    chosen = plan(root, requested)
+    chosen = chosen_plan if chosen_plan is not None else plan(root, requested, selected_commit)
     if set(settings or {}) - chosen["catalog"].keys():
         raise DeploymentError("settings name a product outside the committed inventory")
     storage = storage or state_root()
     private_directory(storage)
-    run_id = uuid.uuid4().hex
+    run_id = run_id or uuid.uuid4().hex
     run = storage / "active"
     if run.exists() or run.is_symlink():
         raise DeploymentError("an active deployment workspace already exists")
@@ -429,11 +453,13 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
             "active_operation": None, "affected": [], "mutation_started": False,
             "apply_started": False, "verbose": verbose, "diagnostics": [], "settings": settings or {},
             "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"}}
+    if request_id is not None:
+        data["request_id"] = request_id
     durable_json(run / "run.json", data)
     try:
         source_manifest = archive_source(root, chosen["source_commit"], run / "source")
         if "deployment/cli.py" not in source_manifest:
-            raise DeploymentError("deployment runner must be committed to main before starting a run")
+            raise DeploymentError("deployment runner must be present in the selected commit")
         durable_json(run / "source-manifest.json", source_manifest)
         data["source_manifest_sha256"] = candidate.digest(run / "source-manifest.json")
         data["python_sha256"] = candidate.digest(Path(data["python"]))
@@ -470,7 +496,7 @@ def deployment_lock(storage: Path) -> Iterator[int]:
         try:
             fcntl.flock(descriptor_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise DeploymentError("another deployment or its active child holds the deployment lock") from error
+            raise DeploymentBusy("another deployment or its active child holds the deployment lock") from error
         yield descriptor_fd
     finally:
         os.close(descriptor_fd)
@@ -482,6 +508,94 @@ def process_birth(pid: int) -> str | None:
     return output.stdout.strip() or None
 
 
+def operation_path(storage: Path, request_id: str) -> Path:
+    if not REQUEST_ID.fullmatch(request_id):
+        raise DeploymentError("request ID must be 1-256 characters using letters, digits, _, ., :, / or -")
+    return storage / "operations" / f"{hashlib.sha256(request_id.encode()).hexdigest()}.json"
+
+
+def read_operation(storage: Path, request_id: str) -> dict[str, Any] | None:
+    path = operation_path(storage, request_id)
+    if not path.exists() and not path.is_symlink():
+        return None
+    record = read_json(path)
+    request = record.get("request")
+    run_id = record.get("run_id")
+    if (record.get("schema") != SCHEMA or record.get("request_id") != request_id
+            or not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id)
+            or not isinstance(request, dict)
+            or record.get("request_hash") != hashlib.sha256(candidate.json_bytes(request)).hexdigest()
+            or record.get("phase") not in ("admitted", "running", "finalizing", "terminal")
+            or not isinstance(record.get("products"), list)
+            or (record.get("phase") == "terminal" and not isinstance(record.get("result"), dict))):
+        raise DeploymentError("invalid retained deployment operation")
+    return record
+
+
+def save_operation(storage: Path, record: dict[str, Any]) -> None:
+    private_directory(storage / "operations")
+    record["updated_at"] = now()
+    durable_json(operation_path(storage, record["request_id"]), record)
+
+
+def result_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    result = {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
+              "products": data["products"], "source_commit": data["source_commit"],
+              "detail": bounded_text(data.get("detail", ""), MAX_DETAIL),
+              "exit_code": 0 if data["state"] in ("installed", "succeeded") else 1,
+              "recovery": data.get("recovery", {"state": "not_needed"}),
+              "maintenance": maintenance_result(data), "build": data.get("build"),
+              "cleanup": dict(data.get("cleanup", {"releases": "not_started", "workspace": "pending"})),
+              "diagnostics": data.get("diagnostics", [])}
+    if data.get("request_id"):
+        result["request_id"] = data["request_id"]
+    return result
+
+
+def retain_operation_result(storage: Path, data: dict[str, Any], result: dict[str, Any],
+                            *, terminal: bool = False) -> None:
+    request_id = data.get("request_id")
+    if request_id is None:
+        return
+    record = read_operation(storage, request_id)
+    if record is None or record["run_id"] != data["run_id"]:
+        raise DeploymentError("deployment outcome has no matching admitted operation")
+    record["result"] = result
+    record["phase"] = "terminal" if terminal else "finalizing"
+    save_operation(storage, record)
+
+
+def deployment_busy(storage: Path) -> bool:
+    try:
+        descriptor_fd = os.open(storage / "deployment.lock", os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return False
+    try:
+        try:
+            fcntl.flock(descriptor_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        return False
+    finally:
+        os.close(descriptor_fd)
+
+
+def operation_status(storage: Path, request_id: str, *, running: bool | None = None) -> dict[str, Any]:
+    record = read_operation(storage, request_id)
+    if record is None:
+        return {"schema": SCHEMA, "request_id": request_id, "state": "not_found",
+                "operation_state": "not_found", "exit_code": 0}
+    if record["phase"] == "terminal":
+        return {**record["result"], "operation_state": "terminal"}
+    if running is None:
+        running = deployment_busy(storage)
+    result = {**record.get("result", {}), "schema": SCHEMA, "request_id": request_id,
+              "run_id": record["run_id"], "source_commit": record["request"]["source_commit"],
+              "products": record["products"], "state": "active" if running else "interrupted",
+              "operation_state": "active" if running else "needs_reconciliation", "exit_code": 0}
+    return result
+
+
 def cleanup_active(storage: Path) -> None:
     """Remove the inactive workspace; caller must hold the host deployment lock."""
     path = storage / "active"
@@ -490,10 +604,14 @@ def cleanup_active(storage: Path) -> None:
     if not path.exists():
         return
     private_directory(path)
+    data = None
+    result = None
     if (path / "run.json").exists():
         data = read_json(path / "run.json")
         if unresolved(data):
             raise DeploymentError("unfinished deployment retained for automatic recovery on the next deployment")
+        result = result_from_data(data)
+        retain_operation_result(storage, data, result)
         repository = Path(data["repository"])
         worktree = (path / "worktree").resolve()
         registered = git(repository, "worktree", "list", "--porcelain").splitlines()
@@ -504,6 +622,9 @@ def cleanup_active(storage: Path) -> None:
     for directory, _, _ in os.walk(path, followlinks=False):
         Path(directory).chmod(0o700)
     shutil.rmtree(path)
+    if data is not None and result is not None:
+        result["cleanup"]["workspace"] = "removed"
+        retain_operation_result(storage, data, result, terminal=True)
 
 
 def unresolved(data: dict[str, Any]) -> bool:
@@ -512,7 +633,7 @@ def unresolved(data: dict[str, Any]) -> bool:
             and data.get("recovery", {}).get("state") != "succeeded")
 
 
-def reconcile_active(storage: Path, lock_fd: int) -> None:
+def reconcile_active(storage: Path, lock_fd: int, *, before_start: bool = True) -> None:
     path = storage / "active"
     if path.is_symlink():
         raise DeploymentError("refusing symbolic active deployment workspace")
@@ -522,7 +643,10 @@ def reconcile_active(storage: Path, lock_fd: int) -> None:
         return
     run = Run(path, lock_fd)
     run.check_source()
-    print("cell-deploy: recovering the unfinished deployment before starting the requested deployment", file=sys.stderr, flush=True)
+    message = "cell-deploy: recovering the unfinished deployment"
+    if before_start:
+        message += " before starting the requested deployment"
+    print(message, file=sys.stderr, flush=True)
     if run.data.get("lifecycle_version", 1) >= 3:
         result = subprocess.call([run.data["python"], str(run.source / "deployment/cli.py"),
                                   "_recover", str(path), str(lock_fd)],
@@ -919,7 +1043,48 @@ class Run:
             self.save()
         self.data["products"] = ordered(self.data["products"], after)
         self.data["affected"] = ordered(sorted(inspected), after)
+        if "nucleus" in self.data["affected"]:
+            command = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".local/bin/cell-ci"
+            if command.exists() or command.is_symlink():
+                selected = command.resolve(strict=True)
+                if not os.access(selected, os.X_OK):
+                    raise DeploymentError("installed CI manager maintenance command is not executable")
+                self.data["ci_manager"] = {"command": str(selected), "sha256": candidate.digest(selected)}
         self.save()
+
+    def ci_maintenance(self, operation: str) -> dict[str, Any]:
+        manager = self.data.get("ci_manager")
+        if manager is None:
+            return {"held": False, "drained": True, "owners": []}
+        command = Path(manager["command"])
+        if candidate.digest(command) != manager["sha256"]:
+            raise DeploymentError("the captured CI manager maintenance command changed")
+        if operation == "hold":
+            manager["hold_attempted"] = True
+            self.save()
+        recorded_operation = "ci-status" if operation == "status" else operation
+        returncode, output = self.command("cell-ci", recorded_operation,
+            [str(command), "maintenance", operation, "--owner", self.data["run_id"]])
+        if output.stat().st_size > MAX_REPLY:
+            raise DeploymentError("CI manager maintenance reply exceeds the protocol bound")
+        reply = read_json(output)
+        owners = reply.get("owners")
+        if (returncode or not isinstance(reply.get("held"), bool)
+                or not isinstance(reply.get("drained"), bool) or not isinstance(owners, list)
+                or not all(isinstance(owner, str) for owner in owners)):
+            raise DeploymentError("CI manager maintenance did not establish its outcome")
+        owned = self.data["run_id"] in owners
+        if operation in ("hold", "status") and not owned:
+            raise DeploymentError("CI manager did not retain this deployment's admission hold")
+        if operation == "release" and owned:
+            raise DeploymentError("CI manager did not release this deployment's admission hold")
+        status = "held" if operation == "hold" else "released" if operation == "release" else "ready"
+        self.event("outcome", product="cell-ci", operation=recorded_operation,
+                   response={"status": status}, returncode=0)
+        manager["held"] = owned
+        self.data["active_operation"] = None
+        self.save()
+        return reply
 
     def phase(self, operation: str, products: Sequence[str]) -> None:
         self.data["state"] = {"hold": "holding", "drain": "draining", "apply": "applying",
@@ -961,6 +1126,8 @@ class Run:
             release_order.append("nucleus")
         self.phase("release", release_order)
         self.phase("activate", affected)
+        if self.data.get("ci_manager", {}).get("hold_attempted"):
+            self.ci_maintenance("release")
         self.data["state"] = "installed"
         self.data["detail"] = "Selected products verified; every run-owned maintenance hold released."
         self.event("installed")
@@ -968,6 +1135,12 @@ class Run:
     def quiesce(self) -> None:
         # An admitted consumer can still need ordinary provider commands.
         # Drain it before closing its providers, using the declared topology.
+        if self.data.get("ci_manager") is not None:
+            reply = self.ci_maintenance("hold")
+            while not reply["drained"]:
+                self.heartbeat()
+                time.sleep(1)
+                reply = self.ci_maintenance("status")
         for product in reversed(self.data["affected"]):
             if product != "nucleus":
                 self.phase("hold", [product])
@@ -990,7 +1163,8 @@ class Run:
             self.event("recovered")
             return
         affected = self.data["affected"]
-        if active and active["product"] not in affected:
+        if active and active["product"] not in affected and not (
+                active["product"] == "cell-ci" and self.data.get("ci_manager")):
             raise DeploymentError("the uncertain operation has no captured product baseline")
         for product in affected:
             record = self.record(product)
@@ -1039,6 +1213,8 @@ class Run:
         self.phase("release", release_order)
         if self.data.get("lifecycle_version", 1) >= 2:
             self.phase("activate", affected)
+        if self.data.get("ci_manager", {}).get("hold_attempted"):
+            self.ci_maintenance("release")
         self.data["state"] = "recovered"
         self.data["detail"] = "Products proved coherent recovery; run-owned holds released. Deployment is not reported as succeeded."
         self.event("recovered")
@@ -1135,18 +1311,171 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
         elif data.get("mutation_started") and data.get("recovery", {}).get("state") == "not_needed":
             data["recovery"] = {"state": "not_attempted"}
         durable_json(path / "run.json", data)
-    return {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
-            "products": data["products"], "source_commit": data["source_commit"],
-            "detail": bounded_text(data.get("detail", ""), MAX_DETAIL), "exit_code": 1 if returncode else 0,
-            "recovery": data.get("recovery", {"state": "not_needed"}), "maintenance": maintenance_result(data),
-            "build": data.get("build"),
-            "cleanup": data.get("cleanup", {"releases": "not_started", "workspace": "pending"}),
-            "diagnostics": data.get("diagnostics", [])}
+    result = result_from_data(data)
+    result["exit_code"] = 1 if returncode else 0
+    retain_operation_result(path.parent, data, result)
+    return result
+
+
+def canonical_request(root: Path, products: Sequence[str], selected_commit: str | None,
+                      settings: dict[str, Any] | None) -> dict[str, Any]:
+    if selected_commit is None:
+        raise DeploymentError("a caller-correlated deployment requires --source-commit")
+    revision = source_commit(root, selected_commit)
+    inventory = catalog(root, revision)
+    if set(settings or {}) - inventory.keys():
+        raise DeploymentError("settings name a product outside the selected inventory")
+    return {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
+            "source_commit": revision, "products": sorted(requested_products(inventory, products)),
+            "settings": settings or {}}
+
+
+def blocked_result(request_id: str, detail: str, *, blocker: str | None = None) -> dict[str, Any]:
+    result = {"schema": SCHEMA, "request_id": request_id, "state": "blocked",
+              "operation_state": "blocked", "detail": detail, "exit_code": 75}
+    if blocker is not None:
+        result["blocking_run_id"] = blocker
+    return result
+
+
+def finish_correlated(storage: Path, request_id: str) -> dict[str, Any]:
+    """Finalize known effects under the host lock. Never start or recover work."""
+    record = read_operation(storage, request_id)
+    if record is None:
+        raise DeploymentError("the admitted deployment operation disappeared")
+    active = storage / "active"
+    if (active / "run.json").exists():
+        data = read_json(active / "run.json")
+        if data.get("run_id") != record["run_id"] or data.get("request_id") != request_id:
+            return blocked_result(request_id, "another operation owns the active deployment workspace",
+                                  blocker=data.get("run_id"))
+        result = result_from_data(data)
+        if unresolved(data):
+            result["cleanup"]["workspace"] = "retained_for_recovery"
+            retain_operation_result(storage, data, result)
+            return {**result, "operation_state": "needs_reconciliation"}
+        if data["state"] not in ("installed", "succeeded", "cleanup_failed", "recovered", "stopped"):
+            data.update(state="stopped", detail="Deployment interrupted before installation completed.")
+            durable_json(active / "run.json", data)
+        cleanup_active(storage)
+        return operation_status(storage, request_id, running=False)
+    if active.exists():
+        # No external process can start before create_run writes run.json.
+        if record["phase"] != "admitted":
+            raise DeploymentError("the active deployment lost its recovery evidence")
+        cleanup_active(storage)
+    if record.get("result") is None:
+        if record["phase"] != "admitted":
+            raise DeploymentError("deployment outcome and active recovery evidence are both unavailable")
+        record["result"] = {"schema": SCHEMA, "request_id": request_id, "run_id": record["run_id"],
+            "source_commit": record["request"]["source_commit"], "products": record["products"],
+            "state": "stopped", "detail": "Deployment interrupted before its worker started.",
+            "exit_code": 1, "recovery": {"state": "not_needed"},
+            "maintenance": {"state": "not_started"},
+            "cleanup": {"releases": "not_started", "workspace": "removed"}}
+    else:
+        if record["result"].get("maintenance", {}).get("state") == "attention_required":
+            raise DeploymentError("deployment recovery evidence is unavailable while maintenance remains unresolved")
+        record["result"]["cleanup"]["workspace"] = "removed"
+    record["phase"] = "terminal"
+    save_operation(storage, record)
+    return operation_status(storage, request_id, running=False)
+
+
+def start_correlated(root: Path, products: Sequence[str], storage: Path, *, request_id: str,
+                     selected_commit: str | None, verbose: bool,
+                     settings: dict[str, Any] | None) -> dict[str, Any]:
+    operation_path(storage, request_id)
+    request = canonical_request(root, products, selected_commit, settings)
+    admitted = False
+    result = None
+    try:
+        with deployment_lock(storage) as lock_fd:
+            existing = read_operation(storage, request_id)
+            if existing is not None:
+                if existing["request"] != request:
+                    raise DeploymentError("request ID already belongs to a different deployment request")
+                result = operation_status(storage, request_id, running=False)
+                result["replayed"] = True
+                if result["operation_state"] != "terminal":
+                    result["exit_code"] = 75
+                return result
+            active = storage / "active"
+            if active.exists() or active.is_symlink():
+                blocker = read_json(active / "run.json").get("run_id") if (active / "run.json").exists() else None
+                return blocked_result(request_id, "reconcile the previous deployment before admitting another", blocker=blocker)
+            chosen = plan(root, request["products"], request["source_commit"])
+            record = {"schema": SCHEMA, "request_id": request_id, "request": request,
+                      "request_hash": hashlib.sha256(candidate.json_bytes(request)).hexdigest(),
+                      "run_id": uuid.uuid4().hex, "products": chosen["products"],
+                      "phase": "admitted", "admitted_at": now()}
+            save_operation(storage, record)
+            admitted = True
+            path = create_run(root, products, storage, verbose=verbose, settings=settings,
+                              chosen_plan=chosen, request_id=request_id, run_id=record["run_id"])
+            record["phase"] = "running"
+            save_operation(storage, record)
+            result = launch(path, lock_fd)
+    except DeploymentBusy:
+        existing = read_operation(storage, request_id)
+        if existing is not None:
+            if existing["request"] != request:
+                raise DeploymentError("request ID already belongs to a different deployment request")
+            result = operation_status(storage, request_id)
+            result["replayed"] = True
+            if result["operation_state"] != "terminal":
+                result["exit_code"] = 75
+            return result
+        return blocked_result(request_id, "another deployment or its child is active")
+    finally:
+        if admitted:
+            try:
+                with deployment_lock(storage):
+                    result = finish_correlated(storage, request_id)
+            except DeploymentBusy:
+                result = operation_status(storage, request_id)
+                result["exit_code"] = 75
+    assert result is not None
+    return result
+
+
+def reconcile_request(storage: Path, request_id: str) -> dict[str, Any]:
+    """Recover only this admitted operation; never admit a replacement."""
+    observed = operation_status(storage, request_id)
+    if observed["operation_state"] in ("not_found", "terminal"):
+        return observed
+    try:
+        with deployment_lock(storage) as lock_fd:
+            record = read_operation(storage, request_id)
+            if record is None:
+                return operation_status(storage, request_id, running=False)
+            active = storage / "active"
+            if (active / "run.json").exists():
+                data = read_json(active / "run.json")
+                if data.get("run_id") != record["run_id"] or data.get("request_id") != request_id:
+                    return blocked_result(request_id, "another operation owns the active deployment workspace",
+                                          blocker=data.get("run_id"))
+                try:
+                    reconcile_active(storage, lock_fd, before_start=False)
+                except DeploymentError:
+                    data = read_json(active / "run.json")
+                    result = result_from_data(data)
+                    retain_operation_result(storage, data, result)
+                    return {**result, "operation_state": "needs_reconciliation"}
+            return finish_correlated(storage, request_id)
+    except DeploymentBusy:
+        result = operation_status(storage, request_id)
+        result["exit_code"] = 75
+        return result
 
 
 def start(root: Path, products: Sequence[str], storage: Path | None = None,
-          *, verbose: bool = False, settings: dict[str, Any] | None = None) -> dict[str, Any]:
+          *, verbose: bool = False, settings: dict[str, Any] | None = None,
+          selected_commit: str | None = None, request_id: str | None = None) -> dict[str, Any]:
     storage = storage or state_root()
+    if request_id is not None:
+        return start_correlated(root, products, storage, request_id=request_id,
+                                selected_commit=selected_commit, verbose=verbose, settings=settings)
     admitted = False
     result = None
     try:
@@ -1154,7 +1483,8 @@ def start(root: Path, products: Sequence[str], storage: Path | None = None,
             admitted = True
             reconcile_active(storage, lock_fd)
             cleanup_active(storage)
-            path = create_run(root, products, storage, verbose=verbose, settings=settings)
+            path = create_run(root, products, storage, verbose=verbose, settings=settings,
+                              selected_commit=selected_commit)
             result = launch(path, lock_fd)
     finally:
         if admitted:
@@ -1210,7 +1540,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
     if arguments[:1] == ["--verbose"] and arguments[1:2] in (["start"], ["plan"]):
         arguments[0], arguments[1] = arguments[1], arguments[0]
-    if arguments and arguments[0] not in ("start", "plan", "-h", "--help"):
+    if arguments and arguments[0] not in ("start", "plan", "status", "reconcile", "-h", "--help"):
         arguments.insert(0, "start")
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1219,12 +1549,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         command.add_argument("products", nargs="+")
         command.add_argument("--verbose", action="store_true", help="show deployment operation progress on stderr")
         command.add_argument("--settings", type=Path, help="private JSON file of product setup choices; credential file references only")
+        command.add_argument("--source-commit", help="complete lowercase commit ID; defaults to local main")
+        if name == "start":
+            command.add_argument("--request-id", help="durable caller identity; requires --source-commit")
+    for name in ("status", "reconcile"):
+        command = commands.add_parser(name)
+        command.add_argument("--request-id", required=True, help="exact admitted caller identity")
     parsed = parser.parse_args(arguments)
     try:
-        root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
-        settings = setup_settings(parsed.settings)
-        if parsed.command == "plan":
-            result = plan(root, parsed.products)
+        if parsed.command == "status":
+            result = operation_status(state_root(), parsed.request_id)
+        elif parsed.command == "reconcile":
+            if sys.platform != "darwin":
+                raise DeploymentError("live deployment recovery is supported only for the current macOS user")
+            result = reconcile_request(state_root(), parsed.request_id)
+        elif parsed.command == "plan":
+            root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
+            settings = setup_settings(parsed.settings)
+            result = plan(root, parsed.products, parsed.source_commit)
             if set(settings) - result["catalog"].keys():
                 raise DeploymentError("settings name a product outside the committed inventory")
             result["settings_products"] = sorted(settings)
@@ -1232,7 +1574,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             if sys.platform != "darwin":
                 raise DeploymentError("live deployment is supported only for the current macOS user")
-            result = start(root, parsed.products, verbose=parsed.verbose, settings=settings)
+            root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
+            settings = setup_settings(parsed.settings)
+            result = start(root, parsed.products, verbose=parsed.verbose, settings=settings,
+                           selected_commit=parsed.source_commit, request_id=parsed.request_id)
         print_result(result)
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
