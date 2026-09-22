@@ -1,7 +1,7 @@
 {
   "id": "ci-manager.queue.operate",
   "contract_version": 1,
-  "kind": "operation",
+  "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Submit and operate the serial Cell CI queue",
@@ -120,9 +120,9 @@
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [
-      {"status": "declared", "statement": "Read-only agent execution, immutable submission identity, cancellation and quota behavior rely on the Nucleus requester contract; Nucleus does not decide whether a patch fixes CI.", "target": "nucleus.requester.integrate", "kind": "control"},
-      {"status": "declared", "statement": "Authored repair instructions and prompt templates rely on exact versioned Bazaar reads. Missing prompt state does not permit a hard-coded fallback.", "target": "bazaar.string.read", "kind": "data"},
-      {"status": "declared", "statement": "The final notification relies on Email's fixed-recipient, stable-key submission and acceptance receipt. Inbox delivery remains outside manager success.", "target": "email.message.send", "kind": "control"},
+      {"status": "declared", "statement": "Read-only agent execution, immutable submission identity, cancellation and quota behavior rely on the Nucleus requester contract; Nucleus does not decide whether a patch fixes CI.", "target": "nucleus", "kind": "control", "contract": "nucleus.requester.integrate"},
+      {"status": "declared", "statement": "Authored repair instructions and prompt templates rely on exact versioned Bazaar reads. Missing prompt state does not permit a hard-coded fallback.", "target": "bazaar", "kind": "data", "contract": "bazaar.string.read"},
+      {"status": "declared", "statement": "The final notification relies on Email's fixed-recipient, stable-key submission and acceptance receipt. Inbox delivery remains outside manager success.", "target": "email", "kind": "control", "contract": "email.message.send"},
       {"status": "declared", "statement": "Commit reachability, merge results, private worktrees and atomic accepted-ref updates rely on Git. No dedicated installed Chancery contract describes this dependency.", "target": "git", "kind": "external"},
       {"status": "declared", "statement": "Candidate coverage and gate evidence rely on Cell's committed-range CI dispatcher and host broker. These remain independently authoritative and have no dedicated installed Chancery contract.", "target": "cell-ci-validation", "kind": "control"},
       {"status": "declared", "statement": "Exact-source deployment, installed-state verification and maintenance recovery rely on the Cell deployment coordinator and selected product installers; no dedicated coordinator Chancery contract is installed.", "target": "cell-deployment", "kind": "control"},
