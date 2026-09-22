@@ -7,11 +7,12 @@ contract three supplies scheduled activation. Clew runs no model requester.
 
 ## Deploy
 
-Validate the changed product scope with the default root gate. Commit the green
-candidate to local main. Preview and run the authorized deployment:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For a
+separate authorized manual deployment, select a validated candidate on local
+main, then preview and run the coordinator:
 
 ```sh
-./ci.sh
 ./deploy.sh plan clew
 ./deploy.sh clew
 ```

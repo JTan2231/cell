@@ -1,0 +1,53 @@
+{
+  "schema_version": 3,
+  "provider": {
+    "id": "ci-manager",
+    "name": "Cell CI manager",
+    "release": "0.3.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "The CI manager owns admission, FIFO order, one active delivery job, retained candidate and repair history, bounded remediation policy, acceptance-ref advancement, deployment correlation, and outcome notification state for its configured Cell repository.",
+      "The CI manager owns its private journal, installed worker lifecycle, operator pause, and owner-qualified Nucleus requester maintenance holds."
+    ],
+    "not_authoritative_for": [
+      "Developers own development commits on main. Git owns commit objects, ancestry, merge results, patch acceptance and application, and atomic ref updates.",
+      "The CI dispatcher owns coverage selection and candidate validation. The broker owns individual gate execution and compiler admission.",
+      "Nucleus owns model execution, sandbox enforcement, account access, quota admission, and provider execution records. Bazaar owns versioned prompt strings.",
+      "The deployment coordinator and product installers own installed-state evidence, maintenance, and recovery. Email and Resend own submission acceptance; the recipient's mail provider owns inbox delivery."
+    ],
+    "inventory": {
+      "covers": [
+        "Supported current-user CLI outcomes for initialization, committed-change submission, queue inspection, waiting, pause and resume, cancellation, provider-backed recovery, requester maintenance, and installation and service operation of the serial Cell CI manager."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Direct check-only CI, product release publication, arbitrary repositories or recipients, manager self-deployment, queue priority controls, automated merge-conflict resolution, and automatic state deletion are outside this inventory."
+      ]
+    },
+    "shared_access_and_trust": [
+      "One current-user installation serves one configured Git common repository on the host. Linked worktrees submit to that same queue.",
+      "Submission authorizes the defined merge, bounded repair, acceptance, exact-source deployment, and outcome email for the pinned input. Catalog discovery and status reads grant no such authority.",
+      "Model output is an untrusted patch proposal. Only manager code applies patches, creates candidate commits, advances accepted state, requests deployment, and sends outcome email."
+    ],
+    "shared_privacy_and_retention": [
+      "The private journal retains input and candidate identities, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
+      "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. Outcome email discloses job identifiers, commits, model use, outcome details, and artifact paths to Email's fixed personal recipient and mail providers.",
+      "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them."
+    ],
+    "compatibility_and_retirement": [
+      "This release uses manager journal schema 1 and queue contract 3. New submissions freeze refund_accepted_patches=true; retained jobs without that policy flag preserve their original limit on all invocations. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
+      "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
+    ],
+    "operational_limits": [
+      "Only one delivery job and one repair loop may be active. The manager invokes the internal validator through the shared broker; root and product ci.sh wrappers support only manager commands.",
+      "New jobs default to three unrefunded gpt-5.6-terra medium repair attempts, then one unrefunded gpt-5.6-sol high attempt, with a 600-second execution timeout per invocation. Git acceptance and a recorded private candidate refund the attempt before later validation. Failed attempts remain charged for the whole job. This limits unrefunded points, not total invocations, runtime, or cost; no separate total-invocation ceiling applies.",
+      "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
+      "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",
+      "No queue completion-time, model availability, cost, complete-repository validation, or inbox-delivery guarantee is declared."
+    ]
+  },
+  "entries": [
+    "entries/queue-operate.json"
+  ]
+}

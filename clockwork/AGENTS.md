@@ -26,4 +26,5 @@ Semantics-Project: clockwork
 - `release.sh` commits, tags, and pushes, and the macOS deployer changes
   installed selectors and launchd state. Do not invoke either without separate
   authority.
-- Every code change must leave `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 /// The only public protocol version currently understood by Nucleus.
 pub const PROTOCOL_VERSION_V1: u32 = 1;
 
+/// Invocation policy version that adds unrestricted current-user execution.
+pub const INVOCATION_VERSION_V2: u32 = 2;
+
 /// Upper bounds are admission safeguards, not storage-format restrictions.
 const MAX_IDENTIFIER_LEN: usize = 255;
 const MAX_LABEL_LEN: usize = 1_024;
@@ -233,6 +236,7 @@ pub enum WorkspaceAccess {
     None,
     ReadOnly,
     ReadWrite,
+    Unrestricted,
 }
 
 /// Built-in model tools controlled by Nucleus independently of requester-owned
@@ -258,7 +262,8 @@ pub struct ToolsetRef {
     pub version: u32,
 }
 
-/// The deliberately small, harness-independent configuration domain for v1.
+/// The closed, harness-independent invocation policy carried by protocol v1.
+/// Policy version two adds unrestricted access; version one retains its modes.
 ///
 /// An adapter either implements every requested semantic exactly or rejects the
 /// request. There is no arbitrary argv, environment, or provider-config escape
@@ -294,7 +299,11 @@ impl AgentInvocationV1 {
         timeout_seconds: TimeoutSeconds,
     ) -> Self {
         Self {
-            version: PROTOCOL_VERSION_V1,
+            version: if workspace_access == WorkspaceAccess::Unrestricted {
+                INVOCATION_VERSION_V2
+            } else {
+                PROTOCOL_VERSION_V1
+            },
             harness: harness.into(),
             model: model.into(),
             reasoning_effort: None,
@@ -452,7 +461,22 @@ impl AgentInvocationV1 {
     }
 
     fn validate_into(&self, issues: &mut Vec<ValidationIssue>) {
-        check_version("invocation.version", self.version, issues);
+        if ![PROTOCOL_VERSION_V1, INVOCATION_VERSION_V2].contains(&self.version) {
+            issues.push(ValidationIssue::new(
+                "invocation.version",
+                "unsupported_version",
+                "only invocation versions 1 and 2 are supported",
+            ));
+        }
+        if self.workspace_access == WorkspaceAccess::Unrestricted
+            && self.version != INVOCATION_VERSION_V2
+        {
+            issues.push(ValidationIssue::new(
+                "invocation.workspaceAccess",
+                "unsupported_setting",
+                "unrestricted access requires invocation version 2",
+            ));
+        }
         check_identifier(
             "invocation.harness",
             self.harness.as_str(),
@@ -617,6 +641,7 @@ pub enum HarnessCapability {
     WorkspaceNone,
     WorkspaceReadOnly,
     WorkspaceReadWrite,
+    WorkspaceUnrestricted,
     BuiltinLocalExecution,
     BuiltinWebSearch,
     DynamicClientTools,
@@ -1519,6 +1544,39 @@ mod tests {
     }
 
     #[test]
+    fn unrestricted_access_requires_the_new_invocation_version() {
+        let mut request = request();
+        request.invocation = AgentInvocationV1::new(
+            "codex",
+            "example-model",
+            AbsolutePath::new("/tmp"),
+            WorkspaceAccess::Unrestricted,
+            BuiltinToolsV1 {
+                local_execution: true,
+                web_search: false,
+            },
+            TimeoutSeconds::new(300),
+        );
+        assert_eq!(request.version, PROTOCOL_VERSION_V1);
+        assert_eq!(request.invocation.version, INVOCATION_VERSION_V2);
+        request.validate().unwrap_or_else(|error| panic!("{error}"));
+        let encoded = serde_json::to_string(&request)
+            .unwrap_or_else(|error| panic!("serialize unrestricted request: {error}"));
+        let decoded: JobRequestV1 = serde_json::from_str(&encoded)
+            .unwrap_or_else(|error| panic!("decode unrestricted request: {error}"));
+        assert_eq!(decoded, request);
+
+        request.invocation.version = PROTOCOL_VERSION_V1;
+        let error = request
+            .validate()
+            .err()
+            .unwrap_or_else(|| panic!("version one must not admit unrestricted execution"));
+        assert!(error.issues.iter().any(|issue| {
+            issue.field == "invocation.workspaceAccess" && issue.code == "unsupported_setting"
+        }));
+    }
+
+    #[test]
     fn checked_in_job_examples_match_the_v1_contract() {
         for encoded in [
             include_str!("../../../examples/job.example.json"),
@@ -1716,7 +1774,7 @@ mod tests {
     }
 
     #[test]
-    fn version_fields_are_rejected_when_not_one() {
+    fn unsupported_invocation_version_is_rejected() {
         let mut request = request();
         request.invocation.version = 0;
         let error = match request.validate() {

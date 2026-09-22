@@ -13,8 +13,17 @@ Semantics-Project: cell
   [the operator manual](nucleus/docs/operator-manual.md). Follow its change
   playbooks and documentation update rules.
 - Preserve the product instructions in nested `AGENTS.md` files.
-- Every code change must pass the default `./ci.sh`. Follow
-  [CI selection](pipeline/README.md) for scope and full-CI rules.
+- Commit each code change and submit it with `./ci.sh submit COMMIT` from the
+  Cell root, or `cell-ci submit COMMIT`. Verify the retained job outcome before
+  considering the change complete. The installed manager owns integration,
+  validation, bounded repair, deployment, and the outcome email. See
+  [CI submission](ci_manager/README.md) and [validation selection](pipeline/README.md).
+  Root and product `ci.sh` wrappers use this same path; there is no direct
+  check-only CI entry point. Focused tests can support development, but they do
+  not replace the manager job.
+  New jobs refund each repair invocation's budget point when Git accepts its
+  patch and the manager records the private candidate. Failed or rejected
+  attempts remain charged for the whole job.
 
 ## Documentation
 

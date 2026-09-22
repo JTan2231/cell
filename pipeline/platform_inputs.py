@@ -46,7 +46,7 @@ PRODUCT_RUNTIME_INPUTS = {
 # A shared change selects its own suite. Only installation primitives expand
 # to consumer installation suites; ordinary shared dependencies do not.
 SHARED_INPUTS = {
-    "pipeline": ("ci.sh", "pipeline/*.py", "pipeline/*.sh", "pipeline/products/*.sh"),
+    "pipeline": ("ci.sh", "ci_manager/*", "pipeline/*.py", "pipeline/*.sh", "pipeline/products/*.sh"),
     "broker": ("ci_broker/*.py", "ci_broker/*.sh"),
     "deployment": ("deploy.sh", "deployment/cli.py",
                    "deployment/candidate.py", "deployment/__init__.py",

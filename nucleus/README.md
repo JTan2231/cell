@@ -18,13 +18,16 @@ nucleus jobs logs --follow explain-unix-socket-01
 The example submits a real agent job. `health` returns a nonzero exit status
 if the service is incompatible, unauthenticated, or closed to new jobs.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh nucleus
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

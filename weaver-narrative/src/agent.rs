@@ -53,7 +53,7 @@ pub fn request(direction: &str, existing: Option<&str>, cwd: &Path) -> Result<Jo
     let id = format!("weaver-{}", uuid::Uuid::now_v7());
     let mut invocation = AgentInvocationV1::new(
         "codex",
-        "gpt-5.6-sol",
+        "gpt-6-astra",
         AbsolutePath::new(cwd),
         WorkspaceAccess::None,
         BuiltinToolsV1 {
@@ -62,7 +62,7 @@ pub fn request(direction: &str, existing: Option<&str>, cwd: &Path) -> Result<Jo
         },
         TimeoutSeconds::new(1200),
     );
-    invocation.reasoning_effort = Some(ReasoningEffort::Medium);
+    invocation.reasoning_effort = Some(ReasoningEffort::High);
     invocation.toolset = Some(prompts.toolset(toolset(), 1)?);
     let mut input = json!({"direction":direction});
     if let Some(markdown) = existing {

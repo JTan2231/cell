@@ -379,8 +379,33 @@ own credential and owns bounded HTTP transport; exit zero establishes provider
 acceptance, not inbox delivery.
 
 Clockwork retains a pending notification in the same transaction as the halt.
-Every scheduled or manual broker visit attempts at most one due notification
-before the product gate, and one after the activation outcome. Attempts use a
+Basic alerts and EMT diagnosis wait for five consecutive failed read-only
+service checks by default. Checks are at least 60 seconds apart. Clockwork uses
+the installed Iatreion report for the configured Cell checkout. Historical
+domain outcomes do not count as service-check failures. Unknown health counts
+as a failed check with an explicit unknown condition. A healthy check, explicit
+inactive intent or operator pause resets progress and suppresses an unalerted episode.
+Resuming the incident also suppresses it. Existing delivery attempts and claims
+retain their recovery rules.
+
+Configure the notification policy and inspect progress:
+
+```sh
+clockwork notification policy --failure-threshold 5 --interval-seconds 60 --cell-root /absolute/cell
+clockwork notification check
+clockwork notification show INCIDENT_ID
+```
+
+`notification check` advances due observations without sending mail or running
+product work. Notification show returns `health_check.threshold`, `count`,
+`last_checked_at`, `condition` and `eligible_at`, including progress below the
+threshold. A continuous eligible episode creates no repeated alerts. The
+default checkout is `$HOME/rust/cell`; Iatreion must be installed at
+`$HOME/.local/bin/iatreion`. Policy changes do not resume schedules or retry work.
+
+Existing broker visits and the EMT worker advance due checks. Every scheduled
+or manual broker visit attempts at most one eligible due notification before
+the product gate, and one after the activation outcome. Attempts use a
 private transport lock, a fixed payload and idempotency key, a 120-second
 process bound, and at least five minutes between attempts for one incident.
 The halt remains closed when transport or notification bookkeeping fails.
@@ -462,19 +487,23 @@ Clockwork stores version-one metadata in notification-routing.json under its
 private state root. It contains the configured domain, activation time, saved
 incident reply routes, grace deadlines and optional EMT delivery UUIDs. It
 contains no diagnostic text, received mail or credential. The schema-two
-database remains unchanged. Back up and recover this metadata with that
-database; a database-only backup does not preserve delegated ownership.
+database remains unchanged. The separate private `notification-checks.json`
+sidecar retains policy, consecutive check progress and eligibility. Back up and
+recover both sidecars with the database; a database-only backup does not
+preserve delegated ownership or alert progress.
 
 The first notification inspection or sender visit snapshots an eligible
-incident's Reply-To and a deadline 120 seconds after its halt. Notification
-show can therefore create that metadata under the notification lock. It
+incident's Reply-To. Its basic-send grace deadline is 120 seconds after the
+service-check threshold is reached. Notification show can therefore create that
+metadata under the notification lock. It
 returns the basic subject/body, saved Reply-To and optional delivery ID.
 The basic rendering remains fixed; existing attempted notifications do not
 acquire new headers.
 
 EMT persists its exact outgoing email before claiming ownership. Claim uses
-the same lock as basic transport. It requires an unattempted pending
-notification with an EMT route and is idempotent for the same delivery UUID.
+the same lock as basic transport. It requires health-check eligibility and an
+unattempted pending notification with an EMT route. It is idempotent for the same
+delivery UUID.
 An existing different claim or started basic send refuses the claim. A basic
 send begins only after the grace deadline and only when no EMT claim exists.
 

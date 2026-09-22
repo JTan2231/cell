@@ -6,8 +6,11 @@ Keep code and tests consistent for exchange coverage, complete source bounds,
 saved classification before acknowledgement, deterministic document rendering,
 Annals idempotency, outbox retirement, and legacy Decisions decoding.
 
-Run `decisions/ci.sh`. It performs no release, deployment, live state migration,
-Nucleus execution, or Annals acceptance.
+Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
+installed manager integrates, validates, attempts bounded repairs through
+Nucleus, deploys, and emails the outcome. Verify the retained job outcome.
+Remote publication, live state migration, and Annals acceptance remain separate
+operations.
 
 ## Source document construction
 

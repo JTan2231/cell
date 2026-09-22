@@ -22,7 +22,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "Current-user private service. Explicit activation authorizes incident diagnosis and mail. Recognized replies authorize one-off interventions; sender verification is deferred. Agents use local execution and the configured read-write workspace."
+      "Current-user private service. Explicit activation authorizes incident diagnosis and mail. Recognized replies authorize one-off interventions; sender verification is deferred. Agents use local execution and unrestricted current-user filesystem, process, local socket, and network access without Codex sandbox restrictions or approval prompts."
     ],
     "shared_privacy_and_retention": [
       "Retains incidents and correspondence without automatic deletion. Job IDs point to Nucleus activity; no operation ledger or tool-output mirror. Providers retain separate copies.",

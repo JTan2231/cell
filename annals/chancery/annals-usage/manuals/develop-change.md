@@ -53,19 +53,21 @@ absent, report a gap.
    tests.
 3. Update `annals/docs/telemetry.md` and configuration or installation
    contracts when affected.
-4. Run:
+4. Commit the changes and submit them through the installed CI manager:
 
    ```sh
    cd /Users/joey/rust/cell
-   ./annals/ci.sh
+   ./ci.sh submit COMMIT
    ```
 
-   Treat that command as the complete Annals product gate.
-5. Treat login and deployment as separately authorized operations.
+   The manager integrates, validates, attempts bounded repairs, deploys, and
+   emails the outcome.
+5. Verify the retained manager outcome. Login remains a separately authorized
+   operation.
 
 Annals Usage is separately versioned but deployed with Annals. Its source
 change does not authorize `annals/release.sh`, which commits, tags, and pushes,
-or the installed deployment. Tests and live diagnostics may expose private
+or a separate installed deployment. Tests and live diagnostics may expose private
 delivery attribution, output metadata, and account activity; keep them inside
 the local security boundary.
 

@@ -19,13 +19,16 @@ platter export ARTIFACT_ID /absolute/chosen/resume.pdf
 `prepare` does not send. `run-ad-hoc` prepares one selected URL and sends its
 frozen packet. Uncertain sends remain held for recovery.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh platter
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

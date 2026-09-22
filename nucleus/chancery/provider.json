@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Nucleus owns version-one invocation admission, the global eight-slot scheduler, and one supervised attempt per job. It also owns job and cancellation lifecycle, exact non-authentication output atoms, immutable schemas and toolsets, the durable requester-tool mailbox, and the managed authentication broker with one authoritative credential.",
+      "Nucleus owns version-one job admission with invocation policies one and two, the global eight-slot scheduler, and one supervised attempt per job. It also owns job and cancellation lifecycle, exact non-authentication output atoms, immutable schemas and toolsets, the durable requester-tool mailbox, and the managed authentication broker with one authoritative credential.",
       "Nucleus SQLite is authoritative for its operational job, attempt, registration, cancellation, mailbox, and output records; the installed service owns its per-user socket, private Codex home, and service lifecycle."
     ],
     "not_authoritative_for": [

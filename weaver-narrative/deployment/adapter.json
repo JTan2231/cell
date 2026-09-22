@@ -10,6 +10,9 @@
   "adapter_binary": "weaver-install",
   "requester_service": "nucleus",
   "description": "Install Weaver and initialize its document store and Annals reading configuration under owned maintenance.",
+  "companions": [
+    "platter"
+  ],
   "runtime_versions": {
     "annals": {
       "minimum": "0.20.1",

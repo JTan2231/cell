@@ -23,4 +23,5 @@ Semantics-Project: annals
   user's explicit consent for the exact target and scope. A request to test,
   run, continue, retry, update, or deploy authorizes only that operation's
   documented effects, not additional storage remediation.
-- Every code change must leave `./ci.sh` green. Run it before considering the change complete.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

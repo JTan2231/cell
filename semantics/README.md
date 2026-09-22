@@ -15,13 +15,16 @@ semantics repository search PROJECT TERM
 Repository reads describe maintained meaning. Product code and documentation
 define current runtime behavior.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh semantics
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

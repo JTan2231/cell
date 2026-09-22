@@ -23,12 +23,12 @@
       "invocation": "semantics repository show cell"
     },
     {
-      "label": "Run authorized routine validation",
-      "invocation": "./ci.sh"
+      "label": "Submit committed CI input",
+      "invocation": "./ci.sh submit COMMIT"
     }
   ],
   "effects": [
-    "Changes source and documentation only. CI, installation, publication and live exchanges remain separately authorized."
+    "Changes source and documentation. CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Publication and live incident exchanges remain separately authorized."
   ],
   "authority": [
     "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."
@@ -117,7 +117,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Agents use Nucleus read-write workspace access and local execution. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred."
+        "statement": "Agents require Nucleus invocation policy version two and workspace-unrestricted for local execution with unrestricted current-user filesystem, process, local socket, and network access. Codex sandbox restrictions and approval prompts are disabled. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       }
     ],
     "lifecycle_and_consistency": [
@@ -189,7 +189,7 @@
   "steps": [
     "Read EMT instructions, maintained Cell terminology and the affected provider contracts.",
     "Make the scoped source and contract change while retaining incident exchanges and Nucleus references.",
-    "Run authorized routine CI and state validation and installation outcomes separately."
+    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job validation, deployment, and notification outcomes."
   ],
   "checkpoints": [
     "Nucleus remains the owner of agent execution and activity.",
@@ -201,7 +201,7 @@
     "Use the Cell semantic repository until EMT is registered."
   ],
   "stop_when": [
-    "The change requires unapproved live exchanges, release publication or installation.",
+    "The change requires unapproved live incident exchanges, release publication, or installation outside the submitted manager job.",
     "The requested scope or retry limit would be exceeded."
   ]
 }

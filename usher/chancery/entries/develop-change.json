@@ -21,7 +21,7 @@
     "Usher owns its recognition contract and separate installation policy; Cell owns membership policy and products own their declarations."
   ],
   "success": [
-    "Synthetic recognition tests, installer ownership, integrity and recovery tests, and the root ./ci.sh pass. Documentation identifies the evidence, installation effects, and what each check establishes."
+    "Synthetic recognition tests and installer ownership, integrity, and recovery tests pass. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome. Documentation identifies the evidence and installation effects."
   ],
   "failure_and_recovery": [
     "Keep failures visible and fix their source. Do not relax membership rules or hide products to make CI pass."
@@ -38,7 +38,7 @@
   "steps": [
     "Read Usher instructions and maintained terminology through Semantics, using Cell while usher registration remains absent.",
     "Implement the smallest change and update exact product contracts and shared operational documentation.",
-    "Run the root ./ci.sh, inspect Usher findings, and keep release/deployment separate from development."
+    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, inspect Usher findings, and verify the retained manager job outcome. Release publication remains separate."
   ],
   "checkpoints": [
     "Recognition remains a read-only deterministic declaration check.",
@@ -52,7 +52,7 @@
     "The change would add registration, installation, service probing, or another system operation to recognition."
   ],
   "does_not_authorize": [
-    "Release publication, deployment, or operations on other systems."
+    "Release publication, deployment outside the submitted manager job, or unrelated operations on other systems."
   ],
   "manual": "manuals/develop-change.md",
   "dependencies": [
@@ -102,13 +102,13 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The change is validated against the exact candidate source through Cell CI."
+        "statement": "The manager validates the committed candidate against its fixed accepted base. Completion requires the retained validation, deployment, and notification outcomes."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "Product-owned source and local CI; no direct service database access."
+        "statement": "Product-owned source and manager CI submission; no direct service database access. Submission includes manager integration, validation, bounded repair, deployment, and the outcome email. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       }
     ],
     "lifecycle_and_consistency": [

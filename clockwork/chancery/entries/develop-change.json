@@ -11,14 +11,14 @@
   ],
   "do_not_use_when": [
     "The request is ordinary installed schedule operation or diagnosis.",
-    "Release publication, deployment, Semantics registration or seed, or a product binding change has not been separately authorized.",
+    "Only release publication, deployment outside a submitted CI job, Semantics registration or seed, or an unrelated product binding change is requested.",
     "The proposed feature is an agent runner, arbitrary command surface, workflow, retry engine, secret store, output capture system, or product-domain scheduler without a new boundary review."
   ],
   "outcome": "A minimal tested change with consistent executable, definition, binding, supervision, persistence, packaging, and published contracts. Each product retains its domain authority.",
   "effects": [
     "Modifies Clockwork source, tests, documentation, packaging, release tooling, or product-owned Chancery contracts.",
     "Manifest, storage, cutover, or process-supervision changes can affect existing product integrations and private persistent state.",
-    "Release, deployment, validation against a real binding, and Semantics operations remain separate effects."
+    "CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Release publication, validation against a real binding, and Semantics operations remain separately authorized."
   ],
   "authority": [
     "Clockwork owns only definition identity, stable selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime history, durable declared-policy failure halts, explicit continuation, and pause notification state.",
@@ -30,7 +30,7 @@
     "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
     "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
     "Packaging tests prove an explicit candidate Chancery reader validates the exact staged provider before any public selector mutation.",
-    "`clockwork/ci.sh` completes green before release or deployment."
+    "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome."
   ],
   "failure_and_recovery": [
     "Do not broaden runtime input into caller-controlled argv, weaken artifact checks, infer domain success, capture product output, or add automatic product retry.",
@@ -51,7 +51,7 @@
     "Read Clockwork's instructions and the exact architecture, CLI, data-model, installation, semantic-seed, and Chancery contracts affected by the change.",
     "Identify whether the change alters executable meaning, product authority, persistent state, cutover consistency, process containment, privacy, recovery, or another system reliance.",
     "Implement the smallest change with isolated synthetic releases, state roots, plists, launchd doubles, and child processes and update every affected product-owned contract.",
-    "Run `clockwork/ci.sh`; run release, deployment, Semantics, or product-binding operations only under separate authority."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication, deployment outside that job, Semantics, and unrelated product-binding operations require separate authority."
   ],
   "checkpoints": [
     "Runtime and the private launchd entry accept only a stable key and never caller-supplied executable, arguments, environment, cwd, schedule, timeout, or policy.",
@@ -73,7 +73,7 @@
     {"id": "chancery.provider.publish", "min_contract": 4, "max_contract_exclusive": 5}
   ],
   "does_not_authorize": [
-    "Running `release.sh`, deploying an installed Clockwork release, switching a product binding, or invoking a product job.",
+    "Running `release.sh`, deploying outside the submitted manager job, switching an unrelated product binding, or invoking a product job.",
     "Registering or seeding the Clockwork Semantics project or changing another product.",
     "Using real credentials, private output, production definitions, or retained user state as development fixtures."
   ],
@@ -82,13 +82,13 @@
       {"status": "declared", "statement": "An interactive contributor may change Clockwork within its reviewed short-lived scheduled-activation boundary while keeping implementation, tests, packaging, documentation, and public promises synchronized."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, identified every changed system boundary, and has separate authority before release, deployment, or real binding effects."}
+      {"status": "declared", "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, and identified every changed system boundary. CI submission supplies authority for the manager deployment and outcome email; publication, deployment outside that job, and unrelated real binding effects require separate authority."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are the scoped request, current Clockwork source and public contracts, isolated synthetic release and state fixtures including a candidate Chancery reader, and any explicitly selected installed documentation contracts."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest synchronized source, test, schema, documentation, packaging, provider, or release-tooling change with a green Clockwork CI result."}
+      {"status": "declared", "statement": "The output is the smallest synchronized source, test, schema, documentation, packaging, provider, or release-tooling change with a verified retained CI manager job outcome."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Development preserves the distinction among immutable definition, stable binding, one-child activation, runtime evidence, product-domain success, and launchd trigger delivery."}
@@ -97,13 +97,13 @@
       {"status": "declared", "statement": "Existing binding keys, immutable definition IDs, activation IDs, product release IDs, artifact digests, manifest and database schema versions, contract versions, and provider releases retain their documented meanings unless an explicit successor is introduced."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completion covers every affected Clockwork code, test, architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contract and the current CI run."}
+      {"status": "declared", "statement": "Completion covers every affected Clockwork code, test, architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contract and the retained manager validation, deployment, and notification outcomes."}
     ],
     "access": [
-      {"status": "declared", "statement": "Development uses the local repository filesystem and shell with isolated state; another product or live launchd operation requires its separately selected contract and authority."}
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell with isolated state; another product or live launchd operation requires its separately selected contract and authority. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; release and deployment remain later transitions."}
+      {"status": "declared", "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; the manager validates before deployment and retains both outcomes; release publication remains separate."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "Development remains bounded to a current-user local broker with supported interval or daily triggers, stable-key runtime selection, direct-child supervision, skip-overlap, and no automatic retry."}

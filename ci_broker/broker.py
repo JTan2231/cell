@@ -1297,6 +1297,10 @@ class Broker:
                     "finished_at": row["finished_at"],
                     "exit_code": row["exit_code"],
                     "detail": row["detail"],
+                    "diagnostic_path": (
+                        str(self.diagnostic_path(row["id"]))
+                        if self.diagnostic_path(row["id"]).is_file() else None
+                    ),
                 }
                 if include_events:
                     receipt["events"] = [
@@ -1313,7 +1317,7 @@ class Broker:
                         )
                     ]
                 return receipt
-        except sqlite3.Error as error:
+        except (OSError, sqlite3.Error) as error:
             raise BrokerError(f"cannot build broker receipt: {error}") from error
 
     def wait_and_run(

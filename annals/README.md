@@ -16,13 +16,16 @@ annals stats
 Integration records an interpretation. Apply a pending reconciliation to change
 the corpus. See [integration and application](docs/cli.md#model-assisted-integration).
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh annals
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

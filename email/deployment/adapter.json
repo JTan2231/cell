@@ -6,6 +6,8 @@
   "description": "Installation through the shared Rust transaction library.",
   "adapter_binary": "email-install",
   "companions": [
+    "clew",
+    "conatus",
     "emt",
     "mentor",
     "paperboy"

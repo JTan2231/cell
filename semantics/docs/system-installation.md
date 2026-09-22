@@ -25,10 +25,12 @@ See [legacy intake and reconciliation](data-model.md#intake-and-reconciliation).
 
 ## Install a candidate
 
-Build and validate the candidate first:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, build and install
+artifacts from a validated source candidate:
 
 ```sh
-semantics/ci.sh
 cargo build --release --locked --package semantics
 /absolute/path/to/target/release/semantics-install install \
   --binary /absolute/path/to/target/release/semantics \

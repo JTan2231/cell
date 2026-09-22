@@ -20,17 +20,17 @@ together. Many human problems need more explanation and context than a fixed
 form can capture. Most workflows here pass readable text documents between
 assistants, with each tool responsible for its own work and records.
 
-## Check
+## CI
+
+Commit the intended changes, then submit that commit:
 
 ```sh
-./ci.sh
+./ci.sh submit COMMIT
 ```
 
-To check one product while iterating, for example:
-
-```sh
-./ci.sh nucleus
-```
+The installed [CI manager](ci_manager/README.md) queues the commit, integrates
+it privately, validates it, attempts bounded repairs, deploys, and emails the
+outcome. `cell-ci submit COMMIT` uses the same path.
 
 ## Further documentation
 

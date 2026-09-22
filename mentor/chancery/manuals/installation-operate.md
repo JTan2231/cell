@@ -175,12 +175,13 @@ an error; it is not treated as successful scheduling.
 
 ## Development gate
 
-`mentor/ci.sh` delegates to the shared pipeline using
-`pipeline/products/mentor.sh`. The descriptor owns package checks, provider
-validation, and release-binary expectations. `mentor/release.sh` enters the
-shared release and deployment workflow; it is not a build shortcut. Run gates,
-builds, release operations, or live configuration only when that work is in
-the authorized scope.
+Use `./ci.sh submit COMMIT` from the Cell root for CI. Product wrappers reach
+the same installed manager. It integrates, validates, attempts bounded repairs,
+deploys, and emails the outcome. The internal validation plan uses
+`pipeline/products/mentor.sh` for package checks, provider validation, and
+release-binary expectations. `mentor/release.sh` enters the separate release
+publication workflow. Builds, publication, and live configuration require
+their applicable authority.
 
 ## Readiness and content-free backup boundary
 

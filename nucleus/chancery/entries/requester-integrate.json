@@ -63,11 +63,11 @@
   ],
   "checkpoints": [
     "The requester domain authority and success proof are named and remain outside Nucleus.",
-    "Every invocation permission and immutable registration identity is explicit.",
+    "Every invocation permission and immutable registration identity is explicit. Unrestricted execution requires invocation policy version two and the workspace-unrestricted harness capability; deploy daemon support before emitting that form.",
     "Duplicate admission and tool results are idempotent, and historical decoding is retained.",
     "Requester and Nucleus restart semantics have separate tested recovery paths.",
     "The requester tolerates accepted/pending queueing, treats waiting-on-requester as active capacity, and keeps its work-packet graph and retry decisions outside Nucleus.",
-    "Concurrent read-write jobs use disjoint working directories or worktrees, or requester-owned serialization."
+    "Concurrent read-write or unrestricted jobs use disjoint working directories or worktrees, or requester-owned serialization."
   ],
   "adaptation": [
     "Use the current installed manual and exact supported protocol rather than assuming source-workspace lockstep.",
@@ -105,7 +105,7 @@
       },
       {
         "status": "declared",
-        "statement": "The requester assigns disjoint working directories or worktrees to concurrent read-write jobs, or owns serialization for every shared filesystem or external mutation target."
+        "statement": "The requester assigns disjoint working directories or worktrees to concurrent read-write or unrestricted jobs, or owns serialization for every shared filesystem or external mutation target."
       }
     ],
     "inputs": [

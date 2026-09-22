@@ -23,12 +23,13 @@ its separate admission and binding authority.
 
 ## Deploy or update
 
-Build and test the candidate products first, then invoke the deployer only with
-explicit installed-state authority:
+For ordinary CI delivery, submit a committed candidate with `cell-ci submit COMMIT`.
+The manager integrates, validates, attempts bounded repairs, deploys, and emails
+the outcome. For an explicitly authorized manual installation or recovery, use
+artifacts from a validated source candidate:
 
 ```sh
 cd /Users/joey/rust/cell
-./annals/ci.sh
 ./target/release/annals-install install \
   --binary <ABSOLUTE_ANNALS_BINARY> \
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \

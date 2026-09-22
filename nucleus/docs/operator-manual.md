@@ -157,15 +157,40 @@ Nucleus owns execution; Email owns transport. See
 [EMT incident response](/Users/joey/rust/cell/emt/chancery/manuals/incident-respond.md)
 for reply recognition, permissions, deadlines, and retained records.
 
-Clockwork's optional EMT preference defers a basic alert for 120 seconds.
+New EMT assignments use Nucleus invocation policy version two and require its
+`workspace-unrestricted` capability. They use local execution with unrestricted
+current-user filesystem, process, local socket, and network access; Codex
+sandbox restrictions and approval prompts are disabled. Operating-system
+permissions still apply. Deploy accepting Nucleus support before EMT emits
+the new policy. Retained requests keep their original policy.
+
+Clockwork gates basic alerts and EMT diagnosis on five consecutive failed
+read-only service checks, at least 60 seconds apart by default. It reads a
+bounded report from installed Iatreion. Healthy checks reset progress; explicit
+inactive intent or operator pause excludes the service and resets progress.
+Unknown health counts as failed with an explicit unknown condition. Historical
+domain outcomes do not trigger this gate. Configure the threshold, interval and
+stable Cell root with `clockwork notification policy`. Inspect progress with
+`clockwork notification show INCIDENT_ID`, or advance due checks without mail
+or product work with `clockwork notification check`.
+
+Existing broker visits and the EMT worker advance checks. No independent
+daemon is added. The scheduling halt remains immediate and no check retries
+product work. Repeated failed checks in the same alert episode create no new
+alert. A resumed incident suppresses an unalerted episode; existing attempts
+and claims retain their delivery recovery rules.
+
+EMT's five-minute diagnosis deadline starts at alert eligibility. Clockwork's
+optional EMT preference then defers a basic alert for 120 seconds.
 EMT freezes its email before claiming initial-notification ownership. Claim
 and basic-send admission are serialized. A claim does not expire or clear
 the halt; EMT owns the delegated send outcome. A basic alert can precede a
 late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
 
 Refresh every active pinned Clockwork broker before enabling EMT preference.
-Keep Clockwork's version-one notification-routing metadata with its incident
-database during backup and recovery. Older brokers ignore claims. Read the
+Keep Clockwork's `notification-routing.json` and `notification-checks.json`
+with its incident database during backup and recovery. Older brokers ignore
+claims and check eligibility. Read the
 Clockwork and EMT installed contracts before cutover or rollback.
 
 Hold and drain EMT before holding Nucleus during coordinated deployment.
@@ -271,26 +296,30 @@ and each consumer's installation contract for the exact selection rules.
 
 ## Shared CI, release, and deployment coordination
 
-From the Cell root, use the default gate for routine validation:
+Commit the intended changes, then submit that commit from the Cell root:
 
 ```sh
-./ci.sh
+./ci.sh submit COMMIT
 ```
 
-It selects outstanding changed products relative to `HEAD`, including deletions
-and both paths of renames. Explicit product arguments limit product coverage.
-A scoped success does not establish full repository validation. Use `--all`
-only when the user explicitly requests full CI.
+`cell-ci submit COMMIT` uses the same installed manager. The manager queues the
+commit, integrates it privately, validates it, attempts bounded repairs, deploys
+the accepted source, and emails the outcome. Root and product `ci.sh` wrappers
+provide manager commands only. There is no direct check-only CI path.
 
-CI rejects source changes during execution as stale. Linked worktrees share the
-CI broker and compiler resources. For selection, output, and recovery details,
-see [CI selection](/Users/joey/rust/cell/pipeline/README.md) and
+The manager selects validation coverage from the fixed accepted base and each
+committed candidate, including deletions and both paths of renames. Selective
+success does not establish full repository validation. Source changes during
+validation are stale. Linked worktrees share the CI broker and compiler
+resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
+[validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
 
-Publication and deployment are separate effects. A product release command
-changes versions, commits, tags, and pushes. CI does not publish. Release and
-deployment preparation build and seal production artifacts; they do not rerun
-CI or turn a build receipt into test evidence.
+Git publication remains separate. A product release command changes versions,
+commits, tags, and pushes. CI makes private candidate commits and advances
+accepted history; it does not publish remote Git refs. Release and deployment
+preparation build and seal production artifacts; they do not rerun validation
+or turn a build receipt into test evidence.
 
 ### Cell deployment
 
@@ -445,6 +474,74 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
+## Serial CI delivery
+
+The installed `cell-ci` manager owns one durable FIFO queue for one configured
+Cell Git common directory. Linked worktrees submit immutable commits to this
+queue. Development continues on `main`. The manager owns `refs/ci/accepted`,
+private input and candidate refs, and its private worktrees. `./ci.sh submit COMMIT`
+and `cell-ci submit COMMIT` submit to this manager. Bare `./ci.sh` does not
+validate; the manager invokes the internal validator for each candidate.
+
+At dequeue, the manager records the current accepted commit as the job's base.
+It merges the submitted commit into a private candidate. Each repair produces
+a new commit before validation. Every validation compares the same accepted
+base with the current candidate and retains aggregate gate receipts. Acceptance
+uses a guarded ref update. Deployment selects that exact accepted candidate,
+with a stable caller request ID and a retained operation receipt. Development
+changes made after submission do not change the job.
+
+Only one delivery lifecycle is active. The manager does not hold a CI broker
+slot while it waits for a model, deployment, or email. Individual gates still
+use the existing broker. A surviving model or deployment remains associated
+with the active job after a manager restart. Unknown execution or lost-process
+ownership blocks admission; a timeout does not prove termination.
+
+CI is an ordinary Nucleus requester. It uses read-only workspace access and
+built-in shell execution, with no requester tools or response schema. The
+agent is asked to return only a raw Git patch in its final response. The manager
+retains the exact response and adds a missing final LF to the application input.
+Git applies it to a private parent index with `--cached --recount
+--whitespace=nowarn`; the manager adds no patch acceptance rules. It commits the
+result and runs the ordinary CI loop. New jobs freeze the refund policy: a
+recorded private candidate refunds its repair attempt before the next validation
+result. The default budget permits three unrefunded `gpt-5.6-terra` medium
+attempts, then one unrefunded `gpt-5.6-sol` high attempt. Failed or rejected
+attempts remain charged for the whole job. Accepted patches can exceed four
+total invocations; no total-invocation ceiling applies. Retained jobs without
+the refund flag keep their original limit on all invocations.
+
+Attempt identities and history remain unique and complete after refunds. Job
+status reports the budget mode, total, used, remaining, refunded, and total
+invocations. Quota deferral preserves the same request identity without another
+charge. Infrastructure failures do not select a stronger model. Bazaar supplies
+the `cell.prompts.ci-manager` selection; import its components before activation.
+
+Deployment holds the installed manager's Nucleus admission before replacing
+Nucleus. CI reports drained when no admitted or unresolved model invocation
+remains and the admission hold prevents another. Its delivery job can continue
+to supervise deployment while that hold is present. Waiting for the delivery
+job to finish at this boundary would cause a circular wait. The coordinator
+releases only its own manager hold after coherent activation or recovery.
+
+Email receives a retained program-authored outcome and idempotency key. The
+manager permits two transport invocations, at least five minutes apart and
+within 23 hours. Provider acceptance completes notification; uncertain delivery
+blocks the queue. An email failure never restarts deployment. Validation,
+acceptance, installation, cleanup, and notification retain separate outcomes.
+
+Manager replacement uses explicit maintenance, outside its own delivery queue.
+Pause admission and finish or recover the active job before replacement. The
+installer selects a fixed release and compatible journal schema under exclusive
+ownership. It preserves queued jobs and starts the replacement paused. It does
+not load worker code from mutable development source or clear existing holds.
+The CI manager is shared infrastructure; the product deployment inventory does
+not deploy the manager itself.
+
+Use the [CI operation contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
+for initialization, controls, Git patch application, retained evidence, and
+recovery outcomes. Installation and queue activation are separate operations.
+
 ## Shared command usage
 
 Product CLIs record agent command invocations in Chancery's private usage
@@ -475,11 +572,13 @@ shared facts or procedures change.
 ### Routine Nucleus patch
 
 1. Identify affected public meaning, schema, harness, and requester obligations.
-2. Update the owning code and documentation, then run the required product gate.
+2. Update the owning code and documentation, commit the changes, and submit
+   them through the CI manager. Verify its validation and deployment outcome.
 3. Publish only when authorized. Release requires clean `main` synchronized
    with `origin/main` and creates the commit and tag.
-4. Quiesce affected work and deploy matching CLI and daemon candidates.
-5. Verify strict health and requester readiness before restoring admission.
+4. Verify strict health and requester readiness after the manager deployment.
+   For a separate manual installation or recovery, quiesce affected work and
+   deploy matching CLI and daemon candidates before restoring admission.
 
 Use [Nucleus installation](/Users/joey/rust/cell/nucleus/docs/system-installation.md)
 for the exact installer and rollback procedure.

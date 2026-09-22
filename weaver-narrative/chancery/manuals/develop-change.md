@@ -22,8 +22,11 @@ Assess each observation deadline from its Nucleus attempt start, including on
 resume. Test bounded overlap, independent failures and cancellation, and queue
 time separately from execution time.
 
-Run `./ci.sh` from Cell after changes. The default gate selects the changed
-products and required platform checks. Test source failures, short pages,
+Commit changes and use `./ci.sh submit COMMIT` from the Cell root. The installed
+manager integrates, validates, attempts bounded repairs, deploys, and emails
+the outcome. It selects changed products and required platform checks from
+the fixed accepted base and candidate. Verify the retained job outcome.
+Test source failures, short pages,
 duplicate and conflicting submissions, pending-call restart, quota deferral,
 queued capacity, cancellation, lost jobs, and saved output followed by runtime
 failure. Test the installer through its maintained coordinator interface.

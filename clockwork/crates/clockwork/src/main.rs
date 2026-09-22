@@ -8,6 +8,7 @@ mod lock;
 mod manifest;
 mod model;
 mod notification;
+mod notification_checks;
 mod paths;
 mod status;
 mod store;
@@ -137,6 +138,17 @@ enum IncidentCommand {
 
 #[derive(Debug, Subcommand)]
 enum NotificationCommand {
+    /// Observe due service checks without sending mail or running product work.
+    Check,
+    /// Inspect or configure the initial-alert threshold and check interval.
+    Policy {
+        #[arg(long)]
+        failure_threshold: Option<u32>,
+        #[arg(long)]
+        interval_seconds: Option<u32>,
+        #[arg(long)]
+        cell_root: Option<PathBuf>,
+    },
     /// Configure EMT preference for new incidents. Existing routes and claims remain retained.
     Emt {
         #[arg(long, required_unless_present = "disable", conflicts_with = "disable")]
@@ -429,6 +441,18 @@ async fn run(cli: Cli) -> Result<()> {
             IncidentCommand::Show { id } => emit(&store.incident(&id)?, cli.json),
         },
         Command::Notification { command } => match command {
+            NotificationCommand::Check => emit(
+                &notification::check_pending(&store, &layout).await?,
+                cli.json,
+            ),
+            NotificationCommand::Policy {
+                failure_threshold,
+                interval_seconds,
+                cell_root,
+            } => emit(
+                &notification::policy(&layout, failure_threshold, interval_seconds, cell_root)?,
+                cli.json,
+            ),
             NotificationCommand::Emt {
                 receiving_domain, ..
             } => {

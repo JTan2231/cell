@@ -46,11 +46,12 @@ explicit recovery.
 ## Migrate the former system installation
 
 The old root-owned LaunchDaemon layout requires one final attended migration.
-Build the current release, then run the bundled migration while logged into the
+Use a source candidate validated through `cell-ci submit COMMIT`. CI includes
+deployment and outcome email; this attended migration remains separate. Build
+its release artifacts, then run the bundled migration while logged into the
 operator's graphical session:
 
 ```sh
-./ci.sh
 sudo ../target/release/annals-install migrate-to-user \
   --binary "$PWD/../target/release/annals" \
   --usage-binary "$PWD/../target/release/annals-usage" \

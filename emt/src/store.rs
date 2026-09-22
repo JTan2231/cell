@@ -210,17 +210,40 @@ impl Store {
                 config.receiving_domain
             )
         });
-        let inserted = transaction.execute(
+        transaction.execute(
             "INSERT OR IGNORE INTO incidents(id,binding_key,feed_cursor,reply_to,clockwork_json,basic_email_json) VALUES(?1,?2,?3,?4,?5,?6)",
             params![incident.id, incident.key, i64::try_from(cursor)?, reply_to, serde_json::to_string(incident)?, serde_json::to_string(basic)?],
         )?;
-        if inserted != 0 && incident.resumed_at.is_none() && incident.key != "emt/worker" {
+        transaction.execute(
+            "UPDATE incidents SET clockwork_json=?2 WHERE id=?1",
+            params![incident.id, serde_json::to_string(incident)?],
+        )?;
+        let existing: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM exchanges WHERE incident_id=?1 AND kind='diagnosis')",
+            [&incident.id],
+            |row| row.get(0),
+        )?;
+        if !existing
+            && incident.resumed_at.is_none()
+            && incident.key != "emt/worker"
+            && basic
+                .health_check
+                .as_ref()
+                .is_some_and(|check| check.eligible_at.is_some())
+        {
             let id = uuid::Uuid::now_v7().to_string();
             let now = crate::now();
             transaction.execute("INSERT INTO exchanges(id,incident_id,kind,nucleus_job_id,created_at,deadline_at) VALUES(?1,?2,'diagnosis',?1,?3,?4)", params![id,incident.id,now,now+300])?;
         }
         transaction.commit()?;
         Ok(())
+    }
+
+    pub fn awaiting_diagnosis(&self) -> Result<Vec<String>> {
+        let mut query = self.connection.prepare("SELECT id FROM incidents WHERE binding_key != 'emt/worker' AND json_extract(clockwork_json,'$.resumed_at') IS NULL AND NOT EXISTS(SELECT 1 FROM exchanges WHERE incident_id=incidents.id AND kind='diagnosis') ORDER BY rowid LIMIT 100")?;
+        Ok(query
+            .query_map([], |row| row.get(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?)
     }
 
     pub fn exchange(&self, id: &str) -> Result<Exchange> {
@@ -377,4 +400,50 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(temporary, path)?;
     File::open(parent)?.sync_all()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod notification_tests {
+    use super::*;
+
+    #[test]
+    fn diagnosis_waits_for_eligibility_after_feed_capture() -> Result<()> {
+        let connection = Connection::open_in_memory()?;
+        connection.execute_batch(include_str!("schema.sql"))?;
+        let mut store = Store { connection };
+        let config = Config::defaults()?;
+        let incident: clockwork::api::IncidentRecord = serde_json::from_value(json!({
+            "id":"incident-one", "key":"example/worker", "activation_id":null,
+            "definition_digest":null, "code":"exit_1", "occurrence":"activation/one",
+            "created_at":1, "resumed_at":null, "notification_status":"pending",
+            "first_attempt_at":null, "last_attempt_at":null, "notification_attempts":0
+        }))?;
+        let mut basic: clockwork::api::NotificationView = serde_json::from_value(json!({
+            "incident_id":incident.id, "delivery_id":null, "reply_to":null,
+            "subject":"Scheduling paused", "body":"Retained failure",
+            "health_check":{"failure_threshold":5,"consecutive_failures":4,
+                "last_checked_at":240,"condition":"unhealthy","eligible_at":null}
+        }))?;
+        store.capture_incident(&incident, 12, &basic, &config)?;
+        assert_eq!(store.cursor()?, 12);
+        assert!(store.next()?.is_none());
+        assert_eq!(store.awaiting_diagnosis()?, vec![incident.id.clone()]);
+        let mut check = basic
+            .health_check
+            .take()
+            .ok_or_else(|| fail("missing fixture check"))?;
+        check.consecutive_failures = 5;
+        check.eligible_at = Some(crate::now());
+        basic.health_check = Some(check);
+        let before = crate::now();
+        store.capture_incident(&incident, 0, &basic, &config)?;
+        store.capture_incident(&incident, 0, &basic, &config)?;
+        let exchanges = store.exchanges(&incident.id)?;
+        assert_eq!(exchanges.len(), 1);
+        assert!(exchanges[0].created_at >= before);
+        assert_eq!(exchanges[0].deadline_at, exchanges[0].created_at + 300);
+        assert!(store.awaiting_diagnosis()?.is_empty());
+        assert_eq!(store.cursor()?, 12);
+        Ok(())
+    }
 }

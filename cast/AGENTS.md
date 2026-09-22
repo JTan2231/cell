@@ -13,4 +13,5 @@ Semantics-Project: cast
   computer use, Nucleus or the CRM steward.
 - Keep source contracts and the Chancery bundle aligned with actual behavior.
   Update the shared Nucleus operator manual when operational boundaries change.
-- Every code change must leave the root `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

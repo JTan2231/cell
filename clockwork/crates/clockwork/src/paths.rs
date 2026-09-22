@@ -162,6 +162,14 @@ impl Layout {
         }
     }
 
+    pub(crate) fn status_report_cli(&self) -> PathBuf {
+        if self.overridden {
+            self.state_root.join("iatreion")
+        } else {
+            self.home.join(".local/bin/iatreion")
+        }
+    }
+
     pub(crate) fn state_root_override(&self) -> Option<&Path> {
         self.overridden.then_some(self.state_root())
     }

@@ -18,11 +18,13 @@ key in the installed user's `~/.zshrc`:
 export RESEND_API_KEY='re_replace_with_the_real_key'
 ```
 
-Run the product gate. Then install the exact binary and Rust installer that it tested:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, install artifacts from
+a validated source candidate:
 
 ```sh
 cd /Users/joey/rust/cell/email
-./ci.sh
 <TESTED_EMAIL_INSTALL> install \
   --binary <TESTED_EMAIL_BINARY> \
   --bundle /Users/joey/rust/cell/email/chancery

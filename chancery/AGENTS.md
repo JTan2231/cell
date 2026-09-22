@@ -8,4 +8,5 @@ Semantics-Project: chancery
   through Chancery and query this project's repository. Code, tests, and product
   documentation define behavior. Do not edit Semantics state directly. If the
   repository cannot be resolved, report the problem.
-- Every code change must leave `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.
