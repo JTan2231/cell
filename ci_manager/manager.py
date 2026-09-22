@@ -13,6 +13,7 @@ import uuid
 from ci_manager import VERSION
 from ci_manager import git_ops as git
 from ci_manager.budget import repair_budget
+from ci_manager.notification import render
 from ci_manager.integrations import (
     DeferredError, IntegrationError, NucleusClient, TransportError,
     freeze_request, load_prompt_selection, make_request, send_email, terminal_result,
@@ -69,23 +70,8 @@ class Worker:
         if outcome not in {"succeeded", "already_included"}:
             self.store.set("paused", True)
         if "notification" not in job:
-            deployment = job.get("deployment_result", {})
-            budget = repair_budget(job)
-            title = "deployed" if job.get("installation_verified") else outcome.replace("_", " ")
-            body = "\n".join([
-                f"Cell CI job {job['id']}: {message}",
-                f"Submitted commit: {job['input_commit']}",
-                f"Accepted base: {job.get('base_commit', 'not started')}",
-                f"Final candidate: {job.get('candidate_commit') or 'none'}",
-                f"Accepted: {bool(job.get('accepted'))}",
-                f"Repair invocations: {len(job.get('attempts', []))}",
-                f"Repair budget: {budget['used']} used, {budget['remaining']} remaining, {budget['refunded']} refunded",
-                "Models: " + ", ".join(item["model"] for item in job.get("attempts", [])),
-                f"Deployment state: {deployment.get('state', 'not started')}",
-                f"Artifacts: {self.directory(job)}",
-                f"Inspect: cell-ci status {job['id']}",
-            ])
-            job["notification"] = {"subject": f"Cell CI {job['id']}: {title}", "body": body,
+            subject, body = render(job)
+            job["notification"] = {"subject": subject, "body": body,
                                    "key": f"cell-ci/{job['id']}/outcome/{job.get('outcome_generation', 1)}", "attempts": [],
                                    "created": time.time(), "state": "pending"}
         self.save(job, "notifying")

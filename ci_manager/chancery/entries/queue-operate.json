@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -59,7 +59,7 @@
   "privacy": [
     "Job state retains private source identities, model requests and final responses, diagnostics, deployment records, and notification payloads. There is no automatic pruning.",
     "The agent can read source, contracts and diagnostics through ordinary shell tools under the Nucleus read-only sandbox. Provider disclosure follows Nucleus's execution boundary.",
-    "The deterministic email sends job and outcome details, commit and model identifiers and local artifact paths to the fixed personal recipient. It does not attach the repository, model reasoning, or full CI transcripts."
+    "New deterministic emails lead with the outcome and product or check names, include available failed test names or a short diagnostic, and distinguish validation, deployment, recovery, and cleanup failures. Unknown causes remain explicit. Emails omit job and commit IDs, model names, repair budgets, and local artifact paths. Receipts do not promise installed versions or individual final installation states; messages do not infer them. Previously frozen messages keep their exact bytes and key. Emails do not attach the repository, model reasoning, or full CI transcripts."
   ],
   "dependencies": [
     {"id": "nucleus.requester.integrate", "min_contract": 2, "max_contract_exclusive": 3},
@@ -119,7 +119,7 @@
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Manager release 0.3.0 uses journal schema 1, this operation contract 3, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
+      {"status": "declared", "statement": "Manager release 0.4.0 uses journal schema 1, this operation contract 4, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [
