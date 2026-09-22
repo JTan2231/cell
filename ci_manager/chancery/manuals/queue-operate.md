@@ -126,7 +126,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.3.0 uses queue contract 3 and retains journal
+arguments. Manager release 0.4.0 uses queue contract 4 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
@@ -348,10 +348,19 @@ maintenance establish the manager's deployment success. Cleanup failure can
 remain visible even when installation and maintenance release succeeded.
 
 The manager creates a deterministic outcome email after deployment or terminal
-failure. It sends to Email's fixed personal recipient. The frozen message
-contains the job, submitted/base/final commits, accepted state, repair count and
-models, deployment outcome, and local artifact path. It does not attach source,
-full CI transcripts, or model reasoning.
+failure. It sends to Email's fixed personal recipient.
+
+New messages lead with the outcome and affected product or check names. They
+separate validation, deployment, recovery, and cleanup failures. A failed check
+includes available failed test names or a short diagnostic. Missing causes remain
+explicitly unknown. The email omits job and commit IDs, model names, repair budget,
+and artifact paths. Detailed evidence remains in local job status and artifacts.
+
+The current receipts do not promise installed version numbers or individual final
+product installation states, so the email does not infer them. A failed deployment
+does not claim that nothing changed. Previously frozen notifications keep their
+exact bytes and send key. Messages do not attach source, full CI transcripts, or
+model reasoning.
 
 The manager saves the exact message and stable key before invoking Email. It
 permits at most two Email invocations, at least five minutes apart and within
@@ -381,7 +390,8 @@ payloads and receipts. It provides no automatic pruning. Protect these files as
 private source and operational data. Provider retention remains separate.
 
 Nucleus may transmit source and diagnostics read by the agent to its model
-provider. Sending the outcome discloses its exact text, including local artifact
-paths, to Resend and the fixed recipient's mail provider. The manager does not
-copy Nucleus credentials or load Email's credential. Read-only inspection and
+provider. Sending the outcome discloses product and check names, failed test
+names, and short outcome diagnostics to Resend and the fixed recipient's mail
+provider. The manager does not copy Nucleus credentials or load Email's
+credential. Read-only inspection and
 catalog discovery do not authorize these disclosures or start a job.

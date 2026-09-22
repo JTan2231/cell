@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.3.0"
+    "release": "0.4.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -32,11 +32,11 @@
     ],
     "shared_privacy_and_retention": [
       "The private journal retains input and candidate identities, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
-      "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. Outcome email discloses job identifiers, commits, model use, outcome details, and artifact paths to Email's fixed personal recipient and mail providers.",
+      "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. New outcome emails disclose product and check names, failed test names, and short outcome diagnostics to Email's fixed personal recipient and mail providers. They omit job and commit IDs, model names, repair budgets, and local artifact paths. Previously frozen messages remain unchanged.",
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them."
     ],
     "compatibility_and_retirement": [
-      "This release uses manager journal schema 1 and queue contract 3. New submissions freeze refund_accepted_patches=true; retained jobs without that policy flag preserve their original limit on all invocations. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
+      "This release uses manager journal schema 1 and queue contract 4. New submissions freeze refund_accepted_patches=true; retained jobs without that policy flag preserve their original limit on all invocations. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [
