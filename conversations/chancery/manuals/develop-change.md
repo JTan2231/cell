@@ -18,11 +18,14 @@ appropriate. Exact-summary tests must also check canonical host matching,
 active and archived metadata lookup, and the absence of turn reads.
 Process-lifecycle changes must also prove that a wrapper's
 persistent descendant cannot outlive the short-lived client and that cleanup
-is scoped to the launch's private process group. Finish with `./ci.sh` green.
+is scoped to the launch's private process group. Commit the changes and use
+`./ci.sh submit COMMIT` from the Cell root. The installed manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. Verify
+the retained job outcome.
 
 `release.sh` commits, tags, and pushes. The macOS deployer changes the installed
-binary and Chancery provider selectors. Neither effect follows from this
-development contract alone.
+binary and Chancery provider selectors. Remote publication and a separate
+manual deployment require their applicable authority.
 
 ## Command usage
 

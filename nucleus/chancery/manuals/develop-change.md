@@ -24,17 +24,18 @@ service-ownership change.
 3. Modify the smallest owning component.
 4. Update the runtime contract and operator manual in the same change whenever
    shared operational facts or obligations change.
-5. Run the Nucleus product quality gate:
+5. Commit the changes and submit them through the installed CI manager:
 
    ```sh
    cd /Users/joey/rust/cell
-   ./nucleus/ci.sh
+   ./ci.sh submit COMMIT
    ```
 
-   Treat it as Nucleus's complete product gate.
-6. Run every affected requester quality gate and contract test.
-7. Treat release and deployment as separate actions requiring their own
-   authority.
+   The manager integrates, validates, attempts bounded repairs, deploys, and
+   emails the outcome.
+6. Verify the retained manager outcome and the selected coverage for affected
+   requesters and contracts.
+7. Treat remote release publication as a separate authorized action.
 
 `nucleus/release.sh` is not a build command. It bumps the workspace release,
 commits, tags, and pushes, and must not be run without explicit publication

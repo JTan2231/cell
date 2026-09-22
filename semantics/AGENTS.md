@@ -20,5 +20,6 @@ Semantics-Project: semantics
 - Decisions and Conversations are read-only upstreams behind adapters. Chancery
   catalog discovery is not an execution dependency; CLI usage recording uses
   the separate best-effort `chancery-usage` library.
-- Do not deploy or run `release.sh` as a side effect of development. The
-  release command commits, tags, and pushes. `./ci.sh` must finish green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. CI includes deployment. The separate
+  `release.sh` command commits, tags, and pushes; it requires publication authority.

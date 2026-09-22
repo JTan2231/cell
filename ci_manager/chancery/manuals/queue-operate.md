@@ -7,7 +7,8 @@ this host. Linked worktrees share that queue.
 
 One delivery job is active at a time, including while it waits for a model,
 deployment, or notification. There is never more than one automated repair
-loop. Ordinary check-only CI can still use the shared broker concurrently.
+loop. The manager invokes the internal validator, which uses the shared broker
+for individual gates.
 
 The manager is shared infrastructure. It has no separate product gate,
 release-publication operation, or automatic self-deployment target. Catalog
@@ -36,7 +37,10 @@ Use the repository wrapper to initialize or install this source package:
 
 The wrapper always runs initialization and installation from the source package.
 It routes the other queue and service commands to the installed manager.
-Existing check-only `./ci.sh` invocations retain their validation behavior.
+The root and product `ci.sh` wrappers provide this same manager path. Use
+`./ci.sh submit COMMIT` to start CI. Bare invocations, product selection, and
+direct validation flags are unsupported; they return submission guidance.
+Product wrappers do not limit validation or deployment to that product.
 
 Initialization starts with admission paused. It records the repository's common
 Git directory, selected baseline, and policy. It does not infer a baseline from
@@ -93,11 +97,19 @@ Calling `cell-ci install` from an installed release selects that release's own
 bytes; it does not find newer source automatically. The repository's
 `./ci.sh install` selects that checkout's manager package.
 
+Install this manager before submitting a commit with the manager-only wrappers.
+Older workers invoke the public root wrapper for validation and cannot validate
+that commit. This worker invokes the candidate's internal
+`pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
+arguments. Journal schema 1 is unchanged. Installation requires paused admission
+and no active job, and preserves the pause until an explicit resume.
+
 ## Submit a committed input
 
 Commit the intended changes before submission. Then submit that commit:
 
 ```sh
+./ci.sh submit COMMIT
 cell-ci submit COMMIT
 cell-ci submit COMMIT --repo /absolute/cell --request-id REQUEST_KEY
 cell-ci submit COMMIT --deploy nucleus --deploy email

@@ -12,13 +12,13 @@
   "do_not_use_when": [
     "The request is ordinary use or operation of an installed library.",
     "The change belongs to Nucleus shared execution rather than Annals domain behavior.",
-    "Publication or deployment has not been separately authorized."
+    "Only publication or deployment outside a submitted CI job is requested."
   ],
   "outcome": "A minimal, tested Annals change using canonical vocabulary and preserving exact domain, execution, migration, installation, and documentation boundaries.",
   "effects": [
     "Modifies Annals source, tests, fixtures, or documentation.",
     "May require coordinated Nucleus or Clockwork contract work when requester or scheduling boundaries change.",
-    "Release and installation actions remain separate and may mutate Git, installed binaries, database state, scheduler state, or configuration."
+    "CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Release publication and destructive state changes require separate authority."
   ],
   "authority": [
     "Annals owns the library catalog, retained sources, stored instruction revisions, structural corpus invariants, reconciliation, history, inbox policy, domain recovery, and installation; consuming applications define interpretation through library instructions.",
@@ -27,7 +27,7 @@
   ],
   "success": [
     "Canonical terminology matches the registered Semantics repository `annals` and affected behavior contracts are updated.",
-    "`./annals/ci.sh` completes green.",
+    "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome.",
     "Affected installation, migration, inbox, and requester behavior is covered by the product gate."
   ],
   "failure_and_recovery": [
@@ -53,13 +53,13 @@
     "Read `semantics.repository.explore`, query `semantics repository show annals`, and identify the Annals-owned contract being changed.",
     "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design. Read Clockwork schedule contract 3 for scheduled-executable or binding changes.",
     "Implement the smallest change and update the owning CLI, architecture, data, installation, telemetry, or Semantics terminology authority in the same change.",
-    "Run `./annals/ci.sh`; deployment and migration remain separately authorized operations."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Destructive migration and deployment outside that job require separate authority."
   ],
   "checkpoints": [
     "Current technical and plain-language terms follow the registered Semantics repository while code, tests, and component documentation remain behavior authority.",
     "Annals domain state remains authoritative over model prose and Nucleus terminal state.",
     "Migration, rollback, and historical decoding are explicit when persistent meaning changes.",
-    "Release or deployment has not occurred without separate authorization."
+    "The manager deployment stays within the submitted job; release publication and deployment outside that job have separate authorization."
   ],
   "adaptation": [
     "Select only the contract documents relevant to the changed domain while always reading the complete Semantics repository first.",
@@ -72,13 +72,13 @@
   ],
   "does_not_authorize": [
     "Running `annals/release.sh`, which commits, tags, and pushes.",
-    "Deploying or replacing the installed Annals library.",
+    "Deploying outside the submitted manager job or destructively replacing an installed Annals library.",
     "Changing Nucleus shared policy solely from the requester side."
   ],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "A contributor or interactive development agent may use this operation for an authorized Annals code, test, terminology, public contract, storage, inbox, liaison, installation, or release-behavior change."},
-      {"status": "unsupported", "statement": "This operation does not cover ordinary product use, changes owned solely by Nucleus, release publication, or installed deployment without separate authority."}
+      {"status": "unsupported", "statement": "This operation does not cover ordinary product use, changes owned solely by Nucleus, release publication, or deployment outside the submitted manager job without separate authority."}
     ],
     "preconditions": [
       {"status": "declared", "statement": "The contributor has read the installed Semantics exploration contract and complete current annals repository, identified the owning Annals behavior contract, and has a scoped authorized change."},
@@ -89,8 +89,8 @@
       {"status": "unsupported", "statement": "Historical experiment vocabulary, Semantics repository output as liaison runtime input, and requester-side invention of Nucleus policy are not valid change inputs."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The result is the smallest coherent source, test, fixture, and owning-documentation change with canonical terminology and a green ./annals/ci.sh gate."},
-      {"status": "unsupported", "statement": "A development result does not itself include Git publication, installed deployment, destructive migration, or a live production success claim."}
+      {"status": "declared", "statement": "The result is the smallest coherent source, test, fixture, and owning-documentation change with canonical terminology and a verified retained CI manager job outcome."},
+      {"status": "unsupported", "statement": "Passing validation alone does not prove deployment or live domain success. The retained manager job identifies deployment and notification outcomes; Git publication and destructive migration remain separately authorized."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
@@ -104,20 +104,20 @@
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "The operation begins from the current authoritative Semantics repository and current owning project contracts and updates every affected behavior contract in the same change."},
-      {"status": "declared", "statement": "Completion requires the full Annals product gate with coverage for affected migration, installation, inbox, and requester behavior."},
+      {"status": "declared", "statement": "Completion requires passing manager-selected validation with coverage for affected migration, installation, inbox, and requester behavior and verification of the retained manager job outcome."},
       {"status": "unspecified", "statement": "No development duration, universal review coverage, or guarantee about unrelated product areas is promised."}
     ],
     "access": [
-      {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under repository instructions."},
-      {"status": "unsupported", "statement": "Development authority does not grant release, deployment, destructive installed-state replacement, external disclosure, or direct Semantics-state editing."}
+      {"status": "declared", "statement": "The operation uses the current local workspace, filesystem, and shell through an interactive agent session under repository instructions. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."},
+      {"status": "unsupported", "statement": "Development authority does not grant release publication, deployment outside that job, destructive installed-state replacement, unrelated external disclosure, or direct Semantics-state editing."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Select the owning contract, make one minimal coherent change, update corresponding documentation and compatibility or recovery material, then run the complete product gate before handoff."},
+      {"status": "declared", "statement": "Select the owning contract, make one minimal coherent change, and update documentation and compatibility or recovery material. Commit the change, submit it through the CI manager, and verify the retained validation, deployment, and notification outcomes before handoff."},
       {"status": "declared", "statement": "Persistent meaning changes retain historical decoding and define migration and rollback rather than rewriting old state in place."},
-      {"status": "declared", "statement": "Annals domain results survive later Nucleus runtime failure and publication or installation remains a separately authorized lifecycle."}
+      {"status": "declared", "statement": "Annals domain results survive later Nucleus runtime failure. CI submission includes the manager deployment; publication and installation outside that job remain separately authorized."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Every code change must leave ./annals/ci.sh green. Contributor Semantics output must not enter liaison context. Destructive migration or installed fresh state requires exact authority and recovery material."},
+      {"status": "declared", "statement": "Every code change must be committed, submitted through the CI manager, and completed with a verified retained job outcome. Contributor Semantics output must not enter liaison context. Destructive migration or installed fresh state requires exact authority and recovery material."},
       {"status": "unspecified", "statement": "No maximum change size or completion time is promised."}
     ],
     "compatibility_and_evolution": [

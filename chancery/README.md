@@ -16,13 +16,16 @@ chancery resolve ENTRY_ID
 Use the catalog to find plausible entries. Read their contracts before choosing
 an interface.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh chancery
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

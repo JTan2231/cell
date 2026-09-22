@@ -23,5 +23,6 @@ Semantics-Project: conatus
   shared operational facts in `nucleus/docs/operator-manual.md` when affected.
 - Installation, initialization, schedule activation, and model execution are
   separate effects. Source presence does not establish deployment or readiness.
-- Every code change must leave the default `./ci.sh` green. A user-requested
-  stop before testing takes precedence; report validation as not run.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. A user-requested stop before CI
+  takes precedence; report CI as not run.

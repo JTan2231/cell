@@ -57,13 +57,14 @@ Use authored corpus data and synthetic answers in source examples. Do not put
 live incoming mail, credentials, model results or Nucleus records in source,
 fixtures, documentation or provider bundles.
 
-`mentor/ci.sh` is the product validation entry point and `./ci.sh` is the root
-gate. Run only the checks permitted by the current task. If tests, builds,
-formatting or validation are deferred or forbidden, report that clearly; do
-not call the source change tested or ready for deployment. Publication,
-installation, schedule enable, model execution and real email are separate
-effects that require applicable authority. A source Chancery bundle becomes
-installed discovery only when it is staged and selected with a release.
+Commit the changes and use `./ci.sh submit COMMIT` from the Cell root for CI.
+`mentor/ci.sh submit COMMIT` reaches the same installed manager. The manager
+integrates, validates, attempts bounded repairs, deploys, and emails the
+outcome. Verify the retained job outcome. If CI is deferred or forbidden,
+report that clearly; do not call the source change tested or ready for
+deployment. Remote publication, schedule enable, and live Mentor practice
+remain separate authorized effects. A source Chancery bundle becomes installed
+discovery only when it is staged and selected with a release.
 
 Stop the change rather than weakening ownership, retaining an undeclared answer
 archive, deleting provider records, replacing unknown outcomes with guesses,

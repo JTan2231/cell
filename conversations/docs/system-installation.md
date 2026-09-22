@@ -1,10 +1,11 @@
 # macOS system installation
 
-Build and test the package and Rust installer through the Cell product gate.
-Then install those exact tested artifacts:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, install artifacts from
+a validated source candidate:
 
 ```sh
-./ci.sh conversations
 <TESTED_CONVERSATIONS_INSTALL> install \
   --binary <TESTED_CONVERSATIONS_BINARY> \
   --bundle /Users/joey/rust/cell/conversations/chancery

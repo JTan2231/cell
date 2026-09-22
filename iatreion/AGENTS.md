@@ -12,4 +12,5 @@ Semantics-Project: iatreion
   coverage. Never reuse an older successful result as current evidence.
 - Do not add a daemon, database, network check, model call, alert, repair, or
   automatic retry.
-- Every code change must leave the root `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

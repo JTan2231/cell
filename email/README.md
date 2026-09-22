@@ -15,13 +15,16 @@ email 'Subject' - < body.txt
 A successful command means Resend accepted the submission. It does not confirm
 arrival in the recipient's inbox.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh email
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

@@ -38,7 +38,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Complete relevant development checks with ./ci.sh usher. Prepare both production executables with deployment/build.py; release and deployment assume prior CI success without rerunning CI or requiring a receipt.",
+    "For source changes, submit the commit with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome; the manager validates and deploys its accepted candidate. Direct authorized installation uses both exact production executables prepared by deployment/build.py and does not rerun CI.",
     "Run usher-install install with the exact recognition binary, provider bundle, and optional expected current selection.",
     "Use inspect and exact-candidate verify to establish installed identity, integrity, and coherent command/provider selection. Use retained verify-release and recover only against the exact intended supported release."
   ],
@@ -88,7 +88,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A version-matched candidate with verified source and executable integrity, and an owned coherent prior release/selector basis. Relevant development CI is expected beforehand but is not rerun or enforced by release or deployment preparation."
+        "statement": "A version-matched candidate with verified source and executable integrity, and an owned coherent prior release/selector basis. Source changes use manager CI submission and retained outcomes. Direct installation and deployment preparation do not rerun validation or enforce a CI receipt."
       }
     ],
     "inputs": [

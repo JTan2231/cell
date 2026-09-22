@@ -17,4 +17,5 @@ Semantics-Project: decisions
   execution. Retained Decisions history is compatibility state, not an active
   digest or review surface.
 - Never add a direct Codex fallback or let model output become domain authority.
-- Every code change must leave `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

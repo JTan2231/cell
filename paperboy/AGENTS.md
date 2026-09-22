@@ -11,4 +11,5 @@ Semantics-Project: paperboy
   its own evidence. Require ASD-STE100 Issue 9 and no process commentary.
 - Paperboy owns briefs, exact agent requests, and email attempt records.
 - Preserve accepted summaries and uncertain email outcomes during recovery.
-- Run the required root CI gate before publication.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

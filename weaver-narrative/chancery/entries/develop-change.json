@@ -10,13 +10,13 @@
     "Change Weaver prompts, CLI, document storage, Annals reads, Nucleus integration, or installation while preserving the small narrative workflow."
   ],
   "do_not_use_when": [
-    "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
+    "Narrative publication or email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
   ],
   "outcome": "Change Weaver prompts, CLI, document storage, Annals reads, Nucleus integration, or installation while preserving the small narrative workflow.",
   "interfaces": [
     {
-      "label": "Validate",
-      "invocation": "./ci.sh"
+      "label": "Submit CI",
+      "invocation": "./ci.sh submit COMMIT"
     },
     {
       "label": "Read maintained terminology",
@@ -24,14 +24,14 @@
     }
   ],
   "effects": [
-    "Changes owned source, tests, and documentation; registration or deployment effects remain separately authorized by the requested endpoint."
+    "Changes owned source, tests, and documentation. CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Registration and effects outside the submitted job require separate authority."
   ],
   "authority": [
     "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission.",
     "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
   ],
   "success": [
-    "The changed behavior meets the agreed endpoint, preserves requester authority and recovery, and passes default root CI before deployment."
+    "The changed behavior meets the agreed endpoint and preserves requester authority and recovery. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome."
   ],
   "failure_and_recovery": [
     "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
@@ -53,7 +53,7 @@
     }
   ],
   "does_not_authorize": [
-    "Source mutation, remote disclosure, publication, email, state deletion, automatic retry, or effects outside the user-approved endpoint."
+    "Source-document mutation, unrelated remote disclosure, narrative publication or email, state deletion, automatic authoring retry, or effects outside the user-approved endpoint."
   ],
   "promise": {
     "data_semantics": [
@@ -81,7 +81,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled."
+        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       }
     ],
     "lifecycle_and_consistency": [

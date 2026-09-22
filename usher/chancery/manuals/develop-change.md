@@ -29,10 +29,12 @@ compatibility, tamper rejection, stale selection, and foreign ownership refusal.
 The product gate builds and stages both executables and validates the matching
 provider bundle.
 
-Run `./ci.sh` and inspect the candidate's report. Usher owns its
-release and product installation policy. A release script commits, tags, and
-pushes; deployment changes installed selectors. Neither is a side effect of
-development. No other system operation is authorized by this contract.
+Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
+installed manager integrates, validates, attempts bounded repairs, deploys,
+and emails the outcome. Inspect the retained job outcome and the candidate
+membership report. Usher owns its release and product installation policy. A
+release script commits, tags, and pushes; remote publication remains separate.
+No other system operation is authorized by this contract.
 
 ## Command usage
 

@@ -7,13 +7,16 @@ Krisis keeps the coverage and receipts needed to trace and recover delivery.
 The command is `krisis`. The source directory and existing state paths retain
 the `decisions` name.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh decisions
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

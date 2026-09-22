@@ -17,6 +17,7 @@ Semantics-Project: conversations
   reasoning, approval, and internal item payloads are outside the public corpus.
 - Update the CLI, architecture, installation, and Chancery contracts together
   when their shared behavior changes.
-- Every code change must leave `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.
 - `release.sh` publishes a release and the macOS deployer changes installed
   selectors; do not invoke either without the corresponding authorization.

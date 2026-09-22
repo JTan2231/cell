@@ -1,13 +1,14 @@
 # Cell CI broker
 
-Use `client.py` to access the broker from the repository. It identifies the
-repository by Git's common directory. Linked worktrees on the same host
-therefore share one broker scope.
+The CI manager uses the internal validation dispatcher, which accesses this
+broker through `client.py`. Submit CI with `./ci.sh submit COMMIT` or
+`cell-ci submit COMMIT`. The broker identifies the repository by Git's common
+directory. Linked worktrees on the same host therefore share one broker scope.
 
 The broker requires Python 3.10 or newer and the product gate's Rust and shell
 prerequisites.
 
-Run a private gate body synchronously:
+The internal dispatcher runs each private gate body synchronously:
 
 ```sh
 python3 ci_broker/client.py run --gate cell.root -- ./path/to/private-ci-body
@@ -95,8 +96,9 @@ child PID. Journal, ownership, configuration, or heartbeat failure stops or
 rejects the body. The broker never falls back to a CI run outside its controls.
 It records an expired runner as lost.
 
-Public `ci.sh` entry points use the shared CI dispatcher, which always invokes
-this client. The dispatcher selects relevant product and platform tests; the
-broker schedules each product or shared suite as a separate queue entry.
-Product test-group selection is part of the brokered command identity. The shared
-`pipeline/ci.sh` body is internal. Callers cannot use it to bypass admission.
+Root and product `ci.sh` wrappers route to the installed CI manager. Its
+internal dispatcher selects relevant product and platform tests and always
+invokes this client. The broker schedules each product or shared suite as a
+separate queue entry. Product test-group selection is part of the brokered
+command identity. The shared `pipeline/ci.sh` body is internal. It is not a
+second CI submission path, and callers cannot use it to bypass admission.

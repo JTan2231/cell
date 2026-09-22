@@ -150,9 +150,9 @@ python3 deployment/build.py --source-root /absolute/cell \
 
 The output contains `candidates/PRODUCT/bin`, each product's `candidate.json`,
 and `result.json`. With a single product, optional `--unit UNIT` selects one
-independently versioned release unit for release preparation. The existing
-product `ci.sh --stage-candidate ABSOLUTE_DIRECTORY` interface still runs the complete
-CI gate for callers that explicitly choose it.
+independently versioned release unit for release preparation. CI submission
+uses `./ci.sh submit COMMIT`; the manager validates the candidate before it
+requests exact-source deployment.
 
 All candidates are prepared before maintenance begins. The coordinator then:
 

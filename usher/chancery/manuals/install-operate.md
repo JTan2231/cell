@@ -1,8 +1,10 @@
 # Install or recover Usher
 
-Complete relevant development checks with `./ci.sh usher` before release or
-deployment. Preparation assumes those checks have passed without rerunning CI
-or requiring a CI receipt. Build both production executables with the shared
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For a
+separate authorized manual deployment, use a validated source candidate.
+Preparation does not rerun validation or require a CI receipt. Build both
+production executables with the shared
 release builder. Installation uses the separate Rust `usher-install` executable
 and shared `cell-install` library:
 

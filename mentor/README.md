@@ -16,13 +16,16 @@ mentor schedule status
 The default delivery time is 09:00 in `America/Chicago`. Initialization leaves
 Mentor paused. The installation guide describes how to enable delivery.
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh mentor
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

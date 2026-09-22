@@ -12,8 +12,10 @@ target/release/usher check .
 target/release/usher --json report . --product krisis
 ```
 
-Build and test with `./ci.sh usher`. The root `./ci.sh` runs a candidate Usher
-membership check for every invocation, including when selecting other product
+Submit committed changes with `./ci.sh submit COMMIT` from the Cell root. The
+installed manager integrates, validates, attempts bounded repairs, deploys,
+and emails the outcome. Its internal validator runs a candidate Usher
+membership check for every candidate, including when selecting other product
 gates. The compiler runs inside the existing CI broker's heavy lane.
 
 ## What is checked

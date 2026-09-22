@@ -13,4 +13,5 @@ Semantics-Project: usher
 - Maintain the documented evidence boundary and JSON compatibility when
   changing recognition rules. No registration or installation is implied by
   a source declaration.
-- Every code change must leave the root `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

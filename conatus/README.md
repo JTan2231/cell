@@ -15,13 +15,16 @@ conatus decision list --limit 20
 conatus status
 ```
 
-## Check
+## CI
 
-From the Cell root:
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh conatus
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

@@ -9,14 +9,18 @@ continues on `main`.
 Submit a committed candidate and inspect its retained job:
 
 ```sh
-cell-ci submit COMMIT
-cell-ci status JOB
+./ci.sh submit COMMIT
+./ci.sh status JOB
 ```
 
 Read [queue operation](chancery/manuals/queue-operate.md) before initialization,
 installation, submission, cancellation, or recovery. It defines submission
 authority, model limits, Git patch application, deployment and email outcomes, and the
 conditions that pause the queue.
+
+The root and product `ci.sh` wrappers use this manager. Bare invocations and
+direct validation flags are unsupported. The manager invokes the internal
+validator against its committed candidate and fixed accepted base.
 
 Read [CI selection](../pipeline/README.md) for committed-range validation and
 [the broker](../ci_broker/README.md) for individual gate execution. Read

@@ -19,10 +19,12 @@ Before installation or maintenance, verify Annals decision-account exchange
 contract 2 and Nucleus execution contract 3, and Clockwork schedule contract 3. Chancery documents these
 contracts. The Semantics worker does not call Chancery.
 
-Build and deploy only a green candidate:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, build and install
+artifacts from a validated source candidate:
 
 ```sh
-semantics/ci.sh
 cargo build --release --locked --package semantics
 /absolute/path/to/target/release/semantics-install install \
   --binary /absolute/path/to/target/release/semantics \

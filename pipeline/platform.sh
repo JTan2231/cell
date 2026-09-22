@@ -22,6 +22,7 @@ case "$suite" in
         done
         python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
+        python3 "$PIPELINE_ROOT/pipeline/test_ci_entry.py" -q
         ;;
     broker) python3 -m unittest -q ci_broker.test_broker ;;
     deployment) python3 -m unittest -q deployment.test_coordinator ;;

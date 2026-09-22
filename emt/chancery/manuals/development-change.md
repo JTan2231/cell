@@ -22,8 +22,10 @@ Update owning documentation and Chancery with behavior. Update the Nucleus
 operator manual for shared boundaries. Preserve unrelated work and the root
 README.
 
-Use emt/ci.sh and routine ./ci.sh when validation is authorized. Explicit
-validation deferral must remain visible and must not be called a passing gate.
+Commit the changes and use `./ci.sh submit COMMIT` from the Cell root for CI.
+The installed manager integrates, validates, attempts bounded repairs, deploys,
+and emails the outcome. Verify the retained job outcome. Explicit CI deferral
+must remain visible and must not be called a passing gate.
 
 ## Command usage
 

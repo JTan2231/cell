@@ -1,9 +1,11 @@
 # Install and configure Cast
 
-Build and verify a candidate through the Cell product gate before installing:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, install artifacts from
+a validated source candidate:
 
 ```sh
-./ci.sh cast
 <TESTED_CAST_INSTALL> install --binary <TESTED_CAST_BINARY> \
   --bundle /Users/joey/rust/cell/cast/chancery
 ```

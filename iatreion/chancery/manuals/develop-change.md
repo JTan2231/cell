@@ -13,14 +13,16 @@ Update code, tests, product declarations, documentation, packaging, and
 Chancery claims together when their shared meaning changes. Version incompatible
 status or report semantics explicitly.
 
-Run focused tests, then the default root gate:
+Commit the changes and submit them through the installed CI manager:
 
 ```sh
-./ci.sh
+./ci.sh submit COMMIT
 ```
 
-Development does not authorize release, installation, deployment, schedule
-changes, recovery, or Semantics state changes.
+The manager integrates, validates, attempts bounded repairs, deploys, and
+emails the outcome. Verify the retained job outcome. Remote publication,
+schedule changes, recovery, and Semantics state changes remain separate
+authorized operations.
 
 ## Command usage
 

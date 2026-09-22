@@ -149,7 +149,8 @@ class Worker:
         # Recovery materializes a previously committed candidate before checking.
         git.ensure_worktree(self.repository, worktree, candidate)
         ordinal = len(job["validations"])
-        command = ["sh", str(worktree / "ci.sh"), "--base", job["base_commit"],
+        command = [sys.executable, str(worktree / "pipeline/select_changes.py"), "run",
+                   "--base", job["base_commit"],
                    "--candidate", candidate, "--json"]
         result, output, diagnostic = self.process(job, f"validation-{ordinal}", command, worktree)
         try:

@@ -6,10 +6,11 @@ Use the Cell deployment coordinator to change the installation. Direct
 `platter-install install` and `recover` are refused because replacing this
 requester must preserve admission, pending Nucleus work and domain state.
 
-Building a candidate does not install it or run domain work:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. A separate
+release build prepares artifacts without installing them or running domain work:
 
 ```sh
-./ci.sh platter
 python3 deployment/build.py --source-root /absolute/cell \
   --product platter --output /absolute/cell-build
 ```

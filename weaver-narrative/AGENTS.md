@@ -9,4 +9,5 @@ Semantics-Project: weaver-narrative
 - Annals owns source reading. Nucleus owns execution and authentication.
   Weaver owns saved documents and the minimum execution recovery state.
 - Use SQLite and the shared Cell installation and maintenance interfaces.
-- Run the default root `./ci.sh` before deployment.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

@@ -29,15 +29,18 @@ Clockwork schedule contract.
 
 Use synthetic Annals accepted-account pages and Conversations cwd values.
 Nucleus integration tests use the fake local server and immutable schemas.
-Never connect CI to the live service. Packaging tests use fake candidate
-binaries, Clockwork, and launchctl in an isolated home. Fixtures contain no real
-user content, credentials, or personal paths.
+Keep validation tests separate from the live service. Packaging tests use fake
+candidate binaries, Clockwork, and launchctl in an isolated home. Fixtures
+contain no real user content, credentials, or personal paths. Commit changes
+and submit them from the Cell root:
 
 ```sh
-semantics/ci.sh
+./ci.sh submit COMMIT
 ```
 
-The complete gate is offline. It checks the compiled Rust installer with
+The installed manager integrates, validates, attempts bounded repairs, deploys,
+and emails the outcome. Verify the retained job outcome. The internal
+Semantics validation gate is offline. It checks the compiled Rust installer with
 synthetic packaging and recovery fixtures. It also checks static runtime shell
 behavior, Clockwork templates, release-local runner and frontend behavior, content-addressed deployment,
 database quiescence and rollback, retained-state uninstall, Chancery provider

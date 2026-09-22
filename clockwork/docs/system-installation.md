@@ -15,10 +15,12 @@ Previously disabled bindings stay disabled. This phase precedes EMT activation.
 An interrupted deployment retains its original inventory and re-establishes
 suspension before recovery; it does not infer intent from temporary disablement.
 
-Build and validate first, then deploy under separate authority:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For an
+explicitly authorized manual installation or recovery, install artifacts from
+a validated source candidate:
 
 ```sh
-./clockwork/ci.sh
 <TESTED_CLOCKWORK_INSTALL> install \
   --binary <TESTED_CLOCKWORK_BINARY> \
   --bundle /Users/joey/rust/cell/clockwork/chancery \

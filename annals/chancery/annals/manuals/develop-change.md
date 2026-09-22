@@ -39,16 +39,18 @@ cross-system integration, read:
 2. Make the smallest change without collapsing work, delivery, examination,
    reconciliation, commit, and revision lifecycles.
 3. Update the owning documentation when public or operational meaning changes.
-4. Run the product gate:
+4. Commit the changes and submit them through the installed CI manager:
 
    ```sh
    cd /Users/joey/rust/cell
-   ./annals/ci.sh
+   ./ci.sh submit COMMIT
    ```
 
-   Treat it as the complete Annals product gate. Packaging coverage uses fake
-   Clockwork and launchctl surfaces in an isolated home, never live bindings.
-5. Treat deployment and migration as separately authorized operations.
+   The manager integrates, validates, attempts bounded repairs, deploys, and
+   emails the outcome. Its Annals packaging checks use fake Clockwork and
+   launchctl surfaces in an isolated home, never live bindings.
+5. Verify the retained manager outcome. Live migration remains a separate
+   authorized operation.
 
 Keep current Semantics terminology out of the preserved experiment archive, whose older
 tree, path, placement, proposal, and uncertainty terms are deliberately

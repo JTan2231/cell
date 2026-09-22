@@ -16,11 +16,16 @@ target/release/usher check .
 `report` shows the evidence. `check` reports incomplete selected products and
 returns a nonzero exit status when declarations are incomplete or invalid.
 
-## Check
+## CI
+
+Commit the intended changes, then submit them from the Cell root:
 
 ```sh
-./ci.sh usher
+./ci.sh submit COMMIT
 ```
+
+The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
+repairs, deploys, and emails the outcome.
 
 ## Further documentation
 

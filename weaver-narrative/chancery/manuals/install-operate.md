@@ -7,9 +7,11 @@ separate from the permanently retired predecessor `weaver` registration.
 
 ## Install
 
-Run the default `./ci.sh` gate before deployment. Commit the tested candidate
-to local `main`. The coordinator selects that commit; it does not publish Git
-changes or author a document.
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For a
+separate authorized manual deployment, select a validated candidate on local
+`main`. The coordinator selects that commit; it does not publish Git changes
+or author a document.
 
 ```sh
 ./deploy.sh plan weaver

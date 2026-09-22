@@ -1,4 +1,4 @@
-"""Exercise root CI selection in local Git fixtures without running real gates."""
+"""Exercise internal CI selection in local Git fixtures without running real gates."""
 
 import json
 import os
@@ -149,7 +149,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         return tokens, result
 
     def ci(self, *arguments, **environment):
-        return subprocess.run(["sh", "ci.sh", *arguments], cwd=self.root,
+        return subprocess.run([sys.executable, "pipeline/select_changes.py", "run", *arguments], cwd=self.root,
                               env={**self.environment, **environment},
                               text=True, capture_output=True)
 
@@ -223,6 +223,17 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(tokens[5:], [])
         self.assertIn("Cargo.lock", result.stderr)
         self.assertIn("unowned notes.txt", result.stderr)
+
+    def test_manager_change_selects_pipeline_regressions(self):
+        base = self.git("rev-parse", "HEAD").strip()
+        self.write("ci_manager/manager.py", "# changed manager source\n")
+        self.git("add", "ci_manager/manager.py")
+        self.git("commit", "-qm", "Change manager")
+        candidate = self.git("rev-parse", "HEAD").strip()
+        result = self.ci("--base", base, "--candidate", candidate)
+        self.assert_passed(result)
+        self.assertEqual([gate["gate"] for gate in self.gates()],
+                         ["preflight", "recognition", "shared-pipeline"])
 
     def test_alias_selects_canonical_project_even_when_clean(self):
         tokens, _ = self.plan("decisions")

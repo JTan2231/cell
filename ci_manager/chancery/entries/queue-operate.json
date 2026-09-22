@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -19,6 +19,7 @@
   "interfaces": [
     {"label": "Initialize a known accepted baseline", "invocation": "cell-ci init --repo /absolute/cell --accepted-baseline COMMIT"},
     {"label": "Install source manager and matching provider", "invocation": "./ci.sh install"},
+    {"label": "Submit through the repository wrapper", "invocation": "./ci.sh submit COMMIT"},
     {"label": "Submit an immutable input", "invocation": "cell-ci submit COMMIT --repo /absolute/cell --request-id KEY --deploy PRODUCT"},
     {"label": "Read queue or one job", "invocation": "cell-ci status [JOB]"},
     {"label": "Wait for a job", "invocation": "cell-ci wait JOB"},
@@ -101,7 +102,7 @@
       {"status": "unspecified", "statement": "No maximum queue delay, provider-observation age, completion deadline, comprehensive source-correctness claim or final inbox-observation guarantee is supplied."}
     ],
     "access": [
-      {"status": "declared", "statement": "The supported surface is the current-user cell-ci CLI and installed worker. Production state is one private host directory and configured Git common repository. Linked worktrees share that identity."},
+      {"status": "declared", "statement": "The supported surface is the current-user cell-ci CLI, root and product ci.sh manager wrappers, and installed worker. Bare wrapper invocations and direct validation flags are unsupported. Product wrappers do not restrict coverage. The manager invokes the internal committed-range validator; older workers must be updated before submitting manager-only wrapper commits. Production state is one private host directory and configured Git common repository. Linked worktrees share that identity."},
       {"status": "declared", "statement": "Nucleus jobs use requester program ci-manager, workspaceAccess read-only, ordinary local shell execution enabled and web search disabled. Only the manager applies final-response patches and performs Git, deployment and notification mutations."}
     ],
     "lifecycle_and_consistency": [
@@ -116,7 +117,7 @@
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Manager release 0.1.0 uses journal schema 1, this operation contract 1, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds."},
+      {"status": "declared", "statement": "Manager release 0.2.0 uses journal schema 1, this operation contract 2, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds."},
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [

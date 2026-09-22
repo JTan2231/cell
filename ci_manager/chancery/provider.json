@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.1.0"
+    "release": "0.2.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -36,11 +36,11 @@
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them."
     ],
     "compatibility_and_retirement": [
-      "This release uses manager journal schema 1 and queue contract 1. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
+      "This release uses manager journal schema 1 and queue contract 2. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [
-      "Only one delivery job and one repair loop may be active. Direct check-only CI can still use the existing broker concurrently.",
+      "Only one delivery job and one repair loop may be active. The manager invokes the internal validator through the shared broker; root and product ci.sh wrappers support only manager commands.",
       "Default policy permits three gpt-5.6-terra medium repair invocations, then one gpt-5.6-sol high invocation, with a 600-second execution timeout per model invocation.",
       "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",

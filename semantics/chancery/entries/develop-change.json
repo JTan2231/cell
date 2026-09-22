@@ -5,18 +5,18 @@
   "mode": "develop",
   "support": "supported",
   "title": "Change the Semantics product safely",
-  "summary": "Develop Semantics while preserving project authority, append-only replay, upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and offline CI.",
+  "summary": "Develop Semantics while preserving project authority, append-only replay, upstream adapters, restricted Nucleus reconciliation, crash recovery, packaging rollback, privacy, and isolated product tests.",
   "use_when": ["Semantics source, schema, effects, worker policy, toolset, prompts, CLI, packaging, service lifecycle, or documentation should change."],
   "do_not_use_when": ["The installed repository should only be explored or operated."],
-  "outcome": "A synchronized product change whose standalone offline CI is green and whose persistent, requester, service, and published discovery contracts remain valid.",
-  "effects": ["May change source, tests, docs, SQLite migrations, immutable schemas/toolsets, packaging, or Chancery contracts; deployment and release remain separate explicit actions."],
+  "outcome": "A synchronized product change with a verified retained CI manager outcome and valid persistent, requester, service, and published discovery contracts.",
+  "effects": ["May change source, tests, docs, SQLite migrations, immutable schemas/toolsets, packaging, or Chancery contracts. CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Release publication remains separate."],
   "authority": [
     "Semantics source and docs own project routing and semantic-domain behavior.",
     "Annals, Conversations, and Nucleus contracts own their respective upstream and requester boundaries; preserved Decisions state is legacy compatibility data.",
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "semantics/ci.sh finishes green offline without contacting live Nucleus, Annals, Conversations, Clockwork, launchd, or Chancery state.",
+    "Internal Semantics tests pass with isolated fixtures. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
     "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
@@ -41,7 +41,7 @@
     "Read Semantics AGENTS.md, architecture, data model, affected upstream contracts, and the current Nucleus requester/operator manuals.",
     "Map changes across registry identity, cursor durability, intake state, replay invariants, immutable tool schemas, mailbox idempotency, service privacy, and rollback.",
     "Implement the smallest change with synthetic adapters and synchronized code, tests, docs, packaging, and Chancery contracts.",
-    "Run semantics/ci.sh offline; deployment and publication remain separate explicit operations."
+    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job outcome. Publication and deployment outside that job remain separately authorized operations."
   ],
   "checkpoints": [
     "Repository meaning is always derived by replaying immutable contiguous revisions and typed effects; v1 has no mutable concept projection.",
@@ -49,7 +49,7 @@
     "Every new account-derived revision grounds its exact Annals library, event, and account identity; legacy admission/review effects remain decodable.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
-    "CI and packaging tests are offline, use fakes, and produce body-free logs."
+    "Internal product and packaging tests are offline, use fakes, and produce body-free logs. The manager owns bounded repair, deployment, and the outcome email."
   ],
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",
@@ -62,23 +62,23 @@
     "A change would expose project workspace or body-bearing logs, make model output authoritative, or require Chancery at runtime."
   ],
   "interfaces": [
-    {"label": "CI", "invocation": "semantics/ci.sh"},
+    {"label": "CI", "invocation": "./ci.sh submit COMMIT"},
     {"label": "Architecture", "invocation": "semantics/docs/architecture.md"},
     {"label": "Installation", "invocation": "semantics/docs/system-installation.md"}
   ],
-  "does_not_authorize": ["Deploying, deleting retained state, mutating upstream products, or publishing a release as a side effect of development."],
+  "does_not_authorize": ["Deployment outside the submitted manager job, retained-state deletion, upstream domain mutations, or release publication."],
   "promise": {
     "consumers": [
       {"status": "declared", "statement": "An interactive contributor may change Semantics while preserving project-scoped authority, append-only replay, restricted requester behavior, and synchronized public contracts."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The contributor has read Semantics instructions, repository terminology, affected public and upstream contracts, and the Nucleus operator manual, with separate authority for release or deployment."}
+      {"status": "declared", "statement": "The contributor has read Semantics instructions, repository terminology, affected public and upstream contracts, and the Nucleus operator manual. CI submission supplies authority for the manager deployment and outcome email; release publication and deployment outside that job require separate authority."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are the requested scoped change, current Semantics source and contracts, exact compatible upstream documentation, and synthetic fixtures or fakes."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest synchronized source, schema, toolset, test, documentation, packaging, or provider change with the offline Semantics CI green."}
+      {"status": "declared", "statement": "The output is the smallest synchronized source, schema, toolset, test, documentation, packaging, or provider change with a verified retained CI manager job outcome."}
     ],
     "data_semantics": [
       {"status": "declared", "statement": "Development preserves stable project and concept identities, contiguous immutable typed-effect replay, exact upstream provenance, and Semantics-owned transactional domain success."}
@@ -87,16 +87,16 @@
       {"status": "declared", "statement": "Existing project, concept, event, decision, schema, toolset, requester, and job identities retain their documented meanings unless an explicit successor is published."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completion covers every affected registry, cursor, intake, replay, tool, requester, service, packaging, documentation, and test boundary and the current offline CI run."}
+      {"status": "declared", "statement": "Completion covers every affected registry, cursor, intake, replay, tool, requester, service, packaging, documentation, and test boundary and the retained manager validation, deployment, and notification outcomes."}
     ],
     "access": [
-      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic upstreams and fakes rather than live services or private data."}
+      {"status": "declared", "statement": "Development uses the local repository filesystem and shell; tests use synthetic upstreams and fakes rather than live services or private data. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."}
     ],
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Persistent changes require a versioned migration and verified rollback of the database and sidecars. Changes to immutable tool meaning require successor schema or toolset identities."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "The standalone gate is offline, bounded to Semantics, and must complete within its documented 60-second deadline without contacting live upstream services."}
+      {"status": "declared", "statement": "The internal Semantics product gate is offline and must complete within its documented 60-second deadline without contacting live upstream services. The manager job can cover other affected products and has separate repair, deployment, and notification stages."}
     ],
     "compatibility_and_evolution": [
       {"status": "declared", "statement": "Development retains historical replay and old correlation decoding; incompatible public, storage, or managed-tool meaning is introduced through an explicit versioned successor."}

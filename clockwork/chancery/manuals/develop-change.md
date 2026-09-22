@@ -65,11 +65,12 @@ staged provider before selector mutation, idempotent redeploy, update, foreign
 and tampered selector refusal, pre-commit rollback, and selector-only
 uninstall without opening runtime state or touching product plists.
 
-Finish with `clockwork/ci.sh` green. `release.sh` creates a commit, tag, and
-remote push; the deployer changes installed program selectors; schedule
-commands change launchd and product activation state; Semantics registration
-and seeding write maintained terminology. Each is a separate effect and none
-follows from the development operation without separate authority.
+Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
+installed manager integrates, validates, attempts bounded repairs, deploys,
+and emails the outcome. Verify the retained job outcome. `release.sh` creates
+a commit, tag, and remote push. Manual deployment, schedule commands, and
+Semantics registration and seeding are separate operations that require their
+applicable authority.
 
 Until `clockwork` is explicitly registered and seeded, query Cell for shared
 maintained terminology. After that transition, query the Clockwork repository.

@@ -12,4 +12,5 @@ Semantics-Project: email
   than guessing.
 - Email always sends from `Codex <codex@joeytan.dev>` to
   `j.tan2231@gmail.com`; do not add configurable recipients.
-- Every code change must leave `./ci.sh` green.
+- Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
+  root and verify the manager job outcome. Follow the root CI instructions.

@@ -5,11 +5,12 @@ It installs no daemon, schedule, or model requester.
 
 ## Install programs
 
-Validate with the default root gate. Commit a green candidate to local main.
-Preview and run deployment when authorized:
+Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+validates, attempts bounded repairs, deploys, and emails the outcome. For a
+separate authorized manual deployment, select a validated candidate on local
+main, then preview and run the coordinator:
 
 ```sh
-./ci.sh
 ./deploy.sh plan bazaar
 ./deploy.sh bazaar
 ```

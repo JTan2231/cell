@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select root CI gates from one stable Git checkout."""
+"""Internal validator: select CI gates from one stable Git checkout."""
 
 from __future__ import annotations
 
@@ -243,7 +243,7 @@ class SelectionParser(argparse.ArgumentParser):
 def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse.Namespace:
     parser_type = SelectionParser if not direct and "--json" in arguments else argparse.ArgumentParser
     parser = parser_type(
-        prog=f"{direct}/ci.sh" if direct else "./ci.sh",
+        prog="pipeline/select_changes.py" + (f" product {direct}" if direct else " run"),
         description="Run product tests; add platform tests for platform inputs or on request.",
     )
     parser.add_argument("--all", action="store_true", help="run every product and platform suite")
@@ -620,7 +620,8 @@ def run(root: Path, arguments: list[str], direct: str | None = None) -> int:
 
 
 def run_shared(root: Path, arguments: list[str]) -> None:
-    parser = argparse.ArgumentParser(prog="pipeline/test.sh", description="Explicit shared platform tests")
+    parser = argparse.ArgumentParser(prog="pipeline/select_changes.py shared",
+                                     description="Internal shared platform tests")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--quiet-result", action="store_true")
     parser.add_argument("suites", nargs="*", metavar="SUITE", help=", ".join(SHARED_INPUTS))

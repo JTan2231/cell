@@ -271,26 +271,30 @@ and each consumer's installation contract for the exact selection rules.
 
 ## Shared CI, release, and deployment coordination
 
-From the Cell root, use the default gate for routine validation:
+Commit the intended changes, then submit that commit from the Cell root:
 
 ```sh
-./ci.sh
+./ci.sh submit COMMIT
 ```
 
-It selects outstanding changed products relative to `HEAD`, including deletions
-and both paths of renames. Explicit product arguments limit product coverage.
-A scoped success does not establish full repository validation. Use `--all`
-only when the user explicitly requests full CI.
+`cell-ci submit COMMIT` uses the same installed manager. The manager queues the
+commit, integrates it privately, validates it, attempts bounded repairs, deploys
+the accepted source, and emails the outcome. Root and product `ci.sh` wrappers
+provide manager commands only. There is no direct check-only CI path.
 
-CI rejects source changes during execution as stale. Linked worktrees share the
-CI broker and compiler resources. For selection, output, and recovery details,
-see [CI selection](/Users/joey/rust/cell/pipeline/README.md) and
+The manager selects validation coverage from the fixed accepted base and each
+committed candidate, including deletions and both paths of renames. Selective
+success does not establish full repository validation. Source changes during
+validation are stale. Linked worktrees share the CI broker and compiler
+resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
+[validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
 
-Publication and deployment are separate effects. A product release command
-changes versions, commits, tags, and pushes. CI does not publish. Release and
-deployment preparation build and seal production artifacts; they do not rerun
-CI or turn a build receipt into test evidence.
+Git publication remains separate. A product release command changes versions,
+commits, tags, and pushes. CI makes private candidate commits and advances
+accepted history; it does not publish remote Git refs. Release and deployment
+preparation build and seal production artifacts; they do not rerun validation
+or turn a build receipt into test evidence.
 
 ### Cell deployment
 
@@ -450,9 +454,9 @@ exports with the provider and update affected consumers.
 The installed `cell-ci` manager owns one durable FIFO queue for one configured
 Cell Git common directory. Linked worktrees submit immutable commits to this
 queue. Development continues on `main`. The manager owns `refs/ci/accepted`,
-private input and candidate refs, and its private worktrees. Ordinary `./ci.sh`
-remains a foreground check. Its submission and operation subcommands use the
-installed manager.
+private input and candidate refs, and its private worktrees. `./ci.sh submit COMMIT`
+and `cell-ci submit COMMIT` submit to this manager. Bare `./ci.sh` does not
+validate; the manager invokes the internal validator for each candidate.
 
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
@@ -535,11 +539,13 @@ shared facts or procedures change.
 ### Routine Nucleus patch
 
 1. Identify affected public meaning, schema, harness, and requester obligations.
-2. Update the owning code and documentation, then run the required product gate.
+2. Update the owning code and documentation, commit the changes, and submit
+   them through the CI manager. Verify its validation and deployment outcome.
 3. Publish only when authorized. Release requires clean `main` synchronized
    with `origin/main` and creates the commit and tag.
-4. Quiesce affected work and deploy matching CLI and daemon candidates.
-5. Verify strict health and requester readiness before restoring admission.
+4. Verify strict health and requester readiness after the manager deployment.
+   For a separate manual installation or recovery, quiesce affected work and
+   deploy matching CLI and daemon candidates before restoring admission.
 
 Use [Nucleus installation](/Users/joey/rust/cell/nucleus/docs/system-installation.md)
 for the exact installer and rollback procedure.

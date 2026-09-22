@@ -12,20 +12,20 @@
   "do_not_use_when": [
     "The request is only to inspect or recover the installed runtime.",
     "The change belongs entirely to Todo, Annals, or another requester domain.",
-    "The user has not authorized release publication or deployment."
+    "Only release publication or deployment outside a submitted CI job is requested."
   ],
   "outcome": "A minimal Nucleus change with the correct compatibility, execution-capacity, managed-authentication, migration, requester, documentation, CI, and recovery obligations satisfied.",
   "effects": [
     "Modifies Nucleus source, tests, contracts, or operator documentation.",
     "Depending on the selected playbook, may require coordinated requester changes, database migration, exact Codex inspection, or service cutover.",
-    "Release and deployment are separate actions that change published or installed state."
+    "CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Release publication remains a separate action."
   ],
   "authority": [
     "Nucleus owns its protocol, store, adapter, global eight-slot scheduler, single-authority managed authentication broker, service packaging, and operator manual.",
     "Requesters continue to own their domain contracts and must be changed only when the shared boundary requires it."
   ],
   "success": [
-    "`./nucleus/ci.sh` completes green.",
+    "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome.",
     "Every changed public or operational fact is reflected in the canonical operator manual and exact contract documentation.",
     "Deployment readiness confirms installed candidate identity and service health without synthetic model jobs or requester records."
   ],
@@ -51,14 +51,14 @@
   "steps": [
     "Run `nucleus manual` and classify the change as a routine patch, protocol/client change, execution-capacity change, store migration, exact Codex upgrade, requester contract change, or authentication/service change.",
     "Apply the smallest change in the owning Nucleus component and update all exact contracts and operator facts affected by it.",
-    "Run the Nucleus product CI and any affected requester CI suites.",
-    "If deployment is authorized, quiesce the required requesters, preserve the required recovery material, deploy in compatible order, and confirm installed candidate identity and service health."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome, including affected requester validation.",
+    "For the manager deployment, preserve the required recovery material and verify requester quiescence, compatible deployment order, installed candidate identity, and service health."
   ],
   "checkpoints": [
     "The primary authority and every cross-system obligation are identified.",
     "Public compatibility, execution-capacity, authentication, and persistent-state consequences are explicit.",
-    "The product CI passes.",
-    "Deployment and publication have not occurred without separate authorization."
+    "The retained manager job records passing validation and the deployment and notification outcomes.",
+    "Deployment is within the submitted manager job; publication and deployment outside that job have separate authorization."
   ],
   "adaptation": [
     "Follow the exact playbook in the installed version-matched manual because store, harness, and requester compatibility facts evolve.",
@@ -71,7 +71,7 @@
   ],
   "does_not_authorize": [
     "Running `release.sh`, which commits, tags, and pushes.",
-    "Deploying to the installed service.",
+    "Deploying to the installed service outside the submitted manager job.",
     "Changing requester-owned domain meaning merely for runtime convenience."
   ],
   "promise": {
@@ -88,7 +88,7 @@
       },
       {
         "status": "declared",
-        "statement": "Separate authority exists before release publication, installed deployment, a requester retry, or any destructive migration or credential move."
+        "statement": "CI submission supplies authority for the manager deployment and outcome email. Separate authority exists before release publication, deployment outside that job, a requester retry, or any destructive migration or credential move."
       }
     ],
     "inputs": [
@@ -104,11 +104,11 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The operation produces the smallest reviewed Nucleus source, test, and exact documentation change with scheduler and managed-authentication invariants explicit, the complete Nucleus product CI green, and affected requester proof synchronized."
+        "statement": "The operation produces the smallest reviewed Nucleus source, test, and exact documentation change with scheduler and managed-authentication invariants explicit, affected requester proof synchronized, and a verified retained manager job outcome."
       },
       {
         "status": "unsupported",
-        "statement": "Development completion alone does not publish a release, deploy the service, migrate live state, authenticate an account, retry requester work, or establish installed runtime readiness."
+        "statement": "Passing validation alone does not prove deployment or runtime readiness. The retained manager job identifies deployment and notification outcomes; release publication, destructive migration, authentication, and requester retries remain separate operations."
       }
     ],
     "data_semantics": [
@@ -148,17 +148,17 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, and retained output stay within their documented private boundaries."
+        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, and retained output stay within their documented private boundaries. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       },
       {
         "status": "unsupported",
-        "statement": "The operation grants no implicit access to requester-owned domain state, production credentials, external publication, installed service mutation, or private source disclosure."
+        "statement": "The operation grants no implicit access to requester-owned domain state, production credentials, external publication, installed service mutation outside the submitted manager job, or unrelated private source disclosure."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Classify the change and name the authorities and affected requesters. Make the smallest edit in the owning component and update contracts and migrations. Run Nucleus and affected requester gates. Obtain separate authority before release or deployment."
+        "statement": "Classify the change and name the authorities and affected requesters. Make the smallest edit in the owning component and update contracts and migrations. Submit the committed change through the CI manager and verify its retained validation, deployment, and notification outcomes. Obtain separate authority for release publication or deployment outside that job."
       },
       {
         "status": "declared",

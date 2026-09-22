@@ -19,8 +19,7 @@ emit_ci_wrapper() {
 set -eu
 PRODUCT_DIR=\$(CDPATH='' cd "\$(dirname "\$0")" && pwd)
 CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/.." && pwd)
-export PYTHONDONTWRITEBYTECODE=1
-exec python3 "\$CELL_ROOT/pipeline/select_changes.py" product "$PRODUCT_ID" "\$@"
+exec "\$CELL_ROOT/ci.sh" "\$@"
 EOF
 }
 
