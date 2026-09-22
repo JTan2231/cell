@@ -268,6 +268,17 @@ fn runtime_harness(prior: &Value, unchanged: bool) -> Result<&str> {
         .ok_or_else(|| Error::new("captured Nucleus harness is missing"))
 }
 
+fn verify_prior_harness(health: &Value, candidate: &Path, prior: Option<&Value>) -> Result<()> {
+    let expected = prior
+        .map(|prior| runtime_harness(prior, true))
+        .transpose()?
+        .map_or(candidate, Path::new);
+    if harness(health)? != expected {
+        return Err(Error::new("configured Nucleus harness changed"));
+    }
+    Ok(())
+}
+
 fn release_root(home: &Path, info: &ReleaseInfo) -> PathBuf {
     home.join("Library/Application Support/Nucleus/install/releases")
         .join(&info.release_id)
@@ -425,6 +436,7 @@ fn install(
     home: &Path,
     owner: Option<&str>,
     exact: Option<&InstallSnapshot>,
+    prior: Option<&Value>,
 ) -> Result<InstallSnapshot> {
     let before = inspect(home)?;
     if args
@@ -450,9 +462,7 @@ fn install(
                 Some(owner),
                 &["--compact", "maintenance", "health", owner],
             )?;
-            if harness(&health)? != args.codex {
-                return Err(Error::new("configured Nucleus harness changed"));
-            }
+            verify_prior_harness(&health, &args.codex, prior)?;
         }
         write_cutover(
             home,
@@ -695,6 +705,7 @@ fn adapter(operation: Operation) -> Result<Value> {
                 &ctx.home,
                 Some(&ctx.request.run_id),
                 Some(&prior()?),
+                Some(ctx.prior()?),
             )?;
             Ok(reply(
                 "applied",
@@ -765,7 +776,7 @@ fn run(command: Command) -> Result<Value> {
                 let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID")
                     .ok()
                     .filter(|value| !value.is_empty());
-                json!(install(&args, &home, owner.as_deref(), None)?)
+                json!(install(&args, &home, owner.as_deref(), None, None)?)
             }
             Command::Inspect(args) => json!(inspect(&home(args.home)?)?),
             Command::Verify(args) => {
@@ -1006,6 +1017,26 @@ mod tests {
         let historical = json!({"harness_executable": "/configured/codex"});
         assert_eq!(runtime_harness(&historical, true)?, "/configured/codex");
         assert_eq!(runtime_harness(&historical, false)?, "/configured/codex");
+        Ok(())
+    }
+
+    #[test]
+    fn upgrade_guard_checks_the_captured_harness_before_cutover() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let configured = directory.path().join("prior-codex");
+        let candidate = directory.path().join("candidate-codex");
+        fs::write(&configured, "prior executable")?;
+        fs::write(&candidate, "candidate executable")?;
+        let prior = json!({
+            "harness_executable": candidate,
+            "prior_harness_executable": configured
+        });
+        let health = json!({"harnessExecutable": configured});
+        verify_prior_harness(&health, &candidate, Some(&prior))?;
+        assert!(verify_prior_harness(&health, &candidate, None).is_err());
+        let changed = json!({"harnessExecutable": candidate});
+        assert!(verify_prior_harness(&changed, &candidate, Some(&prior)).is_err());
+        verify_prior_harness(&changed, &candidate, None)?;
         Ok(())
     }
 }
