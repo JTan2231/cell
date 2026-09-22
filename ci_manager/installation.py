@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import ExitStack, contextmanager
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 from ci_manager.storage import ManagerError, Store, home, lock, private_directory, state_root
@@ -22,6 +24,7 @@ from ci_manager.storage import ManagerError, Store, home, lock, private_director
 LABEL = "dev.cell.ci-manager"
 PROVIDER = "ci-manager"
 FORMAT = 1
+STOP_LOCK_TIMEOUT = 10.0
 
 
 def program_root() -> Path:
@@ -215,6 +218,22 @@ def _stop_if_loaded(owned_plist: bytes | None) -> bool:
     return loaded
 
 
+@contextmanager
+def _worker_lock_after_stop(root: Path):
+    deadline = time.monotonic() + STOP_LOCK_TIMEOUT
+    with ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(lock(root / "worker.lock", blocking=False))
+                break
+            except BlockingIOError as error:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ManagerError("CI manager worker lock did not drain within 10 seconds") from error
+                time.sleep(min(0.05, remaining))
+        yield
+
+
 def _cancelled_validation_exited(store: Store, job: dict) -> bool:
     if (job["phase"] != "blocked" or job.get("stopped_phase") != "checking"
             or not job["cancel_requested"] or job.get("attempts") != []
@@ -352,7 +371,7 @@ def install() -> dict:
             was_loaded = _stop_if_loaded(old_plist)
             switched = False
             try:
-                with lock(root / "worker.lock", blocking=False):
+                with _worker_lock_after_stop(root):
                     _require_idle(store, allow_cancelled_validation=True)
                     release = _prepare_release(source, python)
                     _link(paths["current"], f"releases/{release.name}")
@@ -365,7 +384,7 @@ def install() -> dict:
                 try:
                     if switched:
                         _stop_if_loaded(_check_plist(paths["plist"]))
-                        with lock(root / "worker.lock", blocking=False):
+                        with _worker_lock_after_stop(root):
                             if previous is None:
                                 paths["current"].unlink(missing_ok=True)
                             else:

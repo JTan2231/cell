@@ -84,6 +84,9 @@ content-addressed release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
 selectors or LaunchAgent files and attempts to restore the prior selection if
 installation fails. A failed restoration leaves an explicit recovery error.
+After stopping its owned service during installation or rollback, the installer
+waits up to 10 seconds for the worker lock. It refuses to proceed if the lock
+remains held, and retains all required checks under the lock after acquisition.
 
 To install edited repository code, pause admission, let the active job finish,
 and invoke that source package explicitly:

@@ -233,11 +233,27 @@ class CancelledValidationRecoveryTests(unittest.TestCase):
 
     def test_install_refuses_live_worker_lock(self):
         patches = self.installer()
-        with lock(self.store.root / "worker.lock", blocking=False):
-            with self.assertRaises(ManagerError):
+        with lock(self.store.root / "worker.lock", blocking=False), \
+                mock.patch.object(installation.time, "monotonic", side_effect=[0, 10]):
+            with self.assertRaisesRegex(ManagerError, "did not drain within 10 seconds"):
                 installation.install()
         patches["_prepare_release"].assert_not_called()
         patches["_link"].assert_not_called()
+
+    def test_install_waits_for_stopped_worker_to_release_lock(self):
+        patches = self.installer()
+        with ExitStack() as holder:
+            holder.enter_context(lock(self.store.root / "worker.lock", blocking=False))
+
+            def stopped_worker_exits(_):
+                patches["_stop_if_loaded"].assert_called_once()
+                patches["_prepare_release"].assert_not_called()
+                holder.close()
+
+            with mock.patch.object(installation.time, "sleep", side_effect=stopped_worker_exits) as sleep:
+                self.assertTrue(installation.install()["installed"])
+            sleep.assert_called_once()
+        patches["_prepare_release"].assert_called_once()
 
     def test_install_refuses_other_or_unproved_work(self):
         installation._require_idle(self.store, allow_cancelled_validation=True)
