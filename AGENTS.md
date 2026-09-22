@@ -21,6 +21,9 @@ Semantics-Project: cell
   Root and product `ci.sh` wrappers use this same path; there is no direct
   check-only CI entry point. Focused tests can support development, but they do
   not replace the manager job.
+  New jobs refund each repair invocation's budget point when Git accepts its
+  patch and the manager records the private candidate. Failed or rejected
+  attempts remain charged for the whole job.
 
 ## Documentation
 

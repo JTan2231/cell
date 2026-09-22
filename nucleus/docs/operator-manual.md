@@ -478,11 +478,19 @@ agent is asked to return only a raw Git patch in its final response. The manager
 retains the exact response and adds a missing final LF to the application input.
 Git applies it to a private parent index with `--cached --recount
 --whitespace=nowarn`; the manager adds no patch acceptance rules. It commits the
-result and runs the ordinary CI loop. The initial policy permits three
-`gpt-5.6-terra` medium attempts and one `gpt-5.6-sol` high attempt. Attempts
-accumulate within the job. Quota deferral preserves the same request identity.
-Infrastructure failures do not select a stronger model. Bazaar supplies the
-`cell.prompts.ci-manager` selection; import its components before activation.
+result and runs the ordinary CI loop. New jobs freeze the refund policy: a
+recorded private candidate refunds its repair attempt before the next validation
+result. The default budget permits three unrefunded `gpt-5.6-terra` medium
+attempts, then one unrefunded `gpt-5.6-sol` high attempt. Failed or rejected
+attempts remain charged for the whole job. Accepted patches can exceed four
+total invocations; no total-invocation ceiling applies. Retained jobs without
+the refund flag keep their original limit on all invocations.
+
+Attempt identities and history remain unique and complete after refunds. Job
+status reports the budget mode, total, used, remaining, refunded, and total
+invocations. Quota deferral preserves the same request identity without another
+charge. Infrastructure failures do not select a stronger model. Bazaar supplies
+the `cell.prompts.ci-manager` selection; import its components before activation.
 
 Deployment holds the installed manager's Nucleus admission before replacing
 Nucleus. CI reports drained when no admitted or unresolved model invocation

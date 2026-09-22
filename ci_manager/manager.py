@@ -12,6 +12,7 @@ import uuid
 
 from ci_manager import VERSION
 from ci_manager import git_ops as git
+from ci_manager.budget import repair_budget
 from ci_manager.integrations import (
     DeferredError, IntegrationError, NucleusClient, TransportError,
     freeze_request, load_prompt_selection, make_request, send_email, terminal_result,
@@ -69,6 +70,7 @@ class Worker:
             self.store.set("paused", True)
         if "notification" not in job:
             deployment = job.get("deployment_result", {})
+            budget = repair_budget(job)
             title = "deployed" if job.get("installation_verified") else outcome.replace("_", " ")
             body = "\n".join([
                 f"Cell CI job {job['id']}: {message}",
@@ -77,6 +79,7 @@ class Worker:
                 f"Final candidate: {job.get('candidate_commit') or 'none'}",
                 f"Accepted: {bool(job.get('accepted'))}",
                 f"Repair invocations: {len(job.get('attempts', []))}",
+                f"Repair budget: {budget['used']} used, {budget['remaining']} remaining, {budget['refunded']} refunded",
                 "Models: " + ", ".join(item["model"] for item in job.get("attempts", [])),
                 f"Deployment state: {deployment.get('state', 'not started')}",
                 f"Artifacts: {self.directory(job)}",
@@ -187,9 +190,9 @@ class Worker:
 
     def repair_prepare(self, job: dict) -> None:
         policy = job["policy"]
-        used = len(job["attempts"])
+        used = repair_budget(job)["used"]
         if used >= policy["luna_attempts"] + policy["terra_attempts"]:
-            self.finish(job, "failed", "The repair invocation budget is exhausted.")
+            self.finish(job, "failed", "The repair budget is exhausted.")
             return
         if self.store.owners():
             job["waiting_reason"] = "requester_maintenance"
@@ -198,7 +201,8 @@ class Worker:
         # Retain the existing count keys for stored policy compatibility.
         primary = used < policy["luna_attempts"]
         model, reasoning = ("gpt-5.6-terra", "medium") if primary else ("gpt-5.6-sol", "high")
-        identity = f"ci-{job['id']}-repair-{used + 1}"
+        number = len(job["attempts"]) + 1
+        identity = f"ci-{job['id']}-repair-{number}"
         if "prompts" not in job:
             job["prompts"] = load_prompt_selection()
             self.save(job)
@@ -208,13 +212,13 @@ class Worker:
                                history=job["attempts"], model=model, reasoning=reasoning,
                                prompts=job["prompts"],
                                timeout_seconds=policy["model_timeout_seconds"])
-        request_path = self.directory(job) / f"repair-{used + 1}.request.json"
+        request_path = self.directory(job) / f"repair-{number}.request.json"
         atomic_bytes(request_path, freeze_request(request))
         # The admission lock closes the race between maintenance hold and submit.
         with lock(self.root / "admission.lock"):
             if self.store.owners():
                 return
-            job["attempts"].append({"number": used + 1, "nucleus_job_id": identity,
+            job["attempts"].append({"number": number, "nucleus_job_id": identity,
                                      "model": model, "reasoning": reasoning, "request": str(request_path),
                                      "parent": job["candidate_commit"], "stamp": int(time.time())})
             job["model_unresolved"] = True

@@ -83,7 +83,7 @@ def submit(store: Store, args) -> dict:
         git.git(root, "update-ref", git.private_ref(identity, "input"), revision, "0" * len(revision))
         now = time.time()
         data = {"input_commit": revision, "deploy_products": products,
-                "policy": config["policy"], "submission_key": request_key}
+                "policy": {**config["policy"], "refund_accepted_patches": True}, "submission_key": request_key}
         store.db.execute("INSERT INTO jobs(id,submission_key,phase,created,updated,data) VALUES (?,?,'queued',?,?,?)",
                          (identity, request_key, now, now, json.dumps(data)))
         return store.job(identity)
@@ -124,9 +124,9 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--repo", required=True)
     init.add_argument("--accepted-baseline", required=True)
     init.add_argument("--luna-attempts", type=positive, default=3,
-                      help="Terra medium attempt count (legacy option name)")
+                      help="Terra medium unrefunded budget points (legacy option name)")
     init.add_argument("--terra-attempts", type=positive, default=1,
-                      help="Sol high escalation attempt count (legacy option name)")
+                      help="Sol high escalation unrefunded budget points (legacy option name)")
     init.add_argument("--model-timeout-seconds", type=positive, default=600)
     submission = commands.add_parser("submit")
     submission.add_argument("commit")

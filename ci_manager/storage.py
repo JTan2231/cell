@@ -14,6 +14,8 @@ import sys
 import time
 import uuid
 
+from ci_manager.budget import repair_budget
+
 SCHEMA = 1
 TERMINAL = {"succeeded", "failed", "cancelled", "already_included"}
 
@@ -134,13 +136,16 @@ class Store:
         data = json.loads(row["data"])
         data.update(id=row["id"], sequence=row["sequence"], phase=row["phase"],
                     cancel_requested=bool(row["cancel_requested"]), created=row["created"], updated=row["updated"])
+        data["repair_budget"] = repair_budget(data)
         return data
 
     def save(self, job: dict, phase: str | None = None) -> None:
         if phase is not None:
             job["phase"] = phase
+        data = dict(job)
+        data.pop("repair_budget", None)
         self.db.execute("UPDATE jobs SET phase=?,data=?,updated=? WHERE id=?",
-                        (job["phase"], json.dumps(job, sort_keys=True), time.time(), job["id"]))
+                        (job["phase"], json.dumps(data, sort_keys=True), time.time(), job["id"]))
 
     def active(self) -> dict | None:
         rows = self.db.execute("SELECT * FROM jobs WHERE phase NOT IN ('queued','succeeded','failed','cancelled','already_included') ORDER BY sequence").fetchall()

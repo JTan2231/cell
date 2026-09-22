@@ -56,8 +56,9 @@ cell-ci init --repo /absolute/cell --accepted-baseline COMMIT \
 ```
 
 The flag names are retained for compatibility. `--luna-attempts` sets the first
-tier's Terra medium limit; `--terra-attempts` sets the escalation tier's Sol high
-limit. Retained policy fields use the same legacy names.
+tier's Terra medium budget; `--terra-attempts` sets the escalation tier's Sol
+high budget. Retained policy fields use the same legacy names. For new jobs,
+these limits count unrefunded repair attempts, as described below.
 
 Repeated initialization does not replace the repository or policy and cannot
 move an accepted ref that has already advanced.
@@ -98,11 +99,14 @@ bytes; it does not find newer source automatically. The repository's
 `./ci.sh install` selects that checkout's manager package.
 
 Install this manager before submitting a commit with the manager-only wrappers.
-Older workers invoke the public root wrapper for validation and cannot validate
-that commit. This worker invokes the candidate's internal
+Workers older than 0.2.0 invoke the public root wrapper for validation and
+cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Journal schema 1 is unchanged. Installation requires paused admission
-and no active job, and preserves the pause until an explicit resume.
+arguments. Manager release 0.3.0 uses queue contract 3 and retains journal
+schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
+Existing jobs without this flag retain their original policy, which charges
+every invocation. Installation requires paused admission and no active job,
+and preserves the pause until an explicit resume.
 
 ## Submit a committed input
 
@@ -166,10 +170,25 @@ erase an already accepted commit.
 
 ## Apply bounded model proposals
 
-The default repair sequence permits three `gpt-5.6-terra` invocations with medium
-reasoning, followed by one `gpt-5.6-sol` invocation with high reasoning.
-The limit belongs to the whole job. A different failure after a patch does not
-reset it. One invocation can propose fixes for several diagnostics and files.
+New jobs have a default budget of three unrefunded `gpt-5.6-terra` attempts
+with medium reasoning, followed by one unrefunded `gpt-5.6-sol` attempt with high
+reasoning. Each recorded attempt consumes one point. When Git accepts its patch
+and the manager records the private candidate commit, that point is refunded.
+The refund does not require a later validation pass.
+
+Failed or rejected attempts remain charged for the whole job. A different
+validation failure after an accepted patch does not erase those earlier
+charges. The next model tier follows the unrefunded count: successful Terra
+patches keep Terra available until three attempts remain charged; successful
+Sol patches keep the final point available. One invocation can propose fixes
+for several diagnostics and files.
+
+This policy bounds unrefunded attempts, not total invocations, runtime, or cost.
+Accepted patches can continue beyond four total invocations. There is no
+separate total-invocation ceiling. Every invocation keeps a new, monotonically
+increasing attempt number and unique provider identity. A refund never deletes
+history or reuses an earlier invocation. Jobs whose frozen policy lacks
+`refund_accepted_patches` retain the original limit on all invocations.
 
 The manager invokes Nucleus with requester program `ci-manager`, a unique saved
 job identity, `workspaceAccess: read-only`, ordinary local shell execution
@@ -189,17 +208,19 @@ Git derives hunk counts from the patch body. The manager adds no patch grammar,
 size, byte, path, file-type, or changed-content restrictions to Git's rules.
 
 Successful Git application produces the tree for the next private candidate
-commit, which goes through the ordinary CI loop. A Git rejection consumes its
-recorded invocation and can proceed to the next permitted attempt. The agent
+commit, which goes through the ordinary CI loop. Recording that candidate
+establishes the refund for jobs with the refund policy. A Git rejection keeps
+its attempt charged and can proceed to the next permitted attempt. The agent
 never applies the patch, commits, runs the managed CI loop, deploys, or sends
 email.
 
 The default model execution timeout is 600 seconds. Nucleus owns execution-slot
 and quota waiting; those waits do not grant another job or a larger repair
 budget. The manager preserves the exact prepared request on admission deferral
-or uncertain transport. A terminal model execution failure is not automatically
-a useful patch. Unknown or lost execution remains unresolved until supported
-provider evidence permits recovery.
+or uncertain transport, without charging that attempt again. A terminal model
+execution failure keeps its charge and is not automatically a useful patch.
+Unknown or lost execution remains unresolved until supported provider evidence
+permits recovery.
 
 ## Observe, pause, cancel, and recover
 
@@ -218,6 +239,22 @@ Job and enqueue sequence identify retained work; commit IDs identify input, base
 and candidate. Record timestamps and attempt stamps use Unix seconds. Wait
 observes the same job and does not submit a replacement. Its optional timeout
 uses seconds and returns a timeout observation without cancelling the job.
+
+Each job status includes `repair_budget`, derived from its frozen policy and
+retained attempt history:
+
+| Field | Meaning |
+| --- | --- |
+| `mode` | `refund_accepted` for the refund policy; `invocations` for the original policy. |
+| `total` | Sum of the first-tier and escalation budgets; four by default. |
+| `used` | Recorded attempts minus refunded attempts. |
+| `remaining` | Budget points still available. |
+| `refunded` | Attempts with a recorded private candidate that receive a refund under the frozen policy; zero in `invocations` mode. |
+| `invocations` | Total recorded attempts, including those whose points were refunded. |
+
+Budget exhaustion does not discard an accepted patch: its candidate still goes
+through validation. Cancellation, unknown execution, and recovery retain their
+existing stop and reconciliation rules.
 
 Control queue admission and cancellation:
 
