@@ -20,7 +20,7 @@ use tokio::process::{Child, Command};
 
 const ORIGIN: &str = "http://nucleus.local";
 const FAKE_MODEL: &str = "fake-model";
-const SUPPORTED_CODEX_VERSION: &str = "0.146.0";
+const SUPPORTED_CODEX_VERSION: &str = "0.154.0-alpha.6.2";
 const API_KEY_AUTH: &str = r#"{"OPENAI_API_KEY":"fixture"}"#;
 const MANAGED_ACCESS_TOKEN: &str = "header.e30.signature-fixture-managed-secret";
 const MANAGED_REFRESH_TOKEN: &str = "fixture-managed-refresh-secret";
@@ -1266,7 +1266,7 @@ async fn admission_rejects_unbound_versions_and_incompatible_protocol_schemas() 
         (
             "0.145.0",
             COMPATIBLE_PROTOCOL_SCHEMA,
-            "supported version is 0.146.0",
+            "supported version is 0.154.0-alpha.6.2",
         ),
         (
             SUPPORTED_CODEX_VERSION,

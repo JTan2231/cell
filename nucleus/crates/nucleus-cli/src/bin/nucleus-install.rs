@@ -236,6 +236,38 @@ fn harness(health: &Value) -> Result<PathBuf> {
     Ok(path)
 }
 
+fn candidate_harness(home: &Path, health: &Value) -> Result<PathBuf> {
+    let configured = harness(health)?;
+    if health["harness"]["harnessVersion"] == nucleus_codex::SUPPORTED_CODEX_VERSION {
+        return Ok(configured);
+    }
+    let candidate = home
+        .join("Library/Application Support/Nucleus/harnesses/codex")
+        .join(nucleus_codex::SUPPORTED_CODEX_VERSION)
+        .join("codex");
+    cell_install::file_digest(&candidate)?;
+    let version = call(&candidate, &strings(&["--version"]), home, None, 30)?;
+    if String::from_utf8_lossy(&version.stdout).trim()
+        != format!("codex-cli {}", nucleus_codex::SUPPORTED_CODEX_VERSION)
+    {
+        return Err(Error::new(
+            "staged Nucleus harness has an unsupported Codex version",
+        ));
+    }
+    Ok(fs::canonicalize(candidate)?)
+}
+
+fn runtime_harness(prior: &Value, unchanged: bool) -> Result<&str> {
+    let field = if unchanged && prior["prior_harness_executable"].is_string() {
+        "prior_harness_executable"
+    } else {
+        "harness_executable"
+    };
+    prior[field]
+        .as_str()
+        .ok_or_else(|| Error::new("captured Nucleus harness is missing"))
+}
+
 fn release_root(home: &Path, info: &ReleaseInfo) -> PathBuf {
     home.join("Library/Application Support/Nucleus/install/releases")
         .join(&info.release_id)
@@ -466,9 +498,9 @@ fn install(
 }
 
 fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
-    let expected = ctx.prior()?["harness_executable"]
-        .as_str()
-        .ok_or_else(|| Error::new("captured Nucleus harness is missing"))?;
+    let snapshot = inspect(&ctx.home)?;
+    let prior = ctx.prior()?;
+    let expected = runtime_harness(prior, json!(snapshot) == prior["installed"])?;
     let health = if owned {
         sole(
             &maintenance(&ctx.home, &ctx.request.run_id, "status", false)?,
@@ -485,7 +517,6 @@ fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
     if harness(&health)? != Path::new(expected) {
         return Err(Error::new("Nucleus harness changed since inspection"));
     }
-    let snapshot = inspect(&ctx.home)?;
     let expected_version = snapshot
         .current
         .as_ref()
@@ -602,13 +633,19 @@ fn adapter(operation: Operation) -> Result<Value> {
                 return Err(Error::new("another operation holds Nucleus"));
             }
             let health = json_call(&ctx.home, None, &["--compact", "health"])?;
+            let configured_harness = harness(&health)?;
+            let selected_harness = if ctx.selected() {
+                candidate_harness(&ctx.home, &health)?
+            } else {
+                configured_harness.clone()
+            };
             if ctx.selected() {
                 plan(
                     &InstallArgs {
                         binary: ctx.binary("nucleus")?,
                         daemon: ctx.binary("nucleusd")?,
                         bundle: ctx.request.source_root.join("nucleus/chancery"),
-                        codex: harness(&health)?,
+                        codex: selected_harness.clone(),
                         codex_home: None,
                         home: HomeArgs {
                             home: Some(ctx.home.clone()),
@@ -621,7 +658,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Nucleus installation and configured harness inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":harness(&health)?,"maintenance_products":[],"after":[]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":selected_harness,"prior_harness_executable":configured_harness,"maintenance_products":[],"after":[]}),
             ))
         }
         Operation::Hold => {
@@ -915,4 +952,60 @@ fn recover_cutover(ctx: &Context) -> Result<()> {
     runtime(ctx, true)?;
     fs::remove_file(path)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_upgrade_requires_the_exact_staged_executable() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let home = fs::canonicalize(directory.path())?;
+        let configured = home.join("configured-codex");
+        fs::write(&configured, "prior executable")?;
+        let mut health = json!({
+            "harnessExecutable": configured,
+            "harness": {"harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION}
+        });
+        assert_eq!(candidate_harness(&home, &health)?, configured);
+
+        health["harness"]["harnessVersion"] = json!("0.146.0");
+        assert!(candidate_harness(&home, &health).is_err());
+        let staged = home
+            .join("Library/Application Support/Nucleus/harnesses/codex")
+            .join(nucleus_codex::SUPPORTED_CODEX_VERSION)
+            .join("codex");
+        fs::create_dir_all(
+            staged
+                .parent()
+                .ok_or_else(|| Error::new("missing parent"))?,
+        )?;
+        fs::write(&staged, "#!/bin/sh\necho 'codex-cli 0.146.0'\n")?;
+        fs::set_permissions(&staged, fs::Permissions::from_mode(0o755))?;
+        assert!(candidate_harness(&home, &health).is_err());
+        fs::write(
+            &staged,
+            format!(
+                "#!/bin/sh\necho 'codex-cli {}'\n",
+                nucleus_codex::SUPPORTED_CODEX_VERSION
+            ),
+        )?;
+        assert_eq!(candidate_harness(&home, &health)?, staged);
+        Ok(())
+    }
+
+    #[test]
+    fn recovery_checks_the_harness_for_the_selected_installation() -> Result<()> {
+        let prior = json!({
+            "harness_executable": "/candidate/codex",
+            "prior_harness_executable": "/prior/codex"
+        });
+        assert_eq!(runtime_harness(&prior, true)?, "/prior/codex");
+        assert_eq!(runtime_harness(&prior, false)?, "/candidate/codex");
+        let historical = json!({"harness_executable": "/configured/codex"});
+        assert_eq!(runtime_harness(&historical, true)?, "/configured/codex");
+        assert_eq!(runtime_harness(&historical, false)?, "/configured/codex");
+        Ok(())
+    }
 }

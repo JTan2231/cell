@@ -3840,7 +3840,7 @@ mod tests {
             let record = log_to_core(HarnessOutputRecord {
                 job_id: "job-1".to_owned(),
                 attempt_id: "attempt-1".to_owned(),
-                harness_version: "0.146.0".to_owned(),
+                harness_version: "0.154.0-alpha.6.2".to_owned(),
                 sequence: u64::try_from(sequence + 1)
                     .unwrap_or_else(|error| panic!("convert test sequence: {error}")),
                 observed_at: "2026-08-27T00:00:00Z".to_owned(),

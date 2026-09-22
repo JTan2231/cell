@@ -100,7 +100,7 @@ requested semantic. For example, it rejects a model missing from that installed
 catalog, an unsupported reasoning effort, a missing working directory, or a
 harness other than `codex`.
 
-The v1 adapter requires Codex `0.146.0` and rejects other versions. Before it
+The v1 adapter requires Codex `0.154.0-alpha.6.2` and rejects other versions. Before it
 creates a job row, it checks the generated schema for every protocol method,
 field, and enum value Nucleus consumes. Supporting a new Codex release requires
 an adapter change and tests. A version-range match is not sufficient.
@@ -283,7 +283,7 @@ fields are calculated from the output atom and owning attempt:
   "sequence": 12,
   "observedAt": "2026-08-26T18:31:39.441Z",
   "stream": "harness.output",
-  "schemaId": "codex.app-server.protocol.0.146.0",
+  "schemaId": "codex.app-server.protocol.0.154.0-alpha.6.2",
   "payload": {"jsonrpc":"2.0", "method":"turn/started", "params":{"turn":{"id":"..."}}},
   "payloadDigest": "sha256:..."
 }
