@@ -195,6 +195,75 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn migration_defers_dependency_readiness_and_retains_completion_proof() -> Result<()> {
+    let fixture = tempfile::tempdir()?;
+    fs::set_permissions(fixture.path(), fs::Permissions::from_mode(0o700))?;
+    let home = fixture.path().join("home");
+    let root = home.join(".local/share/platter");
+    frozen_state(&root, &home)?;
+    // Retained dependency pins are deliberately unavailable before configuration.
+    assert!(!root.join("unused-weaver").exists());
+    maintenance::gate(&home).hold("deploy-one")?;
+    let backup = root.join("backups/migration-deploy-one.sqlite");
+    let receipt = fixture.path().join("platter-migration.json");
+    let socket = fixture.path().join("n.sock");
+    let server = mailbox(
+        &socket,
+        (0..4)
+            .flat_map(|_| {
+                [
+                    (list_route("platter"), empty_page()),
+                    (list_route("job-packets"), empty_page()),
+                ]
+            })
+            .collect(),
+    )?;
+    let migrate = |with_receipt: bool| -> Result<Output> {
+        let mut command = cli(&home, &socket);
+        command
+            .env("CELL_DEPLOYMENT_RUN_ID", "deploy-one")
+            .args(["--json", "migrate", "--backup"])
+            .arg(&backup);
+        if with_receipt {
+            command.arg("--completion-receipt").arg(&receipt);
+        }
+        Ok(command.output()?)
+    };
+    let normal = response(&migrate(false)?)?;
+    assert_eq!(
+        normal["data"]["schema_version"],
+        platter::store::SCHEMA_VERSION
+    );
+    assert_eq!(normal["data"]["backup"], backup.to_str().unwrap());
+    assert_eq!(normal["data"]["readiness"]["compatible"], true);
+    assert_eq!(normal["data"]["readiness"]["initialized"], true);
+    assert!(!receipt.exists());
+    let original_backup = fs::read(&backup)?;
+    response(&migrate(true)?)?;
+    let original_receipt = fs::read(&receipt)?;
+    let proof: Value = serde_json::from_slice(&original_receipt)?;
+    assert_eq!(proof["backup"], backup.to_str().unwrap());
+    assert_eq!(proof["sha256"], cell_install::file_digest(&backup)?);
+    Store::open(&root)?.set_setting("post_migration_configuration", &true)?;
+    response(&migrate(true)?)?;
+    assert_eq!(fs::read(&backup)?, original_backup);
+    assert_eq!(fs::read(&receipt)?, original_receipt);
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&backup)?
+        .write_all(b"changed backup")?;
+    let rejected = migrate(true)?;
+    assert!(!rejected.status.success());
+    assert!(
+        String::from_utf8_lossy(&rejected.stdout).contains("retained migration evidence changed")
+    );
+    assert_eq!(fs::read(&receipt)?, original_receipt);
+    assert_eq!(maintenance::gate(&home).status()?.holds, ["deploy-one"]);
+    assert_eq!(server.join().unwrap()?.len(), 8);
+    Ok(())
+}
+
 fn state_bytes(root: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>> {
     if !root.exists() {
         return Ok(vec![]);

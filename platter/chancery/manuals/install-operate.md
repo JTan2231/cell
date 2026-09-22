@@ -129,6 +129,29 @@ migration retains a complete current-schema recovery backup. It does not create
 an old-binary rollback image or start model work. Select a new backup path
 when a retained backup uses a predecessor schema.
 
+Migration verifies retained local state. It does not check dependency readiness
+before deployment updates the retained executable paths. The coordinator runs
+full readiness verification after configuration.
+
+To complete an interrupted migration with a corrected compatible Platter
+executable, retain the exact deployment owner, backup and private completion
+receipt path. Stop concurrent coordinator recovery through its deployment lock.
+Run the corrected command under the existing sole owner hold:
+
+```sh
+CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
+  --backup /absolute/private/backup.sqlite3 \
+  --completion-receipt /absolute/private/deployment/platter-migration.json
+```
+
+The command requires drained work and the existing activity locks. It completes
+the migration and local state verification before it writes the coordinator's
+completion receipt. The receipt binds the exact backup path and digest. A repeat
+verifies that evidence and local state; changed evidence stops recovery. An
+existing backup remains unchanged. The command does not rebind dependencies,
+release holds or establish full deployment readiness. Resume coordinator recovery
+after the command succeeds. Omit `--completion-receipt` for ordinary migration.
+
 ## Readiness and recovery
 
 `doctor` checks retained state, Cast/Annals/Email/Weaver executable identities, Cast's exact
