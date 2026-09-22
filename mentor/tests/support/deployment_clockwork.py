@@ -51,4 +51,11 @@ if args[:2] == ['incident','feed']:
 if args[:2] == ['notification','emt']:
     state['routing'] = args[2:]
     finish({'configured':True})
+if args[:2] == ['notification','policy']:
+    policy = state.setdefault(
+        'notification_policy',
+        {'failure_threshold': 5, 'interval_seconds': 60, 'cell_root': None})
+    if args[2:] == ['--cell-root', args[3]]:
+        policy['cell_root'] = args[3]
+    finish(policy)
 fail('unexpected_fixture_command')
