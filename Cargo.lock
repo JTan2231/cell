@@ -25,6 +25,7 @@ name = "annals"
 version = "0.20.6"
 dependencies = [
  "annals-api",
+ "axum",
  "base64",
  "cell-install",
  "cell-maintenance",
@@ -37,7 +38,6 @@ dependencies = [
  "krisis-api",
  "nucleus-client",
  "nucleus-core",
- "nucleus-daemon",
  "rusqlite",
  "rustix",
  "serde",

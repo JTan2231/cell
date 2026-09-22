@@ -907,6 +907,7 @@ fn runtime_error(code: &'static str, message: &str) -> AppError {
 mod tests {
     use super::*;
     use std::os::unix::net::UnixListener;
+    use std::sync::mpsc::{self, RecvTimeoutError};
     use std::thread;
 
     struct UnusedBackend;
@@ -917,16 +918,51 @@ mod tests {
         }
     }
 
-    fn stalled_nucleus() -> Result<(tempfile::TempDir, PathBuf), Box<dyn std::error::Error>> {
+    struct StalledNucleus {
+        _directory: tempfile::TempDir,
+        socket: PathBuf,
+        shutdown: mpsc::Sender<()>,
+        worker: Option<thread::JoinHandle<()>>,
+    }
+
+    impl Drop for StalledNucleus {
+        fn drop(&mut self) {
+            let _ = self.shutdown.send(());
+            if let Some(worker) = self.worker.take() {
+                let _ = worker.join();
+            }
+        }
+    }
+
+    fn stalled_nucleus() -> Result<StalledNucleus, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let socket = directory.path().join("nucleus.sock");
         let listener = UnixListener::bind(&socket)?;
-        thread::spawn(move || {
-            while let Ok((_stream, _)) = listener.accept() {
-                thread::sleep(Duration::from_secs(2));
+        listener.set_nonblocking(true)?;
+        let (shutdown, stopped) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            loop {
+                let stream = match listener.accept() {
+                    Ok((stream, _)) => Some(stream),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
+                    Err(_) => return,
+                };
+                let delay = if stream.is_some() {
+                    Duration::from_secs(2)
+                } else {
+                    Duration::from_millis(10)
+                };
+                if stopped.recv_timeout(delay) != Err(RecvTimeoutError::Timeout) {
+                    return;
+                }
             }
         });
-        Ok((directory, socket))
+        Ok(StalledNucleus {
+            _directory: directory,
+            socket,
+            shutdown,
+            worker: Some(worker),
+        })
     }
 
     #[test]
@@ -1003,8 +1039,8 @@ mod tests {
     #[test]
     fn stalled_nucleus_request_honors_the_runner_deadline() -> Result<(), Box<dyn std::error::Error>>
     {
-        let (_directory, socket) = stalled_nucleus()?;
-        let runner = Runner::new(socket, Duration::from_millis(300));
+        let nucleus = stalled_nucleus()?;
+        let runner = Runner::new(nucleus.socket.clone(), Duration::from_millis(300));
         let started = Instant::now();
         let Err(error) = runner.run_liaison(
             &ModelSettings::default(),
@@ -1023,8 +1059,8 @@ mod tests {
 
     #[test]
     fn stalled_nucleus_request_observes_cancellation() -> Result<(), Box<dyn std::error::Error>> {
-        let (_directory, socket) = stalled_nucleus()?;
-        let runner = Runner::new(socket, Duration::from_secs(10));
+        let nucleus = stalled_nucleus()?;
+        let runner = Runner::new(nucleus.socket.clone(), Duration::from_secs(10));
         let started = Instant::now();
         let Err(error) = runner.run_liaison_cancellable(
             &ModelSettings::default(),
@@ -1066,8 +1102,8 @@ mod tests {
 
     #[test]
     fn best_effort_stalled_cancel_is_bounded() -> Result<(), Box<dyn std::error::Error>> {
-        let (_directory, socket) = stalled_nucleus()?;
-        let runner = Runner::new(socket, Duration::from_secs(10));
+        let nucleus = stalled_nucleus()?;
+        let runner = Runner::new(nucleus.socket.clone(), Duration::from_secs(10));
         let started = Instant::now();
         runner.cancel_liaison("stalled-cancel");
         assert!(started.elapsed() < Duration::from_secs(2));

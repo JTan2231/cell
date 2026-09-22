@@ -13,8 +13,12 @@ use std::time::{Duration, Instant, SystemTime};
 use serde_json::Value;
 use tempfile::TempDir;
 
-use nucleus_daemon::{ServeConfig, serve};
 use rusqlite::Connection;
+
+#[path = "support/nucleus.rs"]
+mod nucleus;
+
+use nucleus::FakeNucleus;
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -62,12 +66,13 @@ fn inbox_status_uses_the_exported_provider_view() -> TestResult {
 }
 
 struct Installation {
+    // Stop the fixture before its directory is removed (fields drop in declaration order).
+    nucleus: FakeNucleus,
     directory: TempDir,
     config: PathBuf,
     library: PathBuf,
     inbox: PathBuf,
     counter: PathBuf,
-    codex: PathBuf,
     controls: PathBuf,
 }
 
@@ -97,14 +102,12 @@ impl Installation {
         let config = directory.path().join("annals.toml");
         let library = directory.path().join("state/annals.db");
         let inbox = directory.path().join("spool");
-        let counter = directory.path().join("fake-codex-counter");
-        let codex = directory.path().join("fake-codex");
+        let counter = directory.path().join("model-run-counter");
         let socket = directory.path().join("nucleus.sock");
         let controls = directory.path().join("fake-controls");
         fs::create_dir_all(library.parent().ok_or("library had no parent directory")?)?;
         fs::create_dir(&controls)?;
-        write_fake_codex(&codex, &counter, &controls)?;
-        start_fake_nucleus(directory.path(), &socket, &codex)?;
+        let nucleus = FakeNucleus::start(&socket, &counter, &controls)?;
         fs::write(
             &config,
             format!(
@@ -129,12 +132,12 @@ impl Installation {
             ),
         )?;
         Ok(Self {
+            nucleus,
             directory,
             config,
             library,
             inbox,
             counter,
-            codex,
             controls,
         })
     }
@@ -158,11 +161,6 @@ impl Installation {
             .arg(&self.config)
             .arg("--json")
             .env_remove("ANNALS_LIBRARY")
-            .env("ANNALS_FAKE_COUNTER", &self.counter)
-            .env(
-                "CODEX_HOME",
-                self.directory.path().join("source-codex-home"),
-            )
             .current_dir(self.directory.path());
         InstallationCommand {
             inner: command,
@@ -2447,7 +2445,7 @@ fn terminal_processing_receipts_are_archived_without_reprocessing() -> TestResul
         archived_material(&installation.inbox, "processing")?.len(),
         2
     );
-    fs::remove_file(&installation.codex)?;
+    installation.nucleus.disable_execution();
 
     let recovered = installation.json_ok(["inbox", "run"])?;
     assert_eq!(recovered["recovered"], 2);
@@ -2548,7 +2546,7 @@ fn terminal_duplicate_receipt_is_archived_without_another_attempt() -> TestResul
         archived_material(&installation.inbox, "processing")?.len(),
         1
     );
-    fs::remove_file(&installation.codex)?;
+    installation.nucleus.disable_execution();
 
     let recovered = installation.json_ok(["inbox", "run"])?;
     assert_eq!(recovered["recovered"], 1);
@@ -2620,7 +2618,7 @@ fn legacy_done_receipt_reuses_its_applied_reconciliation() -> TestResult {
         processing.join("job.json"),
         serde_json::to_vec_pretty(&legacy)?,
     )?;
-    fs::remove_file(&installation.codex)?;
+    installation.nucleus.disable_execution();
 
     let recovered = installation.json_ok(["inbox", "run"])?;
     assert_eq!(recovered["recovered"], 1);
@@ -3428,207 +3426,5 @@ fn retry_low_storage_halts_before_any_child_attempt() -> TestResult {
     assert_eq!(completed["summary"]["applied"], 1);
     assert_eq!(completed["summary"]["remaining"], 0);
     assert_eq!(fs::read_to_string(&installation.counter)?, "2\n");
-    Ok(())
-}
-
-const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
-  "definitions": {
-    "ClientRequest": {"oneOf": [
-      {"properties":{"method":{"enum":["initialize"]},"params":{"$ref":"#/definitions/InitializeParams"}}},
-      {"properties":{"method":{"enum":["thread/start"]},"params":{"$ref":"#/definitions/v2/ThreadStartParams"}}},
-      {"properties":{"method":{"enum":["turn/start"]},"params":{"$ref":"#/definitions/v2/TurnStartParams"}}},
-      {"properties":{"method":{"enum":["mcpServerStatus/list"]},"params":{"$ref":"#/definitions/v2/ListMcpServerStatusParams"}}},
-      {"properties":{"method":{"enum":["account/login/start"]},"params":{"$ref":"#/definitions/v2/LoginAccountParams"}}},
-      {"properties":{"method":{"enum":["account/read"]},"params":{"$ref":"#/definitions/v2/GetAccountParams"}}}
-    ]},
-    "ServerRequest": {"oneOf": [
-      {"properties":{"method":{"enum":["item/tool/call"]},"params":{"$ref":"#/definitions/DynamicToolCallParams"}}},
-      {"properties":{"method":{"enum":["account/chatgptAuthTokens/refresh"]},"params":{"$ref":"#/definitions/ChatgptAuthTokensRefreshParams"}}}
-    ]},
-    "ServerNotification": {"oneOf": [
-      {"properties":{"method":{"enum":["item/completed"]},"params":{"$ref":"#/definitions/v2/ItemCompletedNotification"}}},
-      {"properties":{"method":{"enum":["turn/completed"]},"params":{"$ref":"#/definitions/v2/TurnCompletedNotification"}}},
-      {"properties":{"method":{"enum":["thread/tokenUsage/updated"]},"params":{"$ref":"#/definitions/v2/ThreadTokenUsageUpdatedNotification"}}}
-    ]},
-    "DynamicToolCallParams": {"required":["arguments","callId","threadId","tool","turnId"]},
-    "ChatgptAuthTokensRefreshParams": {
-      "required":["reason"],
-      "properties":{"previousAccountId":{},"reason":{}}
-    },
-    "ChatgptAuthTokensRefreshReason": {"enum":["unauthorized"]},
-    "ChatgptAuthTokensRefreshResponse": {
-      "required":["accessToken","chatgptAccountId"],
-      "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{}}
-    },
-    "v2": {
-      "ThreadStartParams": {"properties":{
-        "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},
-        "dynamicTools":{},"ephemeral":{},"environments":{},"experimentalRawEvents":{},
-        "model":{},"sandbox":{}
-      }},
-      "AskForApproval": {"enum":["never"]},
-      "SandboxMode": {"enum":["read-only","workspace-write"]},
-      "LoginAccountParams": {"oneOf":[{
-        "required":["accessToken","chatgptAccountId","type"],
-        "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{},"type":{"enum":["chatgptAuthTokens"]}}
-      }]},
-      "GetAccountParams": {"properties":{"refreshToken":{}}},
-      "TurnStartParams": {
-        "required":["input","threadId"],
-        "properties":{"effort":{},"environments":{},"input":{},"threadId":{}}
-      },
-      "DynamicToolSpec": {"oneOf":[{
-        "required":["description","inputSchema","name","type"],
-        "properties":{"type":{"enum":["function"]}}
-      }]},
-      "ThreadStartResponse": {"required":["thread"]},
-      "TurnStartResponse": {"required":["turn"]},
-      "Thread": {"required":["id"]},
-      "Turn": {"required":["id","status"]},
-      "TurnStatus": {"enum":["completed","failed"]},
-      "ItemCompletedNotification": {"required":["item","threadId","turnId"]},
-      "TurnCompletedNotification": {"required":["threadId","turn"]},
-      "ThreadTokenUsageUpdatedNotification": {"required":["threadId","tokenUsage","turnId"]},
-      "RawResponseCompletedNotification": {"required":["responseId","threadId","turnId"]}
-    }
-  }
-}"##;
-
-fn start_fake_nucleus(root: &Path, socket: &Path, codex: &Path) -> TestResult {
-    let codex_home = root.join("nucleus-codex-home");
-    fs::create_dir(&codex_home)?;
-    fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))?;
-    let config = codex_home.join("config.toml");
-    fs::write(&config, "cli_auth_credentials_store = \"file\"\n")?;
-    fs::set_permissions(&config, fs::Permissions::from_mode(0o600))?;
-    let auth = codex_home.join("auth.json");
-    fs::write(&auth, "{\"OPENAI_API_KEY\":\"test-api-key\"}\n")?;
-    fs::set_permissions(&auth, fs::Permissions::from_mode(0o600))?;
-    let serve_config = ServeConfig {
-        socket: socket.to_path_buf(),
-        database: root.join("nucleus.db"),
-        codex: codex.to_path_buf(),
-        codex_home,
-    };
-    thread::spawn(move || {
-        let runtime = match tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(error) => panic!("start fake Nucleus runtime: {error}"),
-        };
-        if let Err(error) = runtime.block_on(serve(serve_config)) {
-            panic!("serve fake Nucleus: {error}");
-        }
-    });
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while !socket.exists() {
-        if Instant::now() >= deadline {
-            return Err("fake Nucleus did not create its socket".into());
-        }
-        thread::sleep(Duration::from_millis(10));
-    }
-    Ok(())
-}
-
-fn write_fake_codex(path: &Path, counter: &Path, controls: &Path) -> TestResult {
-    let script = r#"#!/bin/sh
-set -eu
-
-if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' 'codex-cli 0.146.0'
-  exit 0
-fi
-
-if [ "${1:-}" = "debug" ] && [ "${2:-}" = "models" ]; then
-  printf '%s\n' '{"models":[{"slug":"fake-model","supported_reasoning_levels":[{"effort":"medium"},{"effort":"max"}],"default_reasoning_level":"medium","shell_type":"disabled","supports_search_tool":false}]}'
-  exit 0
-fi
-
-case " $* " in
-  *" generate-json-schema "*)
-    output=''
-    take_output=0
-    for argument in "$@"; do
-      if [ "$take_output" -eq 1 ]; then
-        output=$argument
-        break
-      fi
-      if [ "$argument" = "--out" ]; then
-        take_output=1
-      fi
-    done
-    test -n "$output"
-    mkdir -p "$output"
-    printf '%s\n' '__PROTOCOL_SCHEMA__' > "$output/codex_app_server_protocol.schemas.json"
-    exit 0
-    ;;
-esac
-
-IFS= read -r ignored
-printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{}}'
-IFS= read -r ignored
-IFS= read -r request
-case "$request" in
-  *'account/rateLimits/read'*)
-  if [ -f '__CONTROLS__/auth-fail' ]; then
-    printf '%s\n' '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"refresh_token_reused: please log out and sign in again"}}'
-  else
-    printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"rateLimits":{}}}'
-  fi
-  exit 0
-  ;;
-esac
-
-printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"data":[],"nextCursor":null}}'
-IFS= read -r ignored
-printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"thread":{"id":"thread"}}}'
-IFS= read -r ignored
-printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"turn":{"id":"turn"}}}'
-
-counter='__COUNTER__'
-number=0
-if [ -f "$counter" ]; then
-  number=$(sed -n '1p' "$counter")
-fi
-number=$((number + 1))
-printf '%s\n' "$number" > "$counter"
-if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/block-ready' ]; then
-  ready=$(cat '__CONTROLS__/block-ready')
-  release=$(cat '__CONTROLS__/block-release')
-  printf '%s\n' ready > "$ready"
-  while [ ! -f "$release" ]; do
-    sleep 0.01
-  done
-fi
-if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/fail-first' ]; then
-  printf '%s\n' 'simulated model failure' >&2
-  exit 19
-fi
-printf '%s\n' "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"thread\",\"turnId\":\"turn\",\"callId\":\"call\",\"namespace\":null,\"tool\":\"submit_reconciliation\",\"arguments\":{\"summary\":\"Integrate inbox source $number\",\"operations\":[{\"action\":\"create_concept\",\"ref\":\"inbox_item\",\"label\":\"Inbox concept $number\",\"parents\":[],\"evidence\":[{\"quote\":\"Shared inbox claim.\"}]}]}}}"
-IFS= read -r ignored
-if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/fail-after-submit' ]; then
-  printf '%s\n' 'simulated late model failure' >&2
-  exit 19
-fi
-if [ "$number" -eq 1 ] && [ -f '__CONTROLS__/after-submit-ready' ]; then
-  submit_ready=$(cat '__CONTROLS__/after-submit-ready')
-  submit_release=$(cat '__CONTROLS__/after-submit-release')
-  printf '%s\n' ready > "$submit_ready"
-  while [ ! -f "$submit_release" ]; do
-    sleep 0.01
-  done
-fi
-printf '%s\n' '{"jsonrpc":"2.0","method":"item/completed","params":{"threadId":"thread","turnId":"turn","item":{"id":"message","type":"agentMessage","text":"fake completed"}}}'
-printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread","turn":{"id":"turn","status":"completed"}}}'
-"#
-        .replace("__PROTOCOL_SCHEMA__", COMPATIBLE_PROTOCOL_SCHEMA)
-        .replace("__COUNTER__", &counter.display().to_string())
-        .replace("__CONTROLS__", &controls.display().to_string());
-    fs::write(path, script)?;
-    let mut permissions = fs::metadata(path)?.permissions();
-    permissions.set_mode(0o700);
-    fs::set_permissions(path, permissions)?;
     Ok(())
 }
