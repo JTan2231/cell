@@ -45,6 +45,9 @@ enum Command {
     Migrate {
         #[arg(long)]
         backup: PathBuf,
+        /// Retain or verify the coordinator's migration completion receipt.
+        #[arg(long)]
+        completion_receipt: Option<PathBuf>,
     },
     Init {
         #[arg(long)]
@@ -388,7 +391,10 @@ async fn administrative(
         } else {
             readiness::doctor(root).await?
         }),
-        Command::Migrate { backup } => {
+        Command::Migrate {
+            backup,
+            completion_receipt,
+        } => {
             anyhow::ensure!(backup.is_absolute(), "backup path must be absolute");
             let status = maintenance::status(home, root).await?;
             anyhow::ensure!(
@@ -396,8 +402,17 @@ async fn administrative(
                 "migration requires drained requester work; run maintenance drain first"
             );
             let (_admission, _runner) = maintenance::install_admission(home, root)?;
-            platter::migration::migrate(root, backup)?;
-            let report = readiness::doctor(root).await?;
+            let migrate = || -> cell_install::Result<()> {
+                platter::migration::migrate(root, backup)
+                    .and_then(|()| readiness::local_state(root).map(|_| ()))
+                    .map_err(|error| cell_install::Error::new(error.to_string()))
+            };
+            if let Some(receipt) = completion_receipt {
+                cell_install::migration::run_once(receipt, backup, migrate)?;
+            } else {
+                migrate()?;
+            }
+            let report = serde_json::json!({"compatible":true,"initialized":readiness::local_state(root)?,"state_dir":root});
             Some(
                 serde_json::json!({"schema_version":platter::store::SCHEMA_VERSION,"backup":backup,"readiness":report}),
             )

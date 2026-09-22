@@ -63,7 +63,7 @@
     },
     {
       "label": "Validate supported state and take deployment backup",
-      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH"
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH [--completion-receipt ABSOLUTE_PATH]"
     },
     {
       "label": "Print the selected release daily failure policy without activation",
@@ -74,6 +74,7 @@
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
     "An explicit transaction imports legacy records and files into schema six, writes a complete schema-six backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-five migration advances the version without changing captured inputs, exact requests or artifact bytes.",
+    "Migration verifies local state before dependency paths are rebound. Full readiness follows deployment configuration. Optional completion-receipt recovery writes or verifies the coordinator's exact backup path and digest after migration and local verification under the existing owner and activity locks.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
     "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
   ],
