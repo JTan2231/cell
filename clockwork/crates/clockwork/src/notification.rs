@@ -126,9 +126,9 @@ async fn observe_checks(
         let mut incidents = Vec::new();
         for id in ids {
             let incident = store.incident(&id)?;
-            if !routing
+            if routing
                 .route(layout, &incident)?
-                .is_some_and(|route| route.delivery_id.is_some())
+                .is_none_or(|route| route.delivery_id.is_none())
             {
                 incidents.push(incident);
             }
@@ -146,8 +146,8 @@ pub(crate) async fn check_pending(store: &Store, layout: &Layout) -> Result<serd
     };
     let mut routing = Routing::load(layout)?;
     let checks = observe_checks(store, layout, &mut routing, now_unix()?).await?;
-    Ok(serde_json::to_value(checks)
-        .context("notification_checks_invalid", "encode notification checks")?)
+    serde_json::to_value(checks)
+        .context("notification_checks_invalid", "encode notification checks")
 }
 
 pub(crate) fn policy(
