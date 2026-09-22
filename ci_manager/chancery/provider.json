@@ -11,7 +11,7 @@
       "The CI manager owns its private journal, installed worker lifecycle, operator pause, and owner-qualified Nucleus requester maintenance holds."
     ],
     "not_authoritative_for": [
-      "Developers own development commits on main. Git owns commit objects, ancestry, merge results, and atomic ref updates.",
+      "Developers own development commits on main. Git owns commit objects, ancestry, merge results, patch acceptance and application, and atomic ref updates.",
       "The CI dispatcher owns coverage selection and candidate validation. The broker owns individual gate execution and compiler admission.",
       "Nucleus owns model execution, sandbox enforcement, account access, quota admission, and provider execution records. Bazaar owns versioned prompt strings.",
       "The deployment coordinator and product installers own installed-state evidence, maintenance, and recovery. Email and Resend own submission acceptance; the recipient's mail provider owns inbox delivery."
@@ -42,7 +42,7 @@
     "operational_limits": [
       "Only one delivery job and one repair loop may be active. Direct check-only CI can still use the existing broker concurrently.",
       "Default policy permits three gpt-5.6-luna low repair invocations, then one gpt-5.6-terra medium invocation, with a 600-second execution timeout per model invocation.",
-      "Patch responses are raw UTF-8 Git text diffs with LF lines, at most 1 MiB. Binary, symlink, submodule, quoted or whitespace-containing paths, and explanation or JSON wrappers are unsupported.",
+      "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",
       "No queue completion-time, model availability, cost, complete-repository validation, or inbox-delivery guarantee is declared."
     ]

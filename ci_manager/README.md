@@ -15,7 +15,7 @@ cell-ci status JOB
 
 Read [queue operation](chancery/manuals/queue-operate.md) before initialization,
 installation, submission, cancellation, or recovery. It defines submission
-authority, model and patch limits, deployment and email outcomes, and the
+authority, model limits, Git patch application, deployment and email outcomes, and the
 conditions that pause the queue.
 
 Read [CI selection](../pipeline/README.md) for committed-range validation and

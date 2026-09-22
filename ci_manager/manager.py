@@ -288,10 +288,8 @@ class Worker:
         attempt = job["attempts"][-1]
         parent = attempt["parent"]
         try:
-            raw = git.check_patch(Path(attempt["patch"]).read_text())
+            raw = Path(attempt["patch"]).read_bytes()
             tree = git.patch_tree(self.repository, parent, raw, self.directory(job) / "patch.index")
-            if tree == git.value(self.repository, "rev-parse", parent + "^{tree}"):
-                raise ManagerError("patch produced no change")
         except ManagerError as exception:
             attempt["rejection"] = str(exception)
             self.save(job, "repair_prepare")

@@ -1,16 +1,15 @@
-"""Private candidate commits and a deliberately small raw-text patch grammar."""
+"""Private candidate commits and Git-owned patch application."""
 
 from __future__ import annotations
 
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import subprocess
 
 from ci_manager.storage import ManagerError
 
 ACCEPTED = "refs/ci/accepted"
-MAX_PATCH_BYTES = 1024 * 1024
 
 
 def git(root: Path, *args: str, data: bytes | None = None, env: dict | None = None,
@@ -76,81 +75,14 @@ def commit_tree(root: Path, tree: str, parents: list[str], identity: str, stamp:
                env=environment).stdout.decode().strip()
 
 
-def check_patch(text: str) -> bytes:
-    raw = text.encode("utf-8")
-    if not raw or len(raw) > MAX_PATCH_BYTES or "\x00" in text or "\r" in text:
-        raise ManagerError("patch must be nonempty UTF-8 text, at most 1 MiB, with LF lines")
-    lines = text.splitlines(keepends=True)
-    index = 0
-    seen = set()
-    while index < len(lines):
-        header = re.fullmatch(r"diff --git a/([^\s]+) b/([^\s]+)\n", lines[index])
-        if not header or header[1] != header[2]:
-            raise ManagerError("expected a raw same-path Git text diff; use delete/add for renames")
-        path = header[1]
-        parts = PurePosixPath(path).parts
-        if (not parts or path.startswith("/") or str(PurePosixPath(path)) != path
-                or any(part in {".", ".."} or part.lower() == ".git" for part in parts)
-                or "\\" in path or '"' in path or path in seen):
-            raise ManagerError(f"unsupported patch path: {path}")
-        seen.add(path)
-        index += 1
-        while index < len(lines) and re.fullmatch(
-            r"(?:(?:new file|deleted file|old|new) mode 100(?:644|755)|index [0-9a-f]+\.\.[0-9a-f]+(?: 100(?:644|755))?)\n", lines[index]
-        ):
-            index += 1
-        if index + 1 >= len(lines):
-            raise ManagerError("text patch has no file headers")
-        before, after = lines[index:index + 2]
-        if before not in {f"--- a/{path}\n", "--- /dev/null\n"} or after not in {f"+++ b/{path}\n", "+++ /dev/null\n"}:
-            raise ManagerError("patch file headers do not match the path")
-        if before == "--- /dev/null\n" and after == "+++ /dev/null\n":
-            raise ManagerError("patch has no file")
-        index += 2
-        hunks = 0
-        while index < len(lines) and lines[index].startswith("@@ "):
-            match = re.fullmatch(r"@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@[^\n]*\n", lines[index])
-            if not match:
-                raise ManagerError("invalid unified hunk")
-            old, new = int(match[1] or "1"), int(match[2] or "1")
-            index += 1
-            hunks += 1
-            while old or new:
-                if index >= len(lines):
-                    raise ManagerError("truncated patch hunk")
-                line = lines[index]
-                if line == "\\ No newline at end of file\n":
-                    index += 1
-                    continue
-                if not line.endswith("\n") or line[:1] not in {" ", "+", "-"}:
-                    raise ManagerError("invalid patch hunk body")
-                old -= line[0] in " -"
-                new -= line[0] in " +"
-                if old < 0 or new < 0:
-                    raise ManagerError("patch hunk count mismatch")
-                index += 1
-            if index < len(lines) and lines[index] == "\\ No newline at end of file\n":
-                index += 1
-        if not hunks:
-            raise ManagerError("each file must contain a text hunk")
-    return raw
-
-
 def patch_tree(root: Path, parent: str, raw: bytes, index_path: Path) -> str:
+    if not raw.endswith(b"\n"):
+        raw += b"\n"
     index_path.unlink(missing_ok=True)
     environment = dict(os.environ, GIT_INDEX_FILE=str(index_path))
     try:
         git(root, "read-tree", parent, env=environment)
-        git(root, "apply", "--cached", "--check", "--whitespace=nowarn", "-", data=raw, env=environment)
-        git(root, "apply", "--cached", "--whitespace=nowarn", "-", data=raw, env=environment)
-        tree = git(root, "write-tree", env=environment).stdout.decode().strip()
-        changes = git(root, "diff-tree", "--raw", "-z", "--no-renames", "-r", parent, tree).stdout.split(b"\0")
-        for record in changes[0::2]:
-            if not record:
-                continue
-            fields = record.split()
-            if len(fields) != 5 or fields[0][1:] not in {b"000000", b"100644", b"100755"} or fields[1] not in {b"000000", b"100644", b"100755"}:
-                raise ManagerError("patch changes a symlink, submodule, or unsupported file type")
-        return tree
+        git(root, "apply", "--cached", "--recount", "--whitespace=nowarn", "-", data=raw, env=environment)
+        return git(root, "write-tree", env=environment).stdout.decode().strip()
     finally:
         index_path.unlink(missing_ok=True)

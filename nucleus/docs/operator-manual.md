@@ -470,8 +470,11 @@ ownership blocks admission; a timeout does not prove termination.
 
 CI is an ordinary Nucleus requester. It uses read-only workspace access and
 built-in shell execution, with no requester tools or response schema. The
-completed response must contain only a raw text patch. The manager retains,
-checks, applies, and commits that patch. The initial policy permits three
+agent is asked to return only a raw Git patch in its final response. The manager
+retains the exact response and adds a missing final LF to the application input.
+Git applies it to a private parent index with `--cached --recount
+--whitespace=nowarn`; the manager adds no patch acceptance rules. It commits the
+result and runs the ordinary CI loop. The initial policy permits three
 `gpt-5.6-luna` low attempts and one `gpt-5.6-terra` medium attempt. Attempts
 accumulate within the job. Quota deferral preserves the same request identity.
 Infrastructure failures do not select a stronger model. Bazaar supplies the
@@ -499,7 +502,7 @@ The CI manager is shared infrastructure; the product deployment inventory does
 not deploy the manager itself.
 
 Use the [CI operation contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
-for initialization, controls, supported patch limits, retained evidence, and
+for initialization, controls, Git patch application, retained evidence, and
 recovery outcomes. Installation and queue activation are separate operations.
 
 ## Shared command usage

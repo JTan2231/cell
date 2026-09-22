@@ -161,23 +161,22 @@ enabled, and web search disabled. The agent reads the candidate source, Cell
 contracts, retained failure diagnostics, and prior attempt context. Nucleus
 enforces the sandbox. The manager supplies no custom reading or patching tools.
 
-The only accepted response is the final response's raw Git text diff. It must
-contain no explanation, Markdown fences, JSON envelope, or reasoning text. The
-manager never treats reasoning, execution logs, or another output channel as a
-patch.
+The manager asks for a raw Git patch in the final response, without explanation,
+Markdown fences, a JSON envelope, or reasoning text. It saves that exact final
+response. It never uses reasoning, execution logs, or another output channel as
+the patch proposal.
 
-The patch limit is 1 MiB of UTF-8 bytes. Use LF lines without NUL or CR bytes.
-Each changed file must have a same-path `diff --git`, matching file headers and
-at least one text hunk. Represent a rename as a deletion and addition. Binary,
-symlink, submodule, mode-only, quoted-path, and whitespace-containing-path
-patches are unsupported. Paths must remain inside the repository and cannot
-address Git metadata.
+Git decides whether the proposal applies. The manager adds a missing final LF
+to the application input, then runs `git apply --cached --recount
+--whitespace=nowarn` against a private index initialized from the recorded parent.
+Git derives hunk counts from the patch body. The manager adds no patch grammar,
+size, byte, path, file-type, or changed-content restrictions to Git's rules.
 
-Manager code validates the response, checks complete application against the
-recorded parent, and creates the resulting candidate commit. A malformed,
-empty, unchanged or inapplicable proposal consumes its recorded invocation and
-can proceed to the next permitted attempt. The agent never applies the patch,
-commits, runs the managed CI loop, deploys, or sends email.
+Successful Git application produces the tree for the next private candidate
+commit, which goes through the ordinary CI loop. A Git rejection consumes its
+recorded invocation and can proceed to the next permitted attempt. The agent
+never applies the patch, commits, runs the managed CI loop, deploys, or sends
+email.
 
 The default model execution timeout is 600 seconds. Nucleus owns execution-slot
 and quota waiting; those waits do not grant another job or a larger repair

@@ -33,7 +33,7 @@
   ],
   "effects": [
     "Initialization records one repository, explicit accepted baseline and policy. Submission pins an input commit and appends a durable FIFO job.",
-    "The worker merges in a private worktree, runs brokered CI, invokes read-only Nucleus remediation, validates and applies raw text patches, creates private candidate commits, and atomically advances refs/ci/accepted after successful validation.",
+    "The worker merges in a private worktree, runs brokered CI, invokes read-only Nucleus remediation, applies final-response patches through Git, creates private candidate commits, and atomically advances refs/ci/accepted after successful validation.",
     "The worker requests deployment of the exact accepted commit and sends a deterministic job-outcome email to Email's fixed personal recipient.",
     "Installation selects manager and provider files and configures the current-user service. Pause, cancellation, recovery and maintenance alter only their declared queue or operation state."
   ],
@@ -50,7 +50,7 @@
   ],
   "failure_and_recovery": [
     "Merge conflicts stop automatic processing. Failed jobs and active cancellation pause new jobs; queued cancellation prevents admission without outcome email. Resume does not clear a blocked or unresolved active operation.",
-    "Malformed or inapplicable patches consume an invocation from the frozen job budget. Nucleus quota or maintenance deferral preserves the exact prepared request identity.",
+    "Patches rejected by Git consume an invocation from the frozen job budget. Nucleus quota or maintenance deferral preserves the exact prepared request identity.",
     "Unknown or lost model execution, missing child completion evidence, or unresolved deployment maintenance remains blocked. Recovery consults owning providers and never invents a success or silently starts a replacement model attempt.",
     "Outcome email uses one frozen key and payload for at most two Email invocations, at least five minutes apart and within 23 hours. Unproved acceptance after that boundary blocks continuation without a replacement message."
   ],
@@ -80,8 +80,8 @@
     ],
     "inputs": [
       {"status": "declared", "statement": "First initialization accepts repository path, accepted-baseline commit, positive Luna and Terra invocation limits, and positive model timeout seconds. Reinitialization cannot replace repository or policy or move advanced accepted history. Submission accepts a commit, optional same-repository path, request identity and repeated deployment products. The job freezes its resolved input and policy."},
-      {"status": "declared", "statement": "An agent returns only one raw Git text-diff response, potentially covering multiple files. No explanation, Markdown fence, JSON envelope or reasoning text is accepted as a patch."},
-      {"status": "unsupported", "statement": "Uncommitted working files are not a submitted candidate. Binary, symlink, submodule, quoted or whitespace-containing paths and direct model writes are not supported patch inputs."}
+      {"status": "declared", "statement": "The agent is asked to return only a raw Git patch in its final response, potentially covering multiple files. The exact final response is retained. The application input gains a missing final LF; git apply --cached --recount --whitespace=nowarn decides acceptance against a private index initialized from the recorded parent. The manager adds no patch grammar, size, byte, path, file-type or changed-content restrictions to Git's rules."},
+      {"status": "unsupported", "statement": "Uncommitted working files are not a submitted candidate. Direct model writes and patch proposals from reasoning, execution logs or another output channel are not supported."}
     ],
     "outputs": [
       {"status": "declared", "statement": "Submission returns a durable job identity. Status exposes retained queue or selected-job phase, candidate, attempts, validation, deployment and notification evidence. Wait observes that same job. Provider receipts remain separate from the manager's job outcome."},
@@ -94,7 +94,7 @@
     ],
     "identity_and_units": [
       {"status": "declared", "statement": "Git commit IDs identify input, base and candidate. Manager job IDs and monotonic enqueue sequence identify serial work. Nucleus IDs, deployment request IDs and Email keys correlate separately retained provider operations."},
-      {"status": "declared", "statement": "Local created and updated fields and attempt stamps use Unix seconds. Model timeout uses seconds, patch bounds use UTF-8 bytes, and repair limits count recorded invocations rather than individual diagnostics."}
+      {"status": "declared", "statement": "Local created and updated fields and attempt stamps use Unix seconds. Model timeout uses seconds, and repair limits count recorded invocations rather than individual diagnostics."}
     ],
     "completeness_and_freshness": [
       {"status": "declared", "statement": "Status reads retained manager records for the configured queue or one requested job at read time. Those records contain the last observed provider evidence; status does not turn them into live provider probes. Validation receipts enumerate required scope and completed gate receipts."},
@@ -111,7 +111,7 @@
       {"status": "declared", "statement": "Installation and service stop require paused admission and no active job. Installation selects content-addressed program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."}
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Defaults are three gpt-5.6-luna low invocations followed by one gpt-5.6-terra medium invocation, with a 600-second model execution timeout. Nucleus owns capacity and quota waiting. One raw text patch is limited to 1048576 UTF-8 bytes."},
+      {"status": "declared", "statement": "Defaults are three gpt-5.6-luna low invocations followed by one gpt-5.6-terra medium invocation, with a 600-second model execution timeout. Nucleus owns capacity and quota waiting. Git owns patch acceptance; the manager imposes no additional patch limits."},
       {"status": "declared", "statement": "Notification permits two Email process invocations using the same frozen message and key, at least 300 seconds apart and before 82800 seconds from notice creation. Email owns its separate internal transport retry limit."},
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
@@ -123,7 +123,7 @@
       {"status": "declared", "statement": "Read-only agent execution, immutable submission identity, cancellation and quota behavior rely on the Nucleus requester contract; Nucleus does not decide whether a patch fixes CI.", "target": "nucleus", "kind": "control", "contract": "nucleus.requester.integrate"},
       {"status": "declared", "statement": "Authored repair instructions and prompt templates rely on exact versioned Bazaar reads. Missing prompt state does not permit a hard-coded fallback.", "target": "bazaar", "kind": "data", "contract": "bazaar.string.read"},
       {"status": "declared", "statement": "The final notification relies on Email's fixed-recipient, stable-key submission and acceptance receipt. Inbox delivery remains outside manager success.", "target": "email", "kind": "control", "contract": "email.message.send"},
-      {"status": "declared", "statement": "Commit reachability, merge results, private worktrees and atomic accepted-ref updates rely on Git. No dedicated installed Chancery contract describes this dependency.", "target": "git", "kind": "external"},
+      {"status": "declared", "statement": "Commit reachability, merge results, patch acceptance and application, private worktrees and atomic accepted-ref updates rely on Git. No dedicated installed Chancery contract describes this dependency.", "target": "git", "kind": "external"},
       {"status": "declared", "statement": "Candidate coverage and gate evidence rely on Cell's committed-range CI dispatcher and host broker. These remain independently authoritative and have no dedicated installed Chancery contract.", "target": "cell-ci-validation", "kind": "control"},
       {"status": "declared", "statement": "Exact-source deployment, installed-state verification and maintenance recovery rely on the Cell deployment coordinator and selected product installers; no dedicated coordinator Chancery contract is installed.", "target": "cell-deployment", "kind": "control"},
       {"status": "declared", "statement": "The macOS user service relies on launchd supervision, while the manager retains domain state and singleton ownership.", "target": "launchd", "kind": "external"}
