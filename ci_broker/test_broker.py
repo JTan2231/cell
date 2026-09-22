@@ -389,7 +389,11 @@ class BrokerCliTests(unittest.TestCase):
         first_receipt, second_receipt = json.loads(first_out), json.loads(second_out)
         self.assertEqual(first_receipt["execution_id"], second_receipt["execution_id"])
         self.assertEqual({first_receipt["joined"], second_receipt["joined"]}, {False, True})
-        self.assertEqual(len(first_receipt), 19)
+        self.assertEqual(len(first_receipt), 20)
+        self.assertIsNotNone(first_receipt["diagnostic_path"])
+        self.assertEqual(
+            first_receipt["diagnostic_path"], second_receipt["diagnostic_path"]
+        )
         self.assertIn("decisive failure", first_err)
         self.assertIn("decisive failure", second_err)
         self.assertLess(len(first_err.encode()), broker.MAX_DISPLAY_BYTES + 512)
