@@ -181,8 +181,14 @@ A fresh coordinated installation accepts `codex_bin` and `codex_home` in
 Nucleus's deployment settings. Both paths are absolute. `codex_bin` must be the
 exact supported Codex version. `codex_home` identifies an existing authenticated
 home; settings never contain credential bytes. If Nucleus already owns valid
-authentication, installation preserves it. Existing deployments retain their
-captured harness and do not import another credential home.
+authentication, installation preserves it. Existing deployments retain a
+compatible configured harness and do not import another credential home.
+For an exact Codex upgrade, stage the supported executable at
+`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex` before
+CI submission. The selected installer checks this file's exact version before
+maintenance when the configured version differs. It retains both harness paths
+so recovery can verify the prior service or finish the candidate cutover.
+Keep both executables available until the deployment completes.
 
 The installer persists the run's local admission hold before a fresh daemon
 exists. It starts the service under that hold so dependent products can finish

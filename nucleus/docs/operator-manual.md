@@ -590,6 +590,14 @@ and every consumed method and isolation rule. Update the adapter and its
 compatibility checks before deployment. After cutover, health must identify the
 exact executable, supported version, and required capabilities.
 
+The adapter requires Codex `0.154.0-alpha.6.2`. Before submitting an upgrade,
+stage that exact executable at
+`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex`.
+The selected Nucleus installer uses this file when the configured harness has
+a different version. It checks the staged version before maintenance and
+retains the prior harness path for recovery. Keep both executables available
+until deployment completes. A compatible configured harness stays selected.
+
 ### Public protocol or client change
 
 For additive support, deploy the accepting daemon before new callers. For an

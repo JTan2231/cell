@@ -251,7 +251,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently."
+        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently. The adapter requires Codex 0.154.0-alpha.6.2. A selected Nucleus upgrade retains a compatible configured harness; otherwise it requires that exact executable staged at ~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex, checks its version before maintenance, and retains the prior harness path for recovery."
       },
       {
         "status": "declared",

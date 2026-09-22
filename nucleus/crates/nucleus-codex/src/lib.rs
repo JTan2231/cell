@@ -53,7 +53,7 @@ const AUTH_CONFIG: &str = "cli_auth_credentials_store = \"file\"\n";
 /// The exact Codex CLI release whose app-server contract this adapter proves.
 /// Supporting another release requires reviewing and updating the protocol
 /// semantic checks below.
-pub const SUPPORTED_CODEX_VERSION: &str = "0.146.0";
+pub const SUPPORTED_CODEX_VERSION: &str = "0.154.0-alpha.6.2";
 
 const DISABLED_FEATURES: &[&str] = &[
     "apps",
@@ -3695,6 +3695,38 @@ mod tests {
         assert!(error.to_string().contains("dynamicTools"));
     }
 
+    #[tokio::test]
+    #[ignore = "requires NUCLEUS_TEST_CODEX pointing to the exact supported executable"]
+    async fn exact_codex_supports_astra_and_required_protocol()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let harness = CodexHarness::with_codex_home(
+            std::env::var_os("NUCLEUS_TEST_CODEX").ok_or("NUCLEUS_TEST_CODEX is required")?,
+            directory.path(),
+        );
+        let inspection = harness.inspect().await?;
+        let schema = harness.generate_protocol_schema().await?;
+        harness.validate_protocol_schema(&inspection, &schema)?;
+        let spec = CodexRunSpec {
+            instructions: "Follow the requester contract.".to_owned(),
+            developer_instructions: None,
+            prompt: "unused: compatibility inspection submits no turn".to_owned(),
+            model: "gpt-6-astra".to_owned(),
+            reasoning_effort: Some("max".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::None,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: false,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(30),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        harness.validate(&inspection, &spec)?;
+        Ok(())
+    }
+
     #[test]
     fn protocol_schema_requires_unrestricted_sandbox_support() {
         let harness = CodexHarness::new("codex");
@@ -4928,7 +4960,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
 set -eu
 SCRIPT_DIR=${0%/*}
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' 'codex-cli 0.146.0'
+  printf '%s\n' 'codex-cli 0.154.0-alpha.6.2'
   exit 0
 fi
 if [ "${1:-}" = "debug" ]; then
@@ -5047,7 +5079,7 @@ printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-managed",
         let script = format!(
             r#"#!/bin/sh
 if [ "$1" = "--version" ]; then
-  printf '%s\n' 'codex-cli 0.146.0'
+  printf '%s\n' 'codex-cli 0.154.0-alpha.6.2'
   exit 0
 fi
 if [ "$1" = "debug" ]; then
