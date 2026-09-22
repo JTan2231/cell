@@ -215,8 +215,43 @@ def _stop_if_loaded(owned_plist: bytes | None) -> bool:
     return loaded
 
 
-def _require_idle(store: Store) -> None:
-    if store.get("paused") is not True or store.active() is not None:
+def _cancelled_validation_exited(store: Store, job: dict) -> bool:
+    if (job["phase"] != "blocked" or job.get("stopped_phase") != "checking"
+            or not job["cancel_requested"] or job.get("attempts") != []
+            or job.get("model_unresolved") or job.get("accepted")
+            or job.get("acceptance_intent") or job.get("deployment_request")
+            or job.get("deployment_result") or store.get("recovery_request")):
+        return False
+    directory = store.root / "jobs" / job["id"]
+    worktree = directory / "worktree"
+    name = f"validation-{len(job.get('validations', []))}"
+    request_path = directory / f"{name}.request.json"
+    try:
+        request = json.loads(request_path.read_text())
+        result = json.loads((directory / f"{name}.result.json").read_text())
+        if not isinstance(request, dict) or not isinstance(result, dict):
+            return False
+        command = request["command"]
+        return (isinstance(command, list) and len(command) == 8
+                and isinstance(command[0], str) and Path(command[0]).is_absolute()
+                and command[1:] == [str(worktree / "pipeline/select_changes.py"), "run",
+                                    "--base", job["base_commit"],
+                                    "--candidate", job["candidate_commit"], "--json"]
+                and request["cwd"] == str(worktree)
+                and all(request[key] == str(directory / f"{name}.{suffix}")
+                        for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
+                                            ("started", "started.json"), ("result", "result.json")))
+                and result["request"] == str(request_path)
+                and type(result.get("exit_code")) is int)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+def _require_idle(store: Store, *, allow_cancelled_validation: bool = False) -> None:
+    active = store.active()
+    if (store.get("paused") is not True
+            or (active is not None and not (allow_cancelled_validation
+                                           and _cancelled_validation_exited(store, active)))):
         raise ManagerError("pause CI admission and let the active job finish before service changes")
 
 
@@ -293,7 +328,7 @@ def _plist(release: Path, root: Path) -> bytes:
 
 
 def install() -> dict:
-    """Install or replace code only while the initialized queue is paused and idle."""
+    """Replace paused, settled code; retain a proven drained validation for cancellation."""
     if sys.platform != "darwin":
         raise ManagerError("CI manager service installation requires macOS launchd")
     paths = _paths()
@@ -305,7 +340,7 @@ def install() -> dict:
     with lock(root / "admission.lock"):
         store = Store(root)
         try:
-            _require_idle(store)
+            _require_idle(store, allow_cancelled_validation=True)
             previous = _selected_release(paths)
             wrapper_target = paths["current"] / "bin/cell-ci"
             provider_target = paths["current"] / "ci_manager/chancery"
@@ -318,7 +353,7 @@ def install() -> dict:
             switched = False
             try:
                 with lock(root / "worker.lock", blocking=False):
-                    _require_idle(store)
+                    _require_idle(store, allow_cancelled_validation=True)
                     release = _prepare_release(source, python)
                     _link(paths["current"], f"releases/{release.name}")
                     switched = True

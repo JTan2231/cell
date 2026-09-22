@@ -156,6 +156,9 @@ class Worker:
                    "--base", job["base_commit"],
                    "--candidate", candidate, "--json"]
         result, output, diagnostic = self.process(job, f"validation-{ordinal}", command, worktree)
+        if self.store.job(job["id"])["cancel_requested"]:
+            self.finish(job, "cancelled", "Cancelled after the current validation drained.")
+            return
         try:
             receipt = json.loads(output)
         except (ValueError, UnicodeError) as exception:

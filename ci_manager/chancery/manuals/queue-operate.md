@@ -76,7 +76,9 @@ from the changing development checkout. A source edit alone does not replace
 the running manager. Service start and stop do not clear queue pause, retained
 jobs, maintenance owners, or unresolved effects.
 
-Installation and service stop require paused admission and no active job.
+Installation normally requires paused admission and no active job. Service stop
+always requires both conditions. Installation has only the exception for
+cancelled validation described below.
 Installation keeps the queue paused and loads the service. It pins a
 content-addressed release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
@@ -98,6 +100,25 @@ Calling `cell-ci install` from an installed release selects that release's own
 bytes; it does not find newer source automatically. The repository's
 `./ci.sh install` selects that checkout's manager package.
 
+Installation can also replace the worker while one explicitly cancelled job is
+blocked in its checking phase. Admission must be paused. The job must have no
+pending recovery request, accepted source, model attempts, unresolved model
+execution, or deployment. The exact retained validation supervisor request and
+matching result must prove that the validation process exited. A missing result,
+process disappearance, or an arbitrary blocked job does not qualify.
+
+The installer verifies these conditions before stopping its owned service and
+again under the worker lock. It replaces program and provider bytes while
+preserving the job and its evidence. Installation does not complete the job,
+accept its source, or establish successful validation.
+
+After this installation, run `cell-ci recover JOB`. The new worker reconciles
+the retained process result and recognizes cancellation before reading the
+aggregate validation receipt. A missing aggregate therefore does not prevent
+this cancellation from proceeding through normal outcome handling. Inspect the
+retained outcome before resuming admission. The ordinary service-stop command
+does not use this installation exception.
+
 Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
@@ -105,8 +126,7 @@ cannot validate that commit. This worker invokes the candidate's internal
 arguments. Manager release 0.3.0 uses queue contract 3 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
-every invocation. Installation requires paused admission and no active job,
-and preserves the pause until an explicit resume.
+every invocation. Installation preserves the pause until an explicit resume.
 
 ## Submit a committed input
 
