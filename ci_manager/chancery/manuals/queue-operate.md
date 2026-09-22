@@ -51,6 +51,10 @@ cell-ci init --repo /absolute/cell --accepted-baseline COMMIT \
   --luna-attempts 3 --terra-attempts 1 --model-timeout-seconds 600
 ```
 
+The flag names are retained for compatibility. `--luna-attempts` sets the first
+tier's Terra medium limit; `--terra-attempts` sets the escalation tier's Sol high
+limit. Retained policy fields use the same legacy names.
+
 Repeated initialization does not replace the repository or policy and cannot
 move an accepted ref that has already advanced.
 
@@ -150,8 +154,8 @@ erase an already accepted commit.
 
 ## Apply bounded model proposals
 
-The default repair sequence permits three `gpt-5.6-luna` invocations with low
-reasoning, followed by one `gpt-5.6-terra` invocation with medium reasoning.
+The default repair sequence permits three `gpt-5.6-terra` invocations with medium
+reasoning, followed by one `gpt-5.6-sol` invocation with high reasoning.
 The limit belongs to the whole job. A different failure after a patch does not
 reset it. One invocation can propose fixes for several diagnostics and files.
 

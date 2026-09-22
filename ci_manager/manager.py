@@ -194,8 +194,9 @@ class Worker:
             job["waiting_reason"] = "requester_maintenance"
             self.save(job)
             return
-        luna = used < policy["luna_attempts"]
-        model, reasoning = ("gpt-5.6-luna", "low") if luna else ("gpt-5.6-terra", "medium")
+        # Retain the existing count keys for stored policy compatibility.
+        primary = used < policy["luna_attempts"]
+        model, reasoning = ("gpt-5.6-terra", "medium") if primary else ("gpt-5.6-sol", "high")
         identity = f"ci-{job['id']}-repair-{used + 1}"
         if "prompts" not in job:
             job["prompts"] = load_prompt_selection()

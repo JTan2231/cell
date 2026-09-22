@@ -475,7 +475,7 @@ retains the exact response and adds a missing final LF to the application input.
 Git applies it to a private parent index with `--cached --recount
 --whitespace=nowarn`; the manager adds no patch acceptance rules. It commits the
 result and runs the ordinary CI loop. The initial policy permits three
-`gpt-5.6-luna` low attempts and one `gpt-5.6-terra` medium attempt. Attempts
+`gpt-5.6-terra` medium attempts and one `gpt-5.6-sol` high attempt. Attempts
 accumulate within the job. Quota deferral preserves the same request identity.
 Infrastructure failures do not select a stronger model. Bazaar supplies the
 `cell.prompts.ci-manager` selection; import its components before activation.

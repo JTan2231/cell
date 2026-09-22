@@ -123,8 +123,10 @@ def main(argv: list[str] | None = None) -> int:
     init = commands.add_parser("init", help="select a previously validated bootstrap baseline; start paused")
     init.add_argument("--repo", required=True)
     init.add_argument("--accepted-baseline", required=True)
-    init.add_argument("--luna-attempts", type=positive, default=3)
-    init.add_argument("--terra-attempts", type=positive, default=1)
+    init.add_argument("--luna-attempts", type=positive, default=3,
+                      help="Terra medium attempt count (legacy option name)")
+    init.add_argument("--terra-attempts", type=positive, default=1,
+                      help="Sol high escalation attempt count (legacy option name)")
     init.add_argument("--model-timeout-seconds", type=positive, default=600)
     submission = commands.add_parser("submit")
     submission.add_argument("commit")

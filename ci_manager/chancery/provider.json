@@ -41,7 +41,7 @@
     ],
     "operational_limits": [
       "Only one delivery job and one repair loop may be active. Direct check-only CI can still use the existing broker concurrently.",
-      "Default policy permits three gpt-5.6-luna low repair invocations, then one gpt-5.6-terra medium invocation, with a 600-second execution timeout per model invocation.",
+      "Default policy permits three gpt-5.6-terra medium repair invocations, then one gpt-5.6-sol high invocation, with a 600-second execution timeout per model invocation.",
       "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",
       "No queue completion-time, model availability, cost, complete-repository validation, or inbox-delivery guarantee is declared."
