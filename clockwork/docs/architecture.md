@@ -257,10 +257,22 @@ snapshot or restore incidents. Resume targets an exact incident and never
 retries product work or enables a disabled binding.
 
 A pending Email notification is part of the halt transaction. Broker visits
-attempt due notifications before the product gate and after outcomes, including
-for other halted or disabled keys. No resident worker is added. Transport never
-controls whether the gate remains closed. The fixed payload, five-minute retry
-spacing, 120-second process bound, and 23-hour deduplication horizon constrain
+advance due read-only service checks before the product gate and after outcomes.
+Both basic alerts and EMT diagnosis wait for the same consecutive-failure
+threshold: five checks, at least 60 seconds apart by default. Clockwork reads
+a bounded Iatreion report and retains only check progress and eligibility.
+A healthy check resets progress. Explicit inactive intent or operator pause
+excludes the service and resets progress. Unknown health counts as a failed
+check with an explicit unknown condition. Historical domain outcomes do not
+determine service health.
+
+Threshold and interval are configurable notification policy. Checks do not run
+product work, retry a failed item, or change the immediate scheduling halt.
+Broker visits and the existing EMT worker advance them; no resident worker is
+added. One eligible incident owns the alert episode, so repeated failed checks
+do not create new alerts. Transport never controls whether the gate remains
+closed. The fixed payload, five-minute retry spacing, 120-second process bound,
+and 23-hour deduplication horizon constrain
 notification recovery; later retries need explicit duplicate-risk approval.
 Use the CLI contract for commands, fields, privacy, and upgrade requirements.
 
@@ -270,6 +282,10 @@ EMT consumes the insertion-ordered incident feed and owns agent diagnosis,
 correspondence and delegated email transport. Clockwork retains only optional
 notification routes, grace deadlines and delivery ownership. It runs no agent
 and stores no diagnosis. Claim and basic-send admission share the notification
-lock. EMT must persist its email before claiming it. Unclaimed basic alerts
-remain available after 120 seconds; claims do not expire. EMT's own worker
-failure uses only the basic path.
+lock and the shared health-check gate. EMT starts its five-minute diagnosis
+deadline when the incident becomes eligible. It must persist its email before
+claiming it. Unclaimed basic alerts become available 120 seconds after
+eligibility; claims do not expire. EMT's own worker failure uses the same health
+threshold and only the basic delivery path. A healthy observation or resumed
+incident suppresses an unalerted episode; admitted delivery and claims retain
+their existing recovery rules.

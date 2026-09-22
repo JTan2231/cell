@@ -23,16 +23,17 @@
     "Manual and scheduled activation may start one blocked Clockwork exec gate, durably record its process-group PID, then replace it in place with one product-owned launch image after a parent handshake; Clockwork writes runtime metadata and routes product output to the product-selected files without capturing it.",
     "No operation retries a child, submits to Nucleus, stores a secret, interprets product output, or changes product durable state except through the child process itself.",
     "Schema-two runtime or reported abends retain failure evidence and apply the registered response; the default opens one durable incident and blocks future admission until explicit incident-bound approval.",
-    "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. Broker visits attempt retained pending notifications independently of product admission, with bounded transport and provider idempotency limits.",
+    "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. Basic alerts and EMT diagnosis wait for the same consecutive read-only service-check threshold, default five checks at least 60 seconds apart. Broker visits and the EMT worker advance checks independently of product admission; transport retains its existing bounds and provider idempotency limits.",
     "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state.",
-    "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds; emt/worker always uses the basic path. A notification view can materialize the incident route under the transport lock.",
+    "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds after check eligibility; emt/worker uses the same threshold and only the basic delivery path. A notification view can materialize the incident route under the transport lock.",
+    "Notification policy and check progress live in notification-checks.json. Checks read bounded installed Iatreion reports without running product work, sending mail, retrying failed items or changing halts. Healthy and explicitly inactive observations reset progress; unknown health counts as failed with condition unknown. A resumed incident suppresses its unalerted episode. Admitted delivery and claims retain their recovery rules.",
     "The Iatreion status snapshot opens only an existing supported database read-only and reports binding, halt, and recorded runtime metadata. It does not reconcile running rows, inspect launchd, claim notifications, or change state."
   ],
   "authority": [
     "Clockwork owns definition and activation identity, stable selection, generated LaunchAgents, admission, direct-process supervision, runtime history, enforcement of declared failure policy, durable halt incidents, explicit continuation, and pause notification state.",
     "The product owns immutable failure configuration, the interpretation and reporting of domain failures, exact release and runner, durable work, locks, idempotency, secrets, output files, and item recovery. It stops successor admission after an abend and transfers any former failure-owned scheduling gate to Clockwork without clearing user or maintenance pauses.",
     "launchd owns trigger delivery in the current user's login domain; the operator or product deployer owns authorization to register and switch a binding.",
-    "EMT owns agent diagnosis, correspondence and delegated email delivery. Clockwork retains only notification routing metadata and never invokes the agent or retains its diagnosis."
+    "EMT owns agent diagnosis, correspondence and delegated email delivery. Clockwork owns shared alert eligibility and notification routing metadata. Iatreion and its product probes own their observed health facts. Clockwork never invokes the diagnosis agent or retains its diagnosis."
   ],
   "success": [
     "Registration succeeds only after the complete strict manifest, release root and ID, top-level launch images, hashes, permissions, literal process context, schedule, and supported policies validate without a partial write.",
@@ -132,6 +133,14 @@
       "invocation": "/Users/joey/.local/bin/clockwork notification send"
     },
     {
+      "label": "Configure shared alert checks",
+      "invocation": "clockwork notification policy --failure-threshold N --interval-seconds SECONDS --cell-root ABS"
+    },
+    {
+      "label": "Advance due alert checks without sending or product work",
+      "invocation": "clockwork notification check"
+    },
+    {
       "label": "Approve duplicate risk for an uncertain notification",
       "invocation": "/Users/joey/.local/bin/clockwork notification retry INCIDENT_ID"
     },
@@ -188,7 +197,7 @@
       },
       {
         "status": "declared",
-        "statement": "Pause notifications use email.message.send contract 4 for the fixed recipient, wrapper credential loading, provider acceptance, bounded transport, and 24-hour idempotency. Catalog compatibility does not establish live credentials, delivery, or authorization for unrelated messages."
+        "statement": "Pause notifications use email.message.send contract 4 for the fixed recipient, wrapper credential loading, provider acceptance, bounded transport, and 24-hour idempotency. Shared alert checks require installed HOME/.local/bin/iatreion and a stable Cell checkout, default HOME/rust/cell. Catalog compatibility does not establish live credentials, delivery, or authorization for unrelated messages."
       }
     ],
     "inputs": [
@@ -220,7 +229,7 @@
       },
       {
         "status": "declared",
-        "statement": "Incident feed returns items, next_cursor and has_more in insertion order. Notification show returns basic subject/body, saved Reply-To and an optional EMT delivery ID. Incident notification_status continues to describe only Clockwork transport; delegated acceptance is read from EMT."
+        "statement": "Incident feed returns items, next_cursor and has_more in insertion order. Notification show returns basic subject/body, saved Reply-To, an optional EMT delivery ID and health_check with threshold, count, last_checked_at, condition and eligible_at. Check progress is visible below the threshold. Incident notification_status continues to describe only Clockwork transport; delegated acceptance is read from EMT."
       }
     ],
     "data_semantics": [
@@ -235,6 +244,10 @@
       {
         "status": "declared",
         "statement": "A binding is a stable key with one nullable selected definition and internal exact generated-plist digest, while a generated plist contains the manifest-checked content-addressed installed Clockwork binary and stable key but no product executable or secret."
+      },
+      {
+        "status": "declared",
+        "statement": "Service checks use current operational conditions, not historical domain outcomes. Explicit inactive intent or operator pause excludes the service and resets progress. Healthy checks reset progress; unknown health counts as a failed check and remains labelled unknown. Repeated failed checks within an eligible alert episode do not create a new alert."
       }
     ],
     "identity_and_units": [
@@ -294,13 +307,17 @@
       },
       {
         "status": "declared",
-        "statement": "Claim and basic-send admission share the notification lock. A claim requires an unattempted pending notification and is idempotent for the same delivery UUID. Configuration changes preserve existing routes and claims."
+        "statement": "Checks, claim and basic-send admission share the notification lock. A claim requires health-check eligibility and an unattempted pending notification and is idempotent for the same delivery UUID. Configuration changes preserve existing routes and claims. Notification-checks metadata preserves policy and progress beside the unchanged schema-two database."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
         "statement": "Version 1 supports current-user LaunchAgents, one interval or daily local-calendar trigger per definition, one direct child per activation, skip-on-overlap, an optional timeout, exact product output files, separate Clockwork broker logs, and bounded local history queries."
+      },
+      {
+        "status": "declared",
+        "statement": "Shared basic-alert and EMT-diagnosis eligibility defaults to five consecutive failed service checks at least 60 seconds apart. Notification policy can change the threshold, interval and stable Cell root. Existing broker visits and the EMT worker advance due checks; no independent check daemon or timer is added."
       },
       {
         "status": "unsupported",
@@ -336,9 +353,16 @@
       },
       {
         "status": "declared",
-        "statement": "Automatic pending notification progress requires subsequent scheduled or manual broker invocation; when no broker runs, notification send is an explicit operational action. There is no independent notification timer.",
+        "statement": "Automatic check progress requires subsequent broker visits or the existing EMT worker. Basic notification transport requires broker invocation or explicit notification send. There is no independent notification timer.",
         "target": "launchd",
         "kind": "control"
+      },
+      {
+        "status": "declared",
+        "statement": "Shared alert checks consume bounded read-only operational reports from the installed Iatreion selector. Clockwork retains eligibility progress; Iatreion and product probes retain authority for observed facts and unknown coverage.",
+        "target": "iatreion",
+        "kind": "data",
+        "contract": "iatreion.status.inspect"
       }
     ]
   },
@@ -348,6 +372,11 @@
       "id": "email.message.send",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "iatreion.status.inspect",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ]
 }

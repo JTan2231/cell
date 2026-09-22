@@ -200,6 +200,7 @@ async fn run(command: Command) -> Result<Value> {
                 config.validate()?;
             }
             let client = clockwork::api::Client::new(&config.clockwork_executable);
+            client.notification_check_root(&config.cell_root)?;
             client.configure_emt(if paused {
                 None
             } else {

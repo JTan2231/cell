@@ -73,22 +73,7 @@ pub fn prepare(root: &Path, store: &Store, exchange: &Exchange, config: &Config)
         "current_received_email":exchange.incoming_json,"emt_state_root":root,
     })
     .to_string();
-    let mut invocation = AgentInvocationV1::new(
-        "codex",
-        ModelId::new(&config.model),
-        AbsolutePath::new(&config.agent_cwd),
-        WorkspaceAccess::ReadWrite,
-        BuiltinToolsV1 {
-            local_execution: true,
-            web_search: false,
-        },
-        TimeoutSeconds::new(if exchange.kind == "diagnosis" {
-            300
-        } else {
-            900
-        }),
-    );
-    invocation.reasoning_effort = Some(ReasoningEffort::Medium);
+    let invocation = responder_invocation(config, &exchange.kind);
     let mut request = JobRequestV1::new(
         JobId::new(&exchange.nucleus_job_id),
         if exchange.kind == "diagnosis" {
@@ -112,6 +97,22 @@ pub fn prepare(root: &Path, store: &Store, exchange: &Exchange, config: &Config)
         params![exchange.id, encoded, request.request_digest()?],
     )?;
     Ok(encoded)
+}
+
+fn responder_invocation(config: &Config, kind: &str) -> AgentInvocationV1 {
+    let mut invocation = AgentInvocationV1::new(
+        "codex",
+        ModelId::new(&config.model),
+        AbsolutePath::new(&config.agent_cwd),
+        WorkspaceAccess::Unrestricted,
+        BuiltinToolsV1 {
+            local_execution: true,
+            web_search: false,
+        },
+        TimeoutSeconds::new(if kind == "diagnosis" { 300 } else { 900 }),
+    );
+    invocation.reasoning_effort = Some(ReasoningEffort::Medium);
+    invocation
 }
 
 fn shell_quote(value: &str) -> String {
@@ -205,7 +206,7 @@ pub async fn advance(store: &Store, exchange: &Exchange, quota_blocked: bool) ->
     }
     let health = timeout(HTTP_TIMEOUT, client.health_for_work()).await??;
     let required = [
-        HarnessCapability::WorkspaceReadWrite,
+        HarnessCapability::WorkspaceUnrestricted,
         HarnessCapability::BuiltinLocalExecution,
         HarnessCapability::BuiltinWebSearch,
         HarnessCapability::ExactModel,
@@ -255,4 +256,35 @@ pub async fn advance(store: &Store, exchange: &Exchange, quota_blocked: bool) ->
         [&exchange.id],
     )?;
     Ok(Progress::Waiting)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Config, WorkspaceAccess, responder_invocation};
+
+    #[test]
+    fn both_responder_assignments_request_unrestricted_local_execution() {
+        let config = Config {
+            receiving_domain: "example.test".into(),
+            email_executable: "/tmp/email".into(),
+            clockwork_executable: "/tmp/clockwork".into(),
+            cell_root: "/tmp/cell".into(),
+            agent_cwd: "/tmp/agent".into(),
+            model: "example-model".into(),
+            paused: true,
+            poll_after: None,
+        };
+        for (kind, seconds) in [("diagnosis", 300), ("reply", 900)] {
+            let invocation = responder_invocation(&config, kind);
+            assert_eq!(invocation.version, nucleus_core::INVOCATION_VERSION_V2);
+            assert_eq!(invocation.workspace_access, WorkspaceAccess::Unrestricted);
+            assert!(invocation.builtin_tools.local_execution);
+            assert!(!invocation.builtin_tools.web_search);
+            assert_eq!(invocation.cwd.as_path(), config.agent_cwd);
+            assert_eq!(invocation.timeout_seconds.get(), seconds);
+            invocation
+                .validate()
+                .unwrap_or_else(|error| panic!("{error}"));
+        }
+    }
 }

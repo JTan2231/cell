@@ -157,15 +157,40 @@ Nucleus owns execution; Email owns transport. See
 [EMT incident response](/Users/joey/rust/cell/emt/chancery/manuals/incident-respond.md)
 for reply recognition, permissions, deadlines, and retained records.
 
-Clockwork's optional EMT preference defers a basic alert for 120 seconds.
+New EMT assignments use Nucleus invocation policy version two and require its
+`workspace-unrestricted` capability. They use local execution with unrestricted
+current-user filesystem, process, local socket, and network access; Codex
+sandbox restrictions and approval prompts are disabled. Operating-system
+permissions still apply. Deploy accepting Nucleus support before EMT emits
+the new policy. Retained requests keep their original policy.
+
+Clockwork gates basic alerts and EMT diagnosis on five consecutive failed
+read-only service checks, at least 60 seconds apart by default. It reads a
+bounded report from installed Iatreion. Healthy checks reset progress; explicit
+inactive intent or operator pause excludes the service and resets progress.
+Unknown health counts as failed with an explicit unknown condition. Historical
+domain outcomes do not trigger this gate. Configure the threshold, interval and
+stable Cell root with `clockwork notification policy`. Inspect progress with
+`clockwork notification show INCIDENT_ID`, or advance due checks without mail
+or product work with `clockwork notification check`.
+
+Existing broker visits and the EMT worker advance checks. No independent
+daemon is added. The scheduling halt remains immediate and no check retries
+product work. Repeated failed checks in the same alert episode create no new
+alert. A resumed incident suppresses an unalerted episode; existing attempts
+and claims retain their delivery recovery rules.
+
+EMT's five-minute diagnosis deadline starts at alert eligibility. Clockwork's
+optional EMT preference then defers a basic alert for 120 seconds.
 EMT freezes its email before claiming initial-notification ownership. Claim
 and basic-send admission are serialized. A claim does not expire or clear
 the halt; EMT owns the delegated send outcome. A basic alert can precede a
 late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
 
 Refresh every active pinned Clockwork broker before enabling EMT preference.
-Keep Clockwork's version-one notification-routing metadata with its incident
-database during backup and recovery. Older brokers ignore claims. Read the
+Keep Clockwork's `notification-routing.json` and `notification-checks.json`
+with its incident database during backup and recovery. Older brokers ignore
+claims and check eligibility. Read the
 Clockwork and EMT installed contracts before cutover or rollback.
 
 Hold and drain EMT before holding Nucleus during coordinated deployment.

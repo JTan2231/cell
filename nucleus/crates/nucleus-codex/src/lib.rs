@@ -1327,9 +1327,9 @@ impl CodexHarness {
                     .map_err(CodexError::Preparation)?;
                 path
             }
-            WorkspaceAccess::ReadOnly | WorkspaceAccess::ReadWrite => {
-                spec.working_directory.clone()
-            }
+            WorkspaceAccess::ReadOnly
+            | WorkspaceAccess::ReadWrite
+            | WorkspaceAccess::Unrestricted => spec.working_directory.clone(),
         };
 
         let mut command =
@@ -1558,6 +1558,7 @@ impl ProtocolClient {
         let sandbox = match spec.workspace_access {
             WorkspaceAccess::None | WorkspaceAccess::ReadOnly => "read-only",
             WorkspaceAccess::ReadWrite => "workspace-write",
+            WorkspaceAccess::Unrestricted => "danger-full-access",
         };
         let mut thread_params = json!({
             "model": spec.model,
@@ -2087,6 +2088,7 @@ fn verify_protocol_semantics(document: &Value) -> Result<(), CodexError> {
     let sandbox = protocol_definition(document, &["v2", "SandboxMode"])?;
     require_enum_value(sandbox, "v2/SandboxMode", "read-only")?;
     require_enum_value(sandbox, "v2/SandboxMode", "workspace-write")?;
+    require_enum_value(sandbox, "v2/SandboxMode", "danger-full-access")?;
 
     let turn_start = protocol_definition(document, &["v2", "TurnStartParams"])?;
     require_properties(
@@ -2478,7 +2480,10 @@ fn configured_model_catalog(bytes: &[u8], spec: &CodexRunSpec) -> Result<Value, 
         object.insert("supports_search_tool".to_owned(), json!(false));
     }
     if !(spec.builtin_tools.local_execution
-        && matches!(spec.workspace_access, WorkspaceAccess::ReadWrite))
+        && matches!(
+            spec.workspace_access,
+            WorkspaceAccess::ReadWrite | WorkspaceAccess::Unrestricted
+        ))
     {
         object.insert("apply_patch_tool_type".to_owned(), Value::Null);
     }
@@ -3578,7 +3583,7 @@ mod tests {
                         "environments": {}, "experimentalRawEvents": {}, "model": {}, "sandbox": {}
                     } },
                     "AskForApproval": { "enum": ["never"] },
-                    "SandboxMode": { "enum": ["read-only", "workspace-write"] },
+                    "SandboxMode": { "enum": ["read-only", "workspace-write", "danger-full-access"] },
                     "TurnStartParams": {
                         "required": ["input", "threadId"],
                         "properties": { "effort": {}, "environments": {}, "input": {}, "threadId": {} }
@@ -3688,6 +3693,23 @@ mod tests {
         };
         assert!(error.to_string().contains("harness.protocolSchema"));
         assert!(error.to_string().contains("dynamicTools"));
+    }
+
+    #[test]
+    fn protocol_schema_requires_unrestricted_sandbox_support() {
+        let harness = CodexHarness::new("codex");
+        let mut schema = compatible_protocol_schema();
+        let mut document: Value = serde_json::from_slice(&schema.bytes)
+            .unwrap_or_else(|error| panic!("decode protocol schema: {error}"));
+        document["definitions"]["v2"]["SandboxMode"]["enum"] =
+            json!(["read-only", "workspace-write"]);
+        schema.bytes = serde_json::to_vec(&document)
+            .unwrap_or_else(|error| panic!("encode protocol schema: {error}"));
+        let error = harness
+            .validate_protocol_schema(&inspection(), &schema)
+            .err()
+            .unwrap_or_else(|| panic!("unproved unrestricted mode must fail validation"));
+        assert!(error.to_string().contains("danger-full-access"));
     }
 
     #[test]
@@ -3834,6 +3856,14 @@ mod tests {
         assert_eq!(model["shell_type"], "shell_command");
         assert_eq!(model["supports_search_tool"], true);
         assert_eq!(model["apply_patch_tool_type"], "freeform");
+
+        spec.workspace_access = WorkspaceAccess::Unrestricted;
+        let unrestricted = configured_model_catalog(&bytes, &spec)
+            .unwrap_or_else(|error| panic!("configure unrestricted catalog: {error}"));
+        assert_eq!(
+            unrestricted["models"][0]["apply_patch_tool_type"],
+            "freeform"
+        );
     }
 
     #[test]
@@ -4550,6 +4580,49 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     }
 
     #[tokio::test]
+    async fn unrestricted_local_execution_uses_full_access_without_approvals()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("managed-fake-codex");
+        write_managed_fake_codex(&executable)?;
+        let codex_home = directory.path().join("codex-home");
+        write_test_codex_home(
+            &codex_home,
+            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
+        )?;
+        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
+        let inspection = harness.inspect().await?;
+        let spec = CodexRunSpec {
+            instructions: "Inspect the local service.".to_owned(),
+            developer_instructions: None,
+            prompt: "work".to_owned(),
+            model: "example-model".to_owned(),
+            reasoning_effort: Some("medium".to_owned()),
+            working_directory: directory.path().to_path_buf(),
+            workspace_access: WorkspaceAccess::Unrestricted,
+            builtin_tools: BuiltinToolsV1 {
+                local_execution: true,
+                web_search: false,
+            },
+            timeout: Duration::from_secs(5),
+            tools: Vec::new(),
+            launch_environment: None,
+        };
+        let (events_tx, _events_rx) = mpsc::channel(64);
+        let (_cancel_tx, cancel_rx) = watch::channel(false);
+        harness.run(&inspection, spec, events_tx, cancel_rx).await?;
+        let thread: Value =
+            serde_json::from_slice(&fs::read(directory.path().join("thread-request.json"))?)?;
+        assert_eq!(thread["params"]["sandbox"], "danger-full-access");
+        assert_eq!(thread["params"]["approvalPolicy"], "never");
+        assert_eq!(
+            thread["params"]["cwd"],
+            directory.path().display().to_string()
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn managed_worker_refresh_is_end_to_end_and_secrets_never_become_events()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4947,6 +5020,7 @@ printf '%s\n' '{"method":"account/updated","params":{"authMode":"chatgptAuthToke
 IFS= read -r inventory
 printf '%s\n' '{"id":2,"result":{"data":[],"nextCursor":null}}'
 IFS= read -r thread
+printf '%s\n' "$thread" > "$SCRIPT_DIR/thread-request.json"
 printf '%s\n' '{"id":3,"result":{"thread":{"id":"thread-managed"}}}'
 IFS= read -r turn
 printf '%s\n' '{"id":4,"result":{"turn":{"id":"turn-managed"}}}'

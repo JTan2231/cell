@@ -17,6 +17,8 @@ clockwork [--json] incident list [KEY] [--limit N]
 clockwork [--json] incident show INCIDENT_ID
 clockwork [--json] notification send
 clockwork [--json] notification retry INCIDENT_ID
+clockwork [--json] notification policy [--failure-threshold N] [--interval-seconds SECONDS] [--cell-root ABS]
+clockwork [--json] notification check
 clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY
 ```
 
@@ -343,8 +345,33 @@ own credential and owns bounded HTTP transport; exit zero establishes provider
 acceptance, not inbox delivery.
 
 Clockwork retains a pending notification in the same transaction as the halt.
-Every scheduled or manual broker visit attempts at most one due notification
-before the product gate, and one after the activation outcome. Attempts use a
+Basic alerts and EMT diagnosis wait for five consecutive failed read-only
+service checks by default. Checks are at least 60 seconds apart. Clockwork uses
+the installed Iatreion report for the configured Cell checkout. Historical
+domain outcomes do not count as service-check failures. Unknown health counts
+as a failed check with an explicit unknown condition. A healthy check, explicit
+inactive intent or operator pause resets progress and suppresses an unalerted episode.
+Resuming the incident also suppresses it. Existing delivery attempts and claims
+retain their recovery rules.
+
+Configure the notification policy and inspect progress:
+
+```sh
+clockwork notification policy --failure-threshold 5 --interval-seconds 60 --cell-root /absolute/cell
+clockwork notification check
+clockwork notification show INCIDENT_ID
+```
+
+`notification check` advances due observations without sending mail or running
+product work. Notification show returns `health_check.threshold`, `count`,
+`last_checked_at`, `condition` and `eligible_at`, including progress below the
+threshold. A continuous eligible episode creates no repeated alerts. The
+default checkout is `$HOME/rust/cell`; Iatreion must be installed at
+`$HOME/.local/bin/iatreion`. Policy changes do not resume schedules or retry work.
+
+Existing broker visits and the EMT worker advance due checks. Every scheduled
+or manual broker visit attempts at most one eligible due notification before
+the product gate, and one after the activation outcome. Attempts use a
 private transport lock, a fixed payload and idempotency key, a 120-second
 process bound, and at least five minutes between attempts for one incident.
 The halt remains closed when transport or notification bookkeeping fails.
@@ -406,8 +433,9 @@ clockwork notification claim INCIDENT_ID --delivery-id UUID
 
 Feed returns items, next_cursor and has_more in insertion order. Show returns
 the basic payload and ownership and can materialize the incident reply route.
-Claim is for an already retained EMT email and refuses a started basic send or
-a different delivery owner. Disabling new EMT routing preserves existing
+Claim requires health-check eligibility and an already retained EMT email. It
+refuses a started basic send or a different delivery owner. The 120-second basic
+fallback grace starts at eligibility. Disabling new EMT routing preserves existing
 routes and claims. These operations never resume a schedule.
 
 See the installed schedule-operation manual for grace timing, transport

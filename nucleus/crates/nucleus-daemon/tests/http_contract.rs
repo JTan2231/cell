@@ -59,7 +59,7 @@ const COMPATIBLE_PROTOCOL_SCHEMA: &str = r##"{
         "approvalPolicy":{},"baseInstructions":{},"cwd":{},"developerInstructions":{},"dynamicTools":{},"ephemeral":{},"environments":{},"experimentalRawEvents":{},"model":{},"sandbox":{}
       }},
       "AskForApproval": {"enum":["never"]},
-      "SandboxMode": {"enum":["read-only","workspace-write"]},
+      "SandboxMode": {"enum":["read-only","workspace-write","danger-full-access"]},
       "LoginAccountParams": {"oneOf":[{
         "required":["accessToken","chatgptAccountId","type"],
         "properties":{"accessToken":{},"chatgptAccountId":{},"chatgptPlanType":{},"type":{"enum":["chatgptAuthTokens"]}}

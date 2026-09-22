@@ -8,7 +8,7 @@
   "summary": "Check readiness, eight-slot execution capacity, and account access; submit or inspect agent jobs, read their output, cancel work, or operate the per-user Nucleus service.",
   "use_when": [
     "Nucleus readiness, authentication, job state, exact harness output, cancellation, or service state must be inspected or changed.",
-    "An exact version-one invocation must be submitted directly for technical diagnosis or a deliberate runtime task.",
+    "An exact version-one job request must be submitted directly for technical diagnosis or a deliberate runtime task.",
     "A deployment must durably hold new admissions, observe actual runtime settlement, inspect health, and release only its own hold."
   ],
   "do_not_use_when": [
@@ -107,7 +107,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "Local requester products may submit closed version-one invocations, and the current user may inspect or operate Nucleus jobs, account access, authentication, and the user service."
+        "statement": "Local requester products may submit version-one jobs with closed invocation policies one and two, and the current user may inspect or operate Nucleus jobs, account access, authentication, and the user service."
       },
       {
         "status": "unsupported",
@@ -127,7 +127,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "A version-one job request supplies a requester-chosen job ID, label, requester program and domain-run ID, instructions, optional developer instructions, prompt, and one closed invocation policy."
+        "statement": "A version-one job request supplies a requester-chosen job ID, label, requester program and domain-run ID, instructions, optional developer instructions, prompt, and one closed invocation policy. Policy version two adds unrestricted current-user filesystem, process, local socket, and network access, with approvals disabled and the workspace-unrestricted harness capability. Version-one policies retain their existing meanings."
       },
       {
         "status": "declared",

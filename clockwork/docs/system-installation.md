@@ -166,12 +166,20 @@ backup must not erase a later halt or authorize resumed work.
 
 ## EMT handoff compatibility
 
+Install compatible Iatreion before notification checks are enabled. Clockwork
+uses `$HOME/.local/bin/iatreion` for bounded read-only service reports and
+defaults to the stable checkout `$HOME/rust/cell`. Configure another checkout
+with `clockwork notification policy --cell-root ABSOLUTE_CELL_ROOT`.
+The default alert policy requires five failed checks at least 60 seconds apart.
+This policy applies to both basic alerts and EMT diagnosis.
+
 Before configuring notification emt, refresh all active generated broker
 plists to this handoff-capable Clockwork release. Stable CLI replacement alone
 does not change those pinned brokers. No schema-two database migration is
 needed for the additive incident feed and version-one routing sidecar.
 
-Include notification-routing.json in state backups and recovery. Older
+Include `notification-routing.json` and `notification-checks.json` in state
+backups and recovery. Older
 brokers ignore that file. Do not roll back to them while notification claims
 remain: a claimed EMT message may already have been accepted. Preserve the
 database, routing metadata and EMT correspondence together. Disabling new

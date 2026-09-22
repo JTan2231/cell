@@ -117,7 +117,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Agents use Nucleus read-write workspace access and local execution. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
+        "statement": "Agents require Nucleus invocation policy version two and workspace-unrestricted for local execution with unrestricted current-user filesystem, process, local socket, and network access. Codex sandbox restrictions and approval prompts are disabled. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       }
     ],
     "lifecycle_and_consistency": [

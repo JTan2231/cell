@@ -43,6 +43,15 @@ and the exact protocol, adapter, and execution-capacity capabilities needed by
 the requester. Health exposes Nucleus's global maximum of eight active attempts
 as `maxActiveJobs` and the live `activeJobs` and `availableSlots` counts.
 
+Invocation policy version two adds `workspaceAccess=unrestricted` with
+unsandboxed current-user filesystem, process, local socket, and network access.
+Require `workspace-unrestricted` in the harness capabilities and enable local
+execution when commands are needed. `approvalPolicy=never` remains fixed.
+Built-in web search is a separate tool choice. Version-one policies retain
+their existing access modes. The job and HTTP protocol stay version one.
+Deploy accepting daemon support first, and preserve compatible decoding for
+retained version-two requests.
+
 Admission does not require a free execution slot. A newly admitted job remains
 `accepted` with its sole attempt `pending` until a slot is available. The
 invocation timeout begins only when that slot is acquired. An attempt in
@@ -50,8 +59,8 @@ invocation timeout begins only when that slot is acquired. An attempt in
 remains live. Nucleus schedules capacity only; it does not own the requester's
 work-packet graph, priorities, success rule, or retry policy.
 
-Before submitting concurrent `read-write` jobs, assign disjoint working
-directories or worktrees, or serialize them in the requester. Nucleus does not
+Before submitting concurrent `read-write` or `unrestricted` jobs, assign
+disjoint working directories or worktrees, or serialize them in the requester. Nucleus does not
 compare paths or coordinate filesystem and external-mutation conflicts.
 
 Decoder schemas and toolset registrations are immutable by identity and

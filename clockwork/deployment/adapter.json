@@ -3,7 +3,8 @@
   "product": "clockwork",
   "application": "Clockwork",
   "dependencies": [
-    "chancery"
+    "chancery",
+    "iatreion"
   ],
   "description": "Installation through the shared Rust transaction library.",
   "adapter_binary": "clockwork-install",

@@ -520,6 +520,7 @@ fn deployment_operation(
                 .ok_or_else(|| fail("saved pause intent is missing"))?;
             config.validate()?;
             // Routing starts only after every prior broker has been refreshed.
+            Client::new(&config.clockwork_executable).notification_check_root(&config.cell_root)?;
             Client::new(&config.clockwork_executable).configure_emt(if config.paused {
                 None
             } else {

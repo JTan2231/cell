@@ -45,8 +45,9 @@ Neither operation enables a schedule or clears a Clockwork halt.
 A worker imports one page of 100 incidents and reads at most four 100-record
 receiving pages. Incident creation is idempotent. The feed cursor advances
 after every item on its page is stored. Initial discovery retains historical
-incident metadata but diagnoses only open incidents. EMT excludes its own
-emt/worker halt from diagnosis.
+incident metadata but diagnoses only open incidents that pass Clockwork's
+shared service-check threshold. Retained incidents below the threshold remain
+available for later checks. EMT excludes its own emt/worker halt from diagnosis.
 
 Receiving fetches bodies only for recognized routes. Provider IDs deduplicate
 replies; RFC Message-IDs thread responses. Cursors are scan positions, not
@@ -61,11 +62,13 @@ Each fresh assignment receives the incident, available selected definition,
 basic notification, prior correspondence, Nucleus references and current email.
 
 The default model is gpt-5.6-terra with medium reasoning. Another configured
-model must be accepted by the installed Nucleus adapter. Jobs use read-write
-workspace access, local execution and no built-in web search. The default
-agent working directory is the current user's home so Cell operations and
-EMT's mail command can write their user-owned state. Cell source is supplied
-separately. Actual access remains subject to the Nucleus sandbox.
+model must be accepted by the installed Nucleus adapter. Jobs use unrestricted
+current-user execution through Nucleus invocation policy version two, with
+local execution and no built-in web search. The Codex sandbox does not restrict
+filesystem, process, local socket, or network access, and approval prompts are
+disabled. Operating-system permissions still apply. The default working
+directory is the user's home; Cell source is supplied separately. EMT requires
+the `workspace-unrestricted` capability before submission.
 
 Agents use Chancery to discover contracts and invoke supported interfaces
 directly. EMT has no command allowlist or operation adapters. Diagnosis is
@@ -86,7 +89,9 @@ is accepted only while the exchange is running and before its deadline. A
 different subject or body is refused after freezing. The receipt establishes
 Resend acceptance, not inbox delivery. The agent does not send a separate copy.
 
-Diagnosis expires five minutes after EMT capture. Reply assignments expire
+Diagnosis expires five minutes after Clockwork records alert eligibility.
+Waiting for the service-check threshold does not consume that deadline.
+Reply assignments expire
 15 minutes after the provider receipt timestamp. Nucleus active limits are
 300 and 900 seconds; queue time does not extend EMT deadlines. On observing
 expiry, EMT requests cancellation and waits for terminal state before another
@@ -95,7 +100,22 @@ can delay cancellation. Cancellation cannot undo an action already performed.
 
 ## Initial alert ownership
 
-Clockwork defers new EMT-routed basic notifications for 120 seconds. EMT
+Clockwork gates both basic alerts and new EMT diagnoses on five consecutive
+failed read-only service checks, at least 60 seconds apart by default. A healthy
+check resets progress. Explicit inactive intent or operator pause excludes the
+service and resets progress. Unknown health counts as failed with an explicit
+unknown condition. Historical domain outcomes do not count as service failures.
+`clockwork notification show INCIDENT_ID` exposes the count, threshold, last
+check, condition and eligibility time before or after the threshold is reached.
+
+The existing EMT worker advances due checks through Clockwork using its
+configured Cell root. Checks use the installed bounded Iatreion report. They do
+not run product work, retry failed work or change the scheduling halt. A resumed
+incident suppresses an unalerted diagnosis. A continuous alert episode creates
+no replacement diagnosis; admitted delivery and claims keep their recovery rules.
+
+Clockwork defers new EMT-routed basic notifications for 120 seconds after the
+threshold is reached. EMT
 persists the agent-authored email before claiming initial-notification ownership
 with the exchange delivery ID. Clockwork serializes claims with its basic
 sender. A claim does not expire. EMT owns subsequent delivery recovery;

@@ -155,15 +155,30 @@ No email body, provider response body, credential, or product output is stored.
 
 ## Notification routing metadata
 
+The private `notification-checks.json` sidecar stores notification policy and
+consecutive service-check progress. Defaults are five failed checks and a
+60-second minimum interval. The policy also selects a stable Cell checkout for
+the installed Iatreion report. The notification lock serializes check updates,
+basic-send admission and EMT claims.
+
+Notification views expose `health_check` with `threshold`, `count`,
+`last_checked_at`, `condition` and `eligible_at`. Progress remains visible below
+the threshold. Unknown observations count as failed checks and remain labelled
+unknown. Healthy or explicitly inactive observations reset the count and
+suppress an unalerted episode. Resuming its incident has the same suppression
+effect. Eligibility admits one alert episode; repeated checks do not create
+another message. Existing delivery attempts and claims remain retained.
+
 The optional notification-routing.json file has version 1 and is protected by
 the notification lock. It records a domain, enable time and per-incident reply
 address, grace deadline and optional EMT delivery UUID. Writes replace a
-private file atomically and sync its directory. It stores no mail body.
+private file atomically and sync its directory. The grace deadline is 120
+seconds after health-check eligibility. It stores no mail body.
 
 The SQLite schema remains two. Incident row insertion order supplies the feed
 cursor; retained rows are never deleted. Cursors belong to that retained
 history. Save a page cursor after its items are retained. Restore routing
-metadata with the database: losing a claim can duplicate an already submitted
+and check metadata with the database: losing a claim can duplicate an already submitted
 EMT notification. Incident notification_status still describes Clockwork
 transport; EMT records its own email acceptance.
 

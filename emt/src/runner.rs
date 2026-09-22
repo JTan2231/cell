@@ -90,6 +90,7 @@ pub async fn tick(root: &Path, recovery: bool) -> Result<Value> {
 
 fn ingest(store: &mut Store, config: &Config) -> Result<()> {
     let client = clockwork::api::Client::new(&config.clockwork_executable);
+    client.check_notifications()?;
     let page = client.incident_feed(store.cursor()?, 100)?;
     for incident in &page.items {
         let notification = client.notification(&incident.id)?;
@@ -101,6 +102,13 @@ fn ingest(store: &mut Store, config: &Config) -> Result<()> {
             "UPDATE incidents SET feed_cursor=?2 WHERE id=?1",
             params![last.id, i64::try_from(page.next_cursor)?],
         )?;
+    }
+    // The feed cursor can advance while an incident waits for health checks.
+    // Its diagnosis deadline begins only when the shared gate releases it.
+    for id in store.awaiting_diagnosis()? {
+        let incident = client.incident(&id)?;
+        let notification = client.notification(&id)?;
+        store.capture_incident(&incident, 0, &notification, config)?;
     }
     Ok(())
 }

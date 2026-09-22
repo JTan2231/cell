@@ -8,6 +8,7 @@ use tokio::process::Command;
 
 use crate::error::{Context as _, Error, Result};
 use crate::lock::KeyLock;
+use crate::notification_checks::Checks;
 use crate::paths::Layout;
 use crate::store::{Store, now_unix};
 
@@ -47,14 +48,22 @@ pub(crate) async fn send_selected(
             .context("database_read_failed", "decode pending notifications")?
     };
     let mut routing = Routing::load(layout)?;
+    let checks = observe_checks(store, layout, &mut routing, now).await?;
     let mut pending = None;
     for (id, executable, generation) in candidates {
         let incident = store.incident(&id)?;
         let route = routing.route(layout, &incident)?;
-        if route
-            .as_ref()
-            .is_some_and(|route| route.delivery_id.is_some() || now < route.due_at)
-        {
+        let check = checks.view(&incident);
+        if incident.first_attempt_at.is_none() && generation == 0 && check.eligible_at.is_none() {
+            continue;
+        }
+        if route.as_ref().is_some_and(|route| {
+            route.delivery_id.is_some()
+                || now
+                    < route
+                        .due_at
+                        .max(check.eligible_at.unwrap_or(0).saturating_add(120))
+        }) {
             continue;
         }
         pending = Some((
@@ -98,6 +107,96 @@ pub(crate) async fn send_selected(
             )?;
     }
     Ok(1)
+}
+
+async fn observe_checks(
+    store: &Store,
+    layout: &Layout,
+    routing: &mut Routing,
+    now: i64,
+) -> Result<Checks> {
+    let incidents = {
+        let mut query = store.connection.prepare("SELECT id FROM incidents WHERE notification_status='pending' AND first_attempt_at IS NULL AND notification_generation=0")
+            .context("database_read_failed", "prepare unchecked notifications")?;
+        let ids = query
+            .query_map([], |row| row.get::<_, String>(0))
+            .context("database_read_failed", "read unchecked notifications")?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode unchecked notifications")?;
+        let mut incidents = Vec::new();
+        for id in ids {
+            let incident = store.incident(&id)?;
+            if !routing
+                .route(layout, &incident)?
+                .is_some_and(|route| route.delivery_id.is_some())
+            {
+                incidents.push(incident);
+            }
+        }
+        incidents
+    };
+    let mut checks = Checks::load(layout)?;
+    checks.observe(store, layout, &incidents, now).await?;
+    Ok(checks)
+}
+
+pub(crate) async fn check_pending(store: &Store, layout: &Layout) -> Result<serde_json::Value> {
+    let Some(_lock) = KeyLock::try_acquire_notifications(layout)? else {
+        return Ok(serde_json::json!({"busy":true}));
+    };
+    let mut routing = Routing::load(layout)?;
+    let checks = observe_checks(store, layout, &mut routing, now_unix()?).await?;
+    Ok(serde_json::to_value(checks)
+        .context("notification_checks_invalid", "encode notification checks")?)
+}
+
+pub(crate) fn policy(
+    layout: &Layout,
+    threshold: Option<u32>,
+    interval: Option<u32>,
+    root: Option<std::path::PathBuf>,
+) -> Result<serde_json::Value> {
+    let Some(_lock) = KeyLock::try_acquire_notifications(layout)? else {
+        return Err(Error::new(
+            "notification_busy",
+            "another notification operation is in progress",
+        ));
+    };
+    let mut checks = Checks::load(layout)?;
+    let changed = threshold.is_some() || interval.is_some() || root.is_some();
+    if let Some(value) = threshold {
+        if value == 0 {
+            return Err(Error::new(
+                "notification_policy_invalid",
+                "failure threshold must be positive",
+            ));
+        }
+        checks.failure_threshold = value;
+    }
+    if let Some(value) = interval {
+        if value == 0 {
+            return Err(Error::new(
+                "notification_policy_invalid",
+                "check interval must be positive",
+            ));
+        }
+        checks.interval_seconds = value;
+    }
+    if let Some(value) = root {
+        if !value.is_absolute() || !value.is_dir() {
+            return Err(Error::new(
+                "notification_policy_invalid",
+                "Cell root must be an existing absolute directory",
+            ));
+        }
+        checks.cell_root = value;
+    }
+    if changed {
+        checks.save(layout)?;
+    }
+    Ok(
+        serde_json::json!({"failure_threshold":checks.failure_threshold,"interval_seconds":checks.interval_seconds,"cell_root":checks.cell_root}),
+    )
 }
 
 pub(crate) fn approve_retry(store: &mut Store, layout: &Layout, id: &str) -> Result<()> {
@@ -358,7 +457,22 @@ pub(crate) fn view(
     let incident = store.incident(id)?;
     let mut routing = Routing::load(layout)?;
     let mut route = routing.route(layout, &incident)?;
+    let mut health_check = Checks::load(layout)?.view(&incident);
+    // Preserve mail already admitted before the threshold rollout.
+    if incident.first_attempt_at.is_some()
+        || route
+            .as_ref()
+            .is_some_and(|route| route.delivery_id.is_some())
+    {
+        health_check.eligible_at.get_or_insert(incident.created_at);
+    }
     if let Some(delivery) = delivery_id {
+        if health_check.eligible_at.is_none() {
+            return Err(Error::new(
+                "notification_checks_pending",
+                "the consecutive service-check threshold has not been reached",
+            ));
+        }
         if uuid::Uuid::parse_str(delivery).is_err() {
             return Err(Error::new(
                 "delivery_id_invalid",
@@ -393,6 +507,7 @@ pub(crate) fn view(
         reply_to: route.and_then(|route| route.reply_to),
         subject,
         body,
+        health_check: Some(health_check),
     })
 }
 
@@ -446,6 +561,15 @@ mod tests {
                 rusqlite::params![incident.id, email.to_string_lossy()],
             )
             .expect("fixture transport");
+        let mut checks = crate::notification_checks::Checks::load(&layout).expect("checks");
+        for _ in 0..5 {
+            checks.record(
+                &incident,
+                "unhealthy",
+                crate::store::now_unix().expect("time"),
+            );
+        }
+        checks.save(&layout).expect("eligible transport fixture");
         assert_eq!(
             super::send_pending(&mut store, &layout)
                 .await
@@ -507,6 +631,61 @@ mod tests {
         let accepted = store.incident(&incident.id).expect("incident");
         assert_eq!(accepted.notification_status, "accepted");
         assert_eq!(accepted.notification_attempts, 2);
+        assert!(store.require_unhalted("example/worker").is_err());
+    }
+
+    #[tokio::test]
+    async fn initial_alert_and_emt_claim_share_five_check_gate() {
+        use crate::{
+            notification_checks::Checks,
+            paths::Layout,
+            store::{Store, now_unix},
+        };
+        let temporary = tempfile::tempdir().expect("temporary");
+        let layout = Layout::isolated(temporary.path());
+        let mut store = Store::open(&layout).expect("store");
+        super::configure_emt(&layout, Some("example.resend.app")).expect("route");
+        let incident = store
+            .import_halt("example/worker", "failed", "job/one")
+            .expect("incident");
+        let delivery = uuid::Uuid::now_v7().to_string();
+        let now = now_unix().expect("time");
+        let mut checks = Checks::load(&layout).expect("checks");
+        for number in 1..=4 {
+            checks.record(&incident, "unhealthy", now);
+            checks.save(&layout).expect("save progress");
+            let view = super::view(&store, &layout, &incident.id, None).expect("view");
+            assert_eq!(
+                view.health_check
+                    .expect("health check")
+                    .consecutive_failures,
+                number
+            );
+            assert!(super::view(&store, &layout, &incident.id, Some(&delivery)).is_err());
+            assert_eq!(
+                super::send_pending(&mut store, &layout)
+                    .await
+                    .expect("send gate"),
+                0
+            );
+        }
+        checks.record(&incident, "unhealthy", now);
+        checks.save(&layout).expect("threshold");
+        let view = super::view(&store, &layout, &incident.id, Some(&delivery)).expect("claim");
+        assert_eq!(view.delivery_id.as_deref(), Some(delivery.as_str()));
+        assert_eq!(
+            super::send_pending(&mut store, &layout)
+                .await
+                .expect("claimed"),
+            0
+        );
+        assert_eq!(
+            store
+                .incident(&incident.id)
+                .expect("incident")
+                .notification_attempts,
+            0
+        );
         assert!(store.require_unhalted("example/worker").is_err());
     }
 }

@@ -428,6 +428,7 @@ async fn health(State(state): State<AppState>) -> Json<HealthResponseV1> {
             HarnessCapability::WorkspaceNone,
             HarnessCapability::WorkspaceReadOnly,
             HarnessCapability::WorkspaceReadWrite,
+            HarnessCapability::WorkspaceUnrestricted,
             HarnessCapability::BuiltinLocalExecution,
             HarnessCapability::BuiltinWebSearch,
             HarnessCapability::DynamicClientTools,

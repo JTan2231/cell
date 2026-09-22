@@ -23,15 +23,25 @@ values remain unchanged. Changes require paused admission and drained work.
 The receiving domain must belong to Email's configured receiving account.
 EMT stores no credentials.
 
-The default agent cwd is the user's home, with local execution and read-write
-workspace access. This is deliberate operational authority. Cell source is
-supplied separately. Nucleus must support the configured invocation.
+The default agent cwd is the user's home, with local execution and unrestricted
+current-user filesystem, process, local socket, and network access. Approval
+prompts are disabled. This is deliberate operational authority. Cell source is
+supplied separately. Nucleus must support invocation policy version two and
+advertise `workspace-unrestricted` before EMT submits new assignments.
 
 Before EMT resume, deploy Clockwork's incident-feed and notification-handoff
 interfaces and refresh all active generated broker plists to that release.
 An older pinned broker ignores EMT claims. Routing uses a version-one
 metadata sidecar beside Clockwork's unchanged schema-two database. Never
 run old brokers while claims exist.
+
+Install compatible Iatreion for Clockwork's bounded read-only service checks.
+Both basic alerts and EMT diagnosis use the shared Clockwork notification
+policy: five failed checks at least 60 seconds apart by default. Configure its
+threshold and interval with `clockwork notification policy`; EMT supplies its
+configured stable `cell_root` when advancing checks. Keep Clockwork's
+`notification-checks.json` with its routing metadata and incident database in
+backups. This gate delays alerts and diagnosis, not the scheduling halt.
 
 Doctor checks local configuration/schema, SQLite quick_check, the Clockwork
 feed interface, Nucleus health and Email executable presence. It submits no

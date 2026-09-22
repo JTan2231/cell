@@ -87,8 +87,18 @@ them. A successful tool result or Nucleus completion still does not establish
 application success.
 
 Nucleus does not detect overlapping working directories or mutation targets.
-Concurrent `read-write` jobs require disjoint directories or worktrees, or
-requester-owned serialization.
+Concurrent `read-write` or `unrestricted` jobs require disjoint directories or
+worktrees, or requester-owned serialization.
+
+The version-one job protocol accepts invocation policies one and two. Policy
+one retains `none`, `read-only`, and `read-write`. Policy two adds
+`workspaceAccess=unrestricted`, advertised by `workspace-unrestricted`.
+It uses Codex `danger-full-access` with approvals disabled, so the Codex sandbox
+does not restrict filesystem, process, local socket, or network access.
+Operating-system permissions still apply. Local execution and built-in web
+search remain separate tool choices. New callers require that capability;
+deploy accepting daemon support first and preserve compatible readers for
+retained version-two requests.
 
 Cancellation targets one exact job. Repeating the request is idempotent. It
 does not remove the job, output history, or a requester mutation already

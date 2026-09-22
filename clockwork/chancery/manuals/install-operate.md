@@ -159,6 +159,20 @@ Clockwork/product releases, prior definitions and generated plists, plus full
 quiescence. Retain the failed store and newer incident evidence. A pre-halt
 backup must not erase a later halt or authorize resumed work.
 
+## Alert-check dependencies and recovery
+
+Install compatible Iatreion for shared basic-alert and EMT-diagnosis checks.
+Clockwork invokes `$HOME/.local/bin/iatreion` with a bounded read-only report.
+The default stable checkout is `$HOME/rust/cell`; select another with
+`clockwork notification policy --cell-root ABSOLUTE_CELL_ROOT`.
+
+Refresh active pinned brokers before relying on shared alert eligibility.
+Preserve `notification-checks.json`, `notification-routing.json`, the incident
+database and EMT correspondence together during backup and recovery. Older
+brokers do not enforce check eligibility or preserve delegated ownership. Do
+not remove these sidecars to force another alert. Installation and check
+configuration do not clear halts or retry product work.
+
 ## Command usage
 
 After each installation or update, run `clockwork --register-usage`.

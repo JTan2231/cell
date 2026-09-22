@@ -98,6 +98,18 @@ pub struct NotificationView {
     pub reply_to: Option<String>,
     pub subject: String,
     pub body: String,
+    /// Initial alerts wait for this shared consecutive-check gate.
+    #[serde(default)]
+    pub health_check: Option<NotificationCheck>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationCheck {
+    pub failure_threshold: u32,
+    pub consecutive_failures: u32,
+    pub last_checked_at: Option<i64>,
+    pub condition: String,
+    pub eligible_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -540,6 +552,22 @@ impl Client {
 
     pub fn notification(&self, id: &str) -> Result<NotificationView, Error> {
         self.invoke(&["notification".as_ref(), "show".as_ref(), id.as_ref()])
+    }
+
+    pub fn check_notifications(&self) -> Result<serde_json::Value, Error> {
+        self.invoke(&["notification".as_ref(), "check".as_ref()])
+    }
+
+    pub fn notification_check_root(
+        &self,
+        root: &std::path::Path,
+    ) -> Result<serde_json::Value, Error> {
+        self.invoke(&[
+            "notification".as_ref(),
+            "policy".as_ref(),
+            "--cell-root".as_ref(),
+            root.as_os_str(),
+        ])
     }
 
     pub fn claim_notification(&self, id: &str, delivery: &str) -> Result<NotificationView, Error> {

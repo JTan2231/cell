@@ -50,14 +50,23 @@ The invocation accepts only these settings:
 - exact harness and model
 - optional reasoning effort (`low`, `medium`, `high`, or `max`)
 - absolute working directory
-- workspace access (`none`, `read-only`, or `read-write`)
+- workspace access (`none`, `read-only`, `read-write`, or `unrestricted`)
 - explicit built-in tool policy (`localExecution` and `webSearch`)
 - positive wall-clock timeout
 - optional versioned toolset reference
 - optional ID of a short-lived launch context registered immediately before
   submission
 
-Every v1 invocation is ephemeral, unattended, enables Codex raw-response
+The job and HTTP envelopes remain version one. Invocation policy version one
+retains `none`, `read-only`, and `read-write`. Policy version two adds
+`unrestricted` and accepts the earlier modes unchanged. The typed constructor
+selects version two for `unrestricted`; version one rejects that mode. Requesters
+must require the `workspace-unrestricted` harness capability before submitting
+it. Deploy daemon support before an unrestricted requester. Retain a compatible
+daemon when retained jobs contain version-two policies; old binaries cannot
+decode the new mode.
+
+Every supported invocation is ephemeral, unattended, enables Codex raw-response
 telemetry, and uses `approvalPolicy=never`. There is one attempt and no
 automatic retry. There is no request field for a command, argv, Codex config,
 approval behavior, isolation mode, or output format.
@@ -104,12 +113,15 @@ invocation contract version.
 `workspaceAccess=none` gives Codex an empty temporary working directory under a
 read-only sandbox and explicitly sends `environments: []` on both thread and
 turn start. `read-only` uses the requested directory under a read-only sandbox.
-`read-write` uses it under Codex's workspace-write sandbox. Approvals remain
-disabled in all three cases. `localExecution=false` removes Codex's
+`read-write` uses it under Codex's workspace-write sandbox. `unrestricted` uses
+the requested directory with Codex's `danger-full-access` mode: filesystem,
+process, local socket, and network access are not restricted by the Codex
+sandbox. The current user's operating-system permissions still apply.
+Approvals remain disabled in all modes. `localExecution=false` removes Codex's
 command, inspection, and edit primitives; `webSearch=false` removes live search.
 Nucleus does not lock or compare working directories. A requester that submits
-concurrent `read-write` jobs must give them disjoint working directories or
-worktrees, or serialize them itself; the eight-slot scheduler does not resolve
+concurrent `read-write` or `unrestricted` jobs must give them disjoint working
+directories or worktrees, or serialize them itself; the eight-slot scheduler does not resolve
 filesystem or external-mutation conflicts.
 The Codex adapter rejects local execution with `workspaceAccess=none` because it
 cannot prove that combination's filesystem semantics. Todo's current
