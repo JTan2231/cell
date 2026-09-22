@@ -92,7 +92,7 @@ prefixes and contain discussion as well as user decisions. The prompt asks the
 agent to compose these sources into a story. Source availability, complete
 historical coverage, and the agent's reading selection are distinct.
 
-The installed author uses `gpt-5.6-sol` with medium reasoning. Nucleus workspace,
+The installed author uses `gpt-6-astra` with high reasoning. Nucleus workspace,
 local execution, and web access are disabled. Its tools are `read_decisions` and
 `submit_document`. Retrieved text cannot change those permissions. Only the
 submit tool writes a document, and Weaver checks nonblank UTF-8 text and size.
