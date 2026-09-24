@@ -92,3 +92,9 @@ Upgrade all requester clients before enabling the gate. Use coordinated
 maintenance for cutover. Clients tolerate a daemon without optional quota health
 fields; EMT also tolerates the old quota endpoint's 404. This procedure does not
 authorize rollout, a quota reset, or clearance of existing service halts.
+
+Deployment readiness accepts a healthy runtime under a reported quota pause.
+It still requires the exact harness, authentication, supported protocol, and
+execution state. A deployment hold must belong solely to that run and be
+drained. Successful installation does not clear quota admission; ordinary
+`nucleus health` remains strict about accepting jobs.

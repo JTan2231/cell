@@ -193,6 +193,25 @@ fn json_call(home: &Path, owner: Option<&str>, args: &[&str]) -> Result<Value> {
     )
 }
 
+fn unheld_health(home: &Path) -> Result<Value> {
+    let status = json_call(home, None, &["--compact", "service", "status"])?;
+    health_from_service_status(&status)
+}
+
+fn health_from_service_status(status: &Value) -> Result<Value> {
+    if status["loaded"] != true || !status["healthError"].is_null() {
+        return Err(Error::new("Nucleus service health is unavailable"));
+    }
+    let value = status
+        .get("health")
+        .ok_or_else(|| Error::new("Nucleus service did not report health"))?;
+    let health: nucleus_core::HealthResponseV1 = serde_json::from_value(value.clone())?;
+    if !nucleus_client::unheld_deployment_ready(&health) {
+        return Err(Error::new("Nucleus runtime is not ready for deployment"));
+    }
+    Ok(value.clone())
+}
+
 fn maintenance(home: &Path, owner: &str, operation: &str, named: bool) -> Result<Value> {
     let mut args = vec!["--compact", "maintenance", operation];
     if named {
@@ -559,7 +578,7 @@ fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
             &["--compact", "maintenance", "health", &ctx.request.run_id],
         )?
     } else {
-        json_call(&ctx.home, None, &["--compact", "health"])?
+        unheld_health(&ctx.home)?
     };
     if harness(&health)? != Path::new(expected) {
         return Err(Error::new("Nucleus harness changed since inspection"));
@@ -679,7 +698,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             if status["holds"] != json!([]) {
                 return Err(Error::new("another operation holds Nucleus"));
             }
-            let health = json_call(&ctx.home, None, &["--compact", "health"])?;
+            let health = unheld_health(&ctx.home)?;
             let configured_harness = harness(&health)?;
             let selected_harness = if ctx.selected() {
                 candidate_harness(&ctx.home, &health)?
@@ -832,7 +851,7 @@ fn run(command: Command) -> Result<Value> {
                     .ok_or_else(|| Error::new("Nucleus is absent"))?,
                 &plan(&args, &home)?,
             )?;
-            let health = json_call(&home, None, &["--compact", "health"])?;
+            let health = unheld_health(&home)?;
             if harness(&health)? != args.codex {
                 return Err(Error::new("configured Nucleus harness differs"));
             }
@@ -1020,6 +1039,61 @@ fn recover_cutover(ctx: &Context) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn service_status_fixture(quota_state: &str) -> Value {
+        json!({
+            "loaded":true,
+            "health":{
+                "version":1,"status":"ok","daemonVersion":"0.5.8",
+                "acceptingJobs":false,"checkedAt":"2026-09-25T00:00:00Z",
+                "supportedProtocolVersions":[1],
+                "harness":{"harness":"codex","harnessVersion":"0.154.0-alpha.6.2","adapterVersion":"0.5.8"},
+                "harnessExecutable":"/runtime/codex",
+                "authentication":{"codexHome":"/private/codex-home","configured":true,"authenticated":true},
+                "execution":{"maxActiveJobs":8,"activeJobs":0,"availableSlots":8},
+                "quota":{"version":1,"policy":nucleus_core::QuotaPolicyV1::default(),
+                    "state":quota_state,"accountKey":"account","limitId":"codex","remainingPercent":6,
+                    "observedAt":100,"resetsAt":200,"conditionId":"condition","conditionStartedAt":100}
+            }
+        })
+    }
+
+    #[test]
+    fn raw_service_health_preserves_expected_quota_pauses() -> Result<()> {
+        for state in ["low", "exhausted", "unknown"] {
+            let status = service_status_fixture(state);
+            let health = health_from_service_status(&status)?;
+            assert_eq!(health, status["health"]);
+            assert_eq!(health["acceptingJobs"], false);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn raw_service_health_rejects_unavailable_or_unexplained_readiness() {
+        for (pointer, invalid) in [
+            ("/loaded", json!(false)),
+            ("/health", json!(null)),
+            ("/health/status", json!("degraded")),
+            ("/health/authentication/authenticated", json!(false)),
+            ("/health/harness", json!(null)),
+            ("/health/quota", json!(null)),
+            ("/health/quota/state", json!("open")),
+        ] {
+            let mut status = service_status_fixture("low");
+            let Some(field) = status.pointer_mut(pointer) else {
+                panic!("missing fixture field {pointer}");
+            };
+            *field = invalid;
+            assert!(
+                health_from_service_status(&status).is_err(),
+                "accepted {pointer}"
+            );
+        }
+        let mut status = service_status_fixture("low");
+        status["healthError"] = json!("health observation failed");
+        assert!(health_from_service_status(&status).is_err());
+    }
 
     fn stage_fixture(home: &Path) -> Result<PathBuf> {
         let source = home.join("source");

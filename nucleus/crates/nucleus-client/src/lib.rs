@@ -58,6 +58,53 @@ pub enum ClientError {
     },
 }
 
+/// Check runtime readiness before an installation hold or after its release.
+/// A documented quota pause does not prevent installation, but this result
+/// never authorizes model work or substitutes for maintenance ownership checks.
+#[must_use]
+pub fn unheld_deployment_ready(health: &HealthResponseV1) -> bool {
+    deployment_runtime_ready(health)
+        && health.status == "ok"
+        && (health.accepting_jobs
+            || health
+                .quota
+                .as_ref()
+                .is_some_and(|quota| quota.version == 1 && quota.is_blocked()))
+}
+
+fn deployment_runtime_ready(health: &HealthResponseV1) -> bool {
+    health.version == 1
+        && health.harness.is_some()
+        && health
+            .harness_executable
+            .as_ref()
+            .is_some_and(|path| path.as_path().is_absolute())
+        && health.authentication.configured
+        && health.authentication.authenticated
+        && health.detail.is_none()
+        && health.supported_protocol_versions.contains(&1)
+        && health.execution.is_some()
+}
+
+fn deployment_ready(
+    health: &HealthResponseV1,
+    status: &nucleus_core::MaintenanceStatusV1,
+    run_id: &str,
+) -> bool {
+    let admission_ready = if status.holds.is_empty() {
+        unheld_deployment_ready(health)
+    } else {
+        status.holds == [run_id]
+            && status.nonterminal_jobs == 0
+            && status.drained
+            && health
+                .execution
+                .as_ref()
+                .is_some_and(|capacity| capacity.active_jobs == 0)
+    };
+    status.protocol_version == 1 && admission_ready && deployment_runtime_ready(health)
+}
+
 /// A client whose connections are pinned to one Unix-domain socket.
 #[derive(Clone, Debug)]
 pub struct NucleusClient {
@@ -130,8 +177,8 @@ impl NucleusClient {
         self.get("/v1/quota").await
     }
 
-    /// Prove requester deployment readiness with open service admission, or
-    /// service replacement readiness under one exact owner's sole hold.
+    /// Prove requester deployment readiness with open admission or a quota pause,
+    /// or service replacement readiness under one exact owner's sole hold.
     /// The returned health remains unchanged: `accepting_jobs` is false while
     /// held. Callers must use this result only for installation readiness, never
     /// ordinary research admission. A held service must have drained all work.
@@ -145,27 +192,7 @@ impl NucleusClient {
     ) -> Result<HealthResponseV1, ClientError> {
         let health = self.health().await?;
         let status = self.maintenance_status().await?;
-        let admission_ready = if status.holds.is_empty() {
-            health.status == "ok" && health.accepting_jobs
-        } else {
-            status.holds == [run_id]
-                && status.nonterminal_jobs == 0
-                && status.drained
-                && health
-                    .execution
-                    .as_ref()
-                    .is_some_and(|capacity| capacity.active_jobs == 0)
-        };
-        if status.protocol_version != 1
-            || !admission_ready
-            || health.harness.is_none()
-            || health.harness_executable.is_none()
-            || !health.authentication.configured
-            || !health.authentication.authenticated
-            || health.detail.is_some()
-            || !health.supported_protocol_versions.contains(&1)
-            || health.execution.is_none()
-        {
+        if !deployment_ready(&health, &status, run_id) {
             return Err(ClientError::DeploymentNotReady);
         }
         Ok(health)
@@ -704,6 +731,123 @@ fn path_segment(value: &str) -> String {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn deployment_health_fixture() -> Result<HealthResponseV1, serde_json::Error> {
+        serde_json::from_value(serde_json::json!({
+            "version":1,"status":"ok","daemonVersion":"0.5.8",
+            "acceptingJobs":false,"checkedAt":"2026-09-25T00:00:00Z",
+            "supportedProtocolVersions":[1],
+            "harness":{"harness":"codex","harnessVersion":"0.154.0-alpha.6.2","adapterVersion":"0.5.8"},
+            "harnessExecutable":"/runtime/codex",
+            "authentication":{"codexHome":"/private/codex-home","configured":true,"authenticated":true},
+            "execution":{"maxActiveJobs":8,"activeJobs":0,"availableSlots":8},
+            "quota":{"version":1,"policy":nucleus_core::QuotaPolicyV1::default(),
+                "state":"low","accountKey":"account","limitId":"codex","remainingPercent":6,
+                "observedAt":100,"resetsAt":200,"conditionId":"condition","conditionStartedAt":100}
+        }))
+    }
+
+    #[test]
+    fn deployment_allows_documented_quota_pauses_without_allowing_work()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use nucleus_core::QuotaStateV1;
+        let mut health = deployment_health_fixture()?;
+        for state in [
+            QuotaStateV1::Low,
+            QuotaStateV1::Exhausted,
+            QuotaStateV1::Unknown,
+        ] {
+            health.quota.as_mut().ok_or("missing fixture quota")?.state = state;
+            assert!(unheld_deployment_ready(&health));
+            assert!(!health.accepting_jobs);
+            assert!(
+                health
+                    .quota
+                    .as_ref()
+                    .ok_or("missing fixture quota")?
+                    .check()
+                    .is_err()
+            );
+        }
+        for state in [
+            QuotaStateV1::Open,
+            QuotaStateV1::NotApplicable,
+            QuotaStateV1::Disabled,
+        ] {
+            health.quota.as_mut().ok_or("missing fixture quota")?.state = state;
+            assert!(!unheld_deployment_ready(&health));
+        }
+        health.quota = None;
+        assert!(!unheld_deployment_ready(&health));
+        health.accepting_jobs = true;
+        assert!(unheld_deployment_ready(&health));
+        Ok(())
+    }
+
+    #[test]
+    fn quota_pause_cannot_hide_runtime_readiness_failures() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use serde_json::json;
+        let original = serde_json::to_value(deployment_health_fixture()?)?;
+        for (pointer, invalid) in [
+            ("/version", json!(2)),
+            ("/status", json!("degraded")),
+            ("/supportedProtocolVersions", json!([2])),
+            ("/harness", json!(null)),
+            ("/harnessExecutable", json!(null)),
+            ("/harnessExecutable", json!("relative/codex")),
+            ("/authentication/configured", json!(false)),
+            ("/authentication/authenticated", json!(false)),
+            ("/execution", json!(null)),
+            ("/quota/version", json!(2)),
+        ] {
+            let mut value = original.clone();
+            *value.pointer_mut(pointer).ok_or("missing fixture field")? = invalid;
+            let health: HealthResponseV1 = serde_json::from_value(value)?;
+            assert!(!unheld_deployment_ready(&health), "accepted {pointer}");
+        }
+        let mut health = deployment_health_fixture()?;
+        health.detail = Some("runtime failure".into());
+        assert!(!unheld_deployment_ready(&health));
+        Ok(())
+    }
+
+    #[test]
+    fn quota_pause_does_not_bypass_hold_ownership_or_drain()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let mut health = deployment_health_fixture()?;
+        let mut status = nucleus_core::MaintenanceStatusV1 {
+            protocol_version: 1,
+            holds: vec!["owner".into()],
+            drained: true,
+            nonterminal_jobs: 0,
+        };
+        health.status = "degraded".into();
+        for state in [
+            nucleus_core::QuotaStateV1::Low,
+            nucleus_core::QuotaStateV1::Unknown,
+        ] {
+            health.quota.as_mut().ok_or("missing fixture quota")?.state = state;
+            assert!(deployment_ready(&health, &status, "owner"));
+            assert!(!deployment_ready(&health, &status, "other"));
+        }
+        status.holds.push("other".into());
+        assert!(!deployment_ready(&health, &status, "owner"));
+        status.holds.pop();
+        status.drained = false;
+        assert!(!deployment_ready(&health, &status, "owner"));
+        status.drained = true;
+        status.nonterminal_jobs = 1;
+        assert!(!deployment_ready(&health, &status, "owner"));
+        status.nonterminal_jobs = 0;
+        health
+            .execution
+            .as_mut()
+            .ok_or("missing fixture capacity")?
+            .active_jobs = 1;
+        assert!(!deployment_ready(&health, &status, "owner"));
+        Ok(())
+    }
 
     #[test]
     fn quota_deferral_remains_classifiable_through_client_error()

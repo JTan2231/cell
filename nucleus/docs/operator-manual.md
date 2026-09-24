@@ -239,9 +239,11 @@ compatible, authenticated, and accepting jobs. Its execution fields report
 
 `authentication_busy` identifies credential-operation contention. An active
 job alone does not make an account read busy or prove a bad credential.
-The deployment health client accepts a healthy service with open admission for
-a requester-only update. When a hold exists, it requires that exact owner's sole
-hold and complete drain. Ordinary health remains strict.
+The deployment health client accepts a healthy service with open admission or
+a reported quota pause. The installer reads `service status` for this runtime
+proof. When a hold exists, the client requires that exact owner's sole hold
+and complete drain. These checks preserve quota admission; ordinary health
+remains strict.
 
 Do not maintain a dated installed-version table here. A source checkout or
 catalog entry does not establish the currently running release.
@@ -576,7 +578,8 @@ shared facts or procedures change.
    them through the CI manager. Verify its validation and deployment outcome.
 3. Publish only when authorized. Release requires clean `main` synchronized
    with `origin/main` and creates the commit and tag.
-4. Verify strict health and requester readiness after the manager deployment.
+4. Verify runtime health and report requester admission after the manager
+   deployment. A quota pause can remain after successful installation.
    For a separate manual installation or recovery, quiesce affected work and
    deploy matching CLI and daemon candidates before restoring admission.
 
