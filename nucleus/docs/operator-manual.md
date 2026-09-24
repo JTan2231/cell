@@ -603,9 +603,10 @@ compatibility test must observe a command's actual result through the adapter
 and exact Codex runtime. A completed turn or version check is insufficient.
 The Nucleus CI gate runs this test against the staged runtime, using a local
 mock model endpoint and temporary state. It uses no account credentials and
-creates no production jobs or emails. The CI gate always selects the staged
-runtime. For a direct development test, `NUCLEUS_TEST_CODEX` can select an
-explicit complete source runtime.
+creates no production jobs or emails. The test defaults to the staged runtime
+and fails if it is absent. For a direct development test, `NUCLEUS_TEST_CODEX`
+can select an explicit complete source runtime. Managed CI does not pass this
+override to the test, so validation uses the staged deployment candidate.
 
 Installation and live readiness check the runtime files and recorded identities
 without model calls. Every selected deployment requires the tested staged

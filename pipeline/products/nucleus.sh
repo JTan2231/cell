@@ -19,10 +19,6 @@ nucleus-store'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-# The real tool-path regression uses only an isolated local mock model endpoint.
-# Stage the exact runtime before submitting a harness upgrade.
-NUCLEUS_TEST_CODEX="$HOME/Library/Application Support/Nucleus/harnesses/codex/0.154.0-alpha.6.2/runtime/codex"
-export NUCLEUS_TEST_CODEX
 CI_SHELL_CHECKS='sh|nucleus/release.sh'
 CI_RUN_CHECKS=
 CI_PROVIDER_VALIDATION_PHASE=before-rust

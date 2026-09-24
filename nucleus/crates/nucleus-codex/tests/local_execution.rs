@@ -20,12 +20,7 @@ const MARKER: &str = "nucleus-real-local-tool-result";
 
 #[tokio::test]
 async fn exact_codex_executes_a_real_local_tool() -> TestResult {
-    let Some(executable) = std::env::var_os("NUCLEUS_TEST_CODEX").map(PathBuf::from) else {
-        eprintln!(
-            "NUCLEUS_TEST_CODEX is unset; the Nucleus CI gate must run this proof with its candidate bundle"
-        );
-        return Ok(());
-    };
+    let executable = test_codex_path()?;
     let directory = tempfile::tempdir()?;
     let bundle = if executable
         .parent()
@@ -121,6 +116,20 @@ async fn exact_codex_executes_a_real_local_tool() -> TestResult {
         "the actual tool result did not reach the next model request"
     );
     Ok(())
+}
+
+fn test_codex_path() -> TestResult<PathBuf> {
+    std::env::var_os("NUCLEUS_TEST_CODEX")
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var_os("HOME").map(|home| {
+                PathBuf::from(home)
+                    .join("Library/Application Support/Nucleus/harnesses/codex")
+                    .join(nucleus_codex::SUPPORTED_CODEX_VERSION)
+                    .join("runtime/codex")
+            })
+        })
+        .ok_or_else(|| "HOME or NUCLEUS_TEST_CODEX is required for the real runtime test".into())
 }
 
 fn write_fake_credentials(directory: &Path) -> TestResult {
