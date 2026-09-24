@@ -467,6 +467,12 @@ installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard
 locally; the public health proof requires all guards drained.
 
+Without a hold, deployment readiness also accepts a healthy runtime whose
+admission is paused by reported low, exhausted, or unknown quota. Harness,
+authentication, protocol, and execution checks still apply. An unexplained
+admission pause fails. The installer reads raw health through `service status`
+for this proof. Quota policy and ordinary requester admission remain unchanged.
+
 The HTTP surfaces are GET `/v1/maintenance` and POST
 `/v1/maintenance/{hold,release}`. Each POST accepts exactly
 `{"run_id":"OWNER"}` and returns maintenance status. The typed client owns

@@ -93,8 +93,9 @@ binary or database rollback must not replace a newer credential.
 When deployment is separately authorized, quiesce requesters if replacing the
 daemon could lose active work. Preserve the recovery material required by the
 selected playbook. After cutover, prove matching CLI and daemon versions,
-strict health and its `maxActiveJobs`, `activeJobs`, and `availableSlots`
-capacity, and the exact harness and account before resuming dispatch.
+runtime health and its `maxActiveJobs`, `activeJobs`, and `availableSlots`
+capacity, and the exact harness and account. Report requester admission
+separately: a quota pause can remain after successful installation.
 Deployment readiness checks do not submit model jobs or create synthetic
 requester records.
 

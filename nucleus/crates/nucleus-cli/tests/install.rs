@@ -36,6 +36,10 @@ set -eu
 case "${{1:-}}" in
  --version) echo 'nucleus {}'; exit 0 ;;
  --help) echo 'fake Nucleus'; exit 0 ;;
+ --compact)
+  [ "$2" = service ] && [ "$3" = status ]
+  cat "$HOME/service-status.json"
+  exit 0 ;;
 esac
 [ "$1" = service ] && [ "$2" = install ] && [ "$3" = --daemon ]
 [ ! -f "$HOME/fail-before" ]
@@ -85,8 +89,12 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
     }
 
     fn install(&self) -> Result<Output> {
+        self.run("install")
+    }
+
+    fn run(&self, operation: &str) -> Result<Output> {
         Ok(Command::new(env!("CARGO_BIN_EXE_nucleus-install"))
-            .args(["install", "--binary"])
+            .args([operation, "--binary"])
             .arg(&self.binary)
             .arg("--daemon")
             .arg(&self.daemon)
@@ -112,6 +120,60 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
         fs::write(&self.binary, bytes)?;
         Ok(())
     }
+}
+
+#[test]
+fn verify_accepts_a_quota_pause_but_rejects_unexplained_closed_admission() -> Result {
+    let fixture = Fixture::new()?;
+    assert!(fixture.install()?.status.success());
+    let mut status = serde_json::json!({
+        "loaded": true,
+        "health": {
+            "version": 1,
+            "status": "ok",
+            "daemonVersion": env!("CARGO_PKG_VERSION"),
+            "acceptingJobs": false,
+            "checkedAt": "2026-09-24T09:00:00Z",
+            "supportedProtocolVersions": [1],
+            "harness": {
+                "harness": "codex",
+                "harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION,
+                "adapterVersion": env!("CARGO_PKG_VERSION")
+            },
+            "harnessExecutable": fixture.codex,
+            "authentication": {
+                "codexHome": fixture.home.join("codex-home"),
+                "configured": true,
+                "authenticated": true
+            },
+            "execution": {"maxActiveJobs": 8, "activeJobs": 0, "availableSlots": 8},
+            "quota": {
+                "version": 1,
+                "policy": {"enabled": true, "pauseAtRemainingPercent": 10, "resumeAboveRemainingPercent": 15},
+                "state": "low",
+                "accountKey": "test-account",
+                "limitId": "codex",
+                "remainingPercent": 6,
+                "observedAt": 1,
+                "resetsAt": 2,
+                "conditionId": "test-condition",
+                "conditionStartedAt": 1
+            }
+        }
+    });
+    let observation = fixture.home.join("service-status.json");
+    fs::write(&observation, serde_json::to_vec(&status)?)?;
+    let result = fixture.run("verify")?;
+    assert!(
+        result.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    status["health"]["quota"] = serde_json::Value::Null;
+    fs::write(observation, serde_json::to_vec(&status)?)?;
+    assert!(!fixture.run("verify")?.status.success());
+    Ok(())
 }
 
 #[test]

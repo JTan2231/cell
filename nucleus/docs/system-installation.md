@@ -62,7 +62,11 @@ nucleus account --wait 0
 Registration adds the command inventory to Chancery without product work.
 Verify the expected CLI, daemon, harness, and account before restoring requester
 admission. `health` exits nonzero unless the service is compatible, authenticated,
-and accepting jobs. The deployment owner's held-health interface is separate.
+and accepting jobs. Deployment checks runtime health separately: a reported
+quota pause can remain after successful installation. The installer reads raw
+health through `service status` and verifies the harness, authentication,
+protocol, and execution state. A held service also requires the deployment
+owner's sole drained hold. Installation does not reopen quota admission.
 
 ## Foreground development instance
 
