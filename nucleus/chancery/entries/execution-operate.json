@@ -251,7 +251,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently. The adapter requires Codex 0.154.0-alpha.6.2. A selected Nucleus upgrade retains a compatible configured harness; otherwise it requires that exact executable staged at ~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex, checks its version before maintenance, and retains the prior harness path for recovery."
+        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently. The adapter requires Codex 0.154.0-alpha.6.2 with a complete runtime sealed by nucleus-install stage-harness. The runtime contains codex, its matching codex-code-mode-host, and nucleus-runtime.json with their SHA-256 identities. Installation, health and admission reject missing, nonexecutable or changed files. Every selected upgrade requires the staged runtime tested by the Nucleus CI gate at ~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/codex. It retains a configured runtime only when both file identities match that pair; otherwise it selects the staged path. Deployment captures and rechecks file identities and retains the prior harness path for recovery. Staging does not change service selection or credentials."
       },
       {
         "status": "declared",

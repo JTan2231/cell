@@ -132,7 +132,7 @@ impl DaemonFixture {
         let temporary = tempfile::tempdir().or_panic("create test directory");
         let root = temporary.path();
         let socket = root.join("nucleus.sock");
-        let fake_codex = root.join("fake-codex");
+        let fake_codex = root.join("runtime/codex");
         let home = root.join("home");
         let codex_home = home.join(".codex");
         fs::create_dir_all(&codex_home).or_panic("create fake Codex home");
@@ -222,7 +222,7 @@ impl DaemonFixture {
     }
 
     fn active_harness_count(&self) -> usize {
-        fs::read_dir(self.temporary.path().join("fake-codex.active"))
+        fs::read_dir(self.temporary.path().join("codex.active"))
             .map(|entries| entries.filter_map(Result::ok).count())
             .unwrap_or_default()
     }
@@ -245,7 +245,7 @@ fn spawn_test_daemon(root: &Path) -> Child {
         .arg("--database")
         .arg(root.join("nucleus.db"))
         .arg("--codex")
-        .arg(root.join("fake-codex"))
+        .arg(root.join("runtime/codex"))
         .arg("--codex-home")
         .arg(root.join("home/.codex"))
         .env("HOME", root.join("home"))
@@ -368,7 +368,7 @@ async fn both_authentication_sequences_expose_private_durable_output_without_rer
             .or_panic("submit failing output fixture");
         let failed = wait_for_state(&fixture, &failed_request.id, JobState::Failed).await;
         assert!(failed.attempts[0].output.is_none());
-        let attempts_path = fixture.temporary.path().join("fake-codex.attempts");
+        let attempts_path = fixture.temporary.path().join("codex.attempts");
         let attempts = fs::read(&attempts_path).or_panic("read actual executions");
         assert_eq!(attempts, b"attempt\nattempt\n");
 
@@ -1261,6 +1261,68 @@ async fn daemon_runs_eight_jobs_and_dispatches_queued_work() {
 }
 
 #[tokio::test]
+async fn health_and_admission_reject_a_runtime_that_loses_its_execution_helper() {
+    let fixture = DaemonFixture::start().await;
+    let healthy = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read complete runtime health");
+    assert_eq!(healthy.status, "ok");
+    assert!(healthy.accepting_jobs);
+    fs::remove_file(
+        fixture
+            .temporary
+            .path()
+            .join("runtime/codex-code-mode-host"),
+    )
+    .or_panic("remove execution helper after readiness");
+
+    let health = fixture
+        .client
+        .health()
+        .await
+        .or_panic("read incomplete runtime health");
+    assert_eq!(health.status, "degraded");
+    assert!(!health.accepting_jobs);
+    assert!(health.harness.is_none());
+    assert!(
+        health
+            .detail
+            .or_panic("runtime failure detail")
+            .contains("codex-code-mode-host")
+    );
+    let request = fixture.request(
+        "missing-execution-helper",
+        Requester {
+            program: "contract".into(),
+            id: "missing-execution-helper".into(),
+        },
+        "COMPLETE",
+    );
+    match fixture.client.submit_job(&request).await {
+        Err(ClientError::Api {
+            status,
+            code,
+            message,
+            ..
+        }) => {
+            assert_eq!(status, 503);
+            assert_eq!(code, "harness_unavailable");
+            assert!(message.contains("codex-code-mode-host"));
+        }
+        result => panic!("incomplete runtime admitted a job: {result:?}"),
+    }
+    let jobs = fixture
+        .client
+        .list_jobs(&ListJobsQueryV1::default())
+        .await
+        .or_panic("list jobs after incomplete-runtime rejection");
+    assert!(jobs.jobs.is_empty(), "rejected request reached job storage");
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn admission_rejects_unbound_versions_and_incompatible_protocol_schemas() {
     for (version, protocol_schema, expected_detail) in [
         (
@@ -1392,9 +1454,15 @@ async fn wait_for_state(
 fn write_fake_codex(path: &Path, version: &str, protocol_schema: &str) {
     const SCRIPT: &str = r#"#!/bin/sh
 set -eu
+SCRIPT_ROOT=${0%/*}
+SCRIPT_ROOT=${SCRIPT_ROOT%/*}
 
 if [ "${1:-}" = "--version" ]; then
-  printf '%s\n' 'codex-cli __CODEX_VERSION__'
+  version=__CODEX_VERSION__
+  if [ -f "$SCRIPT_ROOT/codex-version" ]; then
+    IFS= read -r version < "$SCRIPT_ROOT/codex-version"
+  fi
+  printf '%s\n' "codex-cli $version"
   exit 0
 fi
 
@@ -1453,7 +1521,7 @@ IFS= read -r thread_start
 printf '%s\n' '{"jsonrpc":"2.0","id":'"$thread_id"',"result":{"thread":{"id":"thread-fake"}}}'
 IFS= read -r turn_start
 printf '%s\n' '{"jsonrpc":"2.0","id":'"$turn_id"',"result":{"turn":{"id":"turn-fake"}}}'
-printf '%s\n' 'attempt' >> "${0}.attempts"
+printf '%s\n' 'attempt' >> "$SCRIPT_ROOT/codex.attempts"
 
 case "$turn_start" in
   *CHECK_LAUNCH_CONTEXT*)
@@ -1464,8 +1532,8 @@ case "$turn_start" in
     test "${CODEX_HOME:-}" != /attacker/home
     ;;
   *WAIT_FOR_CANCEL*)
-    active_marker="${0}.active/$$"
-    mkdir -p "${0}.active"
+    active_marker="$SCRIPT_ROOT/codex.active/$$"
+    mkdir -p "$SCRIPT_ROOT/codex.active"
     : > "$active_marker"
     trap 'rm -f "$active_marker"' EXIT
     trap 'exit 0' TERM INT
@@ -1491,9 +1559,34 @@ esac
 printf '%s\n' '{"jsonrpc":"2.0","method":"turn/completed","params":{"threadId":"thread-fake","turn":{"id":"turn-fake","status":"completed"}}}'
 "#;
     let script = SCRIPT
-        .replace("__CODEX_VERSION__", version)
+        .replace("__CODEX_VERSION__", SUPPORTED_CODEX_VERSION)
         .replace("__PROTOCOL_SCHEMA__", protocol_schema);
-    fs::write(path, script).or_panic("write fake Codex executable");
-    fs::set_permissions(path, fs::Permissions::from_mode(0o755))
-        .or_panic("make fake Codex executable");
+    let source = tempfile::tempdir().or_panic("create fake runtime source");
+    let source_runtime = source.path().join("runtime");
+    fs::create_dir(&source_runtime).or_panic("create fake source runtime directory");
+    let executable = source_runtime.join("codex");
+    let helper = source_runtime.join("codex-code-mode-host");
+    fs::write(&executable, script).or_panic("write fake Codex executable");
+    fs::write(&helper, "#!/bin/sh\nexit 0\n").or_panic("write fake execution helper");
+    for program in [&executable, &helper] {
+        fs::set_permissions(program, fs::Permissions::from_mode(0o755))
+            .or_panic("make fake runtime executable");
+    }
+    let destination = path.parent().or_panic("fake runtime directory");
+    nucleus_codex::runtime_bundle::stage_runtime(&executable, destination)
+        .or_panic("stage sealed fake runtime");
+    fs::set_permissions(destination, fs::Permissions::from_mode(0o700))
+        .or_panic("allow fake runtime cleanup");
+    if version != SUPPORTED_CODEX_VERSION {
+        // The sealed fixture can report an incompatible live version without
+        // bypassing or damaging bundle verification.
+        fs::write(
+            destination
+                .parent()
+                .or_panic("fixture directory")
+                .join("codex-version"),
+            format!("{version}\n"),
+        )
+        .or_panic("override live fake Codex version");
+    }
 }

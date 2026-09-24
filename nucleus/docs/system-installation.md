@@ -34,7 +34,8 @@ Use the CLI, daemon, and installer from the same sealed candidate:
   --codex /absolute/path/to/codex
 ```
 
-The exact Codex executable must be supported by the candidate adapter. For an
+The Codex path must select a complete staged runtime with its verified manifest.
+Stage it as described below before installation. For an
 initial credential import, add `--codex-home /absolute/signed-in-codex-home`.
 The source home is an import. Nucleus copies its credential into the private
 owned home and uses a file credential store there.
@@ -183,12 +184,31 @@ exact supported Codex version. `codex_home` identifies an existing authenticated
 home; settings never contain credential bytes. If Nucleus already owns valid
 authentication, installation preserves it. Existing deployments retain a
 compatible configured harness and do not import another credential home.
-For an exact Codex upgrade, stage the supported executable at
-`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex` before
-CI submission. The selected installer checks this file's exact version before
-maintenance when the configured version differs. It retains both harness paths
-so recovery can verify the prior service or finish the candidate cutover.
-Keep both executables available until the deployment completes.
+Before CI submission, stage the complete supported Codex runtime with the
+candidate installer:
+
+```sh
+<TESTED_NUCLEUS_INSTALL> stage-harness --codex /absolute/release/codex
+```
+
+The source directory must contain `codex` and its matching
+`codex-code-mode-host` from the same release. Staging checks the exact Codex
+version and executable files, copies both files, and records their SHA-256
+identities in `nucleus-runtime.json`. It publishes the complete directory at
+`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
+An identical staged runtime is reused. A different existing directory is refused.
+Staging does not select a service runtime, import credentials, or run model work.
+The source release is operator-selected; the manifest detects changes to the
+selected files and does not independently authenticate their origin.
+
+Installation, health, and admission verify the manifest and required files.
+Every selected upgrade requires the staged runtime used by the Nucleus CI gate.
+It keeps a configured runtime only when both file identities match that staged
+pair; otherwise it selects the staged runtime. An old single-file installation at the
+same version also requires this replacement. Deployment captures both file
+identities and checks them again before cutover and after installation. Keep
+the previous runtime available for supported recovery. Preserve credentials,
+retained jobs, and existing failure halts.
 
 The installer persists the run's local admission hold before a fresh daemon
 exists. It starts the service under that hold so dependent products can finish

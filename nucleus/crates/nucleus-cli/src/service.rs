@@ -21,6 +21,8 @@ pub enum ServiceError {
     DaemonNotFound,
     #[error("unable to locate Codex; pass --codex or set NUCLEUS_CODEX")]
     CodexNotFound,
+    #[error("Codex runtime is incomplete or changed: {0}")]
+    InvalidCodexRuntime(String),
     #[error("Codex home must be an existing absolute directory: {0}")]
     InvalidCodexHome(PathBuf),
     #[error("a loaded {SERVICE_LABEL} service has no managed plist at {0}")]
@@ -269,6 +271,8 @@ pub fn install(
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
     let codex = find_codex(codex_source)?;
+    nucleus_codex::runtime_bundle::verify_runtime(&codex)
+        .map_err(|error| ServiceError::InvalidCodexRuntime(error.to_string()))?;
     let source_codex_home = find_codex_home(codex_home_source)?;
     let target = service_target()?;
     let was_loaded = launchctl([OsStr::new("print"), OsStr::new(&target)])?

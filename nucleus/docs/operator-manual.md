@@ -590,13 +590,31 @@ and every consumed method and isolation rule. Update the adapter and its
 compatibility checks before deployment. After cutover, health must identify the
 exact executable, supported version, and required capabilities.
 
-The adapter requires Codex `0.154.0-alpha.6.2`. Before submitting an upgrade,
-stage that exact executable at
-`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/codex`.
-The selected Nucleus installer uses this file when the configured harness has
-a different version. It checks the staged version before maintenance and
-retains the prior harness path for recovery. Keep both executables available
-until deployment completes. A compatible configured harness stays selected.
+The adapter requires Codex `0.154.0-alpha.6.2`. Stage its complete runtime with
+`<TESTED_NUCLEUS_INSTALL> stage-harness --codex /absolute/release/codex` before
+CI submission. The source must include the matching `codex-code-mode-host`.
+The installer records both file identities and publishes the complete runtime
+under `~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
+It refuses to overwrite a different staged runtime. See
+[Nucleus installation](system-installation.md) for source and recovery rules.
+
+Prove local tool execution during isolated predeployment validation. The
+compatibility test must observe a command's actual result through the adapter
+and exact Codex runtime. A completed turn or version check is insufficient.
+The Nucleus CI gate runs this test against the staged runtime, using a local
+mock model endpoint and temporary state. It uses no account credentials and
+creates no production jobs or emails. The CI gate always selects the staged
+runtime. For a direct development test, `NUCLEUS_TEST_CODEX` can select an
+explicit complete source runtime.
+
+Installation and live readiness check the runtime files and recorded identities
+without model calls. Every selected deployment requires the tested staged
+runtime. A configured runtime remains selected only when both file identities
+match that pair. A different or incomplete installation uses the staged replacement.
+The coordinator captures the candidate identities before maintenance and
+verifies them before cutover and after installation. Retain the previous runtime
+for supported recovery. A runtime upgrade does not clear requester failure
+halts or authorize retries.
 
 ### Public protocol or client change
 

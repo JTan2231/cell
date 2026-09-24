@@ -58,7 +58,18 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
         let codex = root.path().join("codex");
         executable(
             &codex,
-            "#!/bin/sh\n[ \"$1\" = --version ]; echo 'codex fixture'\n",
+            "#!/bin/sh\n[ \"$1\" = --version ]; echo 'codex-cli 0.154.0-alpha.6.2'\n",
+        )?;
+        executable(
+            &root.path().join("codex-code-mode-host"),
+            "#!/bin/sh\nexit 0\n",
+        )?;
+        let codex =
+            nucleus_codex::runtime_bundle::stage_runtime(&codex, &root.path().join("runtime"))?
+                .executable;
+        fs::set_permissions(
+            root.path().join("runtime"),
+            fs::Permissions::from_mode(0o700),
         )?;
         let provider = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../chancery")

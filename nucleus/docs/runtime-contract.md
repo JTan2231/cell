@@ -94,7 +94,8 @@ context. Todo's current stages deliberately do not register a launch context.
 ## Harness adapters
 
 An adapter translates the stable domain to one harness. Before accepting a job,
-the Codex adapter inspects the exact executable, reads its version and bundled
+the Codex adapter verifies the complete runtime manifest and required executable
+files, then inspects the exact executable, reads its version and bundled
 model catalog, and generates its app-server protocol schema. It then checks each
 requested semantic. For example, it rejects a model missing from that installed
 catalog, an unsupported reasoning effort, a missing working directory, or a
