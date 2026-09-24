@@ -4,6 +4,8 @@
 //! Codex command-line arguments. The adapter owns the translation to a concrete,
 //! inspected Codex installation.
 
+pub mod runtime_bundle;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
@@ -920,14 +922,15 @@ impl CodexHarness {
         })
     }
 
-    /// Inspect the exact binary used to execute jobs. Validation never assumes
+    /// Inspect the complete runtime used to execute jobs. Validation never assumes
     /// that a model or effort supported by another Codex version is available.
     ///
     /// # Errors
     ///
-    /// Returns an inspection error when the executable cannot be run or its
-    /// version/model-catalog output is unsuccessful or malformed.
+    /// Returns an inspection error when the runtime is incomplete, unsealed, or
+    /// changed, or its executable/version/model-catalog output is invalid.
     pub async fn inspect(&self) -> Result<HarnessInspection, CodexError> {
+        runtime_bundle::verify_runtime(&self.executable)?;
         let version = self.read_version().await?;
 
         let catalog_output = self
@@ -3696,6 +3699,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn inspection_rejects_a_runtime_that_loses_its_execution_helper()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let executable = directory.path().join("runtime/codex");
+        write_managed_fake_codex(&executable)?;
+        let harness = CodexHarness::new(&executable);
+        let inspection = harness.inspect().await?;
+        assert!(inspection.models[0].supports_local_execution);
+
+        fs::remove_file(executable.with_file_name("codex-code-mode-host"))?;
+        let Err(error) = harness.inspect().await else {
+            panic!("missing execution helper must prevent capability inspection");
+        };
+        assert!(error.to_string().contains("codex-code-mode-host"));
+        Ok(())
+    }
+
+    #[tokio::test]
     #[ignore = "requires NUCLEUS_TEST_CODEX pointing to the exact supported executable"]
     async fn exact_codex_supports_astra_and_required_protocol()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -4001,7 +4022,7 @@ mod tests {
     async fn sensitive_authentication_rejection_is_not_emitted_or_echoed()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("reject-sensitive-login"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4223,7 +4244,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn job_sessions_overlap_and_exclude_attended_login_across_harnesses()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         let codex_home = directory.path().join("codex-home");
         write_test_codex_home(
@@ -4259,7 +4280,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn account_snapshot_promotes_a_safe_proactive_refresh_from_staging()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("proactive-account-refresh"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4297,7 +4318,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn account_request_cancellation_cannot_strand_a_rotated_generation()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("slow-account-refresh"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4353,7 +4374,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn account_request_timeout_still_promotes_a_complete_rotated_generation()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("timeout-account-refresh"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4407,7 +4428,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn attended_login_promotes_only_from_its_private_staging_home()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("login-refresh"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4435,7 +4456,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn attended_login_cancellation_cannot_damage_canonical_authentication()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("slow-login"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4472,7 +4493,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn closed_auth_operation_gate_rejects_new_account_and_refresh_children()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         let codex_home = directory.path().join("codex-home");
         write_test_codex_home(
@@ -4568,7 +4589,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn eight_simultaneous_rejections_force_one_canonical_refresh()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         let codex_home = directory.path().join("codex-home");
         write_test_codex_home(
@@ -4615,7 +4636,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn unrestricted_local_execution_uses_full_access_without_approvals()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         let codex_home = directory.path().join("codex-home");
         write_test_codex_home(
@@ -4658,7 +4679,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn managed_worker_refresh_is_end_to_end_and_secrets_never_become_events()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         let codex_home = directory.path().join("codex-home");
         write_test_codex_home(
@@ -4736,7 +4757,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn worker_cancellation_cannot_interrupt_canonical_refresh()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("managed-fake-codex");
+        let executable = directory.path().join("runtime/codex");
         write_managed_fake_codex(&executable)?;
         fs::write(directory.path().join("slow-refresh"), b"")?;
         let codex_home = directory.path().join("codex-home");
@@ -4808,7 +4829,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     async fn fake_app_server_preserves_protocol_and_cleans_descendants()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("fake-codex");
+        let executable = directory.path().join("runtime/codex");
         let descendant_pid = directory.path().join("descendant.pid");
         write_fake_codex(&executable, &descendant_pid)?;
         let codex_home = directory.path().join("codex-home");
@@ -4954,11 +4975,14 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     }
 
     fn write_managed_fake_codex(path: &Path) -> std::io::Result<()> {
+        let source = tempfile::tempdir()?;
+        let executable = source.path().join("codex");
         fs::write(
-            path,
+            &executable,
             r#"#!/bin/sh
 set -eu
 SCRIPT_DIR=${0%/*}
+SCRIPT_DIR=${SCRIPT_DIR%/*}
 if [ "${1:-}" = "--version" ]; then
   printf '%s\n' 'codex-cli 0.154.0-alpha.6.2'
   exit 0
@@ -5070,9 +5094,7 @@ printf '%s\n' '{"method":"item/completed","params":{"threadId":"thread-managed",
 printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-managed","turn":{"id":"turn-managed","status":"completed","items":[]}}}'
 "#,
         )?;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o700);
-        fs::set_permissions(path, permissions)
+        stage_fake_runtime(&executable, path)
     }
 
     fn write_fake_codex(path: &Path, descendant_pid: &Path) -> std::io::Result<()> {
@@ -5123,10 +5145,23 @@ esac
 "#,
             pidfile = descendant_pid.display(),
         );
-        fs::write(path, script)?;
-        let mut permissions = fs::metadata(path)?.permissions();
-        permissions.set_mode(0o700);
-        fs::set_permissions(path, permissions)
+        let source = tempfile::tempdir()?;
+        let executable = source.path().join("codex");
+        fs::write(&executable, script)?;
+        stage_fake_runtime(&executable, path)
+    }
+
+    fn stage_fake_runtime(source: &Path, executable: &Path) -> std::io::Result<()> {
+        let helper = source.with_file_name("codex-code-mode-host");
+        fs::write(&helper, "#!/bin/sh\nexit 0\n")?;
+        for path in [source, helper.as_path()] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
+        }
+        let destination = executable.parent().ok_or_else(|| {
+            std::io::Error::other("fake runtime requires a destination directory")
+        })?;
+        crate::runtime_bundle::stage_runtime(source, destination).map_err(std::io::Error::other)?;
+        fs::set_permissions(destination, fs::Permissions::from_mode(0o700))
     }
 
     fn process_exists(pid: u32) -> bool {

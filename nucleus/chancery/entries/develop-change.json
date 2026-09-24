@@ -138,7 +138,7 @@
       },
       {
         "status": "declared",
-        "statement": "Exact Codex changes use freshly inspected executable, model-catalog, and generated app-server schema evidence rather than an assumed version range."
+        "statement": "Exact Codex changes stage the complete version-matched runtime, inspect its executable, model catalog and generated app-server schema, and prove a local command result through the actual tool path in isolated predeployment validation. Deployment readiness verifies sealed file identities without creating model jobs."
       },
       {
         "status": "unspecified",

@@ -35,6 +35,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Stage the complete supported Codex runtime without changing the service.
+    StageHarness {
+        #[arg(long)]
+        codex: PathBuf,
+        #[command(flatten)]
+        home: HomeArgs,
+    },
     Install(InstallArgs),
     Inspect(HomeArgs),
     Verify(InstallArgs),
@@ -238,23 +245,41 @@ fn harness(health: &Value) -> Result<PathBuf> {
 
 fn candidate_harness(home: &Path, health: &Value) -> Result<PathBuf> {
     let configured = harness(health)?;
-    if health["harness"]["harnessVersion"] == nucleus_codex::SUPPORTED_CODEX_VERSION {
+    // The CI tool-path proof uses this exact staged pair. Version equality
+    // alone cannot justify retaining another pair at a different path.
+    let candidate = staged_runtime(home).join("codex");
+    let candidate_identity = runtime_identity(&candidate)?;
+    if health["harness"]["harnessVersion"] == nucleus_codex::SUPPORTED_CODEX_VERSION
+        && runtime_identity(&configured).is_ok_and(|identity| identity == candidate_identity)
+    {
         return Ok(configured);
     }
-    let candidate = home
-        .join("Library/Application Support/Nucleus/harnesses/codex")
+    Ok(fs::canonicalize(candidate)?)
+}
+
+fn staged_runtime(home: &Path) -> PathBuf {
+    home.join("Library/Application Support/Nucleus/harnesses/codex")
         .join(nucleus_codex::SUPPORTED_CODEX_VERSION)
-        .join("codex");
-    cell_install::file_digest(&candidate)?;
-    let version = call(&candidate, &strings(&["--version"]), home, None, 30)?;
-    if String::from_utf8_lossy(&version.stdout).trim()
-        != format!("codex-cli {}", nucleus_codex::SUPPORTED_CODEX_VERSION)
-    {
+        .join("runtime")
+}
+
+fn runtime_identity(executable: &Path) -> Result<Value> {
+    let runtime = nucleus_codex::runtime_bundle::verify_runtime(executable)
+        .map_err(|error| Error::new(error.to_string()))?;
+    Ok(json!({
+        "version": runtime.version,
+        "codex_sha256": runtime.codex_sha256,
+        "code_mode_host_sha256": runtime.code_mode_host_sha256,
+    }))
+}
+
+fn verify_runtime_identity(executable: &Path, expected: &Value) -> Result<()> {
+    if runtime_identity(executable)? != *expected {
         return Err(Error::new(
-            "staged Nucleus harness has an unsupported Codex version",
+            "Codex runtime differs from the inspected bundle",
         ));
     }
-    Ok(fs::canonicalize(candidate)?)
+    Ok(())
 }
 
 fn runtime_harness(prior: &Value, unchanged: bool) -> Result<&str> {
@@ -344,7 +369,7 @@ fn plan(args: &InstallArgs, home: &Path) -> Result<ReleasePlan> {
         }
         call(path, &strings(&["--help"]), home, None, 30)?;
     }
-    call(&args.codex, &strings(&["--version"]), home, None, 30)?;
+    runtime_identity(&args.codex)?;
     let installer = std::env::current_exe()?;
     let mut files = BTreeMap::from([
         (
@@ -438,6 +463,9 @@ fn install(
     exact: Option<&InstallSnapshot>,
     prior: Option<&Value>,
 ) -> Result<InstallSnapshot> {
+    if let Some(expected) = prior.and_then(|value| value.get("harness_runtime")) {
+        verify_runtime_identity(&args.codex, expected)?;
+    }
     let before = inspect(home)?;
     if args
         .expected_current
@@ -510,7 +538,16 @@ fn install(
 fn runtime(ctx: &Context, owned: bool) -> Result<Value> {
     let snapshot = inspect(&ctx.home)?;
     let prior = ctx.prior()?;
-    let expected = runtime_harness(prior, json!(snapshot) == prior["installed"])?;
+    let unchanged = json!(snapshot) == prior["installed"];
+    let expected = runtime_harness(prior, unchanged)?;
+    let identity_key = if unchanged {
+        "prior_harness_runtime"
+    } else {
+        "harness_runtime"
+    };
+    if let Some(identity) = prior.get(identity_key).filter(|value| !value.is_null()) {
+        verify_runtime_identity(Path::new(expected), identity)?;
+    }
     let health = if owned {
         sole(
             &maintenance(&ctx.home, &ctx.request.run_id, "status", false)?,
@@ -635,7 +672,7 @@ fn adapter(operation: Operation) -> Result<Value> {
                 return Ok(reply(
                     "ready",
                     "fresh Nucleus configuration and explicit authentication source inspected",
-                    json!({"current":"absent","installed":snapshot,"runtime":status,"harness_executable":codex,"codex_home":codex_home,"maintenance_products":[],"after":[]}),
+                    json!({"current":"absent","installed":snapshot,"runtime":status,"harness_runtime":runtime_identity(&codex)?,"harness_executable":codex,"codex_home":codex_home,"maintenance_products":[],"after":[]}),
                 ));
             }
             let status = maintenance(&ctx.home, &ctx.request.run_id, "status", false)?;
@@ -668,7 +705,7 @@ fn adapter(operation: Operation) -> Result<Value> {
             Ok(reply(
                 "ready",
                 "owned Nucleus installation and configured harness inspected",
-                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_executable":selected_harness,"prior_harness_executable":configured_harness,"maintenance_products":[],"after":[]}),
+                json!({"current":selection(&snapshot),"installed":snapshot,"runtime":status,"harness_runtime":runtime_identity(&selected_harness)?,"prior_harness_runtime":runtime_identity(&configured_harness).ok(),"harness_executable":selected_harness,"prior_harness_executable":configured_harness,"maintenance_products":[],"after":[]}),
             ))
         }
         Operation::Hold => {
@@ -768,37 +805,45 @@ fn adapter(operation: Operation) -> Result<Value> {
 }
 
 fn run(command: Command) -> Result<Value> {
-    let data =
-        match command {
-            Command::Adapter { operation } => return adapter(operation),
-            Command::Install(args) => {
-                let home = home(args.home.home.clone())?;
-                let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID")
-                    .ok()
-                    .filter(|value| !value.is_empty());
-                json!(install(&args, &home, owner.as_deref(), None, None)?)
+    let data = match command {
+        Command::StageHarness { codex, home: args } => {
+            let home = home(args.home)?;
+            let runtime =
+                nucleus_codex::runtime_bundle::stage_runtime(&codex, &staged_runtime(&home))
+                    .map_err(|error| Error::new(error.to_string()))?;
+            json!({"executable":runtime.executable,"runtime":runtime_identity(&runtime.executable)?})
+        }
+        Command::Adapter { operation } => return adapter(operation),
+        Command::Install(args) => {
+            let home = home(args.home.home.clone())?;
+            let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID")
+                .ok()
+                .filter(|value| !value.is_empty());
+            json!(install(&args, &home, owner.as_deref(), None, None)?)
+        }
+        Command::Inspect(args) => json!(inspect(&home(args.home)?)?),
+        Command::Verify(args) => {
+            let home = home(args.home.home.clone())?;
+            let snapshot = inspect(&home)?;
+            verify_plan(
+                snapshot
+                    .current
+                    .as_ref()
+                    .ok_or_else(|| Error::new("Nucleus is absent"))?,
+                &plan(&args, &home)?,
+            )?;
+            let health = json_call(&home, None, &["--compact", "health"])?;
+            if harness(&health)? != args.codex {
+                return Err(Error::new("configured Nucleus harness differs"));
             }
-            Command::Inspect(args) => json!(inspect(&home(args.home)?)?),
-            Command::Verify(args) => {
-                let home = home(args.home.home.clone())?;
-                let snapshot = inspect(&home)?;
-                verify_plan(
-                    snapshot
-                        .current
-                        .as_ref()
-                        .ok_or_else(|| Error::new("Nucleus is absent"))?,
-                    &plan(&args, &home)?,
-                )?;
-                let health = json_call(&home, None, &["--compact", "health"])?;
-                if harness(&health)? != args.codex {
-                    return Err(Error::new("configured Nucleus harness differs"));
-                }
-                json!(snapshot)
-            }
-            Command::VerifyRelease { release } => json!(
-                cell_install::transaction::verify_release_at(&layout(), &release, &legacy)?
-            ),
-        };
+            json!(snapshot)
+        }
+        Command::VerifyRelease { release } => json!(cell_install::transaction::verify_release_at(
+            &layout(),
+            &release,
+            &legacy
+        )?),
+    };
     Ok(json!({"ok":true,"data":data}))
 }
 
@@ -846,6 +891,10 @@ fn fresh_settings(ctx: &Context) -> Result<(PathBuf, Option<PathBuf>)> {
     if !codex.is_absolute() {
         return Err(Error::new("Nucleus codex_bin must be absolute"));
     }
+    verify_runtime_identity(
+        &codex,
+        &runtime_identity(&staged_runtime(&ctx.home).join("codex"))?,
+    )?;
     cell_install::file_digest(&codex)?;
     let version = call(&codex, &strings(&["--version"]), &ctx.home, None, 30)?;
     if String::from_utf8_lossy(&version.stdout).trim()
@@ -922,6 +971,9 @@ fn recover_cutover(ctx: &Context) -> Result<()> {
     if saved["codex"] != ctx.prior()?["harness_executable"] {
         return Err(Error::new("Nucleus recovery harness differs"));
     }
+    if let Some(identity) = ctx.prior()?.get("harness_runtime") {
+        verify_runtime_identity(Path::new(codex), identity)?;
+    }
     let args = InstallArgs {
         binary: ctx.binary("nucleus")?,
         daemon: ctx.binary("nucleusd")?,
@@ -969,8 +1021,30 @@ fn recover_cutover(ctx: &Context) -> Result<()> {
 mod tests {
     use super::*;
 
+    fn stage_fixture(home: &Path) -> Result<PathBuf> {
+        let source = home.join("source");
+        fs::create_dir_all(&source)?;
+        let executable = source.join("codex");
+        fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\necho 'codex-cli {}'\n",
+                nucleus_codex::SUPPORTED_CODEX_VERSION
+            ),
+        )?;
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
+        let host = source.join("codex-code-mode-host");
+        fs::write(&host, "#!/bin/sh\nexit 0\n")?;
+        fs::set_permissions(&host, fs::Permissions::from_mode(0o755))?;
+        let runtime =
+            nucleus_codex::runtime_bundle::stage_runtime(&executable, &staged_runtime(home))
+                .map_err(|error| Error::new(error.to_string()))?;
+        fs::set_permissions(staged_runtime(home), fs::Permissions::from_mode(0o700))?;
+        Ok(runtime.executable)
+    }
+
     #[test]
-    fn codex_upgrade_requires_the_exact_staged_executable() -> Result<()> {
+    fn codex_upgrade_requires_a_complete_staged_runtime() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let home = fs::canonicalize(directory.path())?;
         let configured = home.join("configured-codex");
@@ -979,29 +1053,55 @@ mod tests {
             "harnessExecutable": configured,
             "harness": {"harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION}
         });
-        assert_eq!(candidate_harness(&home, &health)?, configured);
-
+        // Matching version metadata cannot admit an incomplete installation.
+        assert!(candidate_harness(&home, &health).is_err());
+        let staged = stage_fixture(&home)?;
+        assert_eq!(candidate_harness(&home, &health)?, staged);
         health["harness"]["harnessVersion"] = json!("0.146.0");
+        assert_eq!(candidate_harness(&home, &health)?, staged);
+        health["harnessExecutable"] = json!(staged);
+        health["harness"]["harnessVersion"] = json!(nucleus_codex::SUPPORTED_CODEX_VERSION);
+        assert_eq!(candidate_harness(&home, &health)?, staged);
+        fs::set_permissions(staged_runtime(&home), fs::Permissions::from_mode(0o700))?;
+        fs::remove_file(staged_runtime(&home).join("codex-code-mode-host"))?;
         assert!(candidate_harness(&home, &health).is_err());
-        let staged = home
-            .join("Library/Application Support/Nucleus/harnesses/codex")
-            .join(nucleus_codex::SUPPORTED_CODEX_VERSION)
-            .join("codex");
-        fs::create_dir_all(
-            staged
-                .parent()
-                .ok_or_else(|| Error::new("missing parent"))?,
-        )?;
-        fs::write(&staged, "#!/bin/sh\necho 'codex-cli 0.146.0'\n")?;
-        fs::set_permissions(&staged, fs::Permissions::from_mode(0o755))?;
-        assert!(candidate_harness(&home, &health).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_identity_rejects_changed_capture() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let executable = stage_fixture(directory.path())?;
+        let identity = runtime_identity(&executable)?;
+        verify_runtime_identity(&executable, &identity)?;
+        let mut different = identity;
+        different["code_mode_host_sha256"] = json!("different");
+        assert!(verify_runtime_identity(&executable, &different).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn same_version_retains_only_the_tested_file_pair() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let home = fs::canonicalize(directory.path())?;
+        let staged = stage_fixture(&home)?;
+        let source = home.join("source/codex");
         fs::write(
-            &staged,
-            format!(
-                "#!/bin/sh\necho 'codex-cli {}'\n",
-                nucleus_codex::SUPPORTED_CODEX_VERSION
-            ),
+            home.join("source/codex-code-mode-host"),
+            "#!/bin/sh\nexit 1\n",
         )?;
+        let different =
+            nucleus_codex::runtime_bundle::stage_runtime(&source, &home.join("different"))
+                .map_err(|error| Error::new(error.to_string()))?;
+        fs::set_permissions(home.join("different"), fs::Permissions::from_mode(0o700))?;
+        let health = json!({
+            "harnessExecutable": different.executable,
+            "harness": {"harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION}
+        });
+        assert_ne!(
+            runtime_identity(&staged)?,
+            runtime_identity(&different.executable)?
+        );
         assert_eq!(candidate_harness(&home, &health)?, staged);
         Ok(())
     }

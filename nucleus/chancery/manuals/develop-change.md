@@ -53,10 +53,15 @@ version, a representative old-state fixture, transactional proof, a backup and
 rollback plan, and explicit handling of post-commit maintenance. Never restore
 old binaries onto a database they cannot read.
 
-For an exact Codex upgrade, inspect the candidate executable, version, model
-catalog, app-server schema, and every consumed semantic. Update the adapter and
-compatibility tests before deployment. Nucleus intentionally rejects an
-unproved executable.
+For an exact Codex upgrade, stage the complete runtime with the candidate
+installer's `stage-harness --codex /absolute/release/codex` command. Include its
+matching `codex-code-mode-host`. Inspect the version, model catalog, app-server
+schema, and every consumed semantic. Run the real local-tool compatibility test
+against the staged files in isolated validation. It uses a local mock endpoint,
+temporary state, and no production credentials. Assert the command result;
+completion alone is insufficient. Installation and live readiness verify the
+sealed file identities without model calls. Update the adapter, compatibility
+tests, and installation instructions together before deployment.
 
 For execution capacity, preserve one global ceiling of eight active attempts.
 An admitted job waits as `accepted` with a `pending` attempt until a slot is
