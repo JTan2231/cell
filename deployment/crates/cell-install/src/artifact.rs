@@ -219,11 +219,11 @@ pub(crate) fn provider_files(
             let path = overview
                 .as_str()
                 .ok_or_else(|| Error::new("provider bundle has an unsupported inventory"))?;
-            let path = Path::new(path);
+            let overview_path = Path::new(path);
             if value.get("schema_version").and_then(serde_json::Value::as_u64) != Some(4)
-                || !path.is_relative()
-                || path.extension() != Some(OsStr::new("md"))
-                || !path
+                || !overview_path.is_relative()
+                || overview_path.extension() != Some(OsStr::new("md"))
+                || !overview_path
                     .components()
                     .all(|component| matches!(component, Component::Normal(_)))
             {
