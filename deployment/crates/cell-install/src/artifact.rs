@@ -212,12 +212,34 @@ pub(crate) fn provider_files(
     spec: &InstallSpec,
 ) -> Result<BTreeMap<String, FileEntry>> {
     let (files, dirs) = inventory(root)?;
-    if dirs != BTreeSet::from(["entries".to_owned(), "manuals".to_owned()])
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(root.join("provider.json"))?)?;
+    let overview = value
+        .get("overview")
+        .map(|overview| {
+            let path = overview
+                .as_str()
+                .ok_or_else(|| Error::new("provider bundle has an unsupported inventory"))?;
+            let path = Path::new(path);
+            if value.get("schema_version").and_then(serde_json::Value::as_u64) != Some(4)
+                || !path.is_relative()
+                || path.extension() != Some(OsStr::new("md"))
+                || !path
+                    .components()
+                    .all(|component| matches!(component, Component::Normal(_)))
+            {
+                return Err(Error::new("provider bundle has an unsupported inventory"));
+            }
+            Ok(path)
+        })
+        .transpose()?;
+    if dirs != expected_dirs(files.keys().cloned())
         || !files.contains_key("provider.json")
         || !files.keys().any(|p| p.starts_with("entries/"))
         || !files.keys().any(|p| p.starts_with("manuals/"))
+        || overview.is_some_and(|path| !files.contains_key(path))
         || files.keys().any(|p| {
             p != "provider.json"
+                && overview.is_none_or(|path| p != path)
                 && !(p.starts_with("entries/")
                     && Path::new(p).extension() == Some(OsStr::new("json")))
                 && !(p.starts_with("manuals/")
@@ -226,7 +248,6 @@ pub(crate) fn provider_files(
     {
         return Err(Error::new("provider bundle has an unsupported inventory"));
     }
-    let value: serde_json::Value = serde_json::from_slice(&fs::read(root.join("provider.json"))?)?;
     if value
         .pointer("/provider/id")
         .and_then(serde_json::Value::as_str)

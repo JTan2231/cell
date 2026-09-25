@@ -94,6 +94,26 @@ fn install_redeploy_and_verify_exact_source() -> Result<()> {
 }
 
 #[test]
+fn indexed_provider_overview_is_published_and_unindexed_file_is_refused() -> Result<()> {
+    let f = Fixture::new("0.3.0")?;
+    fs::write(
+        f.input.provider_dir.join("provider.json"),
+        r#"{"schema_version":4,"provider":{"id":"usher","release":"0.3.0"},"overview":"overview.md"}"#,
+    )?;
+    fs::write(f.input.provider_dir.join("overview.md"), "Usher overview.\n")?;
+
+    let installed = f.installed()?;
+    assert_eq!(
+        fs::read_to_string(f.root(&installed).join("share/chancery/usher/overview.md"))?,
+        "Usher overview.\n"
+    );
+
+    fs::write(f.input.provider_dir.join("unindexed.md"), "Not published.\n")?;
+    assert!(verify_candidate(&SPEC, &f.home, &f.input).is_err());
+    Ok(())
+}
+
+#[test]
 fn stale_selection_and_foreign_public_paths_are_refused() -> Result<()> {
     let f = Fixture::new("0.3.0")?;
     let installed = f.installed()?;
