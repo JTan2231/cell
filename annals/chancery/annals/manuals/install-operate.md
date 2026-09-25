@@ -90,6 +90,12 @@ receipts, or swap database files manually after interruption. Run the exact reta
 release evidence before restoring pre-commit state or completing a committed
 operation. Recovery material is retained in `backups/deployments/`.
 
+Database restoration copies each retained backup through SQLite. Copying progress
+does not consume the one-minute lock-wait allowance. Recovery stops if database
+access remains blocked for that interval. After a copy completes, recovery
+checkpoints the restored database and retains its WAL coordination files. A
+blocked checkpoint retains maintenance and the transaction for recovery.
+
 The attended migration from the former system LaunchDaemon uses a narrower
 handoff. Its child fresh-state deploy keeps Annals maintenance in place and
 renders the exact Clockwork definition, but does not register or select it.
