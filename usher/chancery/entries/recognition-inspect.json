@@ -76,7 +76,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "A checkout root and optional exact descriptor ID or declared alias. Inputs are schema-one literal descriptors, root AGENTS.md markers, Chancery provider schemas one through three, and optional additive Iatreion status declarations."
+        "statement": "A checkout root and optional exact descriptor ID or declared alias. Inputs are schema-one literal descriptors, root AGENTS.md markers, Chancery provider schemas one through four, and optional additive Iatreion status declarations."
       }
     ],
     "outputs": [
@@ -132,7 +132,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Usher recognition contract three, membership JSON schema one, check schema two, Iatreion status declaration schema one, provider schemas one through three, and pipeline schema one are separate. Incompatible recognition or output meaning requires an explicit versioned change."
+        "statement": "Usher recognition contract three, membership JSON schema one, check schema two, Iatreion status declaration schema one, provider schemas one through four, and pipeline schema one are separate. Incompatible recognition or output meaning requires an explicit versioned change."
       }
     ],
     "reliances": [

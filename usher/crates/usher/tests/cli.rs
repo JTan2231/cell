@@ -293,6 +293,20 @@ fn broken_provider_material_cannot_satisfy_an_introduction() -> TestResult {
 }
 
 #[test]
+fn provider_schema_four_is_recognized() -> TestResult {
+    let temp = fixture()?;
+    let path = temp.path().join("alpha/chancery/alpha/provider.json");
+    let mut manifest: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    manifest["schema_version"] = json!(4);
+    manifest["overview"] = json!("overview.md");
+    fs::write(path, manifest.to_string())?;
+    let (status, report) = run(temp.path(), "check", None)?;
+    assert_eq!(status, 0);
+    assert_eq!(report["complete"], 1);
+    Ok(())
+}
+
+#[test]
 fn future_provider_format_is_unassessed_and_other_products_survive() -> TestResult {
     let temp = fixture()?;
     product(temp.path(), "beta")?;

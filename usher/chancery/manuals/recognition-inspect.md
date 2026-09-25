@@ -39,7 +39,7 @@ two providers; Krisis retains the `decisions` descriptor ID and declared aliases
    identifies the declared provider, name, release, and a nonempty entry index.
    Indexed entries have unique provider-prefixed identities, positive contract
    versions, and readable nonempty indexed manuals. Provider IDs cannot have
-   multiple claimants. Usher supports provider schemas 1 through 3.
+   multiple claimants. Usher supports provider schemas 1 through 4.
 
 These **introduction projections** select provider identity, indexed entry
 identity and version, and indexed manual presence. Chancery validates bundle

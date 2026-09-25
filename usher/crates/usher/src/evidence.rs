@@ -211,7 +211,7 @@ fn inspect_provider(
     let path = format!("{provider_dir}/provider.json");
     let manifest = chancery::api::ProviderIntroduction::decode(&read(root, &path)?)
         .map_err(introduction_error)?;
-    if !(1..=3).contains(&manifest.schema_version) {
+    if !(1..=4).contains(&manifest.schema_version) {
         return Err(Problem::new(
             Status::Unassessed,
             "unsupported Chancery provider schema",
