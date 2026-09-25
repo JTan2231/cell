@@ -119,12 +119,35 @@ pub fn main() -> std::process::ExitCode {
             );
             std::process::ExitCode::FAILURE
         }
-        _ => cell_install::simple::main_with_lifecycle(
+        _ => cell_install::simple::main_with_lifecycle_and_maintenance(
             &specification(),
             env!("CARGO_PKG_VERSION"),
             lifecycle,
+            candidate_maintenance,
         ),
     }
+}
+
+fn candidate_maintenance(context: &cell_install::adapter::Context) -> cell_install::Result<bool> {
+    let compatible = || -> Result<bool> {
+        let root = crate::default_state_dir(&context.home)?;
+        let path = root.join(crate::store::DATABASE);
+        if !path.try_exists()? {
+            return Ok(false);
+        }
+        crate::store::regular_file(&path)?;
+        let connection = rusqlite::Connection::open_with_flags(
+            path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        ensure!(
+            matches!(version, 1 | 2 | 3 | 4 | 5 | crate::store::SCHEMA_VERSION),
+            "unsupported Platter database schema"
+        );
+        Ok(version == crate::store::SCHEMA_VERSION)
+    };
+    compatible().map_err(|error| cell_install::Error::new(error.to_string()))
 }
 
 #[derive(Default, serde::Deserialize)]

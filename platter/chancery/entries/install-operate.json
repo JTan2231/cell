@@ -76,7 +76,8 @@
     "An explicit transaction imports legacy records and files into schema six, writes a complete schema-six backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-five migration advances the version without changing captured inputs, exact requests or artifact bytes.",
     "Migration verifies local state before dependency paths are rebound. Full readiness follows deployment configuration. Optional completion-receipt recovery writes or verifies the coordinator's exact backup path and digest after migration and local verification under the existing owner and activity locks.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
-    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
+    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases.",
+    "For selected Platter with read-only-proved schema-six state, the sealed candidate can perform protocol-one maintenance before publication, including recovery and release. Current installation ownership, exact candidate identity, durable hold owners and drain checks remain required; this performs no migration or domain work."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -168,6 +169,10 @@
       {
         "status": "declared",
         "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      },
+      {
+        "status": "declared",
+        "statement": "Selected Platter may use candidate maintenance only after the installer proves current installation ownership and a read-only product check proves schema-six state. Supported predecessor schemas and existing affected-only Platter retain installed maintenance; foreign installations and unsupported state are refused."
       }
     ],
     "inputs": [
@@ -210,6 +215,10 @@
       {
         "status": "declared",
         "statement": "Installation inspection reports selected releases and stored configuration; strict doctor checks the documented runtime dependencies."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance reads all job-summary pages for platter and job-packets and, when assignments exist, Weaver summaries intersected with exact retained Weaver job IDs. It does not decode full historical job output for each assignment. Each maintenance observation has a 60-second bound; failed or incomplete evidence does not establish drain."
       }
     ],
     "access": [

@@ -20,6 +20,11 @@ use std::time::Duration;
 /// must be idempotent: the coordinator can retry them after interruption.
 pub type Lifecycle = fn(&Context, Operation) -> Result<Value>;
 
+/// Read-only product proof that its sealed candidate can operate the current
+/// maintenance state without migration. Used only for a selected product whose
+/// existing installation ownership has already been proved.
+pub type CandidateMaintenance = fn(&Context) -> Result<bool>;
+
 fn no_lifecycle(context: &Context, _: Operation) -> Result<Value> {
     if context
         .request
@@ -421,11 +426,25 @@ fn current(spec: &Spec, home: &Path) -> Result<InstallSnapshot> {
     tx::inspect_installation(&spec.layout(), home, &|root| spec.legacy(root))
 }
 
-fn maintained(spec: &Spec, context: &Context, operation: &str, owner: bool) -> Result<Value> {
+fn maintained(
+    spec: &Spec,
+    context: &Context,
+    operation: &str,
+    owner: bool,
+    candidate_maintenance: Option<CandidateMaintenance>,
+) -> Result<Value> {
     // A first installation still needs the product's state and maintenance
-    // boundary. Only a proved absent installation may use the sealed candidate;
-    // a damaged or foreign public selector must never trigger this fallback.
-    let binary = if current(spec, &context.home)?.current.is_none() {
+    // boundary. A selected product can also explicitly prove that its candidate
+    // understands the current maintenance state without migration. A damaged or
+    // foreign public selector must never trigger either candidate route.
+    let absent = current(spec, &context.home)?.current.is_none();
+    let compatible_candidate = !absent
+        && context.selected()
+        && candidate_maintenance
+            .map(|compatible| compatible(context))
+            .transpose()?
+            .unwrap_or(false);
+    let binary = if absent || compatible_candidate {
         context.binary(spec.product)?
     } else {
         context.home.join(".local/bin").join(spec.product)
@@ -462,6 +481,7 @@ fn adapter_run(
     release_version: &str,
     operation: Operation,
     lifecycle: Lifecycle,
+    candidate_maintenance: Option<CandidateMaintenance>,
 ) -> Result<Value> {
     let context = Context::read(
         spec.product,
@@ -488,7 +508,7 @@ fn adapter_run(
         plan(spec, release_version, &args, scratch.path())?;
         let snapshot = current(spec, &context.home)?;
         let runtime = if spec.maintained {
-            let status = maintained(spec, &context, "status", false)?;
+            let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
             if status["holds"] != json!([]) {
                 return Err(Error::new("another operation holds product maintenance"));
             }
@@ -557,9 +577,11 @@ fn adapter_run(
         ));
     }
     let data = match operation {
-        Operation::Hold if spec.maintained => maintained(spec, &context, "hold", true)?,
+        Operation::Hold if spec.maintained => {
+            maintained(spec, &context, "hold", true, candidate_maintenance)?
+        }
         Operation::Drain if spec.maintained => {
-            let status = maintained(spec, &context, "drain", false)?;
+            let status = maintained(spec, &context, "drain", false, candidate_maintenance)?;
             if status["holds"] != json!([context.request.run_id]) {
                 return Err(Error::new("drain requires sole run-owned hold"));
             }
@@ -577,7 +599,7 @@ fn adapter_run(
                 return Err(Error::new("cannot install an affected-only product"));
             }
             if spec.maintained {
-                let status = maintained(spec, &context, "status", false)?;
+                let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
                 if status["holds"] != json!([context.request.run_id]) || status["drained"] != true {
                     return Err(Error::new("installation requires drained run-owned hold"));
                 }
@@ -605,7 +627,7 @@ fn adapter_run(
                 smoke(spec, &context.home, release, args.reader.as_deref())?;
             }
             if spec.maintained {
-                let status = maintained(spec, &context, "status", false)?;
+                let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
                 let verified = context
                     .request
                     .recovery
@@ -658,7 +680,9 @@ fn adapter_run(
             }
             json!({"installation":observed,"safe_to_release":true,"installed":if is_prior {"prior"} else {"candidate"}})
         }
-        Operation::Release if spec.maintained => maintained(spec, &context, "release", true)?,
+        Operation::Release if spec.maintained => {
+            maintained(spec, &context, "release", true, candidate_maintenance)?
+        }
         Operation::Hold | Operation::Drain | Operation::Release => json!({"drained":true}),
         Operation::Configure | Operation::Activate => product_data,
         Operation::Inspect => return Err(Error::new("invalid adapter dispatch")),
@@ -681,11 +705,13 @@ fn adapter_run(
     ))
 }
 
+#[allow(clippy::too_many_lines)] // Keep the fixed installer operations and their proofs together.
 fn execute(
     spec: &Spec,
     release_version: &str,
     arguments: &[String],
     lifecycle: Lifecycle,
+    candidate_maintenance: Option<CandidateMaintenance>,
 ) -> Result<Value> {
     let (operation, remaining) = arguments
         .split_first()
@@ -694,7 +720,13 @@ fn execute(
         if remaining.len() != 1 {
             return Err(Error::new("adapter requires one operation"));
         }
-        return adapter_run(spec, release_version, remaining[0].parse()?, lifecycle);
+        return adapter_run(
+            spec,
+            release_version,
+            remaining[0].parse()?,
+            lifecycle,
+            candidate_maintenance,
+        );
     }
     if operation == "verify-release" {
         if remaining.len() != 1 {
@@ -799,6 +831,27 @@ pub fn main(spec: &Spec, version: &str) -> ExitCode {
 /// Run a product installer with its owned deployment lifecycle.
 #[must_use]
 pub fn main_with_lifecycle(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
+    main_inner(spec, version, lifecycle, None)
+}
+
+/// Run a product installer with an explicit compatibility proof for candidate
+/// maintenance. Affected-only products still use their installed command.
+#[must_use]
+pub fn main_with_lifecycle_and_maintenance(
+    spec: &Spec,
+    version: &str,
+    lifecycle: Lifecycle,
+    candidate_maintenance: CandidateMaintenance,
+) -> ExitCode {
+    main_inner(spec, version, lifecycle, Some(candidate_maintenance))
+}
+
+fn main_inner(
+    spec: &Spec,
+    version: &str,
+    lifecycle: Lifecycle,
+    candidate_maintenance: Option<CandidateMaintenance>,
+) -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments == ["--version"] || arguments == ["-V"] {
         println!("{}-install {version}", spec.product);
@@ -812,7 +865,7 @@ pub fn main_with_lifecycle(spec: &Spec, version: &str, lifecycle: Lifecycle) -> 
         return ExitCode::SUCCESS;
     }
     let adapter = arguments.first().is_some_and(|value| value == "adapter");
-    let result = execute(spec, version, &arguments, lifecycle);
+    let result = execute(spec, version, &arguments, lifecycle, candidate_maintenance);
     if adapter {
         return adapter::finish(result);
     }

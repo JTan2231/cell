@@ -337,6 +337,12 @@ bounds select compatible candidates; sealed product inspectors prove retained
 dependencies and their runtime prerequisites before maintenance.
 Annals includes Usage; `decisions` aliases `krisis`.
 
+Selected Platter upgrades can use their sealed candidate for maintenance after
+the product proves compatibility with its retained state. This permits repair
+of a broken installed maintenance reader. Installation ownership, admission
+holds, drain, and installed readiness checks still apply. Read
+`chancery show platter.install.operate` for the compatibility boundary.
+
 The shared sequence is:
 
 1. Prepare and verify all selected candidates before maintenance.

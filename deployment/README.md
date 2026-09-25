@@ -180,7 +180,16 @@ current CI job may still be waiting for deployment. The coordinator releases
 only its own CI hold after product activation or coherent recovery. This shared
 infrastructure hook does not install or update the CI manager. Explicit manager
 upgrades must preserve its captured command during a deployment.
+
 Affected-only installations must provide compatible maintenance operations.
+A selected product can explicitly permit its sealed candidate to perform
+maintenance after a read-only product check proves compatible current state.
+The adapter must first prove the current installation's ownership. Platter uses
+this route only for schema-six state; its predecessor schemas and existing
+affected-only installations keep the installed maintenance command. Candidate
+maintenance preserves owned holds and drain checks without migration or early publication.
+Post-publication verification still proves the actual installed programs.
+
 Mentor and EMT capture worker intent during inspection, suspend their bindings,
 select disabled definitions during configuration, and restore enabled state
 after verification and hold release. Existing pauses and incidents remain.
