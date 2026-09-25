@@ -1662,9 +1662,14 @@ mod recovery_tests {
         for path in [&source_path, &destination_path] {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
-        let error =
-            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
-                .expect_err("an active writer must prevent restoration");
+        let error = match restore_database_with_lock_wait(
+            &source_path,
+            &destination_path,
+            Duration::ZERO,
+        ) {
+            Err(error) => error,
+            Ok(()) => return Err("an active writer must prevent restoration".into()),
+        };
         assert!(error.message.contains("could not acquire database access"));
         assert_eq!(
             writer.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
@@ -1698,9 +1703,14 @@ mod recovery_tests {
         for path in [&source_path, &destination_path] {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
-        let error =
-            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
-                .expect_err("a retained reader must prevent the final checkpoint");
+        let error = match restore_database_with_lock_wait(
+            &source_path,
+            &destination_path,
+            Duration::ZERO,
+        ) {
+            Err(error) => error,
+            Ok(()) => return Err("a retained reader must prevent the final checkpoint".into()),
+        };
         assert!(error.message.contains("checkpoint remains blocked"));
         assert!(source_path.is_file());
         reader.execute_batch("ROLLBACK;")?;
