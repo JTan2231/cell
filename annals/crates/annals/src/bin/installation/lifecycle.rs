@@ -1662,11 +1662,9 @@ mod recovery_tests {
         for path in [&source_path, &destination_path] {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
-        let Err(error) = restore_database_with_lock_wait(
-            &source_path,
-            &destination_path,
-            Duration::ZERO,
-        ) else {
+        let Err(error) =
+            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
+        else {
             return Err("an active writer must prevent restoration".into());
         };
         assert!(error.message.contains("could not acquire database access"));
@@ -1702,11 +1700,9 @@ mod recovery_tests {
         for path in [&source_path, &destination_path] {
             fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         }
-        let Err(error) = restore_database_with_lock_wait(
-            &source_path,
-            &destination_path,
-            Duration::ZERO,
-        ) else {
+        let Err(error) =
+            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
+        else {
             return Err("a retained reader must prevent the final checkpoint".into());
         };
         assert!(error.message.contains("checkpoint remains blocked"));
