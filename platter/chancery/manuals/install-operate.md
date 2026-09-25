@@ -25,9 +25,9 @@ When installation is authorized and the changes are committed on local main:
 `plan` is read-only. A deployment selects its exact local `main` commit; it
 ignores uncommitted changes and does not publish a release, commit, tag or
 push. When selected together, Cast, Annals, Email, Nucleus and Weaver install before
-Platter. Maintenance includes Nucleus and its registered requesters, whose
-installed maintenance interfaces must already be compatible. Unselected
-products are not upgraded to satisfy a missing prerequisite.
+Platter. Maintenance includes Nucleus and its registered requesters. Unselected
+products must have compatible installed maintenance interfaces and are not
+upgraded to satisfy a missing prerequisite.
 
 Cast must support collection contract 5 for `job collect`: exact-job retention
 with disabled-source access and preserved ordinary collection policy. Email must
@@ -93,11 +93,30 @@ activity. The predecessor maintenance gate and runner lock are also observed
 while present, so a coordinated transition accounts for old binaries already
 running. Empty predecessor gate files are retired on a drained final release.
 
-Maintenance observes all pages of nonterminal jobs under both `platter` and
-`job-packets`, plus the exact Weaver job IDs retained in packet executions. Drain cancels orphaned matching work only once local admissions
-and the predecessor runner have settled. It creates no replacement jobs or
-synthetic domain records. Unresolved jobs and other hold owners prevent cutover.
+Maintenance reads job-summary pages for `platter` and `job-packets`. When packet
+executions retain Weaver assignments, it also reads `weaver` summaries and
+matches only those exact retained job IDs. It does not read full job output for
+each historical assignment. Unrelated Weaver jobs remain outside its authority.
+Each maintenance observation is bounded to 60 seconds; an incomplete or failed
+observation cannot establish drain.
+
+Drain cancels orphaned matching work only once local admissions and the
+predecessor runner have settled. It creates no replacement jobs or synthetic
+domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
+
+For selected Platter, the coordinator can use its sealed candidate for
+maintenance before publication when a read-only check proves schema-six state.
+This permits a corrected observer to replace a slow installed observer without
+changing the public selection first. The installer still proves ownership of
+the current installation before this choice. Foreign selectors, changed
+candidate bytes, and unsupported state stop the operation.
+
+Candidate maintenance uses the existing protocol, durable owners, activity locks,
+and drain rules. It does not migrate state, prepare packets, or send mail. The
+same choice applies during recovery and release before publication. Supported
+predecessor schemas and existing affected-only Platter use the installed command.
+Actual installed-program identity and readiness remain required after publication.
 
 Migration is an explicit one-way schema-one to schema-six import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,

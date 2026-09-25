@@ -5,6 +5,7 @@ mod schemas;
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::env;
+use std::fmt::Write as _;
 use std::fs;
 use std::io;
 use std::os::unix::fs::{FileTypeExt as _, PermissionsExt as _};
@@ -36,10 +37,10 @@ use nucleus_core::{
     ToolsetRegistrationV1, sha256_digest,
 };
 use nucleus_store::{
-    AttemptRecord, AttemptState as StoreAttemptState, HarnessOutputRecord, JobRecord,
-    JobState as StoreJobState, LogSchemaRecord, NewAttempt, NewHarnessOutputRecord, NewJob,
-    NewLogSchema, NewPendingToolCall, NewToolResult, NewToolset, PendingToolCallRecord, Store,
-    StoreError, ToolCallState as StoreToolCallState, ToolsetRecord,
+    AttemptRecord, AttemptState as StoreAttemptState, HarnessOutputRecord, JobListFilter,
+    JobRecord, JobState as StoreJobState, JobSummaryRecord, LogSchemaRecord, NewAttempt,
+    NewHarnessOutputRecord, NewJob, NewLogSchema, NewPendingToolCall, NewToolResult, NewToolset,
+    PendingToolCallRecord, Store, StoreError, ToolCallState as StoreToolCallState, ToolsetRecord,
 };
 use serde_json::value::RawValue;
 #[cfg(test)]
@@ -923,40 +924,21 @@ async fn list_jobs(
     let Query(query) = query.map_err(ApiError::invalid_query)?;
     query.validate().map_err(ApiError::validation)?;
     let store = state.store.lock().await;
-    let records = if let (Some(program), Some(id)) = (&query.requester_program, &query.requester_id)
-    {
-        store
-            .list_jobs_by_requester(program, id)
-            .map_err(ApiError::store)?
-    } else {
-        store.list_jobs().map_err(ApiError::store)?
-    };
-    let mut records = records
-        .into_iter()
-        .filter(|job| {
-            query
-                .requester_program
-                .as_ref()
-                .is_none_or(|value| value == &job.requester_program)
-                && query
-                    .parent
-                    .as_ref()
-                    .is_none_or(|value| Some(value.as_str()) == job.parent_job_id.as_deref())
-                && query
-                    .state
-                    .is_none_or(|value| store_job_state(value) == job.state)
-        })
-        .collect::<Vec<_>>();
-    if let Some(after) = &query.after {
-        let position = records
-            .iter()
-            .position(|job| job.id == after.as_str())
-            .ok_or_else(|| ApiError::bad_request("invalid_cursor", "after job was not found"))?;
-        records.drain(..=position);
-    }
     let limit = usize::try_from(query.limit.unwrap_or(100))
         .unwrap_or(DEFAULT_PAGE)
         .min(MAX_PAGE);
+    let mut records = store
+        .list_job_summaries(
+            JobListFilter {
+                requester_program: query.requester_program.as_deref(),
+                requester_id: query.requester_id.as_deref(),
+                parent_job_id: query.parent.as_ref().map(JobId::as_str),
+                state: query.state.map(store_job_state),
+            },
+            query.after.as_ref().map(JobId::as_str),
+            limit + 1,
+        )
+        .map_err(ApiError::store)?;
     let has_more = records.len() > limit;
     records.truncate(limit);
     let next = has_more
@@ -2271,7 +2253,13 @@ fn job_to_core(
     })
 }
 
-fn job_summary(job: JobRecord) -> JobSummaryV1 {
+fn job_summary(job: impl Into<JobSummaryRecord>) -> JobSummaryV1 {
+    let job = job.into();
+    let mut request_digest = String::with_capacity(71);
+    request_digest.push_str("sha256:");
+    for byte in job.request_digest {
+        let _ = write!(request_digest, "{byte:02x}");
+    }
     JobSummaryV1 {
         version: PROTOCOL_VERSION_V1,
         id: JobId::new(job.id),
@@ -2282,7 +2270,7 @@ fn job_summary(job: JobRecord) -> JobSummaryV1 {
         },
         parent: job.parent_job_id.map(JobId::new),
         state: core_job_state(job.state),
-        request_digest: sha256_digest(&job.request_bytes),
+        request_digest,
         created_at: job.created_at,
         updated_at: job.updated_at,
         completed_at: job.completed_at,
@@ -2834,6 +2822,9 @@ impl ApiError {
 
     fn store(error: StoreError) -> Self {
         match error {
+            StoreError::InvalidJobCursor(_) => {
+                Self::bad_request("invalid_cursor", "after job was not found")
+            }
             StoreError::ToolCallOwnerTerminal { .. } => Self::conflict(
                 "job_terminal",
                 "the job ended before this tool result was posted",
@@ -2980,6 +2971,115 @@ async fn shutdown_signal() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)] // Exercise consecutive pages and their error contract together.
+    async fn job_list_preserves_summary_pagination_and_invalid_cursor_errors()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let state =
+            AppState::new(Store::open_in_memory()?, CodexHarness::new("unused-codex")).await?;
+        let mut expected = Vec::new();
+        {
+            let mut store = state.store.lock().await;
+            for (id, program, requester, created_at) in [
+                ("b", "platter", "packet", "2026-09-25T00:00:00Z"),
+                ("a", "platter", "packet", "2026-09-25T00:00:00Z"),
+                ("c", "platter", "packet", "2026-09-26T00:00:00Z"),
+                ("other", "weaver", "packet", "2026-09-25T00:00:00Z"),
+            ] {
+                let record = store
+                    .admit_job(NewJob {
+                        id: id.into(),
+                        label: format!("Job {id}"),
+                        requester_program: program.into(),
+                        requester_id: requester.into(),
+                        parent_job_id: None,
+                        request_schema_id: JOB_REQUEST_ID.into(),
+                        request_bytes: format!("opaque retained request {id}").into_bytes(),
+                        created_at: created_at.into(),
+                    })?
+                    .into_inner();
+                if program == "platter" {
+                    let digest = sha256_digest(&record.request_bytes);
+                    let summary = job_summary(record);
+                    assert_eq!(summary.request_digest, digest);
+                    expected.push(summary);
+                }
+            }
+        }
+        expected.sort_by(|a, b| (&a.created_at, &a.id).cmp(&(&b.created_at, &b.id)));
+        let query = ListJobsQueryV1 {
+            requester_program: Some("platter".into()),
+            requester_id: Some("packet".into()),
+            state: Some(JobState::Accepted),
+            limit: Some(2),
+            ..Default::default()
+        };
+        let first = list_jobs(State(state.clone()), Ok(Query(query.clone())))
+            .await
+            .map_err(|error| error.message)?
+            .0;
+        assert_eq!(first.version, PROTOCOL_VERSION_V1);
+        assert_eq!(first.jobs, expected[..2]);
+        assert_eq!(first.next, Some(JobId::new("b")));
+        let second = list_jobs(
+            State(state.clone()),
+            Ok(Query(ListJobsQueryV1 {
+                after: first.next,
+                ..query.clone()
+            })),
+        )
+        .await
+        .map_err(|error| error.message)?
+        .0;
+        assert_eq!(second.jobs, expected[2..]);
+        assert!(second.next.is_none());
+        let empty = list_jobs(
+            State(state.clone()),
+            Ok(Query(ListJobsQueryV1 {
+                after: Some(JobId::new("c")),
+                ..query.clone()
+            })),
+        )
+        .await
+        .map_err(|error| error.message)?
+        .0;
+        assert!(empty.jobs.is_empty());
+        assert!(empty.next.is_none());
+        for id in ["missing", "other"] {
+            let result = list_jobs(
+                State(state.clone()),
+                Ok(Query(ListJobsQueryV1 {
+                    after: Some(JobId::new(id)),
+                    ..query.clone()
+                })),
+            )
+            .await;
+            let Err(error) = result else {
+                return Err("invalid cursor was accepted".into());
+            };
+            assert_eq!(error.status, StatusCode::BAD_REQUEST);
+            assert_eq!(error.code, "invalid_cursor");
+            assert_eq!(error.message, "after job was not found");
+        }
+        for invalid in [
+            ListJobsQueryV1 {
+                requester_id: Some("packet".into()),
+                ..Default::default()
+            },
+            ListJobsQueryV1 {
+                limit: Some(0),
+                ..Default::default()
+            },
+        ] {
+            let Err(error) = list_jobs(State(state.clone()), Ok(Query(invalid))).await else {
+                return Err("invalid list query was accepted".into());
+            };
+            assert_eq!(error.status, StatusCode::BAD_REQUEST);
+            assert_eq!(error.code, "validation_failed");
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn quota_deferral_creates_no_job_and_does_not_block_cancellation()

@@ -14,6 +14,10 @@ use std::{
     time::Duration,
 };
 
+// A coordinated upgrade can inspect through a predecessor Nucleus that still
+// reads full request bodies when listing summaries. Keep that handoff bounded.
+const OBSERVATION_TIMEOUT: Duration = Duration::from_secs(60);
+
 #[derive(Debug, Serialize)]
 pub struct Status {
     pub protocol_version: u32,
@@ -249,50 +253,59 @@ fn runner(root: &Path) -> Result<Option<File>> {
     Ok(Some(file))
 }
 
-async fn unfinished(client: &NucleusClient, root: &Path) -> Result<Vec<JobId>> {
+async fn unfinished_for(client: &NucleusClient, program: &str) -> Result<Vec<JobId>> {
     let mut jobs = Vec::new();
-    for program in ["platter", "job-packets"] {
-        let mut query = ListJobsQueryV1 {
-            requester_program: Some(program.into()),
-            limit: Some(1000),
-            ..Default::default()
-        };
-        let mut cursors = std::collections::BTreeSet::new();
-        loop {
-            let page = client.list_jobs(&query).await?;
-            ensure!(page.version == 1, "unsupported Nucleus job list version");
-            for job in page.jobs {
-                ensure!(
-                    job.requester.program == program,
-                    "Nucleus returned a foreign requester"
-                );
-                if !job.state.is_terminal() {
-                    jobs.push(job.id);
-                }
-            }
-            let Some(next) = page.next else {
-                break;
-            };
+    let mut query = ListJobsQueryV1 {
+        requester_program: Some(program.into()),
+        limit: Some(1000),
+        ..Default::default()
+    };
+    let mut cursors = std::collections::BTreeSet::new();
+    loop {
+        let page = client.list_jobs(&query).await?;
+        ensure!(page.version == 1, "unsupported Nucleus job list version");
+        for job in page.jobs {
             ensure!(
-                cursors.insert(next.to_string()),
-                "Nucleus repeated its job cursor"
+                job.requester.program == program,
+                "Nucleus returned a foreign requester"
             );
-            query.after = Some(next);
+            if !job.state.is_terminal() {
+                jobs.push(job.id);
+            }
         }
+        let Some(next) = page.next else {
+            break;
+        };
+        ensure!(
+            cursors.insert(next.to_string()),
+            "Nucleus repeated its job cursor"
+        );
+        query.after = Some(next);
     }
+    Ok(jobs)
+}
+
+async fn unfinished(client: &NucleusClient, root: &Path) -> Result<Vec<JobId>> {
+    let mut jobs = unfinished_for(client, "platter").await?;
+    jobs.extend(unfinished_for(client, "job-packets").await?);
+    let mut assignments = std::collections::BTreeSet::new();
     if root.join(crate::store::DATABASE).exists() {
         let store = Store::control(root)?;
         if store.version()? >= 5 {
             for run in store.list()? {
                 for id in crate::projects::job_ids(&store, &run.id)? {
-                    match client.get_job(&id).await {
-                        Ok(job) if !job.summary.state.is_terminal() => jobs.push(id),
-                        Ok(_) | Err(nucleus_client::ClientError::Api { status: 404, .. }) => {}
-                        Err(error) => return Err(error.into()),
-                    }
+                    assignments.insert(id.to_string());
                 }
             }
         }
+    }
+    if !assignments.is_empty() {
+        jobs.extend(
+            unfinished_for(client, "weaver")
+                .await?
+                .into_iter()
+                .filter(|id| assignments.contains(id.as_str())),
+        );
     }
     Ok(jobs)
 }
@@ -322,7 +335,7 @@ async fn status_inner(home: &Path, root: &Path, client: &NucleusClient) -> Resul
 
 pub async fn status(home: &Path, root: &Path) -> Result<Status> {
     let client = NucleusClient::for_current_user()?;
-    tokio::time::timeout(Duration::from_secs(30), status_inner(home, root, &client))
+    tokio::time::timeout(OBSERVATION_TIMEOUT, status_inner(home, root, &client))
         .await
         .context("maintenance observation timed out")?
 }
@@ -359,7 +372,7 @@ pub async fn drain(home: &Path, root: &Path) -> Result<Status> {
         Err(error) => return Err(error),
     };
     if guards.is_some() {
-        tokio::time::timeout(Duration::from_secs(30), async {
+        tokio::time::timeout(OBSERVATION_TIMEOUT, async {
             for id in unfinished(&client, root).await? {
                 client.cancel_job(&id).await?;
             }

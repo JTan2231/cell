@@ -101,6 +101,7 @@ esac
 printf '%s\n' '{revision} '"$*" >> "$HOME/operations"
 case "${{1-}}" in
 maintenance)
+  if [ '{revision}' = 'first' ] && [ -f "$HOME/fail-first-maintenance" ]; then exit 23; fi
   case "${{2-}}" in
   hold) printf '%s' "$3" > "$HOME/hold";;
   release) if [ -f "$HOME/hold" ] && [ "$(/bin/cat "$HOME/hold")" = "$3" ]; then /bin/rm "$HOME/hold"; fi;;
@@ -314,6 +315,105 @@ fn fresh_repeat_upgrade_and_verified_recovery_preserve_state() {
             .join("Library/Application Support/Chancery/providers/platter")
             .exists()
     );
+}
+
+#[test]
+fn selected_candidate_bootstraps_compatible_maintenance_without_publication() {
+    let mut fixture = Fixture::new();
+    let first = fixture.install();
+    fixture.prepare("second", false);
+    fs::write(
+        fixture.home.join("fail-first-maintenance"),
+        b"old observer fails",
+    )
+    .unwrap();
+    fs::write(fixture.home.join("operations"), b"").unwrap();
+
+    let prior = fixture.begin();
+    assert_eq!(
+        fs::read_link(fixture.install_root().join("current")).unwrap(),
+        PathBuf::from(format!("releases/{first}"))
+    );
+    let recovered = fixture.success(
+        "recover",
+        Some(&prior),
+        json!({"any_apply_started":false,"verified":false}),
+    );
+    assert_eq!(recovered["safe_to_release"], true);
+    assert_eq!(recovered["installed"], "prior");
+    fixture.success("release", Some(&prior), Value::Null);
+    assert!(!fixture.home.join("hold").exists());
+
+    let operations = fs::read_to_string(fixture.home.join("operations")).unwrap();
+    for operation in ["status", "hold fixture-run", "drain", "release fixture-run"] {
+        assert!(operations.contains(&format!("second maintenance {operation}\n")));
+    }
+    assert!(!operations.contains("first maintenance"));
+    assert_eq!(
+        fs::read_link(fixture.install_root().join("current")).unwrap(),
+        PathBuf::from(format!("releases/{first}"))
+    );
+
+    fixture.selected = false;
+    assert!(
+        !fixture
+            .adapter("inspect", None, Value::Null)
+            .status
+            .success()
+    );
+    assert!(
+        fs::read_to_string(fixture.home.join("operations"))
+            .unwrap()
+            .contains("first maintenance status\n")
+    );
+}
+
+#[test]
+fn candidate_maintenance_does_not_override_predecessor_or_foreign_state() {
+    let mut fixture = Fixture::new();
+    fixture.install();
+    fixture.prepare("second", false);
+    let prior = fixture.success("inspect", None, Value::Null);
+    fs::write(
+        fixture.home.join("fail-first-maintenance"),
+        b"old observer fails",
+    )
+    .unwrap();
+    let root = platter::default_state_dir(&fixture.home).unwrap();
+    let connection = rusqlite::Connection::open(root.join(platter::store::DATABASE)).unwrap();
+    connection.pragma_update(None, "user_version", 5).unwrap();
+    fs::write(fixture.home.join("operations"), b"").unwrap();
+
+    assert!(
+        !fixture
+            .adapter("hold", Some(&prior), Value::Null)
+            .status
+            .success()
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.home.join("operations")).unwrap(),
+        "first maintenance hold fixture-run\n"
+    );
+    assert_eq!(
+        connection
+            .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+            .unwrap(),
+        5
+    );
+
+    connection.pragma_update(None, "user_version", 999).unwrap();
+    fs::write(fixture.home.join("operations"), b"").unwrap();
+    let output = fixture.adapter("hold", Some(&prior), Value::Null);
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("unsupported Platter database schema")
+    );
+    assert!(
+        fs::read(fixture.home.join("operations"))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!fixture.home.join("hold").exists());
 }
 
 #[test]

@@ -52,6 +52,9 @@ pub enum StoreError {
     #[error("job `{0}` already exists with a different request")]
     JobConflict(String),
 
+    #[error("job-list cursor `{0}` was not found in the selected jobs")]
+    InvalidJobCursor(String),
+
     #[error("retired deployment job `{0}` has unfinished work or dependent records")]
     DeploymentHistoryBlocked(String),
 
@@ -278,6 +281,48 @@ pub struct JobRecord {
     pub updated_at: String,
     pub completed_at: Option<String>,
     pub terminal_reason: Option<String>,
+}
+
+/// Metadata for a job list, without the retained request body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JobSummaryRecord {
+    pub id: String,
+    pub label: String,
+    pub requester_program: String,
+    pub requester_id: String,
+    pub parent_job_id: Option<String>,
+    pub request_digest: Digest,
+    pub state: JobState,
+    pub current_attempt_id: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+impl From<JobRecord> for JobSummaryRecord {
+    fn from(job: JobRecord) -> Self {
+        Self {
+            id: job.id,
+            label: job.label,
+            requester_program: job.requester_program,
+            requester_id: job.requester_id,
+            parent_job_id: job.parent_job_id,
+            request_digest: job.request_digest,
+            state: job.state,
+            current_attempt_id: job.current_attempt_id,
+            created_at: job.created_at,
+            updated_at: job.updated_at,
+            completed_at: job.completed_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct JobListFilter<'a> {
+    pub requester_program: Option<&'a str>,
+    pub requester_id: Option<&'a str>,
+    pub parent_job_id: Option<&'a str>,
+    pub state: Option<JobState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -696,6 +741,60 @@ impl Store {
         let records = statement
             .query_map([], job_from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(records)
+    }
+
+    /// Read at most `limit` summaries in creation-time and ID order. A cursor
+    /// must identify a job that matches every filter in this same observation.
+    ///
+    /// # Errors
+    /// Returns an error for an absent or filtered cursor, or a database read failure.
+    pub fn list_job_summaries(
+        &self,
+        filter: JobListFilter<'_>,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<JobSummaryRecord>> {
+        let mut selection = String::from("WHERE 1");
+        let mut values = Vec::<rusqlite::types::Value>::new();
+        for (column, value) in [
+            ("requester_program", filter.requester_program),
+            ("requester_id", filter.requester_id),
+            ("parent_job_id", filter.parent_job_id),
+            ("state", filter.state.map(JobState::as_str)),
+        ] {
+            if let Some(value) = value {
+                selection.push_str(" AND ");
+                selection.push_str(column);
+                selection.push_str(" = ?");
+                values.push(value.to_owned().into());
+            }
+        }
+        let transaction = self.connection.unchecked_transaction()?;
+        if let Some(after) = after {
+            let mut cursor_values = values.clone();
+            cursor_values.push(after.to_owned().into());
+            let created_at: String = transaction
+                .query_row(
+                    &format!("SELECT created_at FROM jobs {selection} AND id = ?"),
+                    rusqlite::params_from_iter(cursor_values),
+                    |row| row.get(0),
+                )
+                .optional()?
+                .ok_or_else(|| StoreError::InvalidJobCursor(after.to_owned()))?;
+            selection.push_str(" AND (created_at, id) > (?, ?)");
+            values.extend([created_at.into(), after.to_owned().into()]);
+        }
+        values.push(usize_to_i64(limit).into());
+        let records = transaction
+            .prepare(&format!(
+                "SELECT id, label, requester_program, requester_id, parent_job_id,
+                    request_digest, state, current_attempt_id, created_at, updated_at, completed_at
+                 FROM jobs {selection} ORDER BY created_at, id LIMIT ?"
+            ))?
+            .query_map(rusqlite::params_from_iter(values), job_summary_from_row)?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        transaction.commit()?;
         Ok(records)
     }
 
@@ -1359,6 +1458,22 @@ fn job_from_row(row: &Row<'_>) -> rusqlite::Result<JobRecord> {
     })
 }
 
+fn job_summary_from_row(row: &Row<'_>) -> rusqlite::Result<JobSummaryRecord> {
+    Ok(JobSummaryRecord {
+        id: row.get(0)?,
+        label: row.get(1)?,
+        requester_program: row.get(2)?,
+        requester_id: row.get(3)?,
+        parent_job_id: row.get(4)?,
+        request_digest: digest_from_row(row, 5)?,
+        state: enum_from_row(row, 6)?,
+        current_attempt_id: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+        completed_at: row.get(10)?,
+    })
+}
+
 fn query_attempt(connection: &Connection, id: &str) -> Result<Option<AttemptRecord>> {
     let record = connection
         .query_row(
@@ -2009,6 +2124,139 @@ mod tests {
             jobs.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
             ["job-1", "job-2"]
         );
+    }
+
+    #[test]
+    fn job_summary_pages_preserve_filters_order_and_cursor_membership() -> Result<()> {
+        let mut store = prepared_store();
+        store.admit_job(job("parent", "parent-run"))?;
+        for (id, program, requester, parent, created_at) in [
+            ("a-late", "annals", "run-1", Some("parent"), LATER),
+            ("b-early", "annals", "run-1", Some("parent"), NOW),
+            ("a-early", "annals", "run-1", Some("parent"), NOW),
+            ("other-program", "weaver", "run-1", Some("parent"), NOW),
+            ("other-requester", "annals", "run-2", Some("parent"), NOW),
+            ("other-parent", "annals", "run-1", None, NOW),
+            ("other-state", "annals", "run-1", Some("parent"), NOW),
+        ] {
+            let mut value = job(id, requester);
+            value.requester_program = program.into();
+            value.parent_job_id = parent.map(str::to_owned);
+            value.created_at = created_at.into();
+            store.admit_job(value)?;
+        }
+        store.create_attempt(attempt("other-state"))?;
+        store.transition_attempt("attempt-other-state", AttemptState::Cancelled, LATER, None)?;
+        let filter = JobListFilter {
+            requester_program: Some("annals"),
+            requester_id: Some("run-1"),
+            parent_job_id: Some("parent"),
+            state: Some(JobState::Accepted),
+        };
+        let first = store.list_job_summaries(filter, None, 2)?;
+        assert_eq!(
+            first.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
+            ["a-early", "b-early"]
+        );
+        let second = store.list_job_summaries(filter, Some("b-early"), 2)?;
+        assert_eq!(
+            second.iter().map(|job| job.id.as_str()).collect::<Vec<_>>(),
+            ["a-late"]
+        );
+        assert!(
+            store
+                .list_job_summaries(filter, Some("a-late"), 2)?
+                .is_empty()
+        );
+        for cursor in [
+            "missing",
+            "other-program",
+            "other-requester",
+            "other-parent",
+            "other-state",
+        ] {
+            assert!(
+                matches!(store.list_job_summaries(filter, Some(cursor), 2), Err(StoreError::InvalidJobCursor(id)) if id == cursor)
+            );
+        }
+        // Each filter also works without a requester pair.
+        for individual in [
+            JobListFilter {
+                requester_program: filter.requester_program,
+                ..Default::default()
+            },
+            JobListFilter {
+                parent_job_id: filter.parent_job_id,
+                ..Default::default()
+            },
+            JobListFilter {
+                state: filter.state,
+                ..Default::default()
+            },
+            JobListFilter::default(),
+        ] {
+            let expected = store
+                .list_jobs()?
+                .into_iter()
+                .filter(|job| {
+                    individual
+                        .requester_program
+                        .is_none_or(|value| value == job.requester_program)
+                        && individual
+                            .parent_job_id
+                            .is_none_or(|value| job.parent_job_id.as_deref() == Some(value))
+                        && individual.state.is_none_or(|value| value == job.state)
+                })
+                .map(JobSummaryRecord::from)
+                .collect::<Vec<_>>();
+            assert_eq!(store.list_job_summaries(individual, None, 100)?, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn job_summary_pages_never_read_request_payloads_or_decode_unselected_rows() -> Result<()> {
+        use rusqlite::hooks::{AuthAction, AuthContext, Authorization};
+        let mut store = prepared_store();
+        store.admit_job(job("a", "run-1"))?;
+        let expected = JobSummaryRecord::from(store.admit_job(job("b", "run-1"))?.into_inner());
+        store.admit_job(job("z", "run-2"))?;
+        // An unreadable metadata value beyond the requested page must not be decoded.
+        store.connection.execute_batch(
+            "PRAGMA ignore_check_constraints=ON; UPDATE jobs SET state='unreadable' WHERE id='z';",
+        )?;
+        store
+            .connection
+            .authorizer(Some(|context: AuthContext<'_>| {
+                if matches!(
+                    context.action,
+                    AuthAction::Read {
+                        table_name: "jobs",
+                        column_name: "request_bytes"
+                    }
+                ) {
+                    Authorization::Deny
+                } else {
+                    Authorization::Allow
+                }
+            }))?;
+        let page = store.list_job_summaries(JobListFilter::default(), Some("a"), 1)?;
+        assert_eq!(page.as_slice(), std::slice::from_ref(&expected));
+        let filtered = store.list_job_summaries(
+            JobListFilter {
+                requester_program: Some("annals"),
+                requester_id: Some("run-1"),
+                ..Default::default()
+            },
+            Some("a"),
+            100,
+        )?;
+        assert_eq!(filtered, [expected]);
+        assert!(
+            store.get_job("b").is_err(),
+            "the guard must reject full request reads"
+        );
+        Ok(())
     }
 
     #[test]

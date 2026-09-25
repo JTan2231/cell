@@ -404,6 +404,97 @@ fn active_admission_prevents_cancelling_a_running_stage() -> Result<()> {
 }
 
 #[test]
+fn weaver_maintenance_uses_summary_pages_and_cancels_only_retained_assignments() -> Result<()> {
+    let fixture = tempfile::tempdir()?;
+    let home = fixture.path().join("home");
+    let root = home.join(".local/share/platter");
+    let store = Store::open(&root)?;
+    for number in 0..128 {
+        let run = format!("run-{number}");
+        store.insert_run(
+            &platter::store::PacketRecord {
+                id: run.clone(),
+                opportunity: "fixture-opportunity".into(),
+                job_id: format!("cast-{number}"),
+                company: "Example".into(),
+                title: "Engineer".into(),
+                status: "ready".into(),
+                directory: String::new(),
+            },
+            &json!({}),
+        )?;
+        store.save_execution(
+            &run,
+            "weaver-cell",
+            &json!({"id":format!("weaver-{number}"),"direction":"Fixture","revise":null}),
+        )?;
+    }
+    drop(store);
+    maintenance::gate(&home).hold("deploy-one")?;
+    let before = state_bytes(&root)?;
+    let socket = fixture.path().join("n.sock");
+    let active_pages = || {
+        vec![
+            (list_route("platter"), empty_page()),
+            (list_route("job-packets"), empty_page()),
+            (
+                list_route("weaver"),
+                json!({"version":1,"jobs":[job("weaver","weaver-0","completed"),job("weaver","unrelated","running")],"next":"unrelated"}),
+            ),
+            (
+                list_route("weaver"),
+                json!({"version":1,"jobs":[job("weaver","weaver-127","waiting_on_requester")]}),
+            ),
+        ]
+    };
+    let mut exchanges = active_pages();
+    exchanges.extend(active_pages());
+    exchanges.extend([
+        (
+            "POST /v1/jobs/weaver-127/cancel ".into(),
+            json!({"version":1,"jobId":"weaver-127","state":"cancelled","cancellationRequested":true}),
+        ),
+        (list_route("platter"), empty_page()),
+        (list_route("job-packets"), empty_page()),
+        (
+            list_route("weaver"),
+            json!({"version":1,"jobs":[job("weaver","unrelated","running"),job("weaver","weaver-127","cancelled")]}),
+        ),
+    ]);
+    let server = mailbox(&socket, exchanges)?;
+    let status = response(
+        &cli(&home, &socket)
+            .args(["--json", "maintenance", "status"])
+            .output()?,
+    )?;
+    assert_eq!(status["data"]["nonterminal_jobs"], 1);
+    assert_eq!(status["data"]["drained"], false);
+    let drained = response(
+        &cli(&home, &socket)
+            .env("CELL_DEPLOYMENT_RUN_ID", "deploy-one")
+            .args(["--json", "maintenance", "drain"])
+            .output()?,
+    )?;
+    assert_eq!(drained["data"]["drained"], true);
+    let routes = server.join().unwrap()?;
+    assert!(routes[3].contains("after=unrelated"));
+    assert_eq!(
+        routes
+            .iter()
+            .filter(|route| route.starts_with("POST "))
+            .count(),
+        1
+    );
+    assert!(
+        routes
+            .iter()
+            .all(|route| !route.starts_with("GET /v1/jobs/"))
+    );
+    assert_eq!(state_bytes(&root)?, before);
+    Ok(())
+}
+
+#[test]
 fn default_state_preserves_legacy_paths_and_rejects_ambiguity() -> Result<()> {
     let fixture = tempfile::tempdir()?;
     let home = fixture.path();
