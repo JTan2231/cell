@@ -60,9 +60,9 @@ chancery_candidate=$(pipeline_target_file release/chancery)
 normalized_entries=0
 for provider_path in "$catalog_registry"/*; do
     provider_id=${provider_path##*/}
-    grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' \
+    grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*[34][[:space:]]*,' \
         "$provider_path/provider.json" \
-        || integrated_fail "provider is not schema 3: $provider_id"
+        || integrated_fail "provider is not schema 3 or 4: $provider_id"
     grep -F '"promise_scope"' "$provider_path/provider.json" >/dev/null \
         || integrated_fail "provider has no promise scope: $provider_id"
     for entry_path in "$provider_path"/entries/*.json; do
