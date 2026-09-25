@@ -1,13 +1,14 @@
 mod common;
 use anyhow::Result;
 use serde_json::{Value, json};
-use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+use std::{
+    fs,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
-#[test]
-fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> Result<()> {
-    let temp = tempfile::tempdir()?;
-    let bin = temp.path().join(".local/bin");
-    fs::create_dir_all(&bin)?;
+fn install_cast_fixture(bin: &Path) -> Result<PathBuf> {
     let provider = bin.join("cast");
     let names: Vec<_> = (0..25).map(|i| format!("cast-{i}")).collect();
     let specifications: Vec<_> = names
@@ -24,6 +25,15 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
         ),
     )?;
     fs::set_permissions(&provider, fs::Permissions::from_mode(0o700))?;
+    Ok(provider)
+}
+
+#[test]
+fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let bin = temp.path().join(".local/bin");
+    fs::create_dir_all(&bin)?;
+    let provider = install_cast_fixture(&bin)?;
     let call = |args: &[&str]| -> Result<(bool, Value)> {
         let output = Command::new(env!("CARGO_BIN_EXE_clew"))
             .env("HOME", temp.path())

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clew::store::{DATABASE, Record, Store};
 use std::os::unix::fs::PermissionsExt as _;
 
@@ -199,7 +199,7 @@ fn migration_preserves_original_rows_backups_aliases_corrections_and_exact_retri
         notes: Some("Original note.".into()),
         replaces: None,
     };
-    let original_entry = store.entry("old-applied")?.expect("retained entry");
+    let original_entry = store.entry("old-applied")?.context("retained entry")?;
     assert_eq!(store.record(&original)?, original_entry);
     assert_eq!(original_entry.recorded_at, "2026-01-01T00:00:00Z");
     let mut other_namespace = original.clone();

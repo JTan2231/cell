@@ -27,12 +27,12 @@ fn report(
     Ok(())
 }
 
-fn job(reference: &str, company: &str, title: &str) -> Job {
-    clew::jobs::from_snapshot(
-        serde_json::from_value(common::snapshot(&[(reference, company, title)])).expect("fixture"),
-    )
-    .expect("fixture job")
-    .remove(0)
+fn job(reference: &str, company: &str, title: &str) -> Result<Job> {
+    let jobs = clew::jobs::from_snapshot(
+        serde_json::from_value(common::snapshot(&[(reference, company, title)]))
+            .context("fixture snapshot")?,
+    )?;
+    jobs.into_iter().next().context("fixture job")
 }
 
 #[test]
@@ -95,9 +95,9 @@ fn snapshot_uses_current_status_and_active_notes_in_sequence_order() -> Result<(
         Some("d1"),
     )?;
     let jobs = vec![
-        job("gamma", "Acme", "Z role"),
-        job("alpha", "Acme", "A role"),
-        job("epsilon", "Zoo", "Role"),
+        job("gamma", "Acme", "Z role")?,
+        job("alpha", "Acme", "A role")?,
+        job("epsilon", "Zoo", "Role")?,
     ];
     let rendered = digest::render(&store.entries()?, Some(&jobs), "2026-09-20")?;
     assert_eq!(rendered.application_count, 3);
