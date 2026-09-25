@@ -1,0 +1,171 @@
+{
+  "id": "nucleus.output",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Read Nucleus output and execution history",
+  "summary": "Read exact retained harness observations and derive correlated structured output without rerunning a job.",
+  "use_when": [
+    "A selected job's runtime history, final message, raw output, or historical decoder evidence must be inspected."
+  ],
+  "do_not_use_when": [
+    "The goal is to establish requester-domain success, obtain authentication output, or use stored billing projections."
+  ],
+  "outcome": "Retained runtime observations and any supported correlated structured output are returned for the selected job.",
+  "effects": [
+    "Reads expose retained prompts, source content, tool values, and runtime diagnostics; they do not execute another attempt."
+  ],
+  "authority": [
+    "Nucleus owns exact received output observations and operational execution records.",
+    "Requesters own domain results; reporting consumers own interpretations, totals, coverage, and prices."
+  ],
+  "success": [
+    "The requested retained output is returned with identities and sequence, or missing structured evidence remains explicitly unavailable."
+  ],
+  "failure_and_recovery": [
+    "A decoder repair can recover derived output from retained evidence without rewriting atoms or terminal state. Missing records cannot be recovered or treated as permission to retry."
+  ],
+  "privacy": [
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+  ],
+  "interfaces": [
+    {
+      "label": "Read a job",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs show JOB_ID"
+    },
+    {
+      "label": "Read output",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs logs JOB_ID"
+    },
+    {
+      "label": "Follow output",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs logs --follow JOB_ID"
+    },
+    {
+      "label": "Read a decoder schema",
+      "invocation": "GET /v1/schemas/{schema} over the Nucleus Unix socket"
+    }
+  ],
+  "does_not_authorize": [
+    "Requester-domain acceptance, replay of failed work, credential disclosure, or deletion of retained data."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Operators and requester/reporting consumers may inspect retained job state, exact output observations, and supported derived final output."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Select the exact job or requester run and use supported read interfaces; retained evidence must support any structured projection."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Reads use exact job IDs, requester program/ID filters, per-attempt numeric output cursors, follow=true, or exact generated schema IDs."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The version-one log envelope exposes jobId, attemptId, sequence, observedAt, stream=harness.output, schemaId, payload, and payloadDigest. Completed attempts can expose threadId, turnId, and finalMessage."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Failed, cancelled, timed-out, and lost attempts expose no successful structured output. Authentication responses and stderr chunks are not output records."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Each atom preserves one received non-authentication harness stdout JSONL payload with only its line delimiter removed. Operational records remain separate from reporting observations."
+      },
+      {
+        "status": "declared",
+        "statement": "Read-time projection binds only the retained successful empty MCP-inventory startup sequence and its correlated thread/turn messages, freezing at that turn's terminal notification. Missing or conflicting startup evidence produces no structured output."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Sequence orders atoms within one attempt; observedAt is Nucleus observation time rather than ordering authority. The public digest covers public payload bytes."
+      },
+      {
+        "status": "declared",
+        "statement": "Malformed/non-UTF-8 bytes or JSON whose whitespace would be lost use the reversible nucleus.raw-bytes.v1 base64 envelope. The failure terminalMessage is control-character sanitized and capped at 16 KiB."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Nucleus retains every non-authentication stdout JSONL record it receives. Host-managed authentication responses and managed-worker stderr are excluded; raw input and lifecycle/control events are not reporting atoms."
+      },
+      {
+        "status": "declared",
+        "statement": "Bounded follow returns one output-only LogsResponseV1 page. Status reads mailbox and job state successively, not atomically. Initial read errors remain errors."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No output-arrival, retention-horizon, billing, or completeness beyond received non-authentication observations is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The exact generated harness schema remains available for decoding. Derived output uses retained authentication startup evidence, not today's account mode: response IDs 1/2/3 for API-key inventory/thread/turn and 2/3/4 for managed authentication."
+      },
+      {
+        "status": "declared",
+        "statement": "A decoder repair can expose supported output when an old completed job is read again without a new attempt, changed raw observations, or changed terminal state."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One attempt per version-one job makes its numeric log cursor unambiguous. Nucleus stores no reporting totals, usage prices, final-output materialization, or stderr stream."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No automatic pruning, output-volume bound, or database-retention period is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "The version-one log envelope remains compatible; exact harness schema and retained invocation evidence select historical decoding. Store, adapter, provider, and feature versions remain separate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general historical-decoder retirement window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Received messages and their schema semantics originate in the exact adapter-proved Codex app-server contract, which has no installed Chancery contract. Retained reads do not invoke Codex again.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/output.md"
+}

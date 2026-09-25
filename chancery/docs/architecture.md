@@ -1,8 +1,9 @@
 # Architecture
 
-Chancery reads installed provider bundles without retaining catalog state. Its separate usage journal records command invocations. It lists
-installed capabilities and operations and presents their contracts. For one
-selected entry, it assembles provider scope, normalized claims, transitive
+Chancery reads installed provider bundles without retaining catalog state. Its
+separate usage journal records command invocations. It lists installed
+capabilities and operations, presents product overviews, and reads their
+contracts. For one selected entry, it assembles provider scope, normalized claims, transitive
 dependency contracts, exact source references, and unresolved gaps into a
 deterministic dossier.
 
@@ -13,7 +14,7 @@ how to invoke the documented interface.
 ```text
 product release -- publishes --> provider bundle -- read by --> Chancery
 operation bundle -- references --> capability IDs
-Codex -- list/show --> Chancery -- resolve exact ID --> promise dossier
+Codex -- product/list/show --> Chancery -- resolve exact ID --> promise dossier
 Codex -- then separately invokes ---------------------> product or UI
 ```
 
@@ -30,7 +31,7 @@ index is disposable and derived; provider bundles remain authoritative.
 | --- | --- |
 | Supported product outcome, effects, privacy, invocation, and domain success | Owning product and its versioned provider bundle |
 | Product jurisdiction, scoped inventory completeness, normalized boundary claims, and substantive reliances | Owning product and its versioned provider bundle |
-| Bundle schema, structural validity, complete catalog enumeration, exact-byte basis, dependency closure, facet classification, and presentation | Chancery |
+| Bundle schema, structural validity, product navigation, complete catalog enumeration, exact-byte basis, dependency closure, facet classification, and presentation | Chancery |
 | Whether an installed service, account, UI, credential, or data store is ready now | Represented product or interactive session |
 | Whether a requested mutation is authorized | User request plus the represented product's contract |
 | Cross-capability choreography | The installed operation manual; each participant keeps its own domain authority |
@@ -60,16 +61,16 @@ If a dependency is unavailable, Chancery marks dependent entries as unavailable.
 Those entries remain in the catalog. Chancery reads contract files for these
 checks. It does not test the Nucleus daemon.
 
-Substantive reliance is separate. A schema-3 entry can state that its outcome
-relies on another system's data, control, authority, readiness, or an external
+Substantive reliance is separate. A schema-3 or schema-4 entry can state that
+its outcome relies on another system's data, control, authority, readiness, or an external
 source. It can bind that reliance to a versioned dependency contract. Chancery
 does not infer runtime or data lineage from the dependency graph. A declared
 reliance without a dedicated contract remains a visible gap.
 
 ## Provider scope and normalized promises
 
-Schema-3 providers publish a promise scope beside their identity and entry
-index. It says what the product is and is not authoritative for, the meaningful
+Schema-3 and schema-4 providers publish a promise scope beside their identity
+and entry index. It says what the product is and is not authoritative for, the meaningful
 class of public outcomes its inventory covers, whether that inventory is
 complete or partial within that class, and the shared access, privacy,
 retention, compatibility, retirement, and operating limits that qualify all
@@ -78,7 +79,7 @@ for capability contracts, product documentation, or implementation proof.
 
 Entries remain the unit of reliance. Existing required fields state
 applicability, outcome, interface, effects, authority, success, failure and
-recovery, privacy, dependencies, and exclusions. An optional schema-3
+recovery, privacy, dependencies, and exclusions. An optional schema-3/4
 declaration normalizes the facets that otherwise tend to remain prose:
 consumers, preconditions, inputs, outputs, data semantics, identity and units,
 selected-record coverage and observation times, access, lifecycle and
@@ -118,6 +119,28 @@ and unavailable dependency closures remain inspectable but return nonzero so a
 consumer cannot silently treat them as complete. Resolution never reads a
 database schema or implementation to fill a publisher gap.
 
+## Product and feature documents
+
+A schema-4 provider can index one Markdown product overview. The product owns
+that text and publishes it in the same bundle as its features and operations.
+`product PROVIDER_ID` presents the overview, installed release, and complete
+provider inventory. `list --provider PROVIDER_ID` filters the catalog to the
+same owner. Earlier providers remain readable and report that no overview is
+published. Chancery does not synthesize missing content from a repository.
+
+A feature is represented by an existing `capability` entry and manual. Its
+page owns the full explanation of one coherent promise at a product boundary.
+The overview explains how features fit together; it has no separate contract
+version. This model adds no new entry kind or documentation include engine.
+
+`show` presents a focused page. Operations keep complete operating essentials,
+including prerequisites, consequential effects, authority, checkpoints,
+recovery, and stop conditions. Required feature contracts carry the detailed
+behavior. `resolve` assembles those contracts through existing version-bounded
+`dependencies`, once each. Related Chancery references in Markdown help readers
+navigate; they do not create dependency edges. Required dependency graphs stay
+acyclic even when related topics refer to each other.
+
 ## Capability and operation documents
 
 A capability describes one supported outcome owned by one product. Modes keep
@@ -151,9 +174,9 @@ owning product and avoids a central mutable catalog authority.
 
 When changing the schema or adding providers, use:
 
-1. deploy a reader that accepts schema 3 while retaining schema-1 and schema-2
-   support;
-2. deploy schema-3 product bundles and their selectors;
+1. deploy a reader that accepts schema 4 while retaining schema-1, schema-2,
+   and schema-3 support;
+2. deploy schema-4 product bundles and their selectors;
 3. deploy cross-product operation bundles after all required capabilities;
 4. change the global agent bootstrap last.
 
@@ -169,9 +192,10 @@ never alter stored bundle bytes or infer missing promises.
 
 ## Rust callers
 
-Rust callers use `chancery::api::Client` for typed list, show, resolve, doctor,
-and validate operations. The caller selects an executable and registry.
-Reports distinguish unresolved or invalid domain results from transport errors.
+Rust callers use `chancery::api::Client` for typed list, product, show, resolve,
+doctor, and validate operations. `Client::list_provider` adds an exact provider
+filter; `Client::list` retains its existing interface. The caller selects an
+executable and registry. Reports distinguish unresolved or invalid domain results from transport errors.
 
 The Rust library exposes provider-owned bundle documents and CLI output types
 through `chancery::api`. `ProviderManifest::decode` and `EntryDocument::decode`

@@ -22,11 +22,20 @@ documentation dependency closure, facet and gap classification, and display.
 
 ## 2. Author a self-contained bundle
 
-For provider schema 3, declare product authority and its limits. Name the class
-of public outcomes covered by the inventory and whether coverage is complete
+For provider schemas 3 and 4, declare product authority and its limits. Name
+the class of public outcomes covered by the inventory and whether coverage is complete
 or partial within that class. State shared access, privacy, compatibility,
 retirement, and operating limits. Define the inventory class independently of
 the index.
+
+Use schema 4 to index an optional product overview with `overview` in
+`provider.json`. The path is relative to the bundle and must identify nonempty
+UTF-8 Markdown under the same path, size, and control-character rules as a
+manual. The overview explains product purpose, authority, and how features fit
+together. It has no separate contract version. `chancery product PROVIDER_ID`
+reads it with the provider inventory. Providers without an overview remain
+readable and explicitly report `not_published`. Do not replace installed
+content with repository links.
 
 Add or revise an explicitly indexed entry and its detailed manual under the
 product's owned provider source. Normalize consumers, preconditions, inputs,
@@ -45,16 +54,30 @@ are required. Those `dependencies` edges mean documentation compatibility,
 not runtime calls or data lineage. Publish substantive data, control,
 authority, readiness, and external reliances separately. A declared reliance
 without a dedicated installed contract remains an intentional resolver gap.
+Use ordinary Chancery entry references for related reading that is not a
+required contract. Those references do not affect compatibility or dependency
+closure. Required dependencies must remain acyclic; related topics can refer
+to each other.
 
 Give each entry a distinct title and a summary of its user-visible result.
 An agent must be able to select plausible entries from that text. Use
 `use_when` and `do_not_use_when` to define the detailed selection boundaries.
 
+A feature is one coherent capability contract and its detailed manual. Keep
+`kind: capability`; do not create parallel feature and capability records for
+the same promise. Put the feature's full behavior, interfaces, data meaning,
+lifecycle, recovery, access, compatibility, and material limits in that page.
+An operation supplies the procedure that uses its required features.
+
 The manual is the complete ordinary `show` view. Include applicability,
 interfaces, effects, authority, success, recovery, privacy, exclusions, and
-operation checkpoints. Readers must be able to use the interface without the
-source tree or structured authoring fields. Keep normalized claims aligned
-with the manual for `resolve`. Ordinary `show` does not repeat those claims;
+operation checkpoints. Keep prerequisites, consequential effects, stop
+conditions, and all other operating essentials with the procedure. Readers must
+be able to carry out its steps without the source tree or structured authoring
+fields. Detailed behavioral explanations can live in required feature
+contracts; `resolve` assembles those complete documents once each. Chancery
+does not expand Markdown includes or selected sections. Keep normalized claims
+aligned with the manual for `resolve`. Ordinary `show` does not repeat those claims;
 `show --full` includes all authoring fields. Review both views before
 publication. Structural validation cannot establish that the prose is complete.
 
@@ -107,11 +130,16 @@ After product deployment:
 ```sh
 /Users/joey/.local/bin/chancery doctor
 /Users/joey/.local/bin/chancery list
+/Users/joey/.local/bin/chancery product PROVIDER_ID
+/Users/joey/.local/bin/chancery list --provider PROVIDER_ID
 /Users/joey/.local/bin/chancery show ENTRY_ID
 /Users/joey/.local/bin/chancery resolve ENTRY_ID
 ```
 
 Confirm that the title and summary distinguish the entry in the catalog.
+`product` must show the overview exactly when indexed and report its absence
+otherwise. Its inventory and the provider-filtered list must identify the
+product's entries.
 `show` must render the request boundaries and complete manual. `resolve` must
 render provider scope, normalized facets, reliance gaps, exact basis, and
 dependency closure. No Chancery query may execute a documented command.

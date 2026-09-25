@@ -8,8 +8,8 @@ use serde_json::json;
 use crate::api::{
     CatalogDefaults, CatalogEntry, ContractBasis, ContractDossier, ContractRequirement,
     DoctorResult, FacetCoverage, FacetRequirements, FileBasis, FullShowResult, ListResult,
-    ProviderSummary, RegistryCounts, ResolutionGap, ResolveResult, ResolveSummary, ShowResult,
-    ValidateResult,
+    ProductResult, ProviderSummary, RegistryCounts, ResolutionGap, ResolveResult, ResolveSummary,
+    ShowResult, ValidateResult,
 };
 
 use crate::cli::{Cli, Command, ListArgs, ResolveArgs};
@@ -26,7 +26,15 @@ pub(crate) fn run(cli: &Cli) -> Result<CommandOutput, AppError> {
         Command::Validate(args) => Ok(validate_bundle(&args.bundle)),
         Command::List(args) => {
             let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;
-            Ok(list(&registry, args))
+            if let Some(provider) = &args.provider {
+                find_provider(&registry, provider)?;
+            }
+            let (result, human) = catalog(&registry, args);
+            Ok(CommandOutput::success(json!(result), human))
+        }
+        Command::Product { provider } => {
+            let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;
+            product(&registry, provider)
         }
         Command::Show(args) => {
             let registry = load_registry(&registry_path(cli.registry.as_deref())?)?;
@@ -71,7 +79,7 @@ fn registry_path(selected: Option<&Path>) -> Result<PathBuf, AppError> {
     Ok(home.join("Library/Application Support/Chancery/providers"))
 }
 
-fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
+fn catalog(registry: &Registry, args: &ListArgs) -> (ListResult, String) {
     let mut values = Vec::new();
     let mut human = String::from(
         "Installed Chancery catalog\nDefaults: supported · installed · compatible · readiness not_checked (not probed). Exceptions appear below.\n",
@@ -83,8 +91,9 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
         }
         let mut mode_entries: Vec<_> = registry
             .entries()
-            .filter(|(_, entry)| {
-                entry.document.mode == mode
+            .filter(|(provider, entry)| {
+                args.provider.as_ref().is_none_or(|id| id == &provider.id)
+                    && entry.document.mode == mode
                     && args
                         .kind
                         .is_none_or(|selected| selected == entry.document.kind)
@@ -139,19 +148,78 @@ fn list(registry: &Registry, args: &ListArgs) -> CommandOutput {
         if count == 1 { "y" } else { "ies" }
     );
     append_issues(&mut human, &registry.issues);
-    CommandOutput::success(
-        json!(ListResult {
+    (
+        ListResult {
             defaults: CatalogDefaults {
                 support: crate::model::Support::Supported,
                 availability: "installed".into(),
                 compatibility: "compatible".into(),
-                readiness: "not_checked".into()
+                readiness: "not_checked".into(),
             },
             entries: values,
-            issues: registry.issues.clone()
-        }),
+            issues: registry.issues.clone(),
+        },
         human,
     )
+}
+
+fn find_provider<'a>(registry: &'a Registry, id: &str) -> Result<&'a ProviderBundle, AppError> {
+    registry
+        .providers
+        .iter()
+        .find(|provider| provider.identity.id == id)
+        .ok_or_else(|| {
+            AppError::invalid(
+                "provider_not_found",
+                format!("installed provider not found: {id}"),
+            )
+        })
+}
+
+fn product(registry: &Registry, id: &str) -> Result<CommandOutput, AppError> {
+    let provider = find_provider(registry, id)?;
+    let (catalog, inventory) = catalog(
+        registry,
+        &ListArgs {
+            provider: Some(id.to_owned()),
+            mode: None,
+            kind: None,
+        },
+    );
+    let overview_status = if provider.overview_text.is_some() {
+        "published"
+    } else {
+        "not_published"
+    };
+    let mut human = format!(
+        "{} — {}\nProvider release: {}\nProvider schema:  {}\nOverview:         {overview_status}\nReadiness:        not_checked (not probed)\n",
+        terminal_text(&provider.identity.id, false),
+        terminal_text(&provider.identity.name, false),
+        terminal_text(&provider.identity.release, false),
+        provider.schema_version,
+    );
+    append_provider_scope(&mut human, provider);
+    if let Some(overview) = &provider.overview_text {
+        human.push('\n');
+        human.push_str(&terminal_text(overview, true));
+    } else {
+        human.push_str("\nThis provider does not publish a product overview.\n");
+    }
+    human.push_str("\n\n");
+    human.push_str(&inventory);
+    Ok(CommandOutput::success(
+        json!(ProductResult {
+            provider: provider.identity.clone(),
+            provider_schema_version: provider.schema_version,
+            promise_scope: provider.promise_scope.clone(),
+            overview_status: overview_status.to_owned(),
+            overview: provider.overview_text.clone(),
+            defaults: catalog.defaults,
+            entries: catalog.entries,
+            issues: catalog.issues,
+        }),
+        human,
+    ))
 }
 
 fn mode_heading(mode: Mode) -> &'static str {

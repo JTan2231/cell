@@ -13,3 +13,8 @@ Semantics-Project: nucleus
   read `docs/operator-manual.md`.
 - Update `docs/operator-manual.md` in the same change when any of those
   operational facts, boundaries, or procedures change.
+- Keep detailed feature behavior in the product's Chancery feature contracts.
+  Keep operation manuals focused on procedures and action-critical conditions.
+  Update the owning feature and affected procedures together. Use Chancery
+  identities for installed documentation references; do not add another full
+  explanation to the repository navigation pages.

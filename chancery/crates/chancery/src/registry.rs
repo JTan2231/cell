@@ -11,7 +11,7 @@ use crate::model::{
     ClaimStatus, DependencyState, DependencyStatus, EntryDocument, EntryKind, EntryPromise, Issue,
     LEGACY_PROVIDER_SCHEMA_VERSION, LoadedEntry, PREVIOUS_PROVIDER_SCHEMA_VERSION,
     PROVIDER_SCHEMA_VERSION, PromiseClaim, ProviderBundle, ProviderManifest, ProviderPromiseScope,
-    Registry, RelianceClaim,
+    Registry, RelianceClaim, V2_PROVIDER_SCHEMA_VERSION,
 };
 
 const MAX_MANIFEST_BYTES: u64 = 1_048_576;
@@ -184,6 +184,10 @@ pub(crate) fn load_bundle(bundle_path: &Path) -> Result<ProviderBundle, Vec<Issu
         return Err(issues);
     }
     let mut entries = load_entries(&root, &manifest, &mut issues);
+    let overview_text = manifest
+        .overview
+        .as_deref()
+        .map(|path| load_overview(&root, path, &mut issues));
     if !issues.is_empty() {
         attach_provider(&mut issues, &manifest.provider.id);
         return Err(issues);
@@ -193,6 +197,7 @@ pub(crate) fn load_bundle(bundle_path: &Path) -> Result<ProviderBundle, Vec<Issu
         schema_version: manifest.schema_version,
         identity: manifest.provider,
         promise_scope: manifest.promise_scope,
+        overview_text,
         root,
         manifest_sha256,
         entries,
@@ -445,18 +450,63 @@ fn load_manual(root: &Path, document: &EntryDocument, issues: &mut Vec<Issue>) -
     text
 }
 
+fn load_overview(root: &Path, path: &str, issues: &mut Vec<Issue>) -> String {
+    if !safe_relative_path(Path::new(path))
+        || Path::new(path).extension().and_then(|value| value.to_str()) != Some("md")
+    {
+        issues.push(
+            Issue::new(
+                "invalid_overview_path",
+                format!("overview path must be a safe relative Markdown path: {path}"),
+            )
+            .path(path),
+        );
+        return String::new();
+    }
+    let text = match read_bundle_file(root, path, MAX_MANUAL_BYTES, "overview_unavailable") {
+        Ok(text) => text,
+        Err(mut file_issues) => {
+            issues.append(&mut file_issues);
+            return String::new();
+        }
+    };
+    if text.trim().is_empty() {
+        issues.push(Issue::new("invalid_overview", "overview must not be empty").path(path));
+    }
+    if let Some(character) = text
+        .chars()
+        .find(|character| character.is_control() && !matches!(character, '\n' | '\t'))
+    {
+        issues.push(
+            Issue::new(
+                "invalid_overview",
+                format!(
+                    "overview contains unsupported control character U+{:04X}",
+                    u32::from(character)
+                ),
+            )
+            .path(path),
+        );
+    }
+    text
+}
+
 fn validate_manifest(manifest: &ProviderManifest) -> Vec<Issue> {
     let mut issues = Vec::new();
     if !matches!(
         manifest.schema_version,
-        LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION
+        LEGACY_PROVIDER_SCHEMA_VERSION
+            | V2_PROVIDER_SCHEMA_VERSION
+            | PREVIOUS_PROVIDER_SCHEMA_VERSION
+            | PROVIDER_SCHEMA_VERSION
     ) {
         issues.push(Issue::new(
             "unsupported_schema",
             format!(
-                "provider schema {} is unsupported; supported schemas are {}, {}, and {}",
+                "provider schema {} is unsupported; supported schemas are {}, {}, {}, and {}",
                 manifest.schema_version,
                 LEGACY_PROVIDER_SCHEMA_VERSION,
+                V2_PROVIDER_SCHEMA_VERSION,
                 PREVIOUS_PROVIDER_SCHEMA_VERSION,
                 PROVIDER_SCHEMA_VERSION
             ),
@@ -486,25 +536,37 @@ fn validate_manifest(manifest: &ProviderManifest) -> Vec<Issue> {
         manifest.promise_scope_present,
         &manifest.promise_scope,
     ) {
-        (PROVIDER_SCHEMA_VERSION, true, Some(scope)) => {
+        (PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION, true, Some(scope)) => {
             validate_provider_scope(&manifest.provider.id, scope, &mut issues);
         }
-        (PROVIDER_SCHEMA_VERSION, _, None) => issues.push(
+        (PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION, _, None) => issues.push(
             Issue::new(
                 "missing_promise_scope",
-                "provider schema 3 requires promise_scope to be an object",
+                "provider schemas 3 and 4 require promise_scope to be an object",
             )
             .provider(&manifest.provider.id),
         ),
-        (LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION, true, _) => issues
-            .push(
-                Issue::new(
-                    "unexpected_promise_scope",
-                    "promise_scope requires provider schema 3",
-                )
-                .provider(&manifest.provider.id),
-            ),
+        (LEGACY_PROVIDER_SCHEMA_VERSION | V2_PROVIDER_SCHEMA_VERSION, true, _) => issues.push(
+            Issue::new(
+                "unexpected_promise_scope",
+                "promise_scope requires provider schema 3 or 4",
+            )
+            .provider(&manifest.provider.id),
+        ),
         _ => {}
+    }
+    if manifest.overview_present {
+        if manifest.schema_version != PROVIDER_SCHEMA_VERSION {
+            issues.push(Issue::new(
+                "unexpected_overview",
+                "overview requires provider schema 4",
+            ));
+        } else if manifest.overview.is_none() {
+            issues.push(Issue::new(
+                "invalid_overview",
+                "overview must be a Markdown path or omitted",
+            ));
+        }
     }
     issues
 }
@@ -517,24 +579,23 @@ fn validate_entry(schema_version: u32, provider_id: &str, entry: &EntryDocument)
     validate_dependencies(entry, &mut issues);
     validate_entry_kind(entry, &mut issues);
     match (schema_version, entry.promise_present, &entry.promise) {
-        (PROVIDER_SCHEMA_VERSION, true, Some(promise)) => {
+        (PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION, true, Some(promise)) => {
             validate_promise(entry, promise, &mut issues);
         }
-        (PROVIDER_SCHEMA_VERSION, true, None) => issues.push(
+        (PREVIOUS_PROVIDER_SCHEMA_VERSION | PROVIDER_SCHEMA_VERSION, true, None) => issues.push(
             Issue::new(
                 "invalid_promise_declaration",
                 "promise must be an object or omitted",
             )
             .entry(&entry.id),
         ),
-        (LEGACY_PROVIDER_SCHEMA_VERSION | PREVIOUS_PROVIDER_SCHEMA_VERSION, true, _) => issues
-            .push(
-                Issue::new(
-                    "unexpected_promise_declaration",
-                    "entry promise requires provider schema 3",
-                )
-                .entry(&entry.id),
-            ),
+        (LEGACY_PROVIDER_SCHEMA_VERSION | V2_PROVIDER_SCHEMA_VERSION, true, _) => issues.push(
+            Issue::new(
+                "unexpected_promise_declaration",
+                "entry promise requires provider schema 3 or 4",
+            )
+            .entry(&entry.id),
+        ),
         _ => {}
     }
     issues

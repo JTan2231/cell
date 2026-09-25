@@ -13,7 +13,7 @@ pub use crate::model::{
     EntryPromise, Interface, InventoryCompleteness, InventoryScope, Issue,
     LEGACY_PROVIDER_SCHEMA_VERSION, Mode, OUTPUT_SCHEMA_VERSION, PREVIOUS_PROVIDER_SCHEMA_VERSION,
     PROVIDER_SCHEMA_VERSION, PromiseClaim, PromiseFacet, ProviderIdentity, ProviderManifest,
-    ProviderPromiseScope, RelianceClaim, RelianceKind, Support,
+    ProviderPromiseScope, RelianceClaim, RelianceKind, Support, V2_PROVIDER_SCHEMA_VERSION,
 };
 
 /// Only the provider fields needed to recognize an introduction. Unrelated
@@ -62,7 +62,7 @@ impl EntryIntroduction {
 }
 
 impl ProviderManifest {
-    /// Decode the complete manifest while preserving absent versus null scope.
+    /// Decode the complete manifest while preserving absent versus null fields.
     ///
     /// # Errors
     /// Returns a JSON error if the selected document shape cannot be decoded.
@@ -71,8 +71,12 @@ impl ProviderManifest {
         let present = value
             .as_object()
             .is_some_and(|v| v.contains_key("promise_scope"));
+        let overview_present = value
+            .as_object()
+            .is_some_and(|v| v.contains_key("overview"));
         let mut manifest: Self = serde_json::from_value(value)?;
         manifest.promise_scope_present = present;
+        manifest.overview_present = overview_present;
         Ok(manifest)
     }
 }
@@ -98,7 +102,7 @@ impl EntryDocument {
     }
 }
 
-/// The CLI envelope shared by list, show, resolve, doctor, and validate.
+/// The CLI envelope shared by product, list, show, resolve, doctor, and validate.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Output<T> {
     pub schema_version: u32,
@@ -145,6 +149,19 @@ pub struct CatalogDefaults {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ListResult {
+    pub defaults: CatalogDefaults,
+    pub entries: Vec<CatalogEntry>,
+    pub issues: Vec<Issue>,
+}
+
+/// Installed product overview and its own catalog; this is not a readiness probe.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ProductResult {
+    pub provider: ProviderIdentity,
+    pub provider_schema_version: u32,
+    pub promise_scope: Option<ProviderPromiseScope>,
+    pub overview_status: String,
+    pub overview: Option<String>,
     pub defaults: CatalogDefaults,
     pub entries: Vec<CatalogEntry>,
     pub issues: Vec<Issue>,
@@ -410,7 +427,28 @@ impl Client {
         mode: Option<Mode>,
         kind: Option<EntryKind>,
     ) -> Result<Output<ListResult>, ClientError> {
+        self.list_filtered(None, mode, kind)
+    }
+
+    pub fn list_provider(
+        &self,
+        provider: &str,
+        mode: Option<Mode>,
+        kind: Option<EntryKind>,
+    ) -> Result<Output<ListResult>, ClientError> {
+        self.list_filtered(Some(provider), mode, kind)
+    }
+
+    fn list_filtered(
+        &self,
+        provider: Option<&str>,
+        mode: Option<Mode>,
+        kind: Option<EntryKind>,
+    ) -> Result<Output<ListResult>, ClientError> {
         let mut args: Vec<std::ffi::OsString> = vec!["list".into()];
+        if let Some(provider) = provider {
+            args.extend(["--provider".into(), provider.into()]);
+        }
         if let Some(mode) = mode {
             args.extend(["--mode".into(), mode.as_str().into()]);
         }
@@ -418,6 +456,10 @@ impl Client {
             args.extend(["--kind".into(), kind.as_str().into()]);
         }
         self.invoke(&args)
+    }
+
+    pub fn product(&self, provider: &str) -> Result<Output<ProductResult>, ClientError> {
+        self.invoke(&["product".into(), provider.into()])
     }
 
     pub fn show(&self, id: &str) -> Result<Output<ShowResult>, ClientError> {

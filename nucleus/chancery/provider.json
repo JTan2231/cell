@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "nucleus",
     "name": "Nucleus",
@@ -45,6 +45,14 @@
   "entries": [
     "entries/execution-operate.json",
     "entries/requester-integrate.json",
-    "entries/develop-change.json"
-  ]
+    "entries/develop-change.json",
+    "entries/jobs.json",
+    "entries/invocation.json",
+    "entries/requester-tools.json",
+    "entries/output.json",
+    "entries/authentication.json",
+    "entries/quota.json",
+    "entries/service.json"
+  ],
+  "overview": "overview.md"
 }

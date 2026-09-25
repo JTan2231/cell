@@ -38,6 +38,12 @@ pub(crate) enum Command {
     Usage(UsageCommand),
     /// List installed contracts.
     List(ListArgs),
+    /// Read an installed product overview and its feature and operation inventory.
+    Product {
+        /// Exact installed provider ID.
+        #[arg(value_name = "PROVIDER_ID")]
+        provider: String,
+    },
     /// Show one complete installed contract.
     Show(ShowArgs),
     /// Resolve one exact installed ID into its complete outward-promise dossier.
@@ -91,6 +97,10 @@ pub(crate) struct UsageFilter {
 
 #[derive(Debug, Args)]
 pub(crate) struct ListArgs {
+    /// Restrict results to one exact installed provider ID.
+    #[arg(long, value_name = "PROVIDER_ID")]
+    pub(crate) provider: Option<String>,
+
     /// Restrict results to one work mode.
     #[arg(long, value_enum)]
     pub(crate) mode: Option<Mode>,

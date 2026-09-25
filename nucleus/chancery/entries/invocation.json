@@ -1,0 +1,173 @@
+{
+  "id": "nucleus.invocation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Select Nucleus invocation policy",
+  "summary": "Define supported instructions, model, workspace, tools, timeout, and optional launch context for an exact Nucleus request.",
+  "use_when": [
+    "A requester must choose or interpret execution permissions, instruction roles, model/harness support, or a launch context."
+  ],
+  "do_not_use_when": [
+    "The goal is open-ended Codex configuration or a requester-domain workflow."
+  ],
+  "outcome": "An exact request selects a supported, explicit execution policy or is rejected before job admission.",
+  "effects": [
+    "An admitted policy can expose its selected workspace or environment to Codex and permit local execution or web search.",
+    "Launch-context registration temporarily retains an environment snapshot in daemon memory; submission can consume account allowance."
+  ],
+  "authority": [
+    "Nucleus validates and translates the closed invocation contract.",
+    "The requester chooses the permitted policy and owns write isolation and domain authority."
+  ],
+  "success": [
+    "The exact request is admitted after supported harness, model, directory, and policy checks."
+  ],
+  "failure_and_recovery": [
+    "Correct unsupported policy deliberately; never replace a retained request under the same ID or use a hidden direct-Codex fallback."
+  ],
+  "privacy": [
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+  ],
+  "interfaces": [
+    {
+      "label": "Read installed capabilities",
+      "invocation": "/Users/joey/.local/bin/nucleus health"
+    },
+    {
+      "label": "Submit a policy in an exact request",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>"
+    },
+    {
+      "label": "Register a launch context",
+      "invocation": "POST /v1/launch-contexts over the Nucleus Unix socket"
+    }
+  ],
+  "does_not_authorize": [
+    "Implicit workspace, local execution, web search, or requester mutation authority.",
+    "An unsupported harness upgrade or conflicting concurrent writes."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Requesters constructing exact job policies and operators diagnosing policy rejection may rely on this contract."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The exact Codex runtime, requested model, reasoning effort, directory, and workspace/tool combination must pass adapter checks before admission."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The closed policy accepts harness, model, optional reasoning effort low/medium/high/max, absolute cwd, workspaceAccess, explicit localExecution/webSearch flags, positive timeoutSeconds, optional immutable toolset, and optional launch-context ID."
+      },
+      {
+        "status": "declared",
+        "statement": "Instructions, optional developerInstructions, and prompt remain separate roles."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No command, argv, arbitrary Codex configuration, approval policy, isolation mode, or output-format field is accepted."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Admission records the accepted policy plus harness and adapter versions; a launch-context registration returns a single-use ID valid for 120 seconds."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Policy one supports none/read-only/read-write; policy two adds unrestricted. All supported invocations are ephemeral and unattended with approvalPolicy=never and raw-response telemetry."
+      },
+      {
+        "status": "declared",
+        "statement": "Workspace none uses an empty temporary read-only directory with no inherited environments; read-only and read-write use the requested directory; unrestricted removes Codex sandbox limits while operating-system permissions remain."
+      },
+      {
+        "status": "declared",
+        "statement": "localExecution=false removes command, inspection, and edit primitives; webSearch=false removes live search. Local execution with workspaceAccess=none is rejected."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Invocation policy version is distinct from the version-one job/HTTP envelope. timeoutSeconds is positive wall-clock seconds; launch-context lifetime is 120 seconds."
+      },
+      {
+        "status": "declared",
+        "statement": "The launch-context ID is opaque and single-use; the stored job retains that ID, not the environment snapshot."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Admission checks the exact executable, its catalog and generated protocol semantics. The supported adapter requires Codex 0.154.0-alpha.6.2, not a version-range match."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general model-support window or harness-upgrade cadence is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "A launch context remains only in daemon memory. Its snapshot starts from an empty environment, removes CODEX_EXEC_SERVER_URL, and replaces CODEX_HOME with the isolated Nucleus home."
+      },
+      {
+        "status": "declared",
+        "statement": "Identical resubmission finds the admitted job before checking or consuming its launch context. Nucleus does not compare directories or serialize conflicting mutations."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Only the proved closed policy and exact harness are supported. Codex sandbox restrictions and approvals do not protect an unrestricted invocation; operating-system permissions still apply."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general request-size, environment-size, or admission-latency bound is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Require workspace-unrestricted before policy two. Deploy accepting daemon support before new requesters and retain decoding for stored policies. New portable semantics require an invocation contract version."
+      },
+      {
+        "status": "declared",
+        "statement": "The complete runtime includes codex, matching codex-code-mode-host, and nucleus-runtime.json with SHA-256 identities. Installation, health, and admission verify files; the manifest detects changes but does not independently authenticate origin."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Invocation validation and isolation semantics rely on the exact separately installed Codex runtime and adapter-proved methods; no installed Chancery contract covers that external behavior.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/invocation.md"
+}

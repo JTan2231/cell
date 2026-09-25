@@ -4,13 +4,15 @@ One provider bundle has this shape:
 
 ```text
 provider.json
+overview.md              # optional, schema 4
 entries/
   ENTRY.json
 manuals/
   ENTRY.md
 ```
 
-`provider.json` indexes every entry. Chancery reads indexed files only.
+`provider.json` indexes every entry and an optional product overview. Chancery
+reads indexed files only.
 Provider selectors in the registry can be symbolic links. Indexed paths cannot
 contain symbolic links and must stay beneath the fixed bundle root. Product
 packaging checks the entire bundle tree before publication.
@@ -22,12 +24,13 @@ availability must be checked by the interactive agent.
 
 ## Provider file
 
-New and updated providers use schema version 3. `provider.json` is UTF-8 JSON
-with no unknown fields:
+New and updated providers can use schema version 4. Schemas 1 through 3 remain
+readable; only schema 4 can index a product overview. `provider.json` is UTF-8
+JSON with no unknown fields:
 
 ```json
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "example",
     "name": "Example",
@@ -46,6 +49,7 @@ with no unknown fields:
     "compatibility_and_retirement": ["Entry versions identify compatibility."],
     "operational_limits": ["Per-entry quantitative bounds apply."]
   },
+  "overview": "overview.md",
   "entries": [
     "entries/report-build.json"
   ]
@@ -67,6 +71,41 @@ compatibility, retirement, and operational limits shared by the provider's
 entries. Put entry-specific facts in the entry and manual. Provider scope
 describes the published inventory. Runtime checks and authorization use the
 documented interface.
+
+`overview` is an optional relative path to a nonempty UTF-8 Markdown document.
+The document explains the product, its authority boundary, and how its features
+and operations fit together. It has no entry ID or contract version. The
+provider release selects its bytes. `chancery product PROVIDER_ID` presents it
+with the provider identity and complete entry inventory. When it is absent,
+the product view reports `overview_status: not_published`; Chancery does not
+infer an overview from entry summaries or a source checkout.
+
+The overview has the same path, file-size, UTF-8, and control-character checks
+as an entry manual. An invalid indexed overview invalidates the provider.
+Schemas 1 through 3 reject `overview`. Schema 4 retains schema-3 scope and entry
+rules; it requires `promise_scope` and permits the same optional `promise`.
+
+## Feature documents
+
+A feature is a coherent product capability, represented by one `capability`
+entry and its manual. No separate feature kind or duplicate capability record
+is required. The owning product keeps the full explanation in its provider
+bundle: purpose, boundary, supported interfaces, behavior, data meaning,
+permissions, lifecycle, recovery, compatibility, and material limits.
+
+Use stable Chancery entry IDs to refer to other installed documents. Declare a
+version-bounded `dependencies` edge when the document requires another
+contract. `resolve` then reads that complete dependency contract. Related
+references in Markdown are navigation only: they do not affect compatibility
+or resolution and need not form an acyclic graph. Required dependencies must
+remain acyclic. Do not use repository links as a substitute for installed
+feature content. Chancery does not expand Markdown includes or section links.
+
+A procedure keeps its prerequisites, exact actions, consequential effects,
+authority, success evidence, recovery, privacy, exclusions, and stop conditions
+in its own manual. Its complete operating essentials must be usable through
+`show`. Put the detailed behavior that the procedure relies on in the required
+feature contracts and read the assembled explanation through `resolve`.
 
 ## Capability entry
 
@@ -164,7 +203,7 @@ Common field meanings:
 | `does_not_authorize` | Optional explicit authority boundary for a capability; required and nonempty for an operation |
 | `interfaces` | Display-only stable invocations; Chancery never executes them |
 | `dependencies` | Required installed documentation contracts and integer version range |
-| `promise` | Optional schema-3 normalized outward-boundary declaration; complete when present |
+| `promise` | Optional schema-3/4 normalized outward-boundary declaration; complete when present |
 | `manual` | Indexed, nonempty, UTF-8 detailed Markdown beneath the bundle |
 
 Titles and summaries support discovery. They must distinguish entries by their
@@ -179,7 +218,7 @@ misspellings cannot silently weaken a contract.
 
 ## Normalized promise declaration
 
-The optional schema-3 `promise` object is all-or-nothing. When present, each of
+The optional schema-3/4 `promise` object is all-or-nothing. When present, each of
 these collections contains at least one explicit claim:
 
 | Facet | Question answered |
@@ -248,7 +287,7 @@ least one stable interface. Operations require every operation-only field and a
 nonempty `does_not_authorize` list, but may omit interfaces when there is no
 stable direct invocation. Both kinds may have zero dependencies.
 
-## Legacy schemas 1 and 2
+## Earlier schemas
 
 The reader temporarily accepts provider schema v1 so independently deployed
 products can migrate after Chancery. Its entry documents may contain the old
@@ -261,17 +300,22 @@ Schemas 1 and 2 cannot contain `promise_scope` or `promise`; exact-ID
 resolution preserves their full existing documents and reports provider scope
 and normalized facets as undeclared.
 
-Providers migrate by first deploying a reader that accepts schema 3, then
-changing `schema_version` to 3, adding a complete `promise_scope`, and
-normalizing entries deliberately. Entry `promise` remains optional so one
-provider can onboard in bounded steps. Unknown schema-3 fields and incomplete
-scope or promise objects are invalid.
+Schema 3 requires `promise_scope` and allows the optional `promise` declaration,
+with no product overview. It remains valid without migration.
+
+Deploy a reader that accepts schema 4 before publishing schema-4 bundles.
+A schema-3 provider can adopt schema 4 and index an overview without changing
+its entry IDs or compatible contract versions. Providers migrating from schema
+1 or 2 also add a complete `promise_scope` and normalize entries deliberately.
+Entry `promise` remains optional so one provider can onboard in bounded steps.
+Unknown fields and incomplete scope or promise objects are invalid.
 
 ## Validation and security
 
 Registry provider selectors can be symbolic links to a product's current
 content-addressed release. Chancery canonicalizes each once per invocation.
-CLI validation reads `provider.json` and its indexed entries and manuals.
+CLI validation reads `provider.json`, its optional indexed overview, and its
+indexed entries and manuals.
 Indexed paths must stay beneath the resolved root and contain no symbolic links.
 Validation rejects indexed non-files, invalid UTF-8, oversized inputs,
 unsupported schemas, duplicate entry IDs, dependency cycles, and impossible
