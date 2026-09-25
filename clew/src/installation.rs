@@ -1,4 +1,4 @@
-//! Clew program selection and schema-one initialization. Ledger rows are preserved.
+//! Clew program selection and guarded ledger migration. Ledger rows are preserved.
 use anyhow::{Context as _, Result, ensure};
 use cell_install::{
     adapter::{Context, Operation},
@@ -12,6 +12,7 @@ use clockwork::{
 };
 use serde_json::{Value, json};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write as _,
     os::unix::fs::{DirBuilderExt as _, OpenOptionsExt as _, PermissionsExt as _},
@@ -105,15 +106,22 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         );
         return Ok(json!({"waiting":!status.drained,"drained":status.drained}));
     }
+    let installed = context.home.join(".local/bin/clew");
     let forward = context
         .request
         .recovery
         .as_ref()
         .and_then(|r| r.get("any_apply_started"))
         == Some(&json!(true))
-        && context.home.join(".local/bin/clew").exists();
-    if operation == Operation::Configure || operation == Operation::Recover && forward {
+        && installed.exists()
+        && cell_install::file_digest(&installed)?
+            == cell_install::file_digest(&context.binary("clew")?)?;
+    let mut migration_backup = None;
+    if operation == Operation::Configure && context.selected()
+        || operation == Operation::Recover && forward
+    {
         let _exclusive = gate.enter_for(&context.request.run_id)?;
+        migration_backup = migrate_if_needed(&root, &context.home, &context.request.run_id)?;
         crate::store::Store::initialize(&root)?;
         if schedule.binding.is_some() || settings.daily_email_enabled.is_some() {
             let fallback = definition(&context.home, &root)?;
@@ -135,13 +143,24 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
             )?;
         }
     }
-    if operation == Operation::Verify
-        || operation == Operation::Recover && root.join(crate::store::DATABASE).exists()
-    {
-        crate::store::Store::open(&root, false)?.check()?;
-    }
     if operation == Operation::Verify {
-        platter::api::Client::new(context.home.join(".local/bin/platter")).list(None)?;
+        crate::jobs::read(&context.dependency_binary("cast")?)?;
+    }
+    if matches!(operation, Operation::Verify | Operation::Recover)
+        && root.join(crate::store::DATABASE).exists()
+    {
+        // Prove compatibility with the selected program, including recovery
+        // before schema-two publication. Never release an old program on new state.
+        cell_install::command::json(
+            &installed,
+            &[
+                "--state-dir".into(),
+                root.clone().into_os_string(),
+                "doctor".into(),
+            ],
+            &BTreeMap::from([("CHANCERY_USAGE_INTERNAL".into(), "1".into())]),
+            std::time::Duration::from_secs(30),
+        )?;
     }
     if operation == Operation::Release {
         gate.release(&context.request.run_id)?;
@@ -158,7 +177,64 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         };
         schedule.activate(&clockwork, KEY, enabled)?;
     }
-    Ok(json!({"schema_version":1,"safe_to_release":true}))
+    Ok(json!({"schema_version":2,"safe_to_release":true,"migration_backup":migration_backup}))
+}
+
+fn migrate_if_needed(root: &Path, home: &Path, owner: &str) -> Result<Option<PathBuf>> {
+    if !root.join(crate::store::DATABASE).exists() || !crate::store::Store::migration_needed(root)?
+    {
+        return Ok(None);
+    }
+    let references = crate::store::Store::legacy_references(root)?;
+    let opportunities = if references.is_empty() {
+        Vec::new()
+    } else {
+        platter::api::Client::new(home.join(".local/bin/platter"))
+            .list(None)
+            .context("schema-one migration requires the installed Platter opportunity reader")?
+            .items
+    };
+    let mapping = legacy_mapping(&references, opportunities)?;
+    let backup = root.join(format!(
+        "ledger-schema1-backup-{owner}-{}.sqlite3",
+        uuid::Uuid::now_v7()
+    ));
+    crate::store::Store::migrate(root, &mapping, &backup)?;
+    Ok(Some(backup))
+}
+
+fn legacy_mapping(
+    references: &[String],
+    opportunities: Vec<platter::api::Opportunity>,
+) -> Result<BTreeMap<String, String>> {
+    let needed: BTreeSet<_> = references.iter().collect();
+    let mut mapping = BTreeMap::new();
+    let mut jobs = BTreeSet::new();
+    for opportunity in opportunities {
+        if !needed.contains(&opportunity.reference) {
+            continue;
+        }
+        ensure!(
+            !opportunity.cast_job_id.trim().is_empty(),
+            "legacy Platter reference has no Cast job ID: {}",
+            opportunity.reference
+        );
+        ensure!(
+            !mapping.contains_key(&opportunity.reference),
+            "legacy Platter reference has multiple mappings: {}",
+            opportunity.reference
+        );
+        ensure!(
+            jobs.insert(opportunity.cast_job_id.clone()),
+            "multiple legacy Clew histories map to one Cast job; resolve before migration"
+        );
+        mapping.insert(opportunity.reference, opportunity.cast_job_id);
+    }
+    ensure!(
+        mapping.len() == needed.len(),
+        "legacy Clew history has no retained Platter mapping; resolve before migration"
+    );
+    Ok(mapping)
 }
 
 #[derive(clap::Parser)]
@@ -234,4 +310,59 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     Ok(
         json!({"key":KEY,"release_id":manifest.release_id,"definition":args.output,"registered":false,"activated":false}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::legacy_mapping;
+
+    fn opportunity(reference: &str, cast_job_id: &str) -> platter::api::Opportunity {
+        platter::api::Opportunity {
+            reference: reference.into(),
+            cast_job_id: cast_job_id.into(),
+            company: "Company".into(),
+            title: "Role".into(),
+            urls: Vec::new(),
+            packets: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn migration_requires_exact_unambiguous_mappings_for_retained_histories() -> anyhow::Result<()>
+    {
+        let references = vec!["legacy-a".into(), "legacy-b".into()];
+        let mapping = legacy_mapping(
+            &references,
+            vec![
+                opportunity("legacy-a", "cast-a"),
+                opportunity("legacy-b", "cast-b"),
+                opportunity("untracked", "cast-a"),
+            ],
+        )?;
+        assert_eq!(mapping["legacy-a"], "cast-a");
+        assert_eq!(mapping["legacy-b"], "cast-b");
+        assert_eq!(mapping.len(), 2);
+        assert!(legacy_mapping(&references, vec![opportunity("legacy-a", "cast-a")]).is_err());
+        assert!(
+            legacy_mapping(
+                &references,
+                vec![
+                    opportunity("legacy-a", "cast-a"),
+                    opportunity("legacy-b", "cast-a")
+                ],
+            )
+            .is_err()
+        );
+        assert!(
+            legacy_mapping(
+                &["legacy-a".into()],
+                vec![
+                    opportunity("legacy-a", "cast-a"),
+                    opportunity("legacy-a", "cast-b")
+                ],
+            )
+            .is_err()
+        );
+        Ok(())
+    }
 }

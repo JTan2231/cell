@@ -71,7 +71,7 @@ Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy, Weaver
 Cast --> Platter <-- Vita career works in Annals
-Platter --> Clew application history
+Cast --> Clew application history
 Platter, Clew, Conatus, Mentor, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report

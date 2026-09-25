@@ -1,9 +1,11 @@
 # Install and verify Clew
 
 Clew has an independent private application ledger and an optional daily email.
-It requires Platter opportunity read contract one for candidate search and first
-reference admission. Email contract four supplies mail submission. Clockwork
-contract three supplies scheduled activation. Clew runs no model requester.
+It requires Cast discovery read contract two for candidate search, first-job
+admission and email context. Platter opportunity read contract one supplies only
+the mapping for a schema-one ledger migration. Email contract four supplies mail
+submission. Clockwork contract three supplies scheduled activation. Clew runs no
+model requester.
 
 ## Deploy
 
@@ -21,9 +23,10 @@ Clew accepts the boolean deployment setting `daily_email_enabled`. Omission
 preserves existing schedule intent; an absent binding remains absent. Explicit
 true authorizes daily submission of the content in the
 [email contract](digest-email.md). Explicit false prepares a disabled selection.
-The coordinator installs compatible Platter, Email and Clockwork dependencies
-first when necessary. Configure initializes an empty ledger or checks its schema.
-Verify checks ledger integrity and reads retained Platter opportunity metadata.
+The coordinator installs compatible Cast, Email and Clockwork dependencies
+first when necessary. Configure initializes an empty ledger, migrates a schema-one
+ledger, or checks schema-two state. Verify checks ledger integrity and reads the
+complete retained Cast snapshot.
 Deployment creates no application reports and performs no preparation or send.
 
 The lifecycle captures `clew/daily-email`, holds email admission, suspends the
@@ -31,7 +34,8 @@ binding and drains admitted sends. Configure prepares a disabled definition for
 the exact installed release. Activation restores captured or explicit enabled
 intent after releasing maintenance. Existing schedule policy, disabled intent
 and failure halts are preserved. No lifecycle operation approves an incident.
-Application ledger reads and short writes can continue during email maintenance.
+Schema-two ledger reads and short writes can continue during email maintenance.
+Schema-one migration uses the guarded procedure below.
 
 The immutable release contains `clew`, `clew-install`, the recovery installer,
 and the matching Chancery provider. They live under
@@ -80,12 +84,38 @@ The ledger is `~/.local/share/clew/ledger.sqlite3`. Its directory must be privat
 `--state-dir ABSOLUTE_PATH` selects another explicit private ledger for ordinary
 commands. Deployment configures only the default ledger.
 
-Init creates schema one in an empty database. It can finish initialization after
+Init creates schema two in an empty database. It can finish initialization after
 an interruption left an empty database. It preserves compatible existing rows
 and refuses nonempty foreign or unsupported state. Doctor checks the local schema,
 SQLite integrity and correction references. It returns the retained entry count
-without creating entries or probing Platter. Installation inspection describes
+without creating entries or probing Cast. Installation inspection describes
 files only; it does not establish future runtime readiness.
+
+## Migrate a schema-one ledger
+
+Use coordinated deployment for this migration. Ordinary commands and `init`
+refuse schema-one state; direct program installation does not migrate it.
+
+Configure requires its sole owned email maintenance hold and drained sends.
+It reads the Platter public opportunity interface and maps every legacy reference
+retained in the ledger to its exact `cast_job_id`. Missing mappings or two legacy
+references that select the same Cast job stop the migration. Clew does not infer
+a mapping from company, role or URL, and does not merge histories.
+An empty legacy ledger needs no Platter read.
+
+Migration excludes concurrent ledger writes and creates a private, consistent
+schema-one SQLite backup under the state root as
+`ledger-schema1-backup-RUN_ID-UUID.sqlite3`, with mode 0600. It refuses to overwrite
+an earlier backup. An interrupted retry creates a new backup. It then commits
+the schema and alias mappings in one transaction.
+After commit, old schema-one writers are rejected. Preserve the backup and the
+reported recovery evidence until the deployment is verified.
+
+Original ledger rows, write IDs, sequence, timestamps, supplied text, corrections
+and retractions remain unchanged. Legacy aliases retain their exact argument
+identity for retries. New records use Cast IDs. Frozen email occurrences, message
+bytes, send keys and acceptance receipts remain unchanged. Migration creates no
+application report and starts no collection, preparation or send.
 
 ## Recovery
 
@@ -93,15 +123,16 @@ Each append is atomic. Reinvoke an uncertain write with its original ID and
 identical arguments. Never edit SQLite to repair an entry. Use the application
 contract's append-only correction or retraction commands.
 
-Program recovery can select a retained version-two release:
+Program recovery can select a retained `cell-install-v2` release:
 
 ```sh
 clew-install recover --release /absolute/owned/release
 ```
 
 File recovery preserves the separate ledger and does not restore or delete its
-rows. Only schema-one-compatible programs can operate this ledger. No older
-installation format or incompatible state migration is supported. Preserve
+rows. Only schema-two-compatible programs can operate a migrated ledger. Recovery
+must not declare an old program compatible with schema-two state. No older
+installation format or automatic schema downgrade is supported. Preserve
 unresolved installation evidence if recovery fails. Coordinator recovery checks
 any existing ledger before reporting safe program recovery.
 
@@ -119,12 +150,19 @@ maintenance state and SQLite sidecars together in a
 private backup. Keep the previous complete backup when restoring a compatible
 history. Restoring an older history changes which write IDs are known; reconcile
 uncertain writes and email acceptance before replaying them. Restoring older
-delivery history can permit duplicate mail. Clew supplies
-no automatic backup, pruning or deletion operation.
+delivery history can permit duplicate mail. The schema-one migration creates its
+required ledger backup. Clew supplies no general automatic backup, pruning or
+deletion operation.
 
-Compatible schema-one commands can finish across program selection. An
-incompatible future migration requires a separate procedure that excludes
-writers and preserves a compatible backup. No duration guarantee is supplied.
+Keep a schema-two-capable release selected after migration. A rollback to a
+schema-one program requires a matching schema-one ledger backup and stopped
+commands and scheduling. Reconcile all post-migration reports and uncertain
+email acceptance before restoring that backup. Preserve delivery state; an old
+ledger backup does not justify restoring older email occurrences.
+
+Compatible schema-two commands can finish across program selection. An
+incompatible future migration requires a separate procedure that excludes writers
+and preserves a compatible backup. No duration guarantee is supplied.
 
 Private notes belong in the ledger, outside the source and release trees.
 Installation, initialization and catalog discovery authorize no application

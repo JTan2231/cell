@@ -1,8 +1,9 @@
-//! User-reported application history, linked to retained Platter opportunities.
+//! User-reported application history, linked to retained Cast jobs.
 #![allow(clippy::missing_errors_doc)]
 mod delivery;
 pub mod digest;
 pub mod installation;
+pub mod jobs;
 pub mod store;
 
 use anyhow::{Context, Result, ensure};
@@ -24,8 +25,6 @@ pub fn gate(root: &Path) -> cell_maintenance::Gate {
     cell_maintenance::Gate::new(root.join("deployment-maintenance"))
 }
 
-pub fn platter_client() -> Result<platter::api::Client> {
-    Ok(platter::api::Client::new(
-        home()?.join(".local/bin/platter"),
-    ))
+pub fn cast_jobs() -> Result<Vec<jobs::Job>> {
+    jobs::read(&home()?.join(".local/bin/cast"))
 }

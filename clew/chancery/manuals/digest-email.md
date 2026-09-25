@@ -9,7 +9,7 @@ as `clew list`.
 
 Each included application shows company, role, supplied status and all retained
 job URLs. Items sort by company, then role, without case sensitivity, with the
-opaque Platter reference as the final tie-breaker. Saved notes follow the list,
+opaque Cast job ID as the final tie-breaker. Saved notes follow the list,
 grouped in the same application order. Every active note appears unchanged in
 ledger sequence order. Superseded and retracted records, and retraction
 explanations, are excluded. Rejected applications contribute no counts or notes.
@@ -19,11 +19,11 @@ An empty snapshot says `No applications to show.` No model, application-age
 calculation, correspondence read, status inference or application write occurs.
 The ledger's `recorded_at` records reporting time, not application time.
 
-Clew reads the ledger once and joins Platter's supported retained opportunity
-read by exact reference. These are separate snapshots. A Platter read failure
-or missing opportunity leaves each qualifying application visible under its
-reference, with missing job details marked and one context-unavailable footer.
-A ledger read failure stops rendering. An empty selected list needs no Platter
+Clew reads the ledger once and joins Cast's complete retained snapshot by exact
+job ID. These are separate snapshots. A Cast read failure or missing job leaves
+each qualifying application visible under its Cast job ID, with missing job
+details marked and one context-unavailable footer.
+A ledger read failure stops rendering. An empty selected list needs no Cast
 read. Retained links do not establish that a posting is still open.
 
 ## Preview and send
@@ -39,7 +39,7 @@ Preview prints From, To, Subject and body. JSON returns `data.digest` with
 `subject`, `body`, `application_count`, `context_available` and
 `ledger_sequence`. The sequence is the last ledger append observed, including
 corrections; it is null for an empty ledger. Context is available when every
-included application has Platter metadata. It is also true for an empty list.
+included application has Cast metadata. It is also true for an empty list.
 Preview creates no delivery state and sends nothing.
 
 Manual send requires explicit authorization. Enabling `clew/daily-email` grants
@@ -53,7 +53,7 @@ notes are disclosed to Resend and Gmail. No attachments are sent.
 Clew retains an exact message, a random stable idempotency key, first-attempt
 time and acceptance receipt in private `email.sqlite3` beside `ledger.sqlite3`.
 The email database is schema one and is created on the first send; it does not
-change the application ledger schema. Files use mode 0600 under the private
+change the schema-two application ledger. Files use mode 0600 under the private
 0700 state directory. Records have no automatic pruning. Back up both databases
 and their sidecars together while commands and scheduling are stopped.
 
@@ -75,6 +75,7 @@ that occurrence.
 3. Run `clew email send --retry ID` only when another submission is authorized.
 
 Retry uses the original message and key, even after statuses or notes change.
+Migration to Cast job identities does not rewrite frozen messages or send keys.
 It is allowed for less than 23 hours after the first attempt, and is refused
 after a backwards clock change. Email's external idempotency window is 24 hours.
 An accepted occurrence returns its receipt without resubmission. After the safe
@@ -105,7 +106,7 @@ Scheduled failures halt the binding. Inspect
 submission before explicitly approving
 `clockwork binding resume clew/daily-email INCIDENT_ID`. Continuation permits
 future activations; it does not retry an uncertain message. Deliberate admission
-during deployment maintenance returns a successful skip. Other read and
+during deployment maintenance returns a successful skip. Schema-two read and
 application-report commands remain available during email maintenance.
 
 CLI dispatch attempts metadata-only Chancery usage recording. It records no

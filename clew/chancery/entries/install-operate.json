@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and verify Clew",
-  "summary": "Install and verify Clew under email admission maintenance, preserve its application ledger, and prepare or restore the daily email schedule.",
+  "summary": "Install and verify Clew under email admission maintenance, migrate legacy application references to Cast jobs with a private backup, and preserve the daily email schedule.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -43,7 +43,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A validated committed candidate and compatible Platter, Email and Clockwork interfaces are available. Coordinated mutations require drained run-owned email maintenance."
+        "statement": "A validated committed candidate and compatible Cast, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Coordinated mutations require drained run-owned email maintenance; migration requires the sole owned hold."
       }
     ],
     "inputs": [
@@ -55,13 +55,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The selected immutable release contains clew, clew-install and the matching Chancery provider. Coordinated configure initializes empty schema-one state."
+        "statement": "The selected immutable release contains clew, clew-install and the matching Chancery provider. Coordinated configure initializes empty schema-two state or migrates schema one with a private consistent backup and exact legacy aliases."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation is program selection and empty-ledger initialization. It creates no application entries and supplies no statuses."
+        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no application reports or supplied statuses. Migration preserves original rows, write IDs, timestamps, sequence, corrections and retractions; Platter supplies only the exact legacy-reference-to-Cast-ID mapping."
       }
     ],
     "identity_and_units": [
@@ -73,7 +73,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verification checks the selected installed bytes, local ledger integrity and the retained Platter read interface at that invocation. It establishes no future availability."
+        "statement": "Verification checks selected installed bytes, local ledger integrity and the complete retained Cast snapshot interface at that invocation. Migration requires a mapping for every legacy ledger reference and refuses missing or colliding mappings. It establishes no future availability."
       }
     ],
     "access": [
@@ -85,27 +85,34 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends and drains email work, prepares the exact disabled definition, then restores enabled intent after releasing its hold. Failure halts and both databases are preserved. Ledger writers remain compatible across program selection."
+        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends and drains email work, prepares the exact disabled definition, then restores enabled intent after releasing its hold. Migration serializes ledger writes, creates a new private schema-one SQLite backup, and commits schema and aliases in one transaction. Old schema-one writers are then rejected. Failure halts, frozen email bytes, keys and receipts remain intact."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "There is no completion-time guarantee. Concurrent schema-one readers and short SQLite writers can finish across program selection."
+        "statement": "There is no completion-time guarantee. Compatible schema-two readers and short SQLite writers can finish across program selection. Schema-one migration uses a separate guarded write boundary and never overwrites an earlier backup."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 releases, ledger schema one and email schema one are supported. Contract two adds guarded daily schedule lifecycle. Disable the daily binding before rollback to a program without email support and preserve all delivery records."
+        "statement": "Only cell-install-v2 releases, ledger schema two and email schema one are supported. Contract three adds guarded migration from ledger schema one. Ordinary commands and direct installation do not migrate state. Recovery must use a compatible program and ledger pair; there is no automatic downgrade. Preserve email delivery records across recovery."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clew requires the Platter opportunity reader for first-reference admission and search.",
-        "target": "platter",
+        "statement": "Clew requires the complete Cast snapshot reader for first-job admission, search, email context and deployment verification.",
+        "target": "cast",
         "kind": "readiness",
+        "contract": "cast.discovery.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Cast job ID. Ordinary schema-two work does not need Platter.",
+        "target": "platter",
+        "kind": "data",
         "contract": "platter.opportunity.explore"
       },
       {
@@ -125,6 +132,11 @@
     ]
   },
   "dependencies": [
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
     {
       "id": "platter.opportunity.explore",
       "min_contract": 1,
@@ -149,7 +161,7 @@
   ],
   "outcome": "Verified installed Clew commands, provider and compatible empty or existing ledger.",
   "effects": [
-    "Program deployment selects immutable files and initializes a missing ledger without creating entries. Existing rows remain intact.",
+    "Program deployment selects immutable files and initializes a missing ledger or migrates schema one under maintenance with a private consistent backup. Existing ledger rows and exact retry identities remain intact.",
     "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
   ],
   "authority": [
@@ -157,10 +169,10 @@
     "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
-    "Installed bytes match the selected candidate, ledger integrity passes and the retained Platter read interface succeeds."
+    "Installed bytes match the selected candidate, schema-two ledger integrity passes and the complete retained Cast snapshot interface succeeds."
   ],
   "failure_and_recovery": [
-    "File recovery selects a coherent prior or candidate release without restoring or deleting the ledger. Preserve unresolved installation evidence. Unsupported or nonempty foreign state fails.",
+    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema two. Missing or colliding migration mappings stop the upgrade. Preserve the private schema-one backup and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
     "Retain email occurrences and uncertain acceptance across recovery. Resolve product and schedule selection before releasing run-owned admission; never erase or approve existing failure incidents."
   ],
   "privacy": [

@@ -1,13 +1,13 @@
 # Clew
 
-Clew records your application status and notes for opportunities prepared by
-Platter. It keeps an append-only history and the latest status you supplied.
+Clew records your application status and notes for jobs retained by Cast.
+It keeps an append-only history and the latest status you supplied.
 Its daily email shows tracked applications except current rejections, with
 retained job details and saved notes.
 
 ```sh
 clew find 'company or job URL'
-clew record REFERENCE --id my-application --status applied --notes 'Applied today.'
+clew record --cast-job JOB_ID --id my-application --status applied --notes 'Applied today.'
 clew list
 ```
 
