@@ -138,11 +138,7 @@ pub(crate) fn prepare(root: &Path) -> Result<Digest> {
         return Ok(without_context);
     }
     let jobs = crate::cast_jobs();
-    render(
-        &entries,
-        jobs.as_ref().ok().map(Vec::as_slice),
-        &date,
-    )
+    render(&entries, jobs.as_ref().ok().map(Vec::as_slice), &date)
 }
 
 pub fn preview(root: &Path, occurrence: Option<&str>) -> Result<Value> {
