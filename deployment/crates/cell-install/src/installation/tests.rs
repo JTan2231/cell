@@ -100,7 +100,10 @@ fn indexed_provider_overview_is_published_and_unindexed_file_is_refused() -> Res
         f.input.provider_dir.join("provider.json"),
         r#"{"schema_version":4,"provider":{"id":"usher","release":"0.3.0"},"overview":"overview.md"}"#,
     )?;
-    fs::write(f.input.provider_dir.join("overview.md"), "Usher overview.\n")?;
+    fs::write(
+        f.input.provider_dir.join("overview.md"),
+        "Usher overview.\n",
+    )?;
 
     let installed = f.installed()?;
     assert_eq!(
@@ -108,7 +111,10 @@ fn indexed_provider_overview_is_published_and_unindexed_file_is_refused() -> Res
         "Usher overview.\n"
     );
 
-    fs::write(f.input.provider_dir.join("unindexed.md"), "Not published.\n")?;
+    fs::write(
+        f.input.provider_dir.join("unindexed.md"),
+        "Not published.\n",
+    )?;
     assert!(verify_candidate(&SPEC, &f.home, &f.input).is_err());
     Ok(())
 }
