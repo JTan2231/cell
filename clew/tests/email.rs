@@ -3,7 +3,8 @@ use clew::{
     digest,
     store::{Record, Store},
 };
-use platter::api::Opportunity;
+mod common;
+use clew::jobs::Job;
 use serde_json::{Value, json};
 use std::{fs, os::unix::fs::PermissionsExt as _, path::Path, process::Command};
 
@@ -17,7 +18,8 @@ fn report(
 ) -> Result<()> {
     store.record(&Record {
         id: id.into(),
-        platter_job_ref: reference.into(),
+        cast_job_id: Some(reference.into()),
+        platter_job_ref: None,
         status: status.map(Into::into),
         notes: notes.map(Into::into),
         replaces: replaces.map(Into::into),
@@ -25,15 +27,12 @@ fn report(
     Ok(())
 }
 
-fn job(reference: &str, company: &str, title: &str) -> Opportunity {
-    Opportunity {
-        reference: reference.into(),
-        cast_job_id: reference.into(),
-        company: company.into(),
-        title: title.into(),
-        urls: vec![format!("https://example.com/{reference}")],
-        packets: vec![],
-    }
+fn job(reference: &str, company: &str, title: &str) -> Job {
+    clew::jobs::from_snapshot(
+        serde_json::from_value(common::snapshot(&[(reference, company, title)])).expect("fixture"),
+    )
+    .expect("fixture job")
+    .remove(0)
 }
 
 #[test]
@@ -171,12 +170,12 @@ fn preview_and_uncertain_delivery_preserve_bytes_without_real_transport() -> Res
         None,
     )?;
     fs::create_dir_all(home.join(".local/bin"))?;
-    let platter = home.join(".local/bin/platter");
+    let cast = home.join(".local/bin/cast");
     executable(
-        &platter,
+        &cast,
         &format!(
-            "#!/bin/sh\n[ \"$*\" = 'opportunities list' ] || exit 2\n[ \"$CHANCERY_USAGE_INTERNAL\" = 1 ] || exit 3\nprintf '%s\\n' '{}'\n",
-            json!({"schema_version":1,"items":[job("acme","Acme","Engineer")]})
+            "#!/bin/sh\n[ \"$*\" = 'export --json' ] || exit 2\n[ \"$CHANCERY_USAGE_INTERNAL\" = 1 ] || exit 3\nprintf '%s\\n' '{}'\n",
+            common::snapshot(&[("acme", "Acme", "Engineer")])
         ),
     )?;
     let invoke = |args: &[&str]| {
@@ -278,7 +277,7 @@ fn preview_and_uncertain_delivery_preserve_bytes_without_real_transport() -> Res
     assert!(invoke(&["email", "preview"])?.status.success());
     clew::gate(&root).release("deployment")?;
     report(&mut store, "three", "acme", Some("applied"), None, None)?;
-    fs::remove_file(&platter)?;
+    fs::remove_file(&cast)?;
     let fallback: Value = serde_json::from_slice(&invoke(&["email", "preview"])?.stdout)?;
     assert_eq!(fallback["data"]["digest"]["application_count"], 1);
     assert_eq!(fallback["data"]["digest"]["context_available"], false);

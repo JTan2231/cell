@@ -7,7 +7,7 @@ use std::{collections::BTreeSet, path::PathBuf};
 #[derive(Parser)]
 #[command(
     version,
-    about = "Record your application status and notes for Platter opportunities"
+    about = "Record your application status and notes for Cast jobs"
 )]
 struct Cli {
     #[arg(long, global = true)]
@@ -23,13 +23,18 @@ struct Cli {
 enum Command {
     /// Initialize an empty private ledger, or check the existing schema.
     Init,
-    /// Check local ledger integrity without reading Platter or creating entries.
+    /// Check local ledger integrity without reading Cast or creating entries.
     Doctor,
     /// Find candidates by retained URL, company, title, reference or Clew notes.
     Find { query: String },
-    /// Append an explicitly supplied status and/or note to one exact opportunity.
+    /// Append an explicitly supplied status and/or note to one exact Cast job.
     Record {
-        reference: String,
+        /// A retained legacy Platter reference, for old reports and exact retries.
+        #[arg(required_unless_present = "cast_job", conflicts_with = "cast_job")]
+        reference: Option<String>,
+        /// The exact Cast job ID to track.
+        #[arg(long)]
+        cast_job: Option<String>,
         #[arg(long)]
         id: String,
         #[arg(long)]
@@ -48,9 +53,9 @@ enum Command {
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List the latest supplied status for each currently tracked opportunity.
+    /// List the latest supplied status for each currently tracked Cast job.
     List,
-    /// Read the full recorded history for an exact opportunity reference.
+    /// Read history by Cast job ID or a retained legacy Platter reference.
     Show { reference: String },
     /// Preview or explicitly send the daily application snapshot.
     #[command(subcommand)]
@@ -117,25 +122,28 @@ fn run() -> Result<()> {
     let data = match cli.command {
         Command::Init => {
             Store::initialize(&root)?;
-            json!({"initialized":true,"schema_version":1})
+            json!({"initialized":true,"schema_version":2})
         }
         Command::Doctor => {
             let store = Store::open(&root, false)?;
             store.check()?;
-            json!({"schema_version":1,"entries":store.entries()?.len()})
+            json!({"schema_version":2,"entries":store.entries()?.len()})
         }
         Command::Find { query } => find(&root, &query)?,
         Command::Record {
             reference,
+            cast_job,
             id,
             status,
             notes,
             replaces,
         } => {
+            let _admission = clew::gate(&root).enter()?;
             let mut store = Store::open(&root, true)?;
             let record = Record {
                 id,
                 platter_job_ref: reference,
+                cast_job_id: cast_job,
                 status,
                 notes,
                 replaces,
@@ -143,8 +151,20 @@ fn run() -> Result<()> {
             let entry = if let Some(entry) = store.existing_record(&record)? {
                 entry
             } else {
-                if !store.knows(&record.platter_job_ref)? {
-                    clew::platter_client()?.show(&record.platter_job_ref)?;
+                if let Some(job_id) = &record.cast_job_id {
+                    if !store.knows_job(job_id)? {
+                        ensure!(
+                            clew::cast_jobs()?
+                                .iter()
+                                .any(|job| job.cast_job_id == *job_id),
+                            "Cast job is not retained"
+                        );
+                    }
+                } else {
+                    ensure!(
+                        store.knows(record.platter_job_ref.as_deref().context("reference")?)?,
+                        "legacy reference has no Clew history; use --cast-job with a retained Cast job"
+                    );
                 }
                 store.record(&record)?
             };
@@ -154,16 +174,20 @@ fn run() -> Result<()> {
             entry_id,
             id,
             notes,
-        } => serde_json::to_value(Store::open(&root, true)?.retract(
-            &id,
-            &entry_id,
-            notes.as_deref(),
-        )?)?,
+        } => {
+            let _admission = clew::gate(&root).enter()?;
+            serde_json::to_value(Store::open(&root, true)?.retract(
+                &id,
+                &entry_id,
+                notes.as_deref(),
+            )?)?
+        }
         Command::List => serde_json::to_value(Store::open(&root, false)?.current()?)?,
         Command::Show { reference } => {
             let store = Store::open(&root, false)?;
-            ensure!(store.knows(&reference)?, "opportunity has no Clew history");
-            json!({"platter_job_ref":reference,"current":store.current()?.into_iter().find(|item| item.platter_job_ref == reference),"history":store.history(&reference)?})
+            ensure!(store.knows(&reference)?, "job has no Clew history");
+            let job_id = store.canonical_reference(&reference)?;
+            json!({"cast_job_id":job_id,"current":store.current()?.into_iter().find(|item| item.cast_job_id == job_id),"history":store.history(&reference)?})
         }
         Command::Email(EmailCommand::Preview { occurrence }) => {
             clew::digest::preview(&root, occurrence.as_deref())?
@@ -183,43 +207,51 @@ fn run() -> Result<()> {
             data["digest"]["body"].as_str().context("preview body")?
         );
     } else {
-        println!("{}", json!({"ok":true,"schema_version":1,"data":data}));
+        println!("{}", json!({"ok":true,"schema_version":2,"data":data}));
     }
     Ok(())
 }
 
 fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
     ensure!(!query.trim().is_empty(), "search query must be nonblank");
-    let entries = Store::open(root, false)?.entries()?;
+    let store = Store::open(root, false)?;
+    let entries = store.entries()?;
+    let tracked: BTreeSet<_> = store
+        .current()?
+        .into_iter()
+        .map(|item| item.cast_job_id)
+        .collect();
     let text = query.to_lowercase();
     let references: BTreeSet<_> = entries
         .iter()
         .filter(|entry| {
-            entry.platter_job_ref.to_lowercase().contains(&text)
+            entry.cast_job_id.to_lowercase().contains(&text)
+                || entry
+                    .platter_job_ref
+                    .as_ref()
+                    .is_some_and(|reference| reference.to_lowercase().contains(&text))
                 || entry
                     .notes
                     .as_ref()
                     .is_some_and(|notes| notes.to_lowercase().contains(&text))
         })
-        .map(|entry| entry.platter_job_ref.clone())
+        .map(|entry| entry.cast_job_id.clone())
         .collect();
-    let client = clew::platter_client()?;
-    let result = client
-        .list(None)
+    let jobs = clew::cast_jobs()
         .context("cannot complete candidate search; Clew list/show remain available")?;
-    let mut candidates: Vec<_> = result
-        .items
+    let mut candidates: Vec<_> = jobs
         .into_iter()
-        .filter(|item| {
-            references.contains(&item.reference) || platter::opportunities::matches(item, query)
-        })
+        .filter(|item| references.contains(&item.cast_job_id) || item.matches(query))
         .collect();
-    candidates.sort_by(|a, b| a.reference.cmp(&b.reference));
+    candidates.sort_by(|a, b| a.cast_job_id.cmp(&b.cast_job_id));
     let unmatched: Vec<_> = references
         .into_iter()
-        .filter(|reference| !candidates.iter().any(|item| item.reference == *reference))
+        .filter(|reference| !candidates.iter().any(|item| item.cast_job_id == *reference))
         .collect();
+    let candidates: Vec<_> = candidates.into_iter().map(|item| {
+        json!({"cast_job_id":item.cast_job_id,"company":item.company,"title":item.title,"urls":item.urls,"tracked":tracked.contains(&item.cast_job_id)})
+    }).collect();
     Ok(
-        json!({"candidates":candidates,"retained_references_without_platter_record":unmatched,"complete":true}),
+        json!({"candidates":candidates,"retained_references_without_cast_record":unmatched,"complete":true}),
     )
 }

@@ -1,3 +1,4 @@
+mod common;
 use anyhow::Result;
 use serde_json::{Value, json};
 use std::{fs, os::unix::fs::PermissionsExt, process::Command};
@@ -7,15 +8,19 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     let temp = tempfile::tempdir()?;
     let bin = temp.path().join(".local/bin");
     fs::create_dir_all(&bin)?;
-    let provider = bin.join("platter");
-    let opportunities = json!({"schema_version":1,"items":[
-        {"reference":"ashby:acme:role","cast_job_id":"cast-one","company":"Acme","title":"Engineer","urls":["https://jobs.ashbyhq.com/acme/role"],"packets":[]},
-        {"reference":"ashby:acme:other","cast_job_id":"cast-two","company":"Acme","title":"Other Engineer","urls":[],"packets":[]}
-    ]});
+    let provider = bin.join("cast");
+    let names: Vec<_> = (0..25).map(|i| format!("cast-{i}")).collect();
+    let specifications: Vec<_> = names
+        .iter()
+        .map(|name| (name.as_str(), "Acme", "Engineer"))
+        .collect();
+    let mut snapshot = common::snapshot(&specifications);
+    snapshot["jobs"][0]["source_key"] = json!("ashby:acme:role");
+    snapshot["jobs"][0]["url"] = json!("https://jobs.ashbyhq.com/acme/role");
     fs::write(
         &provider,
         format!(
-            "#!/bin/sh\n[ \"$CHANCERY_USAGE_INTERNAL\" = 1 ] || exit 8\nprintf '%s\\n' '{opportunities}'\n"
+            "#!/bin/sh\n[ \"$*\" = 'export --json' ] || exit 9\n[ \"$CHANCERY_USAGE_INTERNAL\" = 1 ] || exit 8\nprintf '%s\\n' '{snapshot}'\n"
         ),
     )?;
     fs::set_permissions(&provider, fs::Permissions::from_mode(0o700))?;
@@ -34,9 +39,20 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     let candidates = call(&["find", "Acme"])?;
     assert_eq!(
         candidates.1["data"]["candidates"].as_array().map(Vec::len),
-        Some(2)
+        Some(25)
     );
-    assert!(!call(&["record", "Acme", "--id", "one", "--status", "applied"])?.0);
+    assert!(
+        !call(&[
+            "record",
+            "--cast-job",
+            "Acme",
+            "--id",
+            "one",
+            "--status",
+            "applied"
+        ])?
+        .0
+    );
     assert!(
         call(&["list"])?.1["data"]
             .as_array()
@@ -44,7 +60,8 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     );
     let arguments = [
         "record",
-        "ashby:acme:role",
+        "--cast-job",
+        "cast-0",
         "--id",
         "one",
         "--status",
@@ -54,12 +71,28 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     ];
     let first = call(&arguments)?;
     assert!(first.0);
+    assert_eq!(first.1["data"]["cast_job_id"], "cast-0");
+    let found = call(&[
+        "find",
+        "https://jobs.ashbyhq.com/acme/role/application?source=test",
+    ])?;
+    assert_eq!(
+        found.1["data"]["candidates"].as_array().map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(found.1["data"]["candidates"][0]["tracked"], true);
+    assert_eq!(
+        call(&["find", "Project fit"])?.1["data"]["candidates"][0]["cast_job_id"],
+        "cast-0"
+    );
     fs::remove_file(provider)?;
+    assert!(!call(&["find", "Acme"])?.0);
     assert_eq!(call(&arguments)?.1, first.1);
     assert!(
         call(&[
             "record",
-            "ashby:acme:role",
+            "--cast-job",
+            "cast-0",
             "--id",
             "two",
             "--notes",
@@ -71,7 +104,8 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     assert!(
         !call(&[
             "record",
-            "ashby:unknown:role",
+            "--cast-job",
+            "cast-unknown",
             "--id",
             "three",
             "--status",
@@ -79,6 +113,6 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
         ])?
         .0
     );
-    assert!(call(&["show", "ashby:acme:role"])?.0);
+    assert!(call(&["show", "cast-0"])?.0);
     Ok(())
 }

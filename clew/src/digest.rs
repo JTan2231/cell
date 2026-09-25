@@ -1,7 +1,7 @@
-//! Deterministic mail from one ledger snapshot and retained Platter metadata.
+//! Deterministic mail from one ledger snapshot and retained Cast metadata.
+use crate::jobs::Job;
 use anyhow::{Context, Result};
 use chrono::Local;
-use platter::api::Opportunity;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fmt::Write as _, path::Path};
@@ -21,7 +21,7 @@ struct Application<'a> {
     reference: &'a str,
     status: Option<&'a str>,
     notes: Vec<&'a str>,
-    opportunity: Option<&'a Opportunity>,
+    opportunity: Option<&'a Job>,
 }
 
 impl Application<'_> {
@@ -46,25 +46,21 @@ impl Application<'_> {
     }
 }
 
-pub fn render(
-    entries: &[Entry],
-    opportunities: Option<&[Opportunity]>,
-    date: &str,
-) -> Result<Digest> {
+pub fn render(entries: &[Entry], opportunities: Option<&[Job]>, date: &str) -> Result<Digest> {
     let jobs: BTreeMap<_, _> = opportunities
         .unwrap_or_default()
         .iter()
-        .map(|job| (job.reference.as_str(), job))
+        .map(|job| (job.cast_job_id.as_str(), job))
         .collect();
     let mut applications = BTreeMap::new();
     for entry in active_entries(entries) {
         let item = applications
-            .entry(entry.platter_job_ref.as_str())
+            .entry(entry.cast_job_id.as_str())
             .or_insert_with(|| Application {
-                reference: &entry.platter_job_ref,
+                reference: &entry.cast_job_id,
                 status: None,
                 notes: Vec::new(),
-                opportunity: jobs.get(entry.platter_job_ref.as_str()).copied(),
+                opportunity: jobs.get(entry.cast_job_id.as_str()).copied(),
             });
         if let Some(status) = &entry.status {
             item.status = Some(status);
@@ -141,10 +137,10 @@ pub(crate) fn prepare(root: &Path) -> Result<Digest> {
     if without_context.application_count == 0 {
         return Ok(without_context);
     }
-    let jobs = crate::platter_client()?.list(None);
+    let jobs = crate::cast_jobs();
     render(
         &entries,
-        jobs.as_ref().ok().map(|list| list.items.as_slice()),
+        jobs.as_ref().ok().map(|list| list.as_slice()),
         &date,
     )
 }

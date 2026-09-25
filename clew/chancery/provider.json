@@ -3,7 +3,7 @@
   "provider": {
     "id": "clew",
     "name": "Clew",
-    "release": "0.1.0"
+    "release": "0.2.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -11,13 +11,13 @@
       "Clew owns deterministic application email selection, frozen message occurrences, submission recovery, email admission maintenance and its product schedule definition."
     ],
     "not_authoritative_for": [
-      "The user supplies status and resolves ambiguity with the agent. Platter owns prepared opportunity identity and packets.",
+      "The user supplies status and resolves ambiguity with the agent. Cast owns job identities and retained job details. Platter owns prepared material and supplies legacy migration mappings.",
       "Clockwork owns activation and failure halts. Email and Resend own submission acceptance; Gmail owns final inbox delivery."
     ],
     "inventory": {
       "completeness": "complete",
       "covers": [
-        "All public Clew outcomes for initialization, local integrity checking, candidate finding, reported status/notes, current/history reads, retraction and installation.",
+        "All public Clew outcomes for initialization, local integrity checking, complete retained-job search, reported status/notes, current/history reads, retraction and installation, including guarded schema-one ledger migration.",
         "Daily application email previews, explicit sends and retries, retained occurrences, schedule definition generation and coordinated schedule lifecycle."
       ],
       "excludes": [
@@ -33,8 +33,8 @@
       "Frozen mail is retained privately without automatic pruning. Authorized sends disclose complete selected notes, statuses, job details and links through Email."
     ],
     "compatibility_and_retirement": [
-      "Database schema one and output schema one are independent of provider release. Unsupported state fails without implicit migration.",
-      "Email storage uses a separate schema-one database. Old programs do not support the daily binding; disable it before rollback and preserve delivery state."
+      "Ledger schema two and output schema two use Cast job identities. Coordinated deployment migrates schema-one state with a private backup and retained legacy aliases. Ordinary commands do not migrate state; old programs must not use a migrated ledger.",
+      "Email storage remains schema one. Frozen messages, send keys and acceptance receipts survive ledger migration. Preserve delivery state and use matching program and ledger versions for recovery."
     ],
     "operational_limits": [
       "Local full reads scale with retained history. The optional daily activation has a 180-second limit; no scheduling latency or inbox-delivery guarantee is supplied."
