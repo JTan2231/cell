@@ -114,7 +114,7 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         .and_then(|r| r.get("any_apply_started"))
         == Some(&json!(true))
         && installed.exists()
-        && cell_install::file_digest(&installed)?
+        && cell_install::file_digest(&fs::canonicalize(&installed)?)?
             == cell_install::file_digest(&context.binary("clew")?)?;
     let mut migration_backup = None;
     if operation == Operation::Configure && context.selected()
