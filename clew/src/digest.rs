@@ -140,7 +140,7 @@ pub(crate) fn prepare(root: &Path) -> Result<Digest> {
     let jobs = crate::cast_jobs();
     render(
         &entries,
-        jobs.as_ref().ok().map(|list| list.as_slice()),
+        jobs.as_ref().ok().map(Vec::as_slice),
         &date,
     )
 }
