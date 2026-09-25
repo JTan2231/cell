@@ -215,6 +215,11 @@ database compatibility. Safe completion moves the journal to
 `backups/deployments/` and preserves library and spool recovery material.
 Nucleus credentials remain outside Annals rollback.
 
+Database restoration uses SQLite's backup interface. The one-minute wait applies
+to blocked database access, not to copying progress. Recovery checkpoints each
+restored database and preserves its WAL coordination files. A blocked checkpoint
+keeps the transaction and maintenance in place.
+
 ### Low storage and failed jobs
 
 `inbox status` reports capacity at both checked filesystems. Low capacity leaves

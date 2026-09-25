@@ -379,6 +379,10 @@ recovery still reports the original deployment failure. Cleanup failure does not
 erase installation success. The coordinator's final result distinguishes these
 outcomes.
 
+Annals recovery restores and checkpoints each journaled library backup before
+declaring its installation safe. Copying progress does not consume its lock-wait
+allowance. A blocked restore or checkpoint retains the deployment hold.
+
 The coordinator retains no public deployment history or resume interface.
 It retains an unresolved active transaction and uses it for recovery at the next
 ordinary deployment command. It removes the workspace only after resolution.

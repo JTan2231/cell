@@ -564,6 +564,14 @@ fn initialize(
 }
 
 fn restore_database(backup: &Path, database: &Path) -> Result<()> {
+    restore_database_with_lock_wait(backup, database, MINUTE)
+}
+
+fn restore_database_with_lock_wait(
+    backup: &Path,
+    database: &Path,
+    lock_wait: Duration,
+) -> Result<()> {
     private_file(backup)?;
     private_file(database)?;
     let source =
@@ -578,21 +586,42 @@ fn restore_database(backup: &Path, database: &Path) -> Result<()> {
         .map_err(|_| Error::new("cannot preserve Annals WAL files during recovery"))?;
     let backup = rusqlite::backup::Backup::new(&source, &mut destination)
         .map_err(|_| Error::new("cannot start Annals database recovery"))?;
-    let until = Instant::now() + MINUTE;
+    let mut blocked_since = None;
     loop {
         match backup
             .step(128)
             .map_err(|_| Error::new("Annals database recovery failed"))?
         {
-            rusqlite::backup::StepResult::Done => return Ok(()),
-            _ if Instant::now() >= until => {
+            rusqlite::backup::StepResult::Done => break,
+            rusqlite::backup::StepResult::More => blocked_since = None,
+            rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
+                let since = blocked_since.get_or_insert_with(Instant::now);
+                if since.elapsed() >= lock_wait {
+                    return Err(Error::new(
+                        "Annals recovery could not acquire database access",
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            _ => {
                 return Err(Error::new(
-                    "Annals recovery could not acquire database access",
+                    "Annals database recovery returned an unknown state",
                 ));
             }
-            _ => std::thread::sleep(Duration::from_millis(20)),
         }
     }
+    drop(backup);
+    // The backup API does not run the usual write-side automatic checkpoint.
+    // Complete the restored database before another recovery can copy it again.
+    let busy: i64 = destination
+        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))
+        .map_err(|_| Error::new("cannot checkpoint the restored Annals database"))?;
+    if busy != 0 {
+        return Err(Error::new(
+            "Annals database was restored but its checkpoint remains blocked",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn install(args: &InstallArgs) -> Result<Value> {
@@ -1545,6 +1574,146 @@ mod inbox_wait_tests {
             root.path().join("spool/.run.lock"),
         )?;
         assert!(wait_inbox_lock(root.path(), Duration::ZERO).is_err());
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod recovery_tests {
+    use super::{Duration, fs, restore_database_with_lock_wait};
+    use rusqlite::Connection;
+    use std::os::unix::fs::PermissionsExt;
+
+    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
+
+    #[test]
+    fn restoration_progress_does_not_consume_lock_wait() -> TestResult {
+        let root = tempfile::tempdir()?;
+        let source_path = root.path().join("before.db");
+        let destination_path = root.path().join("library.db");
+        let source = Connection::open(&source_path)?;
+        source.execute_batch(
+            "CREATE TABLE retained(content BLOB NOT NULL);
+             INSERT INTO retained VALUES (zeroblob(2097152));
+             PRAGMA user_version=5;",
+        )?;
+        drop(source);
+        let destination = Connection::open(&destination_path)?;
+        destination.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE candidate_only(value INTEGER);
+             PRAGMA user_version=6;",
+        )?;
+        crate::sqlite::persist_wal(&destination)?;
+        drop(destination);
+        for path in [&source_path, &destination_path] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        }
+        let original_backup = fs::read(&source_path)?;
+        // More than one batch must complete even with no lock-wait allowance.
+        for _ in 0..2 {
+            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)?;
+            let reader = Connection::open_with_flags(
+                &destination_path,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )?;
+            assert_eq!(
+                reader.query_row("SELECT length(content) FROM retained", [], |row| row
+                    .get::<_, i64>(0))?,
+                2_097_152
+            );
+            assert_eq!(
+                reader.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?,
+                5
+            );
+            assert_eq!(
+                reader.query_row(
+                    "SELECT count(*) FROM sqlite_master WHERE name='candidate_only'",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )?,
+                0
+            );
+            assert!(destination_path.with_extension("db-shm").is_file());
+            assert_eq!(
+                fs::metadata(destination_path.with_extension("db-wal"))?.len(),
+                0
+            );
+        }
+        assert_eq!(fs::read(source_path)?, original_backup);
+        Ok(())
+    }
+
+    #[test]
+    fn blocked_restoration_preserves_the_live_database() -> TestResult {
+        let root = tempfile::tempdir()?;
+        let source_path = root.path().join("before.db");
+        let destination_path = root.path().join("library.db");
+        let source = Connection::open(&source_path)?;
+        source.execute_batch("CREATE TABLE retained(value INTEGER);")?;
+        drop(source);
+        let writer = Connection::open(&destination_path)?;
+        writer.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE retained(value INTEGER);
+             INSERT INTO retained VALUES (7);
+             BEGIN IMMEDIATE;",
+        )?;
+        for path in [&source_path, &destination_path] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        }
+        let error =
+            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
+                .expect_err("an active writer must prevent restoration");
+        assert!(error.message.contains("could not acquire database access"));
+        assert_eq!(
+            writer.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
+            7
+        );
+        writer.execute_batch("ROLLBACK;")?;
+        Ok(())
+    }
+
+    #[test]
+    fn checkpoint_contention_requires_recovery_to_continue() -> TestResult {
+        let root = tempfile::tempdir()?;
+        let source_path = root.path().join("before.db");
+        let destination_path = root.path().join("library.db");
+        let source = Connection::open(&source_path)?;
+        source.execute_batch(
+            "CREATE TABLE retained(value INTEGER); INSERT INTO retained VALUES (11);",
+        )?;
+        drop(source);
+        let reader = Connection::open(&destination_path)?;
+        reader.execute_batch(
+            "PRAGMA journal_mode=WAL;
+             CREATE TABLE retained(value INTEGER);
+             INSERT INTO retained VALUES (7);
+             BEGIN;",
+        )?;
+        assert_eq!(
+            reader.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
+            7
+        );
+        for path in [&source_path, &destination_path] {
+            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+        }
+        let error =
+            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
+                .expect_err("a retained reader must prevent the final checkpoint");
+        assert!(error.message.contains("checkpoint remains blocked"));
+        assert!(source_path.is_file());
+        reader.execute_batch("ROLLBACK;")?;
+        drop(reader);
+        restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)?;
+        let restored = Connection::open_with_flags(
+            &destination_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )?;
+        assert_eq!(
+            restored.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
+            11
+        );
         Ok(())
     }
 }
