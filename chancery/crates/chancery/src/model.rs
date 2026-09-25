@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 pub const OUTPUT_SCHEMA_VERSION: u32 = 3;
-pub const PROVIDER_SCHEMA_VERSION: u32 = 3;
-pub const PREVIOUS_PROVIDER_SCHEMA_VERSION: u32 = 2;
+pub const PROVIDER_SCHEMA_VERSION: u32 = 4;
+pub const PREVIOUS_PROVIDER_SCHEMA_VERSION: u32 = 3;
+pub const V2_PROVIDER_SCHEMA_VERSION: u32 = 2;
 pub const LEGACY_PROVIDER_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -16,6 +17,10 @@ pub struct ProviderManifest {
     pub promise_scope: Option<ProviderPromiseScope>,
     #[serde(skip)]
     pub(crate) promise_scope_present: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub overview: Option<String>,
+    #[serde(skip)]
+    pub(crate) overview_present: bool,
     pub entries: Vec<String>,
 }
 
@@ -388,6 +393,7 @@ pub(crate) struct ProviderBundle {
     pub(crate) schema_version: u32,
     pub(crate) identity: ProviderIdentity,
     pub(crate) promise_scope: Option<ProviderPromiseScope>,
+    pub(crate) overview_text: Option<String>,
     pub(crate) root: PathBuf,
     pub(crate) manifest_sha256: String,
     pub(crate) entries: Vec<LoadedEntry>,

@@ -31,8 +31,14 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Shared operator manual](docs/operator-manual.md), also available as `nucleus manual`
-- [Installation and recovery](docs/system-installation.md)
-- [Runtime contract](docs/runtime-contract.md)
-- [Requester integration](chancery/manuals/requester-integrate.md)
-- [Operating contracts](chancery/provider.json)
+Read the installed Nucleus overview and feature inventory through Chancery:
+
+```sh
+chancery product nucleus
+chancery show nucleus.jobs
+chancery resolve nucleus.execution.operate
+```
+
+Use `nucleus.requester.integrate` for integration and `nucleus.develop.change`
+for development. The [shared operator manual](docs/operator-manual.md), also
+available as `nucleus manual`, covers ecosystem coordination and recovery order.

@@ -1,0 +1,169 @@
+{
+  "id": "nucleus.requester-tools",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Exchange durable requester tool calls",
+  "summary": "Register immutable schemas and toolsets, read durable model calls, and post exact requester-owned results through the mailbox.",
+  "use_when": [
+    "An application must expose constrained tools and service or recover their calls across requester restarts."
+  ],
+  "do_not_use_when": [
+    "Nucleus is expected to execute domain tools, decide domain success, or invent a missing result."
+  ],
+  "outcome": "A model tool call and its exact requester result are durably correlated and transported.",
+  "effects": [
+    "Schema/toolset registration retains immutable definitions. Calls retain arguments and result posting changes the operational mailbox.",
+    "The requester may commit domain mutations after its own validation; Nucleus transports the result to Codex."
+  ],
+  "authority": [
+    "Nucleus owns registration identity and mailbox transport.",
+    "The requester owns validation, idempotent domain commits, exact result retention, domain success, and retries."
+  ],
+  "success": [
+    "The selected call and at most one exact matching requester result are retained; requester state independently proves its domain outcome."
+  ],
+  "failure_and_recovery": [
+    "Recover the pending call and requester commit after restart; replay only the exact result and avoid repeating committed domain work.",
+    "A terminal owner rejects a new answer; inspect domain effects before any replacement job."
+  ],
+  "privacy": [
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+  ],
+  "interfaces": [
+    {
+      "label": "Register a toolset",
+      "invocation": "POST /v1/toolsets over the Nucleus Unix socket"
+    },
+    {
+      "label": "Read calls",
+      "invocation": "GET /v1/jobs/{job}/tool-calls?after=0&waitSeconds=30 over the Nucleus Unix socket"
+    },
+    {
+      "label": "Post one result",
+      "invocation": "POST /v1/jobs/{job}/tool-calls/{call}/result over the Nucleus Unix socket"
+    },
+    {
+      "label": "Read a schema",
+      "invocation": "GET /v1/schemas/{schema} over the Nucleus Unix socket"
+    }
+  ],
+  "does_not_authorize": [
+    "Unvalidated domain mutation, an invented tool result, or a new attempt after daemon loss."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local requester applications may register immutable tool contracts, read calls, and return their exact validated results."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Register the exact immutable schemas/toolset before a job uses them. Persist request correlation and bind each domain commit to a durable exact result."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Toolset identity is provider/name/version with definitionsSchemaId, definitions and digest. Calls carry job/attempt identity, requestSequence, tool name, arguments schema identity and arguments."
+      },
+      {
+        "status": "declared",
+        "statement": "A result supplies version, callId, matching requester identity, resultSchemaId, result, and isError."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Mailbox reads return versioned calls with retained state, createdAt, and nextSequence; an accepted result is recorded before the blocked Codex call resumes."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Nucleus returns no independent domain-success assertion."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A pending call represents requested work, not a committed result. A schema-bound requester result is transport of the requester's assertion, not Nucleus-authored domain authority."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Schema IDs and provider/name/version bind immutable registered meaning and digest. Call ID selects one call; requestSequence names its per-attempt stdout atom; createdAt is its retained creation timestamp."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Mailbox reads describe committed local state at the read boundary and can recover a pending call after requester restart. A separate job read is not an atomic snapshot."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No mailbox response-latency or general retention objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One transaction commits the exact item/tool/call stdout observation and pending mailbox projection. The result is retained in the operational mailbox, not copied to reporting storage, before Codex is woken."
+      },
+      {
+        "status": "declared",
+        "statement": "Requester identity must match the job. At most one exact result is accepted; identical replay is recoverable and a conflicting result cannot replace it. A new answer is rejected when its job or attempt is terminal."
+      },
+      {
+        "status": "declared",
+        "statement": "An absent requester leaves the job waiting_on_requester until cancellation or timeout, retaining its slot. Daemon restart marks unfinished attempts lost and cannot resume the harness process."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Nucleus never runs requester domain tools or retries domain work automatically; one active requester wait holds one of eight slots."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general mailbox-capacity, database-size, or call-volume bound is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Changed registered meaning requires a new immutable schema/toolset identity or version with historical decoders retained. The transport retains version-one meaning."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general requester-support or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Dynamic calls and their blocked-call transport rely on the exact adapter-proved Codex app-server behavior; no installed Chancery contract covers it.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/requester-tools.md"
+}

@@ -8,7 +8,7 @@
   "summary": "Add or revise a product capability contract and publish it with the matching release. This adds no runtime dependency on Chancery.",
   "use_when": [
     "A product gains or changes a user-facing capability or adaptive operation that should be globally discoverable.",
-    "An installed provider contract, manual, dependency, or selector must change."
+    "An installed provider contract, feature manual, product overview, dependency, or selector must change."
   ],
   "do_not_use_when": [
     "Only product implementation changes while the published contract remains exact.",
@@ -16,7 +16,7 @@
   ],
   "outcome": "The owning product release contains a validated, version-matched bundle and owns one atomic installed provider selector that Chancery can read.",
   "effects": [
-    "Changes product-owned capability JSON, detailed manuals, packaging, and deployment tests.",
+    "Changes product-owned capability JSON, detailed manuals, optional product overview, packaging, and deployment tests.",
     "A product deployment may atomically change that product's provider selector.",
     "Does not change the product runtime's behavior or introduce a product-to-Chancery call."
   ],
@@ -66,11 +66,11 @@
   "automation": "none",
   "steps": [
     "Identify the durable user outcome and owning product before choosing an entry ID or mode.",
-    "Use current product contracts to author provider scope, distinct entries, and self-contained manuals. Keep request boundaries, normalized claims, effects, authority, success, recovery, privacy, interfaces, dependencies, and substantive reliances distinct.",
+    "Use current product contracts to author provider scope, optional schema-4 overview, distinct feature and operation entries, and self-contained operating essentials. Keep full feature explanations in their capability manuals and preserve request boundaries, normalized claims, effects, authority, success, recovery, privacy, interfaces, dependencies, and substantive reliances.",
     "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
     "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
     "Exercise product CI and deployment rollback, then deploy the product release.",
-    "Run Chancery doctor and confirm that list, show, and exact-ID resolve expose the installed contract with its full meaning, scope, basis, gaps, and status."
+    "Run Chancery doctor and confirm that product, provider-filtered list, show, and exact-ID resolve expose the installed overview and contracts with their full meaning, scope, basis, gaps, and status."
   ],
   "checkpoints": [
     "The product owner confirms the capability describes supported current behavior rather than an aspiration.",
@@ -111,7 +111,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The bundle contains provider scope, indexed entries, normalized claims, and matching self-contained manuals. Ordinary show renders each manual once. The manual must contain applicability, interfaces, effects, authority, success, recovery, privacy, exclusions, and required checkpoints. show --full and resolve retain authoring fields and complete outward declarations. Structural validation does not establish prose completeness."
+        "statement": "The bundle contains provider scope, indexed entries, normalized claims, matching manuals, and an optional schema-4 product overview. Features use capability entries. Ordinary show renders each manual once. A procedure retains applicability, interfaces, prerequisites, consequential effects, authority, success, recovery, privacy, exclusions, and required checkpoints. Required feature contracts hold its detailed behavioral explanations and resolve assembles them once each. show --full retains authoring fields. Structural validation does not establish prose completeness."
       }
     ],
     "data_semantics": [
@@ -121,13 +121,13 @@
       },
       {
         "status": "declared",
-        "statement": "Documentation dependencies express installed contract compatibility; substantive runtime, data, authority, readiness, and external reliances are published separately and are never inferred from dependency edges."
+        "statement": "Documentation dependencies express installed contract compatibility and assemble required feature contracts. Ordinary related Chancery references in prose are navigation only. Substantive runtime, data, authority, readiness, and external reliances are published separately and are never inferred from dependency edges."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Provider ID, product release, provider schema version, stable entry ID, and entry contract version are independently reviewed identities and versions."
+        "statement": "Provider ID, product release, provider schema version, stable entry ID, and entry contract version are independently reviewed identities and versions. An overview has no separate entry ID or contract version; the owning release selects its bytes."
       },
       {
         "status": "not_applicable",
@@ -177,7 +177,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Deploy reader support before schema additions. Increment the contract version for incompatible entry semantics. Update dependents and global routing before removing an old contract."
+        "statement": "Deploy reader support before schema additions. Schema 4 adds an optional indexed product overview and retains schema-3 scope and entry rules. Schemas 1 through 3 remain readable. Increment the contract version for incompatible entry semantics. Update dependents and global routing before removing an old contract."
       },
       {
         "status": "unspecified",

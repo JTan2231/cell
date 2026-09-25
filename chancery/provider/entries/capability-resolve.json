@@ -170,7 +170,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Resolver contract version 2 reads provider schemas 1, 2, and 3; schemas 1 and 2 resolve with explicit missing scope and normalized-facet gaps."
+        "statement": "Resolver contract version 2 reads provider schemas 1, 2, 3, and 4; schemas 1 and 2 resolve with explicit missing scope and normalized-facet gaps. Required feature entries use the existing documentation dependency closure; related Markdown references and the separate product overview body do not enter it."
       },
       {
         "status": "declared",

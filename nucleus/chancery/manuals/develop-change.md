@@ -16,14 +16,19 @@ upgrade, protocol or client change, execution-capacity change, database-schema
 change, requester schema/toolset/invocation change, or authentication or
 service-ownership change.
 
+Read `chancery resolve nucleus.develop.change` for this procedure and its
+required feature contracts. The feature pages own detailed Nucleus behavior;
+this manual owns the change sequence and verification obligations.
+
 ## Development sequence
 
 1. Name the primary authority and all affected requesters.
 2. Decide whether public meaning, store format, harness support, operational
    procedure, or recovery changes.
 3. Modify the smallest owning component.
-4. Update the runtime contract and operator manual in the same change whenever
-   shared operational facts or obligations change.
+4. Update the owning feature contract and affected operation manuals in the
+   same change. Update the ecosystem operator manual when shared operational
+   facts or obligations change.
 5. Commit the changes and submit them through the installed CI manager:
 
    ```sh
@@ -64,9 +69,7 @@ sealed file identities without model calls. Update the adapter, compatibility
 tests, and installation instructions together before deployment.
 
 For execution capacity, preserve one global ceiling of eight active attempts.
-An admitted job waits as `accepted` with a `pending` attempt until a slot is
-available; its timeout starts after slot acquisition, and
-`waiting_on_requester` continues to hold the slot through terminal cleanup.
+Verify the admission, timeout, and slot-retention rules in `nucleus.jobs`.
 Capacity scheduling must not add workflow interpretation or automatic retry.
 
 An output-decoder change must exercise both supported authentication sequences
@@ -78,15 +81,30 @@ the operational record or executing another attempt; do not add outgoing
 requests or stored result projections to repair missing correlation.
 
 For authentication or service ownership, prevent new credential consumers and
-let active users finish before attended login. Keep private modes and one
-authoritative managed credential. Allow account reads to overlap jobs, serialize
-canonical refresh, and exclude attended login while job or account sessions
-remain active.
+let active users finish before attended login. Verify private modes, one
+credential authority, concurrent account reads, serialized refresh, staged
+writes, atomic promotion, and login exclusion against `nucleus.authentication`.
+Test that elected refresh and account reconciliation finish after requester
+cancellation. Binary or database rollback must not replace a newer credential.
 
-Stage every Codex credential write away from the authoritative file. Atomically
-promote the validated generation. Let elected refresh and account reconciliation
-finish after requester cancellation. Credential recovery moves only forward;
-binary or database rollback must not replace a newer credential.
+## Publish feature documentation
+
+Keep one detailed explanation in the owning `nucleus.*` feature contract.
+Keep action-critical conditions and verification in each operation. Use
+`chancery show ID` to read one page and `chancery resolve ID` to read all required
+contracts. Related feature references are navigation; required dependencies
+declare compatible contracts and must remain acyclic.
+
+Preserve `nucleus.execution.operate` contract 3 and the existing integration and
+development contract versions when reorganizing prose without changing their
+promises. New feature contracts have their own stable identities and versions.
+Keep normalized claims aligned with their feature bodies. Preserve unsupported,
+unspecified, and not-applicable boundaries instead of filling gaps from code.
+
+Publish the overview, entries, and Markdown bodies together in the Nucleus
+provider bundle. A provider schema-4 publication requires a compatible Chancery
+reader before cutover. Documentation publication follows the product release;
+never edit an installed immutable bundle in place.
 
 ## Deployment
 
@@ -103,6 +121,23 @@ Stop if a destructive migration or credential move lacks a recovery decision,
 an affected requester cannot be quiesced, or the exact candidate harness has
 not been proved. Development completion alone does not authorize release,
 deployment, requester retries, or unrelated domain changes.
+
+## Run an isolated foreground instance
+
+Build from the Cell root and select isolated paths and the supported harness:
+
+```sh
+cargo build --release --package nucleus-cli --package nucleus-daemon
+target/release/nucleusd serve \
+  --socket /tmp/nucleus.sock \
+  --database /tmp/nucleus.db \
+  --codex /absolute/path/to/codex \
+  --codex-home /tmp/nucleus-codex-home
+```
+
+These paths must not already belong to another instance. Building does not
+install the user service. Use `nucleus.execution.operate` for service installation
+and recovery procedures and `nucleus.service` for their guarantees.
 
 ## Sensitive material
 

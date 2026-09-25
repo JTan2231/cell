@@ -277,5 +277,42 @@
       }
     ]
   },
-  "manual": "manuals/execution-operate.md"
+  "manual": "manuals/execution-operate.md",
+  "dependencies": [
+    {
+      "id": "nucleus.jobs",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.invocation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.requester-tools",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.output",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.authentication",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.quota",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
 }

@@ -11,8 +11,9 @@ without contacting the daemon.
 - [Quiesce affected work](#quiesce-before-work-that-cannot-tolerate-a-lost-attempt).
 - [Add a requester](#add-a-new-requester).
 - [Diagnose a failure](#diagnosis-and-recovery).
-- Use [Nucleus installation and recovery](/Users/joey/rust/cell/nucleus/docs/system-installation.md)
-  for service setup, authentication, backup, and restore.
+- Read `chancery show nucleus.execution.operate` for service setup,
+  authentication, backup, and restore. Use `chancery product nucleus` for its
+  feature inventory and `chancery resolve ID` for required feature detail.
 
 ## Choose the system by the intended outcome
 
@@ -250,22 +251,18 @@ catalog entry does not establish the currently running release.
 
 ## Codex weekly quota admission
 
-Read `nucleus quota` to inspect admission without starting a model turn. The
-default policy pauses new main-Codex work at 10% remaining or less. Admission
-resumes only after a fresh observation exceeds 15%. Unknown quota also pauses
-admission. Started attempts drain. API-key jobs have no subscription quota gate.
-
+Read `nucleus quota` to inspect admission without starting a model turn.
 Requesters retain pending work and exact request identity on `quota_deferred`.
-Scheduled deferral is an expected outcome, not a Clockwork abend. Existing
-deadlines and restart rules still apply. After `quota_exhausted`, inspect domain
-effects before authorizing another attempt. Quota recovery clears no deployment
-hold, operator pause, or incident halt.
+Scheduled deferral is an expected outcome, not a Clockwork abend. Preserve
+existing deadlines and inspect domain effects before authorizing another
+attempt after `quota_exhausted`. Quota recovery clears no deployment hold,
+operator pause, or incident halt.
 
-EMT sends one retained notice per quota condition through Email without a model
-job. Upgrade requester clients before enabling the gate. Use coordinated
-maintenance and retain the quota policy, state, and EMT notices in private
-product backups. See [Quota admission](/Users/joey/rust/cell/nucleus/docs/quota-admission.md)
-for the complete policy, protocol, and recovery rules.
+EMT owns the shared condition notice through Email without a model job.
+Upgrade requester clients before enabling the gate and use coordinated
+maintenance. Retain the quota policy, state, and EMT notices in their private
+product backups. Read `chancery show nucleus.quota` for the complete Nucleus
+policy, protocol, observation freshness, and recovery rules.
 
 ## Compatibility model
 
@@ -456,10 +453,10 @@ Keep source content separate from trusted instructions. Declare workspace,
 local execution, web access, model, reasoning, timeout, and tool permissions
 explicitly. Do not add an undocumented direct-Codex fallback.
 
-See [the requester contract](/Users/joey/rust/cell/nucleus/chancery/manuals/requester-integrate.md)
-for the complete integration procedure and required checks, and
-[the runtime contract](/Users/joey/rust/cell/nucleus/docs/runtime-contract.md)
-for request, tool, and output formats.
+Read `chancery show nucleus.requester.integrate` for the integration procedure
+and required checks. Use `chancery resolve nucleus.requester.integrate` to include
+its required feature contracts. The `nucleus.invocation`,
+`nucleus.requester-tools`, and `nucleus.output` pages own their public formats.
 
 ### Provider-owned Rust interfaces
 
@@ -583,8 +580,8 @@ shared facts or procedures change.
    For a separate manual installation or recovery, quiesce affected work and
    deploy matching CLI and daemon candidates before restoring admission.
 
-Use [Nucleus installation](/Users/joey/rust/cell/nucleus/docs/system-installation.md)
-for the exact installer and rollback procedure.
+Read `chancery show nucleus.execution.operate` for the exact installer and
+rollback procedure.
 
 ### Exact Codex upgrade
 
@@ -599,7 +596,8 @@ CI submission. The source must include the matching `codex-code-mode-host`.
 The installer records both file identities and publishes the complete runtime
 under `~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
 It refuses to overwrite a different staged runtime. See
-[Nucleus installation](system-installation.md) for source and recovery rules.
+`chancery show nucleus.execution.operate` for the installation procedure and
+`chancery show nucleus.service` for source and recovery guarantees.
 
 Prove local tool execution during isolated predeployment validation. The
 compatibility test must observe a command's actual result through the adapter
@@ -624,7 +622,7 @@ halts or authorize retries.
 
 For additive support, deploy the accepting daemon before new callers. For an
 incompatible change, retain both forms during migration or quiesce all affected
-requesters. Update core types, client, daemon routes, runtime documentation,
+requesters. Update core types, client, daemon routes, owning feature contracts,
 examples, and contract checks together.
 
 ### Nucleus database schema change
@@ -635,8 +633,9 @@ Before cutover, settle requesters and pending calls, stop Nucleus, and take the
 required consistent backup. Validate retained jobs, output, and mailbox integrity.
 
 Old binaries must not open an incompatible new database. Recovery across that
-boundary requires a matching database and binary pair. See
-[schema recovery](/Users/joey/rust/cell/nucleus/docs/system-installation.md#schema-recovery).
+boundary requires a matching database and binary pair. Read
+`chancery show nucleus.service` for schema recovery guarantees and
+`chancery show nucleus.execution.operate` for the restoration procedure.
 
 ### Requester schema, toolset, prompt, or permission change
 
@@ -705,8 +704,15 @@ owned by the operation. Preserve pre-existing disabled schedules.
 
 Keep each full explanation with its owning product. This manual owns shared
 topology, authority, compatibility, coordination, and recovery order. Product
-references own record meaning and exact operations. Chancery manuals remain
-self-contained for installed use.
+references own record meaning and exact operations.
+
+Nucleus publishes detailed behavior as feature contracts in its Chancery
+provider bundle. Read `chancery product nucleus` for the overview and inventory,
+`chancery show ID` for one feature or procedure, and `chancery resolve ID` for the
+complete required contract reading. Operation manuals keep prerequisites,
+action-critical effects, stop conditions, and verification in place. Required
+dependencies declare compatible contracts; related references provide navigation.
+Other products keep their current documentation organization.
 
 Use short active sentences and descriptive headings. State which records or
 operation a count, timestamp, or failure describes. Remove duplicate explanations,

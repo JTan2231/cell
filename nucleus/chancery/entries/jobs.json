@@ -1,0 +1,193 @@
+{
+  "id": "nucleus.jobs",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Submit, inspect, and cancel Nucleus jobs",
+  "summary": "Admit an exact request, observe its single attempt and global execution capacity, wait for runtime state, or cancel one job.",
+  "use_when": [
+    "An exact runtime request must be submitted, inspected, awaited, or cancelled.",
+    "Queueing, execution capacity, timeout, terminal state, or restart loss must be interpreted."
+  ],
+  "do_not_use_when": [
+    "The actual goal is a requester-owned domain result or a decision to retry domain work.",
+    "Ordinary interactive agent work does not require a Nucleus job merely because it uses a model."
+  ],
+  "outcome": "An exact job is admitted or its current runtime state or cancellation is observed.",
+  "effects": [
+    "Submission creates a durable job and one attempt and may invoke Codex and consume account allowance.",
+    "Cancellation records durable intent for one exact job; reads expose retained runtime state."
+  ],
+  "authority": [
+    "Nucleus owns admission, the global eight-slot scheduler, one attempt per job, runtime lifecycle, and cancellation.",
+    "Requesters own domain records, success, conflicting writes, and whether another attempt is safe."
+  ],
+  "success": [
+    "Submission admits the exact request under its chosen ID, or a supported read confirms the selected job state.",
+    "Requester-owned evidence is inspected separately whenever domain success matters."
+  ],
+  "failure_and_recovery": [
+    "Repeat uncertain submission only with the same job ID and byte-equivalent typed request.",
+    "Inspect domain state after failure, timeout, loss, or quota exhaustion before authorizing a new job."
+  ],
+  "privacy": [
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+  ],
+  "interfaces": [
+    {
+      "label": "Inspect readiness",
+      "invocation": "/Users/joey/.local/bin/nucleus health"
+    },
+    {
+      "label": "Submit an exact request",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>"
+    },
+    {
+      "label": "Inspect a job",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs status JOB_ID"
+    },
+    {
+      "label": "Wait for one observation",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs wait JOB_ID --timeout 60"
+    },
+    {
+      "label": "Cancel a job",
+      "invocation": "/Users/joey/.local/bin/nucleus jobs cancel JOB_ID"
+    }
+  ],
+  "does_not_authorize": [
+    "Requester-domain acceptance or a new attempt after failure or loss.",
+    "Service restart while active attempts must remain uninterrupted."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local applications and the current user may submit exact version-one jobs and observe or cancel their attempts."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Admission requires a compatible daemon, exact supported harness and invocation policy, ready authentication, and applicable admission conditions; a free execution slot is not required."
+      },
+      {
+        "status": "declared",
+        "statement": "The requester persists its exact request and domain-run correlation and decides that a new attempt is safe."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "A version-one request includes a requester-chosen job ID, label, requester program and ID, instructions, prompt, and a closed invocation policy; optional developer instructions and parent provenance retain their documented roles."
+      },
+      {
+        "status": "declared",
+        "statement": "Inspection and cancellation select exact job IDs; listing can select requester program and domain-run ID."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No workflow graph, automatic-retry policy, or requester-domain mutation is accepted."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Submission, job show, list, status, wait, and cancellation return version-one runtime observations. Status includes attempt identity/state, pending calls, output availability, and terminal reason/message."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Nucleus returns no requester-domain success assertion or automatic replacement attempt."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A job is the durable admitted request with one attempt. Accepted jobs have pending attempts until a slot is available; waiting_on_requester still occupies a slot."
+      },
+      {
+        "status": "declared",
+        "statement": "Terminal state describes runtime execution, not application success. A wait-command timeout is an observation and does not cancel the job."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Job ID is the request idempotency key; requester program plus requester ID identifies the domain run; attempt ID identifies the single execution."
+      },
+      {
+        "status": "declared",
+        "statement": "The service has eight global active slots. Invocation timeoutSeconds is wall-clock seconds starting after slot acquisition and includes requester-tool waiting."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Reads describe committed local state at their read boundary. Status reads job and mailbox state in sequence, not as an atomic snapshot; list defaults to 20 and preserves continuation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No job-start, completion, or service-availability objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Byte-equivalent resubmission under one ID returns the existing job; changed content conflicts. Cancellation is durable and idempotent, including when it overlaps startup."
+      },
+      {
+        "status": "declared",
+        "statement": "Queued cancellation does not start Codex. Cancellation cannot erase history or undo committed requester effects. Startup marks every unfinished attempt lost, including pending attempts; Nucleus never retries automatically."
+      },
+      {
+        "status": "declared",
+        "statement": "Quota deferral creates no new job; admitted main-Codex jobs can wait for quota without a slot or running timeout. Maintenance holds permit admitted work to settle."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Version one allows one attempt per job and at most eight active attempts, including requester waits through terminal cleanup. Nucleus does not coordinate write conflicts or interpret workflows."
+      },
+      {
+        "status": "unspecified",
+        "statement": "Beyond the eight-active-attempt ceiling, no throughput, queue-depth, database-capacity, output-volume, retention, or wall-clock-latency bound is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "The job and HTTP envelopes remain version one while invocation policies one and two are supported. Public protocol, store, adapter, exact harness, feature contract, and provider release evolve independently."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general requester-support window or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Execution relies on the separately installed exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/jobs.md"
+}

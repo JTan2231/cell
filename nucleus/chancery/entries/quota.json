@@ -1,0 +1,167 @@
+{
+  "id": "nucleus.quota",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect and configure Nucleus quota admission",
+  "summary": "Read the cached Codex weekly admission condition and interpret its thresholds, freshness, pending-work deferral, and recovery.",
+  "use_when": [
+    "Codex weekly admission, quota_deferred, quota_exhausted, unknown allowance, or startup quota policy must be interpreted."
+  ],
+  "do_not_use_when": [
+    "The goal is a quota reset, requester retry, model billing calculation, or clearance of an independent service halt."
+  ],
+  "outcome": "The cached quota condition or configured admission policy is understood through Nucleus-owned state.",
+  "effects": [
+    "Quota reads start no model work. A startup policy controls new main-Codex admission and pending execution.",
+    "Nucleus retains quota condition state and samples the external Codex allowance; started attempts continue during a pause."
+  ],
+  "authority": [
+    "Nucleus owns quota admission and condition identity; Codex owns the shared account allowance.",
+    "Requesters own pending work, deadlines, domain success, and retry decisions. EMT owns shared notices and Email owns transport."
+  ],
+  "success": [
+    "The supported quota response identifies the retained condition; recovery requires a fresh qualifying observation rather than reset time alone."
+  ],
+  "failure_and_recovery": [
+    "Preserve pending work and exact request identity on deferral. Inspect domain effects after exhaustion before another attempt.",
+    "Do not edit quota-state.json to simulate recovery or clear unrelated holds, pauses, or failure halts."
+  ],
+  "privacy": [
+    "quota-policy.json and quota-state.json are private mode-0600 regular files beside nucleus.db and belong in Nucleus backups.",
+    "Retained quota state includes an account-identity digest, allowance observations, timestamps, and condition identity."
+  ],
+  "interfaces": [
+    {
+      "label": "Read cached quota",
+      "invocation": "/Users/joey/.local/bin/nucleus quota"
+    },
+    {
+      "label": "Read HTTP quota",
+      "invocation": "GET /v1/quota over the Nucleus Unix socket"
+    }
+  ],
+  "does_not_authorize": [
+    "A quota reset, rollout, service restart, replay of expired work, or clearance of existing service halts.",
+    "An additional notice send or application retry."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Operators and requester applications may inspect and obey Nucleus's cached main-Codex weekly admission condition."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Use the Nucleus-owned account observation and private startup policy/state; requesters do not duplicate allowance checks or access the canonical credential."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "quota-policy.json beside nucleus.db supplies enabled, pauseAtRemainingPercent, and resumeAboveRemainingPercent at daemon startup, with 0 <= pause < resume < 100."
+      },
+      {
+        "status": "declared",
+        "statement": "The account observation selects rateLimitsByLimitId.codex and one weekly windowDurationMins=10080; the legacy limitId=codex bucket is used only when the map is absent. Spark is never substituted."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "GET /v1/quota returns the cached condition without model work. New rejected work receives HTTP 429 quota_deferred with snapshot details and no job/attempt; the Rust client exposes ClientError::QuotaDeferred."
+      },
+      {
+        "status": "declared",
+        "statement": "Pending main-Codex job reads attach the condition and get_job_for_work returns typed deferral. Structured usageLimitExceeded ends an attempt with quota_exhausted and immediately pauses admission."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Default policy pauses at 10 percent remaining or less and reopens only above 15 percent after a fresh observation. API-key authentication has no subscription weekly gate."
+      },
+      {
+        "status": "declared",
+        "statement": "Absent, null, ambiguous, expired, or malformed weekly data is unknown, not zero or unlimited. Invalid/unavailable data pauses admission unless a valid cached observation remains."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Remaining percent is 100 minus usedPercent. Observation/reset times are Unix seconds; missing numeric values remain null. One condition ID identifies a continuous pause and state includes an account-identity digest and limitId."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Nucleus samples every 60 seconds. An observation is valid for at most 120 seconds and never past its reset time. Reset time alone does not reopen admission."
+      },
+      {
+        "status": "declared",
+        "statement": "Other sessions consume the same account allowance. The threshold reserves no tokens and cannot guarantee completion of active work."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No billing-equivalence or service-availability objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Exact replay of an admitted request remains available. Accepted jobs recheck quota before execution and retain their pending attempt without a slot or running timeout while paused. Started attempts continue."
+      },
+      {
+        "status": "declared",
+        "statement": "Reads, cancellation, mailbox responses, and authentication remain available. Scheduled deferral preserves work as an explicit expected outcome, not an abend; deadlines and selection rules remain requester-owned."
+      },
+      {
+        "status": "declared",
+        "statement": "Quota state is written atomically and survives restart; an account change requires a new observation. Daemon restart still marks unfinished attempts lost, including pending jobs. Quota recovery clears no other hold, pause, or halt."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Policy and state must be private regular files mode 0600; invalid files prevent startup and both belong in private backups."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No automatic retry, expired-work replay, quota reset, or delivery proof follows from a quota condition."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Upgrade requester clients before enabling the gate and use coordinated maintenance. Clients tolerate a daemon without optional quota health fields; EMT tolerates an old quota endpoint 404. Successful installation can preserve quota-paused admission."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Quota relies on the external Codex weekly allowance through Nucleus's credential authority; no installed Chancery contract covers upstream account behavior.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/quota.md"
+}

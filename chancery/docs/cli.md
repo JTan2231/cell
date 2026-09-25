@@ -1,7 +1,8 @@
 # CLI contract
 
 ```text
-chancery [--registry PATH] [--json] list [--mode MODE] [--kind KIND]
+chancery [--registry PATH] [--json] list [--provider PROVIDER_ID] [--mode MODE] [--kind KIND]
+chancery [--registry PATH] [--json] product PROVIDER_ID
 chancery [--registry PATH] [--json] show ID [--full]
 chancery [--registry PATH] [--json] resolve ID [--min-contract VERSION] [--max-contract-exclusive VERSION] [--require FACET]... [--summary]
 chancery [--registry PATH] [--json] doctor
@@ -14,8 +15,8 @@ precedence over `CHANCERY_REGISTRY`.
 
 Catalog and report computation preserve their source records. CLI dispatch separately attempts a command-usage append. Chancery does not test runtime readiness, execute
 a documented interface, call a model, or access the network. Usage errors return
-exit code 2. Unreadable state, a missing entry, or an invalid doctor or validation
-report returns 1. An unresolved dossier also returns 1 and preserves its full
+exit code 2. Unreadable state, a missing provider or entry, or an invalid doctor
+or validation report returns 1. An unresolved dossier also returns 1 and preserves its full
 result for inspection. JSON output uses one versioned envelope.
 
 The output below shows example formats. The selected registry supplies provider
@@ -54,13 +55,43 @@ the provider release and contract version.
 `compatibility=unavailable` means a missing, incompatible or cyclic dependency.
 Readiness is never probed. Operation readiness remains `session_dependent`.
 
-To narrow the result, use `--mode use|operate|develop` or
-`--kind capability|operation`. Plain `list` returns the complete registered
-inventory. There is no separate `--all` mode.
+To narrow the result, use `--provider PROVIDER_ID`,
+`--mode use|operate|develop`, or `--kind capability|operation`. Filters combine.
+The provider filter uses an exact provider ID and preserves registry issues.
+An unknown or excluded provider returns `provider_not_found`. Plain `list`
+returns the complete registered inventory. There is no separate `--all` mode.
 
 The interactive agent uses the titles and summaries to form a semantic
 shortlist. Chancery does not receive the user's request and does not choose an
 entry.
+
+## `product`
+
+Read one installed product's overview and inventory:
+
+```sh
+chancery product nucleus
+chancery list --provider nucleus
+```
+
+`product` accepts one exact provider ID. It shows provider identity, release,
+schema version, promise scope when published, the authored overview when
+present, and every installed entry
+owned by that provider. Inventory cards use the same shared defaults and
+exceptions as `list`. Registry issues remain visible. An unknown or excluded
+provider returns `provider_not_found`.
+
+The overview comes only from the manifest's indexed Markdown file. It is
+optional in schema 4 and unavailable in earlier schemas. An absent overview
+returns `overview_status: not_published` and a null `overview` in JSON; the
+provider inventory remains available. A present overview returns
+`overview_status: published` and its complete text. This status describes
+published documentation, not live product readiness.
+
+The overview provides context and navigation. Use `show` for a feature's
+complete page or a procedure's operating essentials. Use `resolve` for the
+selected entry and its required feature contracts. Product navigation neither
+executes an interface nor adds a separate entry contract or dependency.
 
 ## `show`
 
@@ -74,7 +105,10 @@ After identifying one or more plausible entries, read each complete contract:
 dependency statuses, and the complete operating manual once. JSON contains the
 same identity and manual. The manual must state applicability, exact interfaces,
 effects, authority, success, recovery, privacy, exclusions, and required
-operation checkpoints. `show` neither tests readiness nor executes an interface.
+operation checkpoints. A feature page owns the detailed explanation of its
+capability. A procedure can require feature contracts for that explanation,
+while retaining all conditions needed to carry out its own steps. `show`
+neither tests readiness nor executes an interface.
 
 `show ID --full` includes the original structured authoring fields and
 normalized claims as well as the manual. Use it to inspect authoring or compare
@@ -154,7 +188,10 @@ Resolution status is:
 claims appear as gaps but do not make the document structurally incomplete.
 A declared substantive reliance without a dedicated versioned contract is an
 `uncontracted_reliance`. Ordinary `dependencies` describe contract compatibility;
-the resolver does not infer runtime calls or data flow from them.
+the resolver does not infer runtime calls or data flow from them. Related
+Chancery references in Markdown provide navigation only and do not enter the
+dependency closure. Resolution does not expand sections or include a separate
+product overview body.
 
 `resolved_not_ready` returns exit code 0. Other resolution statuses return the
 full dossier on stdout and exit code 1. Resolution does not test readiness,
@@ -202,11 +239,12 @@ name another entry in the same bundle are checked for contract-version
 compatibility and cycles. Cross-provider dependencies are deliberately
 reported as `not_checked`; installed compatibility belongs to `doctor`.
 
-The current provider schema is version 3. During coordinated migration the
-reader also accepts schema-1 and schema-2 bundles. It discards obsolete
-`routable` and `routing` metadata only for schema 1 and presents the same
-catalog and `show` shape. New or updated bundles publish schema 3 with a
-provider promise scope; older entries resolve with explicit normalized gaps.
+The current provider schema is version 4. The reader also accepts schemas 1,
+2, and 3. It discards obsolete `routable` and `routing` metadata only for
+schema 1 and presents the same catalog and `show` shape. Schemas 3 and 4 require
+a provider promise scope. Schema 4 additionally permits an indexed product
+overview. Earlier bundles remain valid without one; older entries resolve
+with explicit normalized gaps.
 
 ## JSON
 
@@ -224,7 +262,10 @@ Invalid doctor or validate reports retain the complete data report with
 {"schema_version":3,"ok":false,"error":{"code":"entry_not_found","message":"installed entry not found: missing.entry"}}
 ```
 
-Output schema 3 defines compact list and ordinary show results.
+Output schema 3 defines compact list and ordinary show results. The additive
+`ProductResult` contains `provider`, `provider_schema_version`,
+`promise_scope` (null for legacy providers), `overview`, `overview_status`,
+status `defaults`, `entries`, and `issues`.
 `FullShowResult` contains the complete entry for `--full`. `ResolveResult`
 contains the full dossier; `ResolveSummary` contains its outcome and gaps.
 Use the provider-owned Rust client and named fields. `--json` changes encoding
@@ -234,7 +275,7 @@ only. Provider schemas are separate.
 
 | Result | Exit |
 | --- | ---: |
-| List, show, or fully documented resolve success | 0 |
+| List, product, show, or fully documented resolve success | 0 |
 | Valid doctor or standalone bundle | 0 |
-| Incomplete/incompatible resolve, invalid doctor/bundle, unreadable registry, or missing entry | 1 |
+| Incomplete/incompatible resolve, invalid doctor/bundle, unreadable registry, or missing provider/entry | 1 |
 | CLI usage | 2 |

@@ -36,6 +36,12 @@ fn cli_records_valid_dispatches_without_arguments_and_preserves_product_errors()
     );
     assert!(run(&["list"], None)?.status.success());
     let store = Store::read(&database)?;
+    assert!(
+        store
+            .counts(&Filter::default())?
+            .iter()
+            .any(|command| command.command_id == "product" && command.invocations == 0)
+    );
     let events = store.events(&Filter::default(), 0, 100)?.items;
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].command_id, "show");

@@ -252,7 +252,7 @@ fn schema_v2_rejects_removed_and_v3_fields_and_newer_schemas() -> TestResult {
     let newer = fixture.write_provider_named(
         "newer",
         "beta",
-        4,
+        5,
         vec![capability("beta.run", &json!([]))],
     )?;
     let newer_report = run_validate(&newer)?;
@@ -318,6 +318,273 @@ fn schema_v3_requires_and_validates_provider_scope_and_promise_claims() -> TestR
         vec![normalized_capability("gamma.run", &json!([]))],
     )?;
     assert!(run_validate(&valid)?.status.success());
+    Ok(())
+}
+
+#[test]
+fn product_overview_and_provider_filter_use_only_the_selected_inventory() -> TestResult {
+    let fixture = Fixture::new()?;
+    let root = fixture.write_v4_provider(
+        "nucleus",
+        vec![normalized_capability("nucleus.jobs", &json!([]))],
+        Some("overview.md"),
+    )?;
+    fs::write(
+        root.join("overview.md"),
+        "# Nucleus\n\nRun retained jobs.\n",
+    )?;
+    fixture.write_provider("todo", vec![todo_entry()])?;
+    let before = tree_snapshot(fixture.registry())?;
+    let client = chancery::api::Client::new(env!("CARGO_BIN_EXE_chancery"))
+        .with_registry(fixture.registry());
+    let product = client.product("nucleus")?;
+    assert!(product.ok);
+    assert_eq!(product.schema_version, 3);
+    assert_eq!(product.data.provider.id, "nucleus");
+    assert_eq!(product.data.provider.release, "1.0.0");
+    assert_eq!(product.data.provider_schema_version, 4);
+    assert_eq!(product.data.overview_status, "published");
+    assert_eq!(
+        product.data.overview.as_deref(),
+        Some("# Nucleus\n\nRun retained jobs.\n")
+    );
+    assert!(product.data.promise_scope.is_some());
+    assert_eq!(product.data.defaults.readiness, "not_checked");
+    assert_eq!(product.data.entries.len(), 1);
+    assert_eq!(product.data.entries[0].id, "nucleus.jobs");
+    // Registry issues remain visible even when the inventory is provider-scoped.
+    assert!(
+        product
+            .data
+            .issues
+            .iter()
+            .any(|issue| issue.provider.as_deref() == Some("todo"))
+    );
+    let listed = client.list_provider("nucleus", None, None)?;
+    assert_eq!(listed.data.entries.len(), 1);
+    assert_eq!(listed.data.entries[0].id, "nucleus.jobs");
+    assert_eq!(client.list(None, None)?.data.entries.len(), 2);
+    assert!(
+        client
+            .list_provider("nucleus", Some(chancery::api::Mode::Operate), None)?
+            .data
+            .entries
+            .is_empty()
+    );
+    assert!(
+        client
+            .list_provider("nucleus", None, Some(chancery::api::EntryKind::Operation))?
+            .data
+            .entries
+            .is_empty()
+    );
+    let text = String::from_utf8(fixture.run_human(&["product", "nucleus"])?.stdout)?;
+    assert!(text.contains("Run retained jobs."));
+    assert!(text.contains("nucleus.jobs"));
+    assert!(text.contains("Provider release: 1.0.0"));
+    assert!(text.contains("not_checked (not probed)"));
+    let filtered_text = String::from_utf8(
+        fixture
+            .run_human(&["list", "--provider", "nucleus"])?
+            .stdout,
+    )?;
+    assert!(filtered_text.contains("Use nucleus.jobs"));
+    assert!(!filtered_text.contains("Use todo.concern.capture-and-route"));
+    // Schema four keeps focused show and complete dependency resolution intact.
+    assert!(
+        client
+            .show("nucleus.jobs")?
+            .data
+            .manual
+            .contains("nucleus.jobs")
+    );
+    assert_eq!(
+        client.resolve("nucleus.jobs", None, None, &[])?.data.status,
+        "resolved_not_ready"
+    );
+    assert_eq!(before, tree_snapshot(fixture.registry())?);
+    Ok(())
+}
+
+#[test]
+fn product_reads_older_schemas_and_reports_an_absent_overview() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_legacy_provider(
+        "legacy",
+        vec![legacy_capability("legacy.run", "run", &json!([]))],
+    )?;
+    fixture.write_provider("second", vec![capability("second.run", &json!([]))])?;
+    fixture.write_v3_provider(
+        "third",
+        vec![normalized_capability("third.run", &json!([]))],
+    )?;
+    fixture.write_v4_provider(
+        "fourth",
+        vec![normalized_capability("fourth.run", &json!([]))],
+        None,
+    )?;
+    for provider in ["legacy", "second", "third", "fourth"] {
+        let output = fixture.run_json(&["product", provider])?;
+        assert!(output.status.success());
+        let result = stdout_json(&output)?;
+        assert_eq!(result["data"]["overview_status"], "not_published");
+        assert!(result["data"]["overview"].is_null());
+        assert_eq!(result["data"]["entries"].as_array().map(Vec::len), Some(1));
+        let text = String::from_utf8(fixture.run_human(&["product", provider])?.stdout)?;
+        assert!(text.contains("does not publish a product overview"));
+    }
+    Ok(())
+}
+
+#[test]
+fn product_and_provider_filter_reject_unknown_or_excluded_providers() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_provider_named(
+        "wrong",
+        "actual",
+        2,
+        vec![capability("actual.run", &json!([]))],
+    )?;
+    for provider in ["missing", "wrong", "actual"] {
+        for args in [
+            vec!["product", provider],
+            vec!["list", "--provider", provider],
+        ] {
+            let output = fixture.run_json(&args)?;
+            assert_eq!(output.status.code(), Some(1));
+            assert_eq!(stderr_json(&output)?["error"]["code"], "provider_not_found");
+        }
+    }
+    let client = chancery::api::Client::new(env!("CARGO_BIN_EXE_chancery"))
+        .with_registry(fixture.registry());
+    assert!(
+        matches!(client.product("missing"), Err(chancery::api::ClientError::Provider { code, .. }) if code == "provider_not_found")
+    );
+    Ok(())
+}
+
+#[test]
+fn product_inventory_preserves_dependency_and_session_exceptions() -> TestResult {
+    let fixture = Fixture::new()?;
+    fixture.write_provider(
+        "career",
+        vec![
+            operation_entry(),
+            dependent_entry("career.jobs", "missing.run"),
+        ],
+    )?;
+    let result = stdout_json(&fixture.run_json(&["product", "career"])?)?;
+    let entries = result["data"]["entries"]
+        .as_array()
+        .ok_or("missing entries")?;
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0]["compatibility"], "unavailable");
+    assert_eq!(entries[1]["readiness"], "session_dependent");
+    assert!(has_issue(&result, "missing_dependency"));
+    let text = String::from_utf8(fixture.run_human(&["product", "career"])?.stdout)?;
+    assert!(text.contains("Compatibility: unavailable"));
+    assert!(text.contains("Readiness: session_dependent"));
+    Ok(())
+}
+
+#[test]
+fn product_overview_is_schema_four_only_and_keeps_promise_validation() -> TestResult {
+    let fixture = Fixture::new()?;
+    for schema in 1..=3 {
+        let id = format!("schema-{schema}");
+        let root = fixture.write_provider_named(
+            &id,
+            &id,
+            schema,
+            vec![capability(&format!("{id}.run"), &json!([]))],
+        )?;
+        let path = root.join("provider.json");
+        let mut manifest: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        if schema == 3 {
+            manifest["promise_scope"] = provider_promise_scope();
+        }
+        // Even a null overview is a schema-four field.
+        manifest["overview"] = Value::Null;
+        fs::write(&path, serde_json::to_vec_pretty(&manifest)?)?;
+        assert!(has_issue(
+            &stdout_json(&run_validate(&root)?)?,
+            "unexpected_overview"
+        ));
+    }
+    let missing = fixture.write_provider_named(
+        "missing",
+        "missing",
+        4,
+        vec![capability("missing.run", &json!([]))],
+    )?;
+    assert!(has_issue(
+        &stdout_json(&run_validate(&missing)?)?,
+        "missing_promise_scope"
+    ));
+    let mut entry = normalized_capability("invalid.run", &json!([]));
+    entry["promise"]["outputs"] = json!([]);
+    let invalid = fixture.write_v4_provider("invalid", vec![entry], None)?;
+    assert!(has_issue(
+        &stdout_json(&run_validate(&invalid)?)?,
+        "empty_field"
+    ));
+    Ok(())
+}
+
+#[test]
+fn product_overview_rejects_unsafe_missing_and_invalid_content() -> TestResult {
+    let fixture = Fixture::new()?;
+    for (id, path) in [
+        ("escape", "../overview.md"),
+        ("absolute", "/tmp/overview.md"),
+        ("extension", "overview.json"),
+    ] {
+        let root = fixture.write_v4_provider(
+            id,
+            vec![normalized_capability(&format!("{id}.run"), &json!([]))],
+            Some(path),
+        )?;
+        assert!(has_issue(
+            &stdout_json(&run_validate(&root)?)?,
+            "invalid_overview_path"
+        ));
+    }
+    let root = fixture.write_v4_provider(
+        "content",
+        vec![normalized_capability("content.run", &json!([]))],
+        Some("overview.md"),
+    )?;
+    assert!(has_issue(
+        &stdout_json(&run_validate(&root)?)?,
+        "overview_unavailable"
+    ));
+    for content in ["  \n", "unsafe\u{1b}[0m"] {
+        fs::write(root.join("overview.md"), content)?;
+        assert!(has_issue(
+            &stdout_json(&run_validate(&root)?)?,
+            "invalid_overview"
+        ));
+    }
+    // Invalid indexed overview content excludes the provider from every read.
+    let list = stdout_json(&fixture.run_json(&["list"])?)?;
+    assert_eq!(list["data"]["entries"].as_array().map(Vec::len), Some(0));
+    assert!(has_issue(&list, "invalid_overview"));
+    #[cfg(unix)]
+    {
+        fs::remove_file(root.join("overview.md"))?;
+        fs::write(
+            fixture.temporary().path().join("external.md"),
+            "# Outside\n",
+        )?;
+        std::os::unix::fs::symlink(
+            fixture.temporary().path().join("external.md"),
+            root.join("overview.md"),
+        )?;
+        assert!(has_issue(
+            &stdout_json(&run_validate(&root)?)?,
+            "bundle_symlink_rejected"
+        ));
+    }
     Ok(())
 }
 
@@ -846,6 +1113,23 @@ impl Fixture {
         let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
         manifest["promise_scope"] = provider_promise_scope();
         fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+        Ok(root)
+    }
+
+    fn write_v4_provider(
+        &self,
+        id: &str,
+        entries: Vec<Value>,
+        overview: Option<&str>,
+    ) -> Result<PathBuf, Box<dyn Error>> {
+        let root = self.write_v3_provider(id, entries)?;
+        let path = root.join("provider.json");
+        let mut manifest: Value = serde_json::from_slice(&fs::read(&path)?)?;
+        manifest["schema_version"] = json!(4);
+        if let Some(overview) = overview {
+            manifest["overview"] = json!(overview);
+        }
+        fs::write(&path, serde_json::to_vec_pretty(&manifest)?)?;
         Ok(root)
     }
 

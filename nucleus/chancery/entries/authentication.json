@@ -1,0 +1,178 @@
+{
+  "id": "nucleus.authentication",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect and recover Nucleus authentication",
+  "summary": "Read account access or perform attended login while Nucleus preserves one managed credential authority and isolated job credentials.",
+  "use_when": [
+    "Account access, managed credential concurrency, authentication contention, or attended recovery must be inspected or handled."
+  ],
+  "do_not_use_when": [
+    "A requester wants to copy or refresh Nucleus's canonical credential or treat a live job as proof of bad authentication."
+  ],
+  "outcome": "The account/readiness response is observed or a validated attended login advances Nucleus-owned authentication.",
+  "effects": [
+    "Account reads can refresh and reconcile managed credentials without model work.",
+    "Attended login can replace the Nucleus-owned account credential after active authentication sessions finish."
+  ],
+  "authority": [
+    "Nucleus owns its canonical managed credential and credential staging/promotion. Codex owns account-service behavior and payload meaning."
+  ],
+  "success": [
+    "The supported account response and Nucleus readiness establish the requested observation; attended login promotes only a validated successful staged result."
+  ],
+  "failure_and_recovery": [
+    "Treat authentication_busy as contention, not proof of invalid credentials. Quiesce requesters before attended recovery when work must remain uninterrupted.",
+    "Never restore older authentication bytes as part of program, service, or database rollback."
+  ],
+  "privacy": [
+    "The canonical credential home and backups contain authentication material. Directory/file privacy requirements apply.",
+    "Host-managed authentication responses and managed-worker stderr are excluded from retained job output; managed refresh tokens never enter job homes."
+  ],
+  "interfaces": [
+    {
+      "label": "Inspect the account",
+      "invocation": "/Users/joey/.local/bin/nucleus account --wait 0"
+    },
+    {
+      "label": "Perform attended login",
+      "invocation": "/Users/joey/.local/bin/nucleus auth login --device-auth"
+    },
+    {
+      "label": "Inspect readiness",
+      "invocation": "/Users/joey/.local/bin/nucleus health"
+    }
+  ],
+  "does_not_authorize": [
+    "Requester access to canonical credentials or rollback of a newer credential.",
+    "A service restart, unrelated account change, or interruption of active jobs without task authority."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and supported account readers may inspect authentication and perform separately attended recovery; requesters consume Nucleus execution without owning its credentials."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Use the private Nucleus credential authority and supported exact Codex adapter. Attended login requires exclusive authentication maintenance after active job and account sessions end."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Account reads accept includeUsage and bounded waitSeconds; waitSeconds=0 is a nonblocking attempt. Attended device login is an explicit operator operation."
+      },
+      {
+        "status": "declared",
+        "statement": "The managed home uses a private regular auth.json mode 0600 and a config.toml of at most 64 KiB containing only cli_auth_credentials_store = file."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Account reads pass through Codex rateLimits and optional usage. Contention is authentication_busy; credential/account failure is model_auth_unavailable."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No job receives a managed refresh token or a writable canonical credential."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "An active job alone does not block an account read or prove an invalid credential. Account reads can refresh credentials without model work."
+      },
+      {
+        "status": "declared",
+        "statement": "Managed jobs receive the current access token/account ID in memory; API-key jobs receive isolated key snapshots without copy-back."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "One authoritative managed account credential lives under ~/Library/Application Support/Nucleus/codex-home with directory mode 0700. Canonical generations move only forward."
+      },
+      {
+        "status": "declared",
+        "statement": "waitSeconds is seconds; Codex account rate-limit and usage payloads retain upstream meanings."
+      },
+      {
+        "status": "unspecified",
+        "statement": "Nucleus defines no independent accounting units, prices, or billing semantics."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Account reads report the external account response for that invocation; health reports current Nucleus authentication readiness."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No account-response or service-availability objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Account reads can overlap jobs. Canonical refresh is serialized and staged privately; validated same-account credentials are atomically promoted. Concurrent refresh requests reuse an already advanced generation."
+      },
+      {
+        "status": "declared",
+        "statement": "Started refresh and account reconciliation survive requester cancellation or timeout. Account reconciliation can promote a valid generation even when the account request fails. Attended login promotes only after successful validated completion."
+      },
+      {
+        "status": "declared",
+        "statement": "No Codex child writes the authoritative file directly. Shutdown closes new account/refresh admission and waits for started authentication operations to settle. Credential recovery is separate from program/database rollback."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "There is one managed credential authority. Refresh tokens never enter job homes or output records; static API-key state never copies back."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No cross-user credential service or requester-managed canonical refresh is supported."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "The exact Codex adapter and account service remain prerequisites. Imports occur under service coordination; program, database, and service rollback must not replace a newer credential."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No account-support or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Authentication and account reads rely on the exact adapter-proved Codex runtime and external account service; no installed Chancery contract covers that behavior.",
+        "target": "codex",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/authentication.md"
+}

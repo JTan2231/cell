@@ -26,7 +26,7 @@
   ],
   "success": [
     "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome.",
-    "Every changed public or operational fact is reflected in the canonical operator manual and exact contract documentation.",
+    "Every changed public or operational fact is reflected in the owning feature contract and affected procedures; shared changes also update the ecosystem operator manual.",
     "Deployment readiness confirms installed candidate identity and service health without synthetic model jobs or requester records."
   ],
   "failure_and_recovery": [
@@ -39,8 +39,51 @@
     "Deployment readiness does not create synthetic runtime or requester-domain records."
   ],
   "dependencies": [
-    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4},
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.jobs",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.invocation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.requester-tools",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.output",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.authentication",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.quota",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
   ],
   "session_surfaces": [
     "local_filesystem",

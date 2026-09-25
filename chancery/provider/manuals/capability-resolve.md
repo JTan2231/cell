@@ -22,9 +22,12 @@ manual, with SHA-256 digests of the exact UTF-8 bytes read.
 
 The dependency closure contains the same dossier for each installed transitive
 `dependencies` contract, once, in stable entry-ID order. These edges describe
-documentation compatibility. They do not establish runtime calls, data flow,
-authority transfer, or readiness dependencies. Separate claims describe
-substantive reliances. A declared cross-system reliance without a dedicated
+documentation compatibility and can assemble a procedure's required feature
+contracts. These edges do not establish runtime calls, data flow, authority
+transfer, or readiness dependencies. Related Chancery references in Markdown
+are navigation only and do not enter the closure. Resolution does not expand
+sections or include the separate product overview body. Separate claims
+describe substantive reliances. A declared cross-system reliance without a dedicated
 versioned contract appears as a gap.
 
 Each provider scope says what the provider is authoritative for, what it is
@@ -34,8 +37,8 @@ independently of the entry index.
 
 Existing entry fields provide applicability, outcome, supported interfaces,
 effects, authority, success evidence, failure and recovery, privacy,
-documentation dependencies, and exclusions. Schema-3 entries may add the
-normalized boundary facets that were previously only prose:
+documentation dependencies, and exclusions. Schema-3 and schema-4 entries may
+add the normalized boundary facets that were previously only prose:
 
 - consumers and preconditions;
 - inputs, outputs, and data semantics;
@@ -90,7 +93,8 @@ Resolve returns the root and transitive dependency dossiers, exact bases,
 requirements, declaration and closure status, readiness, gaps, and issues.
 Human output puts outcome and gaps first. `--summary` returns outcome,
 requirements, status, readiness, gaps, and issues with the same exit semantics.
-JSON output uses schema 3.
+JSON output uses schema 3. Provider schemas 1 through 4 remain readable;
+schemas 1 and 2 retain explicit missing-scope and normalized-facet gaps.
 
 ## Command usage
 

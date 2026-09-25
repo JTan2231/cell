@@ -1,204 +1,109 @@
 # Operate Nucleus agent execution
 
-Nucleus coordinates constrained Codex execution for local applications under
-one user. It owns admission, one supervised harness attempt per job, the global
-eight-slot scheduler, cancellation, managed authentication, isolated static
-API-key job credentials, exact harness output, and the durable requester-tool
-mailbox. Managed authentication uses one authoritative credential. Nucleus has
-no project registry or workflow engine. Applications own their domain results.
+Use this contract to inspect or operate Nucleus jobs, authentication, and the
+current user's service. Nucleus owns runtime execution; requesters own domain
+results and retry decisions. A completed job does not establish domain success.
 
-## Choose this capability
+Read `nucleus manual` before shared maintenance. Read
+`chancery resolve nucleus.execution.operate` for this procedure and the complete
+feature contracts. Use `chancery show ID` for one subject:
 
-Use this capability to inspect Nucleus readiness or its authenticated account,
-submit an exact version-one job request, inspect or follow a job, request
-cancellation, perform attended authentication recovery, or operate the macOS
-user service.
+| Feature | Detailed contract |
+| --- | --- |
+| Jobs and attempts | `nucleus.jobs` |
+| Invocation fields, permissions, and harness support | `nucleus.invocation` |
+| Requester-tool mailbox | `nucleus.requester-tools` |
+| Status, output, and retained history | `nucleus.output` |
+| Credentials, login, and account reads | `nucleus.authentication` |
+| Weekly quota admission | `nucleus.quota` |
+| Service readiness, maintenance, and recovery guarantees | `nucleus.service` |
 
-Do not route a generic request here merely because it mentions a job, agent, or
-model. Todo, Annals, and other requesters remain authoritative for the
-work that motivated their Nucleus jobs. Ordinary work in the current Codex
-session normally needs no Nucleus job at all.
+Ordinary work in the current interactive session normally needs no Nucleus
+job. Use the requesting product's contract when its domain result or retry
+policy is the subject of the task.
 
-## Supported interfaces
+## Inspect readiness and work
 
-The installed manual is version-matched and does not contact the daemon:
+Start with supported reads:
 
 ```sh
-/Users/joey/.local/bin/nucleus manual
+nucleus health
+nucleus service status
+nucleus account --wait 0
+nucleus quota
+nucleus jobs list --state accepted
+nucleus jobs list --state running
+nucleus jobs list --state waiting-on-requester
+nucleus jobs list --state failed
 ```
 
-Start diagnosis with supported reads:
+`health` prints the readiness document and exits nonzero unless the daemon is
+compatible, authenticated, and accepting work. A reported quota pause can close
+admission while runtime status remains healthy. Full execution slots do not
+close admission. `authentication_busy` means credential-operation contention;
+an active job alone does not imply invalid credentials.
+
+Use `nucleus status-snapshot --json` for the bounded operational report. It reads
+health and attempts maintenance detail for at most 250 ms, without reading the
+account, job content, or logs. Missing detail stays an incomplete observation.
+
+If the service cannot connect, inspect its status and
+`~/Library/Logs/Nucleus/nucleusd.stderr.log`. Do not fall back to an
+uncoordinated direct Codex invocation.
+
+## Submit, observe, or cancel one job
+
+Prepare an exact request using `nucleus.invocation`. Submission can consume
+account allowance and can cause requester-authorized tool mutations. For
+concurrent writable work, assign disjoint directories or worktrees, or have
+the requester serialize it. Nucleus does not detect write conflicts.
 
 ```sh
-/Users/joey/.local/bin/nucleus health
-/Users/joey/.local/bin/nucleus service status
-/Users/joey/.local/bin/nucleus account --wait 0
-/Users/joey/.local/bin/nucleus jobs list --state accepted
-/Users/joey/.local/bin/nucleus jobs list --state running
-/Users/joey/.local/bin/nucleus jobs list --state waiting-on-requester
-/Users/joey/.local/bin/nucleus jobs list --state failed
-```
-
-Iatreion uses `nucleus status-snapshot --json`. It reads health and attempts a
-maintenance-detail read for at most 250 ms. It reports daemon readiness,
-admission, and execution capacity without reading account usage, job content,
-or logs. Missing maintenance detail remains an explicit incomplete observation.
-
-`health` is strict: it prints the readiness document but exits nonzero unless
-the daemon is compatible, authenticated, and accepting work. It also reports
-the configured `maxActiveJobs=8`, live `activeJobs`, and live `availableSlots`.
-An `authentication_busy` account result means the broker cannot grant
-the read while exclusive authentication maintenance or attended login is in
-progress; an ordinary active job does not by itself block an account read or
-establish that the credential is invalid.
-
-One exact request is submitted from a file or standard input:
-
-```sh
-/Users/joey/.local/bin/nucleus jobs submit <REQUEST_JSON>
-/Users/joey/.local/bin/nucleus jobs show <JOB_ID>
-/Users/joey/.local/bin/nucleus jobs logs <JOB_ID>
-/Users/joey/.local/bin/nucleus jobs logs --follow <JOB_ID>
-/Users/joey/.local/bin/nucleus jobs cancel <JOB_ID>
+nucleus jobs submit <REQUEST_JSON>
+nucleus jobs show <JOB_ID>
+nucleus jobs status <JOB_ID>
+nucleus jobs wait <JOB_ID> --timeout 60
+nucleus jobs logs <JOB_ID>
+nucleus jobs logs --follow <JOB_ID>
+nucleus jobs cancel <JOB_ID>
 ```
 
 The job ID is the idempotency key. If submission is uncertain, resend only the
-byte-equivalent typed request with the same ID. A new attempt needs a new ID and
-the requester's decision that it is safe.
+same ID and byte-equivalent typed request. Each admitted job has one attempt;
+Nucleus never retries automatically. At most eight attempts are active. Further
+admitted jobs wait as accepted/pending. Execution timeout starts after slot
+acquisition; a requester-tool wait holds the slot through terminal cleanup.
 
-Completed structured output is reconstructed from the retained attempt's
-supported API-key or managed-authentication startup sequence and its correlated
-terminal messages. Reading an old completed job after a decoder repair can
-recover its thread ID, turn ID, and final message without a new attempt or a
-change to its raw observations or terminal state. Today's authentication mode
-does not select a historical decoder. Missing or conflicting startup evidence
-remains missing output; a requester still owns any decision to retry its work.
+A wait timeout does not cancel a job. Status reads job and mailbox state in
+sequence, without an atomic snapshot. Cancellation is idempotent for the exact
+job and does not erase history or undo a committed requester mutation.
 
-## Effects and authority
+Inspect the pending call and requester state when an attempt waits on its
+requester. Do not invent a response. Inspect domain effects after failure,
+timeout, or loss before considering another attempt. Missing structured output
+is not authority to rerun work. Successful output decoding and runtime completion
+remain separate from requester success.
 
-Submitting can invoke Codex and consume account allowance. A job receives one
-attempt; Nucleus never creates an automatic retry. At most eight attempts are
-active across all requesters. A newly admitted job stays `accepted` with a
-`pending` attempt while it waits for a slot. Its wall-clock timeout starts only
-after that slot is acquired, and an attempt in `waiting_on_requester` keeps the
-slot until the process and terminal cleanup finish. Dynamic tool calls may cause
-requester-owned mutations only after that requester validates and services
-them. A successful tool result or Nucleus completion still does not establish
-application success.
+## Respond to quota deferral
 
-Nucleus does not detect overlapping working directories or mutation targets.
-Concurrent `read-write` or `unrestricted` jobs require disjoint directories or
-worktrees, or requester-owned serialization.
+Inspect `nucleus quota`. Preserve the work and its exact request identity on
+`quota_deferred`. A rejected new submission creates no job or attempt. Accepted
+work can remain pending without a slot or running timeout; started attempts
+continue. Scheduled deferral is an expected outcome, not an abend.
 
-The version-one job protocol accepts invocation policies one and two. Policy
-one retains `none`, `read-only`, and `read-write`. Policy two adds
-`workspaceAccess=unrestricted`, advertised by `workspace-unrestricted`.
-It uses Codex `danger-full-access` with approvals disabled, so the Codex sandbox
-does not restrict filesystem, process, local socket, or network access.
-Operating-system permissions still apply. Local execution and built-in web
-search remain separate tool choices. New callers require that capability;
-deploy accepting daemon support first and preserve compatible readers for
-retained version-two requests.
+Preserve requester deadlines and committed results. Inspect domain effects
+before a retry after `quota_exhausted`. Do not edit quota state to simulate
+recovery. Quota recovery does not clear maintenance holds, operator pauses, or
+Clockwork failure halts. Read `nucleus.quota` for policy, configuration,
+observation freshness, and exact protocol behavior.
 
-Cancellation targets one exact job. Repeating the request is idempotent. It
-does not remove the job, output history, or a requester mutation already
-committed.
+## Hold and drain for maintenance
 
-The authentication broker keeps one authoritative managed credential beneath
-Nucleus private state; static API-key jobs instead receive isolated credential
-snapshots without copy-back. Jobs and account reads may overlap; canonical
-refresh is serialized, staged away from the authoritative file, and atomically
-promoted so credential generations move only forward. A started refresh
-survives cancellation of its requesting job. Account reads also use private
-staging and finish safe credential reconciliation after requester cancellation
-or timeout. Attended login is exclusive, does not begin until active job and
-account sessions have ended, and promotes only a validated successful staged
-login:
-
-```sh
-/Users/joey/.local/bin/nucleus auth login --device-auth
-/Users/joey/.local/bin/nucleus account --wait 0
-/Users/joey/.local/bin/nucleus health
-```
-
-Quiesce requesters before login or service work when active attempts must remain
-uninterrupted. Nucleus provides durable deployment admission holds owned by run
-IDs and reports drain status. A service restart terminates the daemon; startup
-marks unfinished attempts `lost`. Service uninstall removes the user service and
-installed binaries and retains state and logs.
-
-## Success and recovery
-
-For a runtime read, success is the requested supported Nucleus response. For a
-direct job, success is admission and the intended runtime observation. When a
-requester is involved, separately inspect its database or filesystem result.
-
-If Nucleus cannot connect, inspect service status and
-`~/Library/Logs/Nucleus/nucleusd.stderr.log`; do not fall back to an
-uncoordinated direct Codex invocation. If a job is waiting on the requester,
-inspect the pending mailbox call and requester state rather than inventing a
-result. If an attempt is lost, timed out, or failed after a domain commit,
-inspect domain state before considering any replacement attempt.
-
-## Codex weekly quota admission
-
-Read the cached condition with `nucleus quota` or `GET /v1/quota`. Neither starts
-model work. The default policy pauses new main-Codex work at 10% remaining or
-less. Admission reopens only after a fresh observation exceeds 15%.
-API-key authentication has no subscription weekly gate.
-
-Nucleus samples the Codex weekly allowance every 60 seconds. An observation
-is valid for at most 120 seconds and never past its reset time. Invalid or
-unavailable data pauses admission as `unknown` unless a valid cached observation
-remains. Reset time alone does not reopen admission. Other sessions use the same
-account allowance, so the threshold cannot guarantee that active work finishes.
-
-A quota rejection returns HTTP 429 `quota_deferred` without creating a job or
-attempt. Exact replay of an admitted request remains available. Accepted jobs
-retain their pending attempt while paused, without holding a slot or starting
-their execution timeout. Started attempts continue. Reads, cancellation, mailbox
-responses, and authentication remain available. Scheduled requesters retain work
-and report quota deferral without an abend.
-
-A structured Codex `usageLimitExceeded` ends the attempt with `quota_exhausted`
-and immediately pauses new admission. Inspect domain effects before authorizing
-a retry. Preserve committed results and requester deadlines. Nucleus restart
-still marks unfinished attempts lost, including pending attempts.
-
-A healthy daemon can report `status=ok`, `acceptingJobs=false`, and a blocked
-`quota`. Quota recovery clears no deployment hold, operator pause, or Clockwork
-failure halt. EMT sends one retained notice per condition through Email without
-a model job; use its installed operation contract for uncertain-send recovery.
-
-Configure the gate at daemon startup with `quota-policy.json` beside `nucleus.db`:
-
-```json
-{"enabled":true,"pauseAtRemainingPercent":10,"resumeAboveRemainingPercent":15}
-```
-
-Set `0 <= pause < resume < 100`. Keep this file and `quota-state.json` as private
-regular files with mode 0600, and include both in backups. Invalid files prevent
-startup. Do not edit quota state to simulate recovery. State and condition
-identity survive restart; an account change requires a new observation.
-
-Upgrade requester clients before enabling the gate. Use coordinated maintenance
-for cutover. This operation does not authorize rollout, a quota reset, or
-clearance of existing service halts.
-
-## Privacy
-
-`~/Library/Application Support/Nucleus/` is sensitive. Its database may
-contain complete prompts, tool arguments and results, source content, and exact
-app-server stdout. Its Codex home contains authentication material. The Unix
-socket has no application-level authentication; current-user filesystem
-ownership and permissions are the trust boundary.
-
-For backup, migration, deployment, exact harness compatibility, and detailed
-recovery ordering, use `nucleus manual` as the current authority.
-
-## Deployment admission and verification
-
-The deployment coordinator owns one durable hold through:
+1. Quiesce affected requesters and let their admitted multi-job workflows finish.
+2. Acquire a durable hold using the deployment run's own ID.
+3. Observe actual drain and verify that the sole hold belongs to that run.
+4. Perform only the maintenance authorized for the run.
+5. Verify the held service before releasing that run's hold.
 
 ```sh
 nucleus maintenance hold RUN_ID
@@ -207,139 +112,152 @@ nucleus maintenance health RUN_ID
 nucleus maintenance release RUN_ID
 ```
 
-The daemon stores holds beside its configured database in
-`deployment-maintenance/`. The standard path is
-`~/Library/Application Support/Nucleus/deployment-maintenance/`. Holds survive
-CLI or daemon exit. A hold prevents every new HTTP job submission, including
-unknown or direct callers, with HTTP 503 `deployment_maintenance`. An exact
-existing request can still be rediscovered. Existing accepted jobs continue
-through the scheduler; job reads, cancellation, output, and requester mailbox
-responses remain available. Requesters must first finish their admitted
-multi-job workflows before Nucleus is held.
+A hold rejects new work but lets admitted work settle. Reads, cancellation,
+output, and mailbox responses remain available. Drain includes accepted jobs,
+active processes, admission guards, and terminal cleanup. A foreign hold or
+unfinished work blocks cutover. Holds survive exit and have no automatic expiry.
+Release only the operation's own hold; other holds remain effective.
 
-The JSON status has `protocol_version: 1`, `holds`, `drained`, and
-`nonterminal_jobs`. Drain requires no admission guard, no accepted/running/
-waiting job, and no terminal cleanup still supervised by the daemon. Releasing
-one run ID leaves all other holds intact. No expiry silently reopens admission.
+## Install or update
 
-Ordinary health remains strict and reports `acceptingJobs: false` while held.
-`maintenance health RUN_ID` proves the sole matching owner, zero unfinished
-jobs and active slots, drained admission guards, authenticated credentials, supported protocol, and a
-ready exact harness. The health document is returned unchanged. The typed
-client provides `health_for_deployment`; this exception is solely for
-installation readiness, never ordinary requester admission. Only the service
-installer holding its own exclusive activity guard may account for that guard
-locally; the public health proof requires all guards drained.
-
-Without a hold, deployment readiness also accepts a healthy runtime whose
-admission is paused by reported low, exhausted, or unknown quota. Harness,
-authentication, protocol, and execution checks still apply. An unexplained
-admission pause fails. The installer reads raw health through `service status`
-for this proof. Quota policy and ordinary requester admission remain unchanged.
-
-The HTTP surfaces are GET `/v1/maintenance` and POST
-`/v1/maintenance/{hold,release}`. Each POST accepts exactly
-`{"run_id":"OWNER"}` and returns maintenance status. The typed client owns
-these request/response types.
-
-The Rust `nucleus-install` executable is sealed beside the matching tested CLI
-and daemon. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
-command uses shared immutable `cell-install-v2` packages and invokes the
-existing Nucleus-owned Rust service installer. Public CLI and daemon copies
-remain service-owned so its captured prior binaries and schema rollback
-evidence are preserved. The predecessor format-1 package remains verifiable.
-`inspect` and `verify-release ABS` are read-only; they never execute a retained
-installer or restore authentication.
-
-The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
-it under the product update lock before selector mutation. With
-`CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained
-hold and retains an exclusive activity guard through replacement and health
-verification. The existing guarded database/credential rollback rules remain.
-
-Daemon startup retires terminal records from the removed built-in deployment
-probe. Retirement is limited to requester `nucleus-deployment`, label
-`Verify Nucleus deployment`, and the former deterministic job ID derived from
-that requester ID. It removes only those jobs, their attempts, and raw output;
-children, tool calls, or unfinished work block retirement. Ordinary job history
-and shared schemas remain unchanged. This is not a general pruning API.
-
-## Output selection
-
-Health, account, submission, job show, log, mailbox, cancellation, and service
-results retain protocol-one meaning. `jobs status` returns runtime and requester
-identity, current attempt state and ID, pending call IDs and names, final-output
-availability, and terminal reason and message.
-
-`jobs wait --timeout 60` returns one terminal or timeout observation. A timeout
-does not cancel the job. Status reads mailbox and job state in sequence, without
-an atomic snapshot. Initial read errors remain errors. `jobs list` defaults to
-20 and retains its continuation behavior.
-
-## Coordinated first installation and interrupted cutover
-
-A fresh coordinated installation accepts `codex_bin` and `codex_home` in
-Nucleus's deployment settings. Both paths are absolute. `codex_bin` must be the
-exact supported Codex version. `codex_home` identifies an existing authenticated
-home; settings never contain credential bytes. If Nucleus already owns valid
-authentication, installation preserves it. Existing deployments retain a
-compatible configured harness and do not import another credential home.
-Before CI submission, stage the complete supported Codex runtime with the
-candidate installer:
+Select matching tested CLI, daemon, installer, and provider bundle bytes.
+Stage the complete supported Codex runtime before installation:
 
 ```sh
 <TESTED_NUCLEUS_INSTALL> stage-harness --codex /absolute/release/codex
+<TESTED_NUCLEUS_INSTALL> install \
+  --binary <TESTED_NUCLEUS_BINARY> \
+  --daemon <TESTED_NUCLEUS_DAEMON> \
+  --bundle <TESTED_NUCLEUS_BUNDLE> \
+  --codex <STAGED_CODEX_BINARY>
 ```
 
-The source directory must contain `codex` and its matching
-`codex-code-mode-host` from the same release. Staging checks the exact Codex
-version and executable files, copies both files, and records their SHA-256
-identities in `nucleus-runtime.json`. It publishes the complete directory at
-`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
-An identical staged runtime is reused. A different existing directory is refused.
-Staging does not select a service runtime, import credentials, or run model work.
-The source release is operator-selected; the manifest detects changes to the
-selected files and does not independently authenticate their origin.
+The selected source directory must contain `codex` and the matching
+`codex-code-mode-host`. Retain the previous runtime for recovery. Staging checks
+and seals the pair; it does not select a service runtime or import credentials.
+The operator selects the source release. File digests do not authenticate its
+origin. See `nucleus.invocation` for the exact supported harness and
+`nucleus.service` for staging paths and installation guarantees.
 
-Installation, health, and admission verify the manifest and required files.
-Every selected upgrade requires the staged runtime used by the Nucleus CI gate.
-It keeps a configured runtime only when both file identities match that staged
-pair; otherwise it selects the staged runtime. An old single-file installation at the
-same version also requires this replacement. Deployment captures both file
-identities and checks them again before cutover and after installation. Keep
-the previous runtime available for supported recovery. Preserve credentials,
-retained jobs, and existing failure halts.
+For an initial credential import, add
+`--codex-home /absolute/signed-in-codex-home`. Treat that home as an import source;
+Nucleus owns its resulting private credential. Preserve existing owned
+credentials. Never put credential bytes in deployment settings.
 
-The installer persists the run's local admission hold before a fresh daemon
-exists. It starts the service under that hold so dependent products can finish
-configuration. The configure phase proves the live harness, authentication,
-protocol and drained capacity. Admission opens only at group release.
+Use coordinated maintenance when replacing a daemon could lose work. The
+installer allows up to two minutes for migration, compaction, and health.
+A failed cutover can restore captured programs only when the database schema
+is unchanged. A schema change prevents binary-only rollback. Authentication
+is excluded from program and database rollback.
 
-Before selector or service replacement, the installer writes private
-`service-cutover.json` with its owner, prior package, candidate and harness.
-Recovery uses this journal to select and reinstall the exact candidate through
-`nucleus service recover --daemon ABS --codex ABS` with the recorded
-`CELL_DEPLOYMENT_RUN_ID`. This controlled restart establishes which executable
-is resident; matching files and a health response alone are insufficient.
-The service must have its sole drained hold. If it is stopped, recovery reads
-the database without migration and requires every retained job and attempt to
-be terminal. It does not cancel or retry requester work.
+After installation, register command inventory and inspect the selected service:
 
-Recovery can import the recorded authentication source only if Nucleus's owned
-authentication file is absent. It never rolls back a credential or database.
-A schema or service failure keeps the candidate and journal for recovery.
-Unknown ownership or unfinished jobs keep admission held. Successful recovery
-removes the cutover journal after held live health and exact program-copy checks.
+```sh
+nucleus --register-usage
+nucleus service status
+nucleus health
+nucleus account --wait 0
+```
 
-Deployment settings accept only `codex_bin` and `codex_home`, both strings.
-Unknown keys or values of another type fail inspection before admission holds.
+Verify the expected CLI, daemon, exact harness, protocol, and account before
+restoring requester admission. Deployment readiness permits a reported quota
+pause but still requires runtime readiness; a held service requires the run's
+sole drained hold. Successful installation does not reopen quota admission.
+No readiness check should submit a synthetic model job.
 
-## Command usage
+## Recover interrupted cutover
 
-After each installation or update, run `nucleus --register-usage`.
-This registers command inventory without product work.
+Inspect the retained run ownership and private `service-cutover.json`. Use its
+recorded candidate daemon, harness, and deployment run ID:
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+```sh
+CELL_DEPLOYMENT_RUN_ID=<RECORDED_RUN_ID> \
+  nucleus service recover --daemon <RECORDED_DAEMON> --codex <RECORDED_CODEX>
+```
+
+Require the sole drained hold. For a stopped service, every retained job and
+attempt must be terminal. Unknown ownership or unfinished work keeps admission
+held. Recovery selects and starts the recorded candidate; matching files alone
+do not prove which executable is resident. It does not cancel or retry work,
+roll back a database, or restore an older credential. Authentication import is
+allowed only when the owned file is absent and the source was recorded.
+
+Keep the journal and candidate on failure. Verify held live health and exact
+program copies before considering recovery complete. Follow the shared manual
+for group release; release no unrelated pause or failure halt.
+
+## Recover authentication
+
+Prevent new requester work and let active job and account sessions finish.
+Perform attended login and verify the resulting account and service:
+
+```sh
+nucleus auth login --device-auth
+nucleus account --wait 0
+nucleus health
+```
+
+Account reads may overlap jobs; attended login is exclusive. Do not copy managed
+refresh tokens to requesters or replace credentials because a read is busy.
+`annals-usage login --device-auth` delegates to the same operation. Resume only
+pauses created for this recovery. Never restore an older `auth.json` as a side
+effect of program or database rollback.
+
+## Back up and restore state
+
+Nucleus has no automatic backup or restore command. Select a private destination.
+
+1. Quiesce requesters and wait for jobs to become terminal.
+2. Record the Nucleus version, health, and exact Codex executable.
+3. Stop the user service:
+
+   ```sh
+   launchctl bootout "gui/$(id -u)/org.nucleus.daemon"
+   ```
+
+4. Create a SQLite-aware backup of `nucleus.db`. Other copy methods must preserve
+   the database and any WAL sidecars as one consistent set.
+5. Back up the credential home separately only when credential recovery is required.
+6. Include `quota-policy.json` and `quota-state.json` beside the database. Include
+   logs, service configuration, and requester state as needed.
+7. Start the same service and check readiness:
+
+   ```sh
+   launchctl bootstrap "gui/$(id -u)" \
+     "$HOME/Library/LaunchAgents/org.nucleus.daemon.plist"
+   nucleus health
+   ```
+
+A live copy of only the main database is incomplete. A Nucleus backup does not
+replace requester backups. Use `nucleus.service` for default paths, retained
+state, schema-cutover guarantees, and recovery limits.
+
+Perform restoration with an operator present. Quiesce requesters and stop the
+service. Save current state before restoring a compatible database and binary
+pair. Version-one binaries cannot open schema 2. Do not bypass pending
+compaction or migration failures. Verify health and retained job and output
+reads before resuming. Recover credentials through their separate procedure.
+
+## Restart or remove the service
+
+Quiesce first when active attempts must finish. `nucleus service restart`
+terminates the daemon; startup marks unfinished attempts lost. The requester
+owns recovery. `nucleus service uninstall` removes installed programs and the
+LaunchAgent but retains state and logs. Removing retained material needs a
+separate decision about that data and its recovery needs.
+
+Monitor private state and logs with `du -sh` at the default paths documented in
+`nucleus.service`. Use the host's private-log rotation policy. Nucleus has no
+automatic output pruning. Do not delete database rows, immutable registrations,
+or individual credential-home files to limit storage.
+
+## Privacy and command usage
+
+Treat state, logs, and backups as private. They can contain complete prompts,
+source text, tool arguments and results, exact harness output, and credentials.
+Socket ownership and filesystem permissions are the trust boundary; there is no
+application-level authentication. Read only the records needed for the task.
+
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery records
+command identity, time, and thread ID, not arguments, output, or outcomes.
+Internal product calls are excluded. Recording errors preserve command results.

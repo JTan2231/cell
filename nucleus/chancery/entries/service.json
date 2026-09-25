@@ -1,0 +1,206 @@
+{
+  "id": "nucleus.service",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect and maintain the Nucleus service",
+  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, backup, and recovery guarantees.",
+  "use_when": [
+    "Nucleus health, service selection, admission holds, drain, installation, backup, restore, restart, or removal must be understood or operated."
+  ],
+  "do_not_use_when": [
+    "The actual question is requester-domain success, permission to retry lost work, or authority to clear another owner's hold."
+  ],
+  "outcome": "The service state, owned maintenance condition, or installation/recovery evidence is observed through supported interfaces.",
+  "effects": [
+    "Health and service reads expose runtime state. Maintenance creates or releases durable run-owned holds.",
+    "Restart terminates the daemon; startup marks unfinished attempts lost. Installation can replace programs and service configuration or migrate state; uninstall retains state and logs."
+  ],
+  "authority": [
+    "Nucleus owns its current-user service, socket, state, runtime readiness, and maintenance holds.",
+    "Requesters own workflow settlement, domain evidence, and retry decisions; a coordinator releases only its own holds."
+  ],
+  "success": [
+    "The requested supported service response proves the observed condition. Installation requires matching programs, exact harness/authentication/protocol readiness, and applicable owned drain proof.",
+    "Requester admission is reported separately because a quota pause can remain after successful installation."
+  ],
+  "failure_and_recovery": [
+    "Quiesce requesters before interruptions when admitted work must finish. Preserve named holds and recovery evidence when ownership or drain is unproved.",
+    "Use the retained cutover journal and exact candidate for supported recovery; never roll credentials or an incompatible database backward."
+  ],
+  "privacy": [
+    "Service state, credentials, logs, cutover journals, quota files, and backups are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
+    "Credential backup/recovery remains separate from database and program rollback; a Nucleus backup does not replace requester backups."
+  ],
+  "interfaces": [
+    {
+      "label": "Inspect readiness",
+      "invocation": "/Users/joey/.local/bin/nucleus health"
+    },
+    {
+      "label": "Inspect service",
+      "invocation": "/Users/joey/.local/bin/nucleus service status"
+    },
+    {
+      "label": "Read bounded status snapshot",
+      "invocation": "/Users/joey/.local/bin/nucleus status-snapshot --json"
+    },
+    {
+      "label": "Hold admission",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance hold RUN_ID"
+    },
+    {
+      "label": "Read drain",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance status"
+    },
+    {
+      "label": "Prove held deployment readiness",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance health RUN_ID"
+    },
+    {
+      "label": "Release one owner",
+      "invocation": "/Users/joey/.local/bin/nucleus maintenance release RUN_ID"
+    }
+  ],
+  "does_not_authorize": [
+    "Interrupting active attempts without task authority, deleting retained data, retrying requester work, or clearing another hold or failure halt.",
+    "Restoring an older credential or incompatible database/binary pair."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user, deployment coordinator, and bounded status readers may inspect and operate the per-user service within their own authority."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Service changes use matching sealed programs and documentation, the exact staged Codex runtime, and supported private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
+      },
+      {
+        "status": "declared",
+        "statement": "Requesters must finish admitted multi-job workflows before Nucleus is held; a free process list alone does not prove durable settlement."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Maintenance POST requests accept exactly {\"run_id\":\"OWNER\"}; commands select that exact owner. Deployment settings accept only string codex_bin and codex_home absolute paths, not credential bytes."
+      },
+      {
+        "status": "declared",
+        "statement": "Installation and recovery select exact sealed program, provider-bundle, harness, and retained journal identities."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Health reports protocol/harness identity, readiness, admission, maxActiveJobs=8, activeJobs and availableSlots. Maintenance status returns protocol_version=1, holds, drained and nonterminal_jobs."
+      },
+      {
+        "status": "declared",
+        "statement": "status-snapshot reads health plus maintenance detail with a 250 ms maintenance bound, without account usage, job content or logs; missing detail is incomplete evidence."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "acceptingJobs is admission readiness, not spare capacity. Ordinary health prints diagnostics and exits nonzero unless compatible, authenticated, and accepting."
+      },
+      {
+        "status": "declared",
+        "statement": "Drain requires no admission guard, accepted/running/waiting job, or supervised terminal cleanup. Documentation presence and matching files alone do not prove the resident daemon or domain success."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Run ID owns a durable hold. Maintenance protocol version is 1; execution capacity counts attempts and status-snapshot maintenance wait is at most 250 ms."
+      },
+      {
+        "status": "declared",
+        "statement": "The standard service owns its filesystem-protected socket, mode-0600 database, mode-0700 state directory, LaunchAgent, installed programs, private logs and credential home."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Readiness reflects the live runtime at observation time. Deployment proof accepts a healthy quota-paused service but rejects an unexplained pause; a hold requires its sole matching owner and complete drain."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No service-availability or general response-latency objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported standard surfaces are the current-user CLI and version-one HTTP protocol over Nucleus's filesystem-protected Unix socket."
+      },
+      {
+        "status": "declared",
+        "statement": "Local filesystem ownership and permissions protect the socket and private state; version one has no application-level authentication protocol."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No TCP endpoint, cross-user service, catalog-granted access, or direct SQLite integration is supported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Holds survive process exit with no silent expiry. They refuse new submissions with HTTP 503 deployment_maintenance while exact existing replay and admitted work can continue; release removes only the named owner."
+      },
+      {
+        "status": "declared",
+        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Controlled restart establishes the resident executable; successful recovery removes the journal only after held live health and exact-copy checks."
+      },
+      {
+        "status": "declared",
+        "statement": "Unfinished work or unknown ownership keeps admission held. Credential recovery moves only forward. Schema changes prohibit incompatible binary-only rollback; uninstall retains state/logs."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Deployment checks run no model jobs or synthetic requester records. Service installation waits up to two minutes for migration, compaction, and health. There is no automatic backup/restore command or general output pruning."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No database-capacity, retention-horizon, or general service support/deprecation bound is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. The complete Codex runtime is staged and sealed by both file hashes; selected upgrades reuse a configured runtime only when both identities match the tested staged pair."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema-two cutover preserves jobs/attempts/registrations/cancellation/terminal state, discards old mixed logs and historical answered mailbox rows, and blocks on live pending calls. Pending compaction marker 1000002 becomes 2 only after successful VACUUM and truncating checkpoint; incompatible recovery needs a matching database/binary pair."
+      },
+      {
+        "status": "declared",
+        "statement": "Startup retires only terminal records of the removed reserved built-in deployment probe; dependencies or unfinished work block that retirement. It is not a general pruning API."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Live installation and admission readiness rely on the exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
+        "target": "codex",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "The standard always-on macOS service relies on launchd. Foreground protocol use does not establish launchd readiness; no installed Chancery contract covers launchd.",
+        "target": "launchd",
+        "kind": "readiness"
+      }
+    ]
+  },
+  "manual": "manuals/service.md"
+}
