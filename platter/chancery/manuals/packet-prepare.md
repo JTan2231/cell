@@ -42,8 +42,8 @@ maintenance holds all live in that database. Artifact IDs are not file paths.
 An explicit export writes a private new file at the supplied destination and
 refuses to overwrite one. Platter never relies on exported copies.
 
-The core records are jobs, runs, artifacts, editions and ordered edition
-attachments. A packet is a run and its artifacts. Content references its
+The core records are jobs, runs, artifacts, editions, selected edition packets
+and ordered edition attachments. A packet is a run and its artifacts. Content references its
 producing run; imported templates have no producing run. Nucleus owns tool
 and execution history. Platter retains exact requests and compact execution
 progress needed for recovery, without a separate tool-receipt ledger.
@@ -108,7 +108,7 @@ download time, not the time it was read from disk. The cache is disposable and
 is excluded from SQLite backups. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
-New preparations capture `generation=weaver_projects_v1` and the exact Cell,
+Tailored preparations capture `generation=weaver_projects_v1` and the exact Cell,
 Wrought and shortening directions. Platter appends the captured project editorial
 policy to each direction, so initial project writing and shortening use the
 same project policy. Jackson uses the separate resume editorial policy.
@@ -159,7 +159,7 @@ is omitted. Declining retains its assessment without a resume and sets the job
 ineligible. Project authoring has already occurred when the draft declines.
 
 Rendering checks overflow, missing characters, extractable project text, the
-Jackson heading and one-page layout. Platter is ready only after accepted brief,
+Jackson heading and one-page layout. A tailored packet is ready only after an accepted brief,
 assembled resume content and a validated retained PDF. A Weaver document alone
 is not a ready packet. Weaver certifies neither factual claims nor complete
 historical research coverage.
@@ -261,6 +261,58 @@ retains progress. The normal external
 source, rendering and execution timeouts still apply. Three ready packets is
 an edition ceiling, not a quota. The stored 09:00 America/Chicago setting does
 not install or authorize a schedule.
+
+## Daily resume override
+
+Use one optional, top-level `resume_override` setting to select a private PDF
+for future daily editions:
+
+```sh
+platter config --resume-override /absolute/private/resume.pdf
+platter --json config
+platter config --clear-resume-override
+```
+
+The path must be absolute and identify a readable, valid, unencrypted PDF with
+at least one page. Setting the path validates the file before saving it. Clearing
+the setting restores tailored preparation for future daily work. Configuration
+changes require ordinary mutation admission. They prepare no packets and send
+no email. Keep the PDF outside the repository.
+
+`prepare-daily`, `run-daily` and ordinary `preview` use this setting. A new daily
+invocation reads and validates the file before source or model work and before
+changing job eligibility. `run-daily` uses that single PDF snapshot through
+preparation and freeze. Missing, unreadable or invalid PDFs stop the invocation;
+there is no fallback to generation. Validation uses Python with pypdf, but does
+not compile LaTeX or impose the generated template's one-page and content rules.
+
+With an override, new runs capture `generation=daily_brief_v1`. They retain the
+posting, Vita career entries and prompt selection, then use the existing brief
+stage and career-read tools. They capture no template or project directions and
+invoke no Weaver writer or resume renderer. An accepted pursuit brief makes the
+run ready for daily override selection. A declined brief sets the job ineligible.
+Posting, compensation, preference and freshness checks still apply. Exact brief
+requests and accepted results retain the ordinary interruption and failure rules.
+
+A daily edition selects up to three jobs and freezes one shared `resume-override`
+PDF artifact with its original filename. Its body identifies the shared resume.
+The artifact has no producing run. Selected packet IDs are retained separately
+from attachment IDs, so the freeze sets every selected job ineligible. No selected
+jobs means no edition or email. A prepared tailored packet can supply its brief
+without adding its generated PDF to an override edition.
+
+Already frozen editions retain their exact packet selection, attachments, body
+and send key. Opening or sending them does not read the configured file. Accepted
+editions are not resent and uncertain sends remain held. Replacing the file or
+clearing the setting affects only future editions. A Platter backup includes the
+frozen PDF bytes; future daily work still depends on the configured source file.
+
+Single-job `prepare`, `prepare --fresh`, `regenerate`, `run-ad-hoc` and retained-
+material preview continue to use tailored resumes. They ignore the daily override.
+A brief-only run cannot supply a tailored edition. Changing between workflows
+starts a new capture when the latest packet cannot serve the selected workflow;
+prior model jobs must be terminal or absent. Historical runs and artifacts remain
+intact. Incomplete tailored work is not resumed through the daily brief stage.
 
 ## Editions and sending
 
@@ -391,9 +443,9 @@ Every external send still requires its own applicable user authority.
 
 ## Recovery and privacy
 
-A schema-six SQLite snapshot contains the entire retained Platter library.
+A schema-seven SQLite snapshot contains the entire retained Platter library.
 Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one through schema-five state must pass
+main database without its journal. Schema-one through schema-six state must pass
 the explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves

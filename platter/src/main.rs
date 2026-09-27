@@ -114,8 +114,13 @@ enum Command {
         output: PathBuf,
     },
     Status,
-    /// Read retained configuration without probing dependencies or preparing work.
-    Config,
+    /// Read configuration, or set/clear the PDF override for future daily editions.
+    Config {
+        #[arg(long, conflicts_with = "clear_resume_override")]
+        resume_override: Option<PathBuf>,
+        #[arg(long)]
+        clear_resume_override: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -198,7 +203,15 @@ async fn run() -> Result<()> {
             "Platter uses one canonical database; --state-dir must select its canonical state directory"
         );
     }
-    if matches!(cli.command, Command::Config) {
+    if let Command::Config {
+        resume_override,
+        clear_resume_override,
+    } = &cli.command
+    {
+        if resume_override.is_some() || *clear_resume_override {
+            let _admission = maintenance::gate(&home).enter()?;
+            workflow::set_resume_override(&root, resume_override.as_deref())?;
+        }
         println!(
             "{}",
             serde_json::json!({"ok":true,"data":{"config":workflow::config(&root)?}})
@@ -368,7 +381,7 @@ async fn run() -> Result<()> {
             println!("exported: {}", output.display());
         }
         Command::Status
-        | Command::Config
+        | Command::Config { .. }
         | Command::Opportunities { .. }
         | Command::ScheduleDefinition
         | Command::Doctor { .. }

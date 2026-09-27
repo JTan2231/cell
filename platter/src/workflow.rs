@@ -1,7 +1,7 @@
 use crate::{
     Config, ad_hoc,
     agent::{self, Brief, CareerEntry, Stage, StageInputs, StageResult},
-    resume::{RenderedResume, ResumeTemplate},
+    resume::{RenderedResume, ResumeOverride, ResumeTemplate},
     source::{self, Posting},
     store::{Edition, PacketRecord, Store},
 };
@@ -19,6 +19,7 @@ pub(crate) struct Captured {
     pub company: String,
     pub posting: Posting,
     pub career: Vec<CareerEntry>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub template_artifact: String,
     /// Absence identifies preparations created before independent editorial review.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -38,6 +39,7 @@ pub(crate) struct Captured {
 pub(crate) enum Generation {
     SingleDraftV1,
     WeaverProjectsV1,
+    DailyBriefV1,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -92,6 +94,25 @@ pub fn config(root: &Path) -> Result<Config> {
         .context("run init with the original resume first")?;
     value.validate()?;
     Ok(value)
+}
+
+/// Change only the daily override setting under the caller's mutation admission.
+pub fn set_resume_override(root: &Path, path: Option<&Path>) -> Result<()> {
+    let mut settings = config(root)?;
+    if let Some(path) = path {
+        ResumeOverride::load(path, root)?;
+    }
+    settings.resume_override = path.map(Path::to_owned);
+    settings.validate()?;
+    Store::open(root)?.set_setting("config", &settings)
+}
+
+fn daily_resume(root: &Path) -> Result<Option<ResumeOverride>> {
+    config(root)?
+        .resume_override
+        .as_deref()
+        .map(|path| ResumeOverride::load(path, root))
+        .transpose()
 }
 
 pub async fn prepare(root: &Path, job_id: &str, deadline: Option<Instant>) -> Result<PacketRecord> {
@@ -157,7 +178,7 @@ pub async fn regenerate(
         .iter()
         .find(|company| company.id == job.company_id)
         .map_or("Unknown employer", |company| company.name.as_str());
-    let record = capture_packet(&store, job, company, Some(request_id)).await?;
+    let record = capture_packet(&store, job, company, Some(request_id), false).await?;
     prepare_record(&store, record, deadline).await
 }
 
@@ -230,7 +251,7 @@ async fn prepare_selected(
         .iter()
         .find(|company| company.id == job.company_id)
         .map_or("Unknown employer", |company| company.name.as_str());
-    prepare_job(&store, job, company, deadline, fresh).await
+    prepare_job(&store, job, company, deadline, fresh, false).await
 }
 
 async fn prepare_job(
@@ -239,6 +260,7 @@ async fn prepare_job(
     company: &str,
     deadline: Option<Instant>,
     fresh: bool,
+    daily_override: bool,
 ) -> Result<PacketRecord> {
     ensure!(
         source::eligible(job),
@@ -265,13 +287,23 @@ async fn prepare_job(
         ensure_run_settled(store, &prior.id).await?;
         existing = None;
     }
+    if let Some(record) = &existing {
+        let captured: Captured = store.inputs(&record.id)?;
+        let brief_only = matches!(captured.generation, Some(Generation::DailyBriefV1));
+        // Reuse complete tailored packets for a daily override, but never resume
+        // a different writing workflow or treat a brief as an ad hoc resume.
+        if brief_only != daily_override && (!daily_override || record.status == "preparing") {
+            ensure_run_settled(store, &record.id).await?;
+            existing = None;
+        }
+    }
     let record = if let Some(record) = existing {
         if record.status != "preparing" {
             return Ok(record);
         }
         record
     } else {
-        capture_packet(store, job, company, None).await?
+        capture_packet(store, job, company, None, daily_override).await?
     };
     prepare_record(store, record, deadline).await
 }
@@ -281,6 +313,7 @@ async fn capture_packet(
     job: &Job,
     company: &str,
     regeneration_id: Option<&str>,
+    daily_override: bool,
 ) -> Result<PacketRecord> {
     let record = PacketRecord {
         id: format!("packet_{}", uuid::Uuid::now_v7()),
@@ -292,16 +325,23 @@ async fn capture_packet(
         directory: String::new(),
     };
     let prompts = cell_prompts::Prompts::load("platter")?;
-    let resume_editorial = prompts.expand(agent::RESUME_EDITORIAL)?;
-    let project_editorial = prompts.expand(crate::projects::EDITORIAL)?;
-    let mut project_directions = [
-        prompts.expand(crate::projects::CELL_DIRECTION)?,
-        prompts.expand(crate::projects::WROUGHT_DIRECTION)?,
-        prompts.expand(crate::projects::SHORTEN_DIRECTION)?,
-    ];
-    for direction in &mut project_directions {
-        *direction = format!("{direction}\n\n{project_editorial}");
-    }
+    let (resume_editorial, project_directions) = if daily_override {
+        (None, None)
+    } else {
+        let project_editorial = prompts.expand(crate::projects::EDITORIAL)?;
+        let mut directions = [
+            prompts.expand(crate::projects::CELL_DIRECTION)?,
+            prompts.expand(crate::projects::WROUGHT_DIRECTION)?,
+            prompts.expand(crate::projects::SHORTEN_DIRECTION)?,
+        ];
+        for direction in &mut directions {
+            *direction = format!("{direction}\n\n{project_editorial}");
+        }
+        (
+            Some(prompts.expand(agent::RESUME_EDITORIAL)?),
+            Some(directions),
+        )
+    };
     let captured = Captured {
         prompt_selection: Some(prompts.selection.version),
         job: job.clone(),
@@ -314,14 +354,22 @@ async fn capture_packet(
             }
         },
         career: source::career_library()?,
-        template_artifact: store
-            .setting("template")?
-            .context("original resume is not initialized")?,
-        resume_editorial: Some(resume_editorial),
+        template_artifact: if daily_override {
+            String::new()
+        } else {
+            store
+                .setting("template")?
+                .context("original resume is not initialized")?
+        },
+        resume_editorial,
         project_resources: None,
         regeneration_id: regeneration_id.map(str::to_owned),
-        generation: Some(Generation::WeaverProjectsV1),
-        project_directions: Some(project_directions),
+        generation: Some(if daily_override {
+            Generation::DailyBriefV1
+        } else {
+            Generation::WeaverProjectsV1
+        }),
+        project_directions,
     };
     store.insert_run(&record, &captured)?;
     Ok(record)
@@ -334,7 +382,6 @@ async fn prepare_record(
 ) -> Result<PacketRecord> {
     let captured: Captured = store.inputs(&record.id)?;
     let prompts = cell_prompts::Prompts::at("platter", captured.prompt_selection.unwrap_or(1))?;
-    let template = store.template_artifact(&captured.template_artifact)?;
     let posting = prompts.render(
         "platter.posting.template",
         &[
@@ -345,9 +392,6 @@ async fn prepare_record(
             ("4", captured.posting.text.clone()),
         ],
     )?;
-    if captured.project_resources.is_some() {
-        template.validate_projects_region()?;
-    }
     let guidance = match agent::retained_guidance(store, &record.id)? {
         Some(guidance) => guidance,
         None => prompts.text("platter.packet.guidance")?,
@@ -369,6 +413,24 @@ async fn prepare_record(
         ..StageInputs::default()
     };
     let client = nucleus_client::NucleusClient::for_current_user()?;
+    if matches!(captured.generation, Some(Generation::DailyBriefV1)) {
+        let StageResult::Brief(brief) =
+            agent::run_stage(&client, store, Stage::Brief, inputs, deadline).await?
+        else {
+            anyhow::bail!("unexpected brief result");
+        };
+        let tx = store.connection.unchecked_transaction()?;
+        store.status(&record.id, if brief.pursue { "ready" } else { "declined" })?;
+        if !brief.pursue {
+            store.exclude_job(&record)?;
+        }
+        tx.commit()?;
+        return store.run(&record.id);
+    }
+    let template = store.template_artifact(&captured.template_artifact)?;
+    if inputs.project_resources.is_some() {
+        template.validate_projects_region()?;
+    }
     if matches!(captured.generation, Some(Generation::WeaverProjectsV1)) {
         inputs.fixed_projects = Some(
             crate::projects::prepare(
@@ -607,9 +669,18 @@ async fn write_resume(
 }
 
 pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec<PacketRecord>> {
+    let resume = daily_resume(root)?;
+    prepare_daily_selected(root, deadline, resume.is_some()).await
+}
+
+async fn prepare_daily_selected(
+    root: &Path,
+    deadline: Option<Instant>,
+    daily_override: bool,
+) -> Result<Vec<PacketRecord>> {
     let settings = config(root)?;
     let store = Store::open(root)?;
-    refresh_ready(&store).await?;
+    refresh_ready(&store, daily_override).await?;
     let snapshot = source::discovery(&settings.cast_executable)?;
     let mut jobs: Vec<_> = snapshot
         .jobs
@@ -618,7 +689,7 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
         .collect();
     jobs.sort_by(|a, b| b.last_seen_at.cmp(&a.last_seen_at).then(a.id.cmp(&b.id)));
     for job in jobs {
-        if ready(&store)?.len() >= settings.daily_count {
+        if ready(&store, daily_override)?.len() >= settings.daily_count {
             break;
         }
         ensure!(
@@ -626,10 +697,12 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
             "work deadline reached"
         );
         let opportunity = source::identity(job)?;
-        if !store.is_eligible(&opportunity)?
-            || store
-                .packet(&opportunity)?
-                .is_some_and(|r| matches!(r.status.as_str(), "ready" | "deferred"))
+        if !store.is_eligible(&opportunity)? {
+            continue;
+        }
+        if let Some(record) = store.packet(&opportunity)?
+            && matches!(record.status.as_str(), "ready" | "deferred")
+            && usable(&store, &record, daily_override)?
         {
             continue;
         }
@@ -638,14 +711,15 @@ pub async fn prepare_daily(root: &Path, deadline: Option<Instant>) -> Result<Vec
             .iter()
             .find(|c| c.id == job.company_id)
             .map_or("Unknown employer", |c| c.name.as_str());
-        if let Err(error) = prepare_job(&store, job, company, deadline, false).await {
+        if let Err(error) = prepare_job(&store, job, company, deadline, false, daily_override).await
+        {
             if !error.is::<PostingUnavailable>() {
                 return Err(error);
             }
             eprintln!("skipped {} (ineligible): {error:#}", job.id);
         }
     }
-    ready(&store)
+    ready(&store, daily_override)
 }
 
 /// Run one authorized daily delivery. The CLI holds mutation admission throughout.
@@ -656,11 +730,18 @@ pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Resul
     if Store::open_read_only(root)?.edition(&day)?.is_some() {
         return send(root, &day).map(Some);
     }
+    let resume = daily_resume(root)?;
     loop {
-        if prepare_daily(root, None).await?.is_empty() {
+        if prepare_daily_selected(root, None, resume.is_some())
+            .await?
+            .is_empty()
+        {
             return Ok(None);
         }
-        if preview(root, &day).await?.is_some() {
+        if preview_selected(root, &day, resume.as_ref())
+            .await?
+            .is_some()
+        {
             return send(root, &day).map(Some);
         }
         // Freshness checks excluded the entire pool. Fill it from other jobs.
@@ -730,11 +811,23 @@ fn ensure_edition_url(root: &Path, edition: &Edition, url: &str) -> Result<()> {
     Ok(())
 }
 
-fn ready(store: &Store) -> Result<Vec<PacketRecord>> {
+fn usable(store: &Store, record: &PacketRecord, daily_override: bool) -> Result<bool> {
+    if daily_override {
+        return Ok(true);
+    }
+    let captured: Captured = store.inputs(&record.id)?;
+    Ok(!matches!(
+        captured.generation,
+        Some(Generation::DailyBriefV1)
+    ))
+}
+
+fn ready(store: &Store, daily_override: bool) -> Result<Vec<PacketRecord>> {
     let mut selected = vec![];
     for record in store.list()? {
         if record.status == "ready"
             && store.is_eligible(&record.opportunity)?
+            && usable(store, &record, daily_override)?
             && store
                 .packet(&record.opportunity)?
                 .is_some_and(|latest| latest.id == record.id)
@@ -745,9 +838,17 @@ fn ready(store: &Store) -> Result<Vec<PacketRecord>> {
     Ok(selected)
 }
 
-async fn refresh_ready(store: &Store) -> Result<()> {
+async fn refresh_ready(store: &Store, daily_override: bool) -> Result<()> {
     for record in store.list()? {
-        refresh_packet(store, &record).await?;
+        if matches!(record.status.as_str(), "ready" | "deferred")
+            && store.is_eligible(&record.opportunity)?
+            && usable(store, &record, daily_override)?
+            && store
+                .packet(&record.opportunity)?
+                .is_some_and(|latest| latest.id == record.id)
+        {
+            refresh_packet(store, &record).await?;
+        }
     }
     Ok(())
 }
@@ -784,19 +885,31 @@ async fn refresh_packet(store: &Store, record: &PacketRecord) -> Result<()> {
 
 pub async fn preview(root: &Path, day: &str) -> Result<Option<Edition>> {
     validate_day(day)?;
+    if let Some(edition) = Store::open_read_only(root)?.edition(day)? {
+        return Ok(Some(edition));
+    }
+    let resume = daily_resume(root)?;
+    preview_selected(root, day, resume.as_ref()).await
+}
+
+async fn preview_selected(
+    root: &Path,
+    day: &str,
+    resume: Option<&ResumeOverride>,
+) -> Result<Option<Edition>> {
     let store = Store::open(root)?;
     if let Some(edition) = store.edition(day)? {
         return Ok(Some(edition));
     }
-    refresh_ready(&store).await?;
-    let selected: Vec<_> = ready(&store)?
+    refresh_ready(&store, resume.is_some()).await?;
+    let selected: Vec<_> = ready(&store, resume.is_some())?
         .into_iter()
         .take(config(root)?.daily_count)
         .collect();
     if selected.is_empty() {
         return Ok(None);
     }
-    let edition = compose(&store, day, &selected, &BTreeMap::new())?;
+    let edition = compose_selected(&store, day, &selected, &BTreeMap::new(), resume)?;
     store.freeze_as(day, &edition, true)?;
     store.edition(day)
 }
@@ -806,6 +919,16 @@ pub(crate) fn compose(
     day: &str,
     selected: &[PacketRecord],
     overrides: &BTreeMap<String, String>,
+) -> Result<Edition> {
+    compose_selected(store, day, selected, overrides, None)
+}
+
+fn compose_selected(
+    store: &Store,
+    day: &str,
+    selected: &[PacketRecord],
+    overrides: &BTreeMap<String, String>,
+    resume: Option<&ResumeOverride>,
 ) -> Result<Edition> {
     use std::fmt::Write as _;
     ensure!(
@@ -834,12 +957,16 @@ pub(crate) fn compose(
             .content(&record.id, "brief")?
             .context("accepted brief missing")?;
         ensure!(brief.pursue, "packet was declined");
-        let _: agent::Resume = store
-            .content(&record.id, "resume-content")?
-            .context("accepted resume missing")?;
-        let pdf = store
-            .run_artifact(&record.id, "resume-pdf")?
-            .context("validated PDF missing")?;
+        if resume.is_none() {
+            let _: agent::Resume = store
+                .content(&record.id, "resume-content")?
+                .context("accepted resume missing")?;
+            let pdf = store
+                .run_artifact(&record.id, "resume-pdf")?
+                .context("validated PDF missing")?;
+            edition.attachments.push(pdf.id);
+            edition.attachment_sha256.push(pdf.sha256);
+        }
         let captured: Captured = store.inputs(&record.id)?;
         let paragraph = overrides.get(&record.id).unwrap_or(&brief.paragraph);
         agent::validate_brief_text(paragraph)?;
@@ -853,8 +980,22 @@ pub(crate) fn compose(
             paragraph
         )?;
         edition.packet_ids.push(record.id.clone());
+    }
+    if let Some(resume) = resume {
+        let pdf = store.put_artifact(
+            None,
+            "resume-override",
+            &resume.filename,
+            "application/pdf",
+            &resume.pdf,
+        )?;
         edition.attachments.push(pdf.id);
         edition.attachment_sha256.push(pdf.sha256);
+        writeln!(
+            edition.body,
+            "Attached resume: {} (shared by all opportunities above).",
+            resume.filename
+        )?;
     }
     Ok(edition)
 }

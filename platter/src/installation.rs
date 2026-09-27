@@ -142,7 +142,7 @@ fn candidate_maintenance(context: &cell_install::adapter::Context) -> cell_insta
         )?;
         let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
         ensure!(
-            matches!(version, 1 | 2 | 3 | 4 | 5 | crate::store::SCHEMA_VERSION),
+            matches!(version, 1..=crate::store::SCHEMA_VERSION),
             "unsupported Platter database schema"
         );
         Ok(version == crate::store::SCHEMA_VERSION)
@@ -195,7 +195,7 @@ fn lifecycle_inner(
             let version: i64 =
                 connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
             ensure!(
-                matches!(version, 1 | 2 | 3 | 4 | 5 | crate::store::SCHEMA_VERSION),
+                matches!(version, 1..=crate::store::SCHEMA_VERSION),
                 "unsupported Platter database schema"
             );
             version == 1

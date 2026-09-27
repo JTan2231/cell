@@ -71,6 +71,7 @@ impl Fixture {
             email_executable: forbidden,
             weaver_executable: root.join("original.json"),
             original_resume: root.join("original.json"),
+            resume_override: None,
         };
         let mut store = Store::open(root)?;
         store.set_setting("config", &config)?;

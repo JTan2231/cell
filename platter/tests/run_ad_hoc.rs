@@ -106,6 +106,7 @@ impl Fixture {
             email_executable: email.clone(),
             weaver_executable: tools.join("unused-resume.tex"),
             original_resume: tools.join("unused-resume.tex"),
+            resume_override: None,
         };
         let store = Store::open(&root)?;
         store.set_setting("config", &config)?;
@@ -198,6 +199,9 @@ impl Fixture {
 #[test]
 fn url_selected_command_reuses_the_daily_packet_and_send_records() -> Result<()> {
     let fixture = Fixture::new()?;
+    let mut settings = platter::workflow::config(&fixture.root)?;
+    settings.resume_override = Some(fixture.root.join("missing-daily-only.pdf"));
+    Store::open(&fixture.root)?.set_setting("config", &settings)?;
     let first = fixture.run(&format!("{}/application", fixture.url))?;
     assert!(
         first.status.success(),
@@ -225,6 +229,119 @@ fn url_selected_command_reuses_the_daily_packet_and_send_records() -> Result<()>
     assert_eq!(Fixture::calls(&fixture.cast)?.lines().count(), 2);
     assert_eq!(Fixture::calls(&fixture.email)?, "invoked\n");
     drop(fixture.directory);
+    Ok(())
+}
+
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the isolated capture and restart scenario together"
+)]
+fn daily_override_captures_only_a_brief_and_recovers_acceptance_without_resume_tools() -> Result<()>
+{
+    use serde_json::{Value, json};
+    for pursue in [true, false] {
+        let fixture = Fixture::new()?;
+        let store = Store::open(&fixture.root)?;
+        store.status(&fixture.packet.id, "stale")?;
+        let annals = fixture.home.join(".local/bin/annals");
+        fs::create_dir_all(
+            annals
+                .parent()
+                .ok_or_else(|| anyhow::anyhow!("parent missing"))?,
+        )?;
+        fs::write(
+            &annals,
+            "#!/bin/sh\ncase \"$*\" in\n*list*) /bin/cat \"$0.list\";;\n*show*) /bin/cat \"$0.story\";;\n*) exit 1;;\nesac\n",
+        )?;
+        fs::set_permissions(&annals, fs::Permissions::from_mode(0o700))?;
+        let summary =
+            json!({"work":"story","sha256":"unused","size_bytes":0,"first_retained_at":"unused"});
+        fs::write(
+            annals.with_extension("list"),
+            json!({"ok":true,"data":{"schema_version":2,"items":[summary],"has_more":false}})
+                .to_string(),
+        )?;
+        let mut work = summary;
+        work["text"] = json!("Complete captured career evidence");
+        work["headings"] = json!([]);
+        fs::write(
+            annals.with_extension("story"),
+            json!({"ok":true,"data":work}).to_string(),
+        )?;
+        // Delivery tests exercise the real PDF parser; this fixture isolates stage routing.
+        let python = fixture.root.join("pdf-inspector");
+        fs::write(&python, "#!/bin/sh\nexit 0\n")?;
+        fs::set_permissions(&python, fs::Permissions::from_mode(0o700))?;
+        let pdf = fixture.root.join("Shared.pdf");
+        fs::write(&pdf, b"%PDF-fixture")?;
+        let mut settings = platter::workflow::config(&fixture.root)?;
+        settings.resume_override = Some(pdf);
+        store.set_setting("config", &settings)?;
+        let run = || -> Result<Output> {
+            Ok(Command::new(env!("CARGO_BIN_EXE_platter"))
+                .env_clear()
+                .env("HOME", &fixture.home)
+                .env("PATH", "/usr/bin:/bin")
+                .env("CELL_BAZAAR_DATABASE", cell_prompts::database_path()?)
+                .env(
+                    "NUCLEUS_SOCKET",
+                    fixture.directory.path().join("absent.sock"),
+                )
+                .env("PLATTER_PYTHON", &python)
+                .env("PLATTER_TECTONIC", "/missing-tectonic")
+                .env("CHANCERY_USAGE_DISABLED", "1")
+                .arg("prepare-daily")
+                .output()?)
+        };
+        assert!(!run()?.status.success());
+        let record = store
+            .list()?
+            .into_iter()
+            .find(|p| p.id != fixture.packet.id)
+            .ok_or_else(|| anyhow::anyhow!("daily capture missing"))?;
+        let captured: Value = store.inputs(&record.id)?;
+        assert_eq!(captured["generation"], "daily_brief_v1");
+        assert!(captured.get("template_artifact").is_none());
+        assert!(captured.get("project_directions").is_none());
+        assert!(captured.get("resume_editorial").is_none());
+        let mut execution = store
+            .execution(&record.id, "brief")?
+            .ok_or_else(|| anyhow::anyhow!("brief request missing"))?;
+        assert_eq!(
+            execution["request"]["invocation"]["toolset"]["name"],
+            "brief"
+        );
+        for stage in ["draft", "resume", "weaver-cell", "weaver-wrought"] {
+            assert!(store.execution(&record.id, stage)?.is_none());
+        }
+        // Model-tool acceptance and terminal observation can precede a process restart.
+        store.put_content(&record.id, "brief", &json!({"paragraph":if pursue {"Why it works: Strong fit.\n\nRole: Build systems."} else {""},"pursue":pursue}))?;
+        execution["runtime"] = json!({"state":"completed","attempt_id":null});
+        store.save_execution(&record.id, "brief", &execution)?;
+        fs::remove_file(annals)?;
+        let retry = run()?;
+        assert!(
+            retry.status.success(),
+            "{}",
+            String::from_utf8_lossy(&retry.stderr)
+        );
+        assert_eq!(
+            store.run(&record.id)?.status,
+            if pursue { "ready" } else { "declined" }
+        );
+        assert_eq!(store.is_eligible(&record.opportunity)?, pursue);
+        for kind in [
+            "resume-content",
+            "resume-source",
+            "resume-pdf",
+            "project-bullets",
+        ] {
+            assert!(store.run_artifact(&record.id, kind)?.is_none());
+        }
+        assert_eq!(store.list()?.len(), 2);
+        assert!(!fixture.email.with_extension("calls").exists());
+    }
     Ok(())
 }
 

@@ -25,12 +25,8 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
-    } else if matches!(store.version()?, 2..=5) {
-        // The table layout is unchanged. Older binaries must refuse Weaver runs.
-        // Existing captured inputs and exact requests keep their legacy meanings.
-        let tx = store.connection.unchecked_transaction()?;
-        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        tx.commit()?;
+    } else if matches!(store.version()?, 2..=6) {
+        upgrade_editions(&store)?;
     }
     ensure!(
         store.version()? == SCHEMA_VERSION,
@@ -81,6 +77,25 @@ fn capture(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Vec<u8>
     let bytes = std::fs::read(path)?;
     owned.insert(path.to_owned(), digest(&bytes));
     Ok(bytes)
+}
+
+fn upgrade_editions(store: &Store) -> Result<()> {
+    let tx = store.connection.unchecked_transaction()?;
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS edition_packets(
+        edition_id TEXT NOT NULL REFERENCES editions(id),
+        position INTEGER NOT NULL CHECK(position >= 0),
+        run_id TEXT NOT NULL REFERENCES runs(id),
+        PRIMARY KEY(edition_id,position), UNIQUE(edition_id,run_id));
+        INSERT OR IGNORE INTO edition_packets
+        SELECT ea.edition_id,ea.position,a.run_id FROM edition_attachments ea
+        JOIN artifacts a ON a.id=ea.artifact_id WHERE a.run_id IS NOT NULL;
+        CREATE TRIGGER IF NOT EXISTS immutable_edition_packet BEFORE UPDATE ON edition_packets
+        BEGIN SELECT RAISE(ABORT,'edition packets are immutable'); END;",
+    )?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    tx.commit()?;
+    Ok(())
 }
 fn optional(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Option<Vec<u8>>> {
     if path.try_exists()? {
@@ -366,6 +381,7 @@ fn import_edition(
     }
     edition.attachments = artifacts;
     store.connection.execute("INSERT INTO editions(id,day,status,subject,body,idempotency_key,receipt) VALUES(?1,?2,?3,?4,?5,?6,?7)",params![id,edition.day,edition.status,edition.subject,edition.body,edition.idempotency_key,edition.receipt])?;
+    store.insert_edition_packets(id, &edition.packet_ids)?;
     for (index, artifact) in edition.attachments.iter().enumerate() {
         store.connection.execute(
             "INSERT INTO edition_attachments VALUES(?1,?2,?3)",
@@ -483,7 +499,7 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .context("read snapshot source schema")?;
     ensure!(
-        matches!(version, 1 | 2 | 3 | 4 | 5 | SCHEMA_VERSION),
+        matches!(version, 1..=SCHEMA_VERSION),
         "unsupported source schema"
     );
     crate::private_dir(destination)?;
@@ -492,12 +508,8 @@ pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
         .execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()])
         .context("copy source SQLite into private snapshot")?;
     std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
-    if matches!(version, 2 | 3) {
-        Store::control(destination)?.connection.pragma_update(
-            None,
-            "user_version",
-            SCHEMA_VERSION,
-        )?;
+    if matches!(version, 2..=6) {
+        upgrade_editions(&Store::control(destination)?)?;
     }
     if version == 1 {
         ensure!(

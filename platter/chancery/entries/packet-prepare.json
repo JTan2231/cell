@@ -1,11 +1,11 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 13,
+  "contract_version": 14,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
-  "summary": "Prepare or regenerate private job briefs and resumes from Cast opportunities and Vita career material. Freeze editions and send retained attachment bytes through authorized runs.",
+  "summary": "Prepare private job briefs and tailored resumes, or use one configured PDF for daily emails. Freeze editions and send retained attachment bytes through authorized runs.",
   "use_when": [
     "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
@@ -13,13 +13,14 @@
     "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
     "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient.",
     "The user wants another packet for a previously prepared job, including one already used in an edition, without re-enabling it or sending email.",
-    "The user wants to replace the fixed resume template for future preparations while retaining earlier templates and packets."
+    "The user wants to replace the fixed resume template for future preparations while retaining earlier templates and packets.",
+    "The user wants to set or clear one static PDF override for future daily email resumes."
   ],
   "do_not_use_when": [
     "The request is job discovery, source-library editing, employer outreach or application submission.",
     "The caller expects stored delivery settings or installation alone to enable a schedule, or expects preparation to change fixed content outside its editable regions."
   ],
-  "outcome": "Stored brief, Jackson and Weaver project bullets, fixed presentation and validated one-page resume. Preview freezes ready packets; authorized send records provider acceptance.",
+  "outcome": "Stored private job briefs and either tailored resumes or one shared PDF for a daily edition. Preview freezes selected packets and attachments; authorized send records provider acceptance.",
   "interfaces": [
     {
       "label": "Initialize from original resume",
@@ -92,11 +93,23 @@
     {
       "label": "Import a complete fixed resume template for future runs",
       "invocation": "platter import-template /absolute/private/resume.tex"
+    },
+    {
+      "label": "Set the daily resume override",
+      "invocation": "platter config --resume-override /absolute/private/resume.pdf"
+    },
+    {
+      "label": "Clear the daily resume override",
+      "invocation": "platter config --clear-resume-override"
+    },
+    {
+      "label": "Read retained configuration",
+      "invocation": "platter --json config"
     }
   ],
   "effects": [
     "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Preparation captures posting, career data, template and exact project directions. It requests Cell and Wrought Markdown from Weaver, retains the returned documents, then runs one constrained Platter brief/Jackson draft. Final content and rendered bytes commit together.",
+    "Tailored preparation captures posting, career data, template and exact project directions. It requests Cell and Wrought Markdown from Weaver, retains the returned documents, then runs one constrained Platter brief/Jackson draft. Final content and rendered bytes commit together.",
     "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
     "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
     "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
@@ -105,7 +118,8 @@
     "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite.",
     "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts.",
     "Regenerate captures a new ordinary run with current inputs and writing instructions. It leaves earlier runs and editions intact and does not enable the job or send mail. Availability, compensation, posting retrieval and pursuit checks still apply; retrieval failure or decline can set eligibility false.",
-    "Explicit full-template import validates Jackson and fixed project regions, retains a new immutable template and selects it for future runs. It preserves prior templates, captured runs, instructions, configuration and deliveries; it performs no rendering, model work or sending."
+    "Explicit full-template import validates Jackson and fixed project regions, retains a new immutable template and selects it for future runs. It preserves prior templates, captured runs, instructions, configuration and deliveries; it performs no rendering, model work or sending.",
+    "The optional flat resume_override path changes future daily preparation to the brief stage only. Each new daily invocation validates one PDF snapshot before preparation or eligibility changes. Ordinary preview freezes one shared PDF plus separate ordered packet selections; all selected jobs become ineligible. Configuration setters validate before saving and send nothing."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -113,14 +127,15 @@
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
-    "Preparation succeeds when the combined draft submission passes content and rendering checks and its brief, resume content, LaTeX and one-page PDF are retained together. A declined draft requires no resume or rendering.",
+    "Tailored preparation succeeds when the combined draft submission passes content and rendering checks and its brief, resume content, LaTeX and one-page PDF are retained together. A declined draft requires no resume or rendering.",
     "Preview freezes exact message and ordered immutable artifacts without sending.",
     "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
     "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents.",
-    "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition."
+    "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition.",
+    "With resume_override, an accepted pursuit brief is ready for daily override selection. A daily edition requires that brief and a validated shared PDF. It retains one attachment for one through three selected packets. Ad hoc and single-job preparation remain tailored."
   ],
   "failure_and_recovery": [
-    "A consistent schema-six backup includes retained templates, Weaver directions, IDs, documents and packet history. Schemas one through five require maintained migration. Weaver source reads and Nucleus records remain provider-owned.",
+    "A consistent schema-seven backup includes retained templates, Weaver directions, IDs, documents and packet history. Schemas one through six require maintained migration. Weaver source reads and Nucleus records remain provider-owned.",
     "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
     "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
     "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. Posting retrieval failures are skipped before freeze; other preparation/export failures preserve retained progress and stop before send.",
@@ -130,7 +145,8 @@
     "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
     "Draft jobs reuse their exact retained requests and accepted results without rendering accepted content again. Historical stages retain their original continuation path. A failed job without an accepted result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
     "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding.",
-    "Weaver quota deferral retains assignments without a new attempt. Terminal failure remains an error even when prose is saved. Exact recorded Weaver IDs participate in deadlines and maintenance. One captured shortening round is permitted for project layout rejection; renderer infrastructure failure stops immediately."
+    "Weaver quota deferral retains assignments without a new attempt. Terminal failure remains an error even when prose is saved. Exact recorded Weaver IDs participate in deadlines and maintenance. One captured shortening round is permitted for project layout rejection; renderer infrastructure failure stops immediately.",
+    "An invalid daily override stops new daily work without fallback. Existing editions use retained bytes without reading the file. Replacing the file or clearing the setting affects future editions. Switching workflows creates a new capture only after prior model jobs settle; retained requests and artifacts stay unchanged."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
@@ -193,7 +209,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-six state, the supported resume template, readable Cast and Annals interfaces with the vita library, and full posting text from a supported adapter. It also requires strict authenticated Nucleus readiness and supported rendering tools. Sending requires authorization and Email with --payload-stdin. New runs require a fixed Cell/Wrought template with both bullet marker pairs and a compatible configured Weaver reader."
+        "statement": "Preparation requires initialized schema-seven state, readable Cast and Annals interfaces with the vita library, full supported posting text, and authenticated Nucleus readiness. Tailored work also requires the fixed resume template, Weaver and rendering tools. Daily override work requires the configured readable valid unencrypted PDF and Python with pypdf, and uses the brief stage only. Sending requires authorization and Email with --payload-stdin."
       },
       {
         "status": "declared",
@@ -207,7 +223,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Fresh canonical state is ~/.local/share/platter; a sole ~/.local/share/job-packets predecessor stays in place. Both roots are ambiguous and refused; --state-dir must match the canonical root. Original resume and override paths are import inputs, not continuing content dependencies."
+        "statement": "Fresh canonical state is ~/.local/share/platter; a sole ~/.local/share/job-packets predecessor stays in place. Both roots are ambiguous and refused; --state-dir must match the canonical root. Template and brief-override files are import inputs. The optional resume_override absolute PDF path is a continuing dependency for new daily editions; frozen editions retain their own bytes."
       },
       {
         "status": "declared",
@@ -223,7 +239,7 @@
       },
       {
         "status": "declared",
-        "statement": "Each run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. New captures append a separate project editorial policy to all three directions. Jackson retains its own resume editorial policy; historical captures retain their original directions. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
+        "statement": "Each tailored run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. New captures append a separate project editorial policy to all three directions. Jackson retains its own resume editorial policy; historical captures retain their original directions. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
       },
       {
         "status": "declared",
@@ -254,12 +270,16 @@
       {
         "status": "declared",
         "statement": "Regenerate prints the selected request's packet ID and status, plus retained brief and final PDF artifact IDs when available; it prints no content bytes."
+      },
+      {
+        "status": "declared",
+        "statement": "A shared daily resume is retained as an immutable resume-override PDF artifact with its original filename and no producing run. The edition has one attachment and identifies the shared resume in its body. Frozen bytes are covered by the Platter backup; the source path remains necessary for future new editions."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New runs use weaver_projects_v1. Sequential Weaver calls precede the Platter draft. Retained project Markdown becomes plain bullets without editorial rewriting. At most one shortening round precedes the draft. The draft tool submits only brief and Jackson; Platter adds project_bullets and atomically retains brief, assembled content, LaTeX and PDF. Historical generations retain their prior workflows."
+        "statement": "New tailored runs use weaver_projects_v1. Sequential Weaver calls precede the Platter draft. Retained project Markdown becomes plain bullets without editorial rewriting. At most one shortening round precedes the draft. The draft tool submits only brief and Jackson; Platter adds project_bullets and atomically retains brief, assembled content, LaTeX and PDF. Historical generations retain their prior workflows."
       },
       {
         "status": "declared",
@@ -268,6 +288,10 @@
       {
         "status": "declared",
         "statement": "Eligibility determines ordinary job selection. Explicit regeneration permits another preparation without enabling the job. Ordinary preview sets selected jobs ineligible. Posting retrieval failures also set jobs ineligible; daily work continues with other candidates. Explicit eligibility changes can enable excluded jobs again. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "Daily override runs use daily_brief_v1 without resume or project authoring. The flat optional resume_override path applies to prepare-daily, run-daily and ordinary preview. Single-job and ad hoc operations remain tailored. Ready brief-only packets are excluded from tailored selection. edition_packets stores frozen ordered run selections separately from edition_attachments; one shared PDF does not reduce the selected job count."
       }
     ],
     "identity_and_units": [
@@ -371,7 +395,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
+        "statement": "Preparation contract 14 supports tailored weaver_projects_v1 runs and daily_brief_v1 runs with a shared resume_override PDF. Installation contract 11 migrates schemas one through six to schema seven with independent ordered edition packet selections. Historical inputs, requests, artifact bytes and deliveries remain unchanged."
       },
       {
         "status": "unspecified",

@@ -43,6 +43,7 @@ impl Fixture {
             email_executable: email.clone(),
             weaver_executable: root.join("unused-original-resume.json"),
             original_resume: root.join("unused-original-resume.json"),
+            resume_override: None,
         };
         let mut store = Store::open(root)?;
         store.set_setting("config", &config)?;
@@ -142,6 +143,10 @@ impl Fixture {
     }
 
     fn ready_candidate(&self, id: &str, listed: bool) -> Result<PacketRecord> {
+        self.ready_candidate_mode(id, listed, true)
+    }
+
+    fn ready_candidate_mode(&self, id: &str, listed: bool, tailored: bool) -> Result<PacketRecord> {
         let (job, posting) = self.cached_posting(id, listed)?;
         let packet = PacketRecord {
             id: format!("packet-{id}"),
@@ -157,6 +162,7 @@ impl Fixture {
             &packet,
             &serde_json::json!({
                 "job":job,"company":"Example","career":[],"template_artifact":"unused-template",
+                "generation": if tailored { None } else { Some("daily_brief_v1") },
                 "posting":{"url":job["url"],"retrieved_at":cast::now(),"text":posting.to_string()}
             }),
         )?;
@@ -164,20 +170,22 @@ impl Fixture {
             "paragraph":"Why it works: Strong infrastructure fit.\n\nRole: Build reliable systems.",
             "pursue":true
         }))?;
-        store.put_content(
-            &packet.id,
-            "resume-content",
-            &serde_json::json!({
-                "jackson_bullets":["Built reliable systems"],"evidence":[]
-            }),
-        )?;
-        store.put_artifact(
-            Some(&packet.id),
-            "resume-pdf",
-            "resume.pdf",
-            "application/pdf",
-            b"%PDF-fixture",
-        )?;
+        if tailored {
+            store.put_content(
+                &packet.id,
+                "resume-content",
+                &serde_json::json!({
+                    "jackson_bullets":["Built reliable systems"],"evidence":[]
+                }),
+            )?;
+            store.put_artifact(
+                Some(&packet.id),
+                "resume-pdf",
+                "resume.pdf",
+                "application/pdf",
+                b"%PDF-fixture",
+            )?;
+        }
         Ok(packet)
     }
 }
@@ -190,6 +198,230 @@ fn candidate(id: &str, url: &str) -> serde_json::Value {
         "availability":"listed","missing_complete_snapshots":0,"evidence":[],
         "compensation":[],"geographic_eligibility":[],"parser_version":"fixture"
     })
+}
+
+fn static_pdf() -> Vec<u8> {
+    let mut pdf = b"%PDF-1.4\n".to_vec();
+    let mut offsets = vec![0];
+    for (index, body) in [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> >>",
+    ]
+    .iter()
+    .enumerate()
+    {
+        offsets.push(pdf.len());
+        pdf.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", index + 1).as_bytes());
+    }
+    let xref = pdf.len();
+    pdf.extend_from_slice(b"xref\n0 4\n0000000000 65535 f \n");
+    for offset in &offsets[1..] {
+        pdf.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
+    }
+    pdf.extend_from_slice(
+        format!("trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n").as_bytes(),
+    );
+    pdf
+}
+
+fn configure_override(fixture: &Fixture) -> Result<PathBuf> {
+    let path = fixture.root().join("Shared-Resume.pdf");
+    fs::write(&path, static_pdf())?;
+    workflow::set_resume_override(fixture.root(), Some(&path))?;
+    Ok(path)
+}
+
+#[tokio::test]
+async fn daily_override_sends_three_briefs_with_one_pdf_and_spends_all_jobs() -> Result<()> {
+    let fixture = Fixture::new("Accepted shared-resume")?;
+    fixture.candidates(&[])?;
+    configure_override(&fixture)?;
+    let mut packets = vec![];
+    for id in ["static-one", "static-two", "static-three"] {
+        packets.push(fixture.ready_candidate_mode(id, true, false)?);
+    }
+    let now = "2026-09-08T23:00:00Z".parse()?;
+    let edition = workflow::run_daily(fixture.root(), now)
+        .await?
+        .context("missing edition")?;
+    assert_eq!(edition.packet_ids.len(), 3);
+    assert_eq!(edition.attachments.len(), 1);
+    assert!(
+        edition
+            .body
+            .contains("Shared-Resume.pdf (shared by all opportunities above)")
+    );
+    let store = Store::open(fixture.root())?;
+    for packet in packets {
+        assert!(edition.packet_ids.contains(&packet.id));
+        assert!(!store.is_eligible(&packet.opportunity)?);
+        assert!(store.run_artifact(&packet.id, "resume-pdf")?.is_none());
+    }
+    let attachment = store.artifact(&edition.attachments[0])?;
+    assert_eq!(attachment.content, static_pdf());
+    assert_eq!(attachment.filename, "Shared-Resume.pdf");
+    assert!(attachment.run_id.is_none());
+    let payload: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.email_output("body"))?)?;
+    assert_eq!(
+        payload["attachments"]
+            .as_array()
+            .context("attachments missing")?
+            .len(),
+        1
+    );
+    workflow::run_daily(fixture.root(), now).await?;
+    assert_eq!(
+        fs::read_to_string(fixture.email_output("calls"))?,
+        "invoked\n"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn frozen_override_survives_file_replacement_removal_and_config_clear() -> Result<()> {
+    let fixture = Fixture::new("Accepted frozen-override")?;
+    let path = configure_override(&fixture)?;
+    fixture.ready_candidate_mode("static-one", true, false)?;
+    let first = workflow::preview(fixture.root(), "2026-09-08")
+        .await?
+        .context("missing edition")?;
+    let mut replacement = static_pdf();
+    replacement.extend_from_slice(b"% next edition\n");
+    fs::write(&path, &replacement)?;
+    fixture.ready_candidate_mode("static-two", true, false)?;
+    let second = workflow::preview(fixture.root(), "2026-09-09")
+        .await?
+        .context("missing edition")?;
+    let store = Store::open(fixture.root())?;
+    assert_eq!(store.artifact(&first.attachments[0])?.content, static_pdf());
+    assert_eq!(store.artifact(&second.attachments[0])?.content, replacement);
+    fs::remove_file(path)?;
+    assert_eq!(
+        workflow::preview(fixture.root(), "2026-09-08")
+            .await?
+            .context("frozen edition missing")?
+            .attachments,
+        first.attachments
+    );
+    workflow::set_resume_override(fixture.root(), None)?;
+    let sent = workflow::run_daily(fixture.root(), "2026-09-08T23:00:00Z".parse()?)
+        .await?
+        .context("missing send")?;
+    assert_eq!(sent.attachments, first.attachments);
+    let payload: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.email_output("body"))?)?;
+    assert_eq!(
+        base64::engine::general_purpose::STANDARD.decode(
+            payload["attachments"][0]["content"]
+                .as_str()
+                .context("content missing")?
+        )?,
+        static_pdf()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn invalid_override_stops_before_preparation_selection_or_send() -> Result<()> {
+    let fixture = Fixture::new("Accepted unexpected")?;
+    let packet = fixture.ready_candidate_mode("static-one", true, false)?;
+    for filename in ["missing.pdf", "fake.pdf"] {
+        let path = fixture.root().join(filename);
+        if filename == "fake.pdf" {
+            fs::write(&path, b"%PDF-1.4\nnot a valid document\n")?;
+        }
+        assert!(workflow::set_resume_override(fixture.root(), Some(&path)).is_err());
+        assert!(workflow::config(fixture.root())?.resume_override.is_none());
+        let mut settings = workflow::config(fixture.root())?;
+        settings.resume_override = Some(path);
+        let store = Store::open(fixture.root())?;
+        store.set_setting("config", &settings)?;
+        assert!(
+            workflow::run_daily(fixture.root(), "2026-09-08T23:00:00Z".parse()?)
+                .await
+                .is_err()
+        );
+        assert!(store.is_eligible(&packet.opportunity)?);
+        assert!(store.edition("2026-09-08")?.is_none());
+        workflow::set_resume_override(fixture.root(), None)?;
+    }
+    assert!(!fixture.email_output("calls").exists());
+    Ok(())
+}
+
+#[tokio::test]
+async fn clearing_override_excludes_brief_only_packets_and_ad_hoc_stays_tailored() -> Result<()> {
+    let fixture = Fixture::new("Accepted unused")?;
+    configure_override(&fixture)?;
+    let brief_only = fixture.ready_candidate_mode("static-one", true, false)?;
+    assert!(
+        platter::ad_hoc::preview(
+            fixture.root(),
+            "2026-09-08",
+            "brief-only",
+            std::slice::from_ref(&brief_only.id),
+            None
+        )
+        .is_err()
+    );
+    workflow::set_resume_override(fixture.root(), None)?;
+    assert!(
+        workflow::preview(fixture.root(), "2026-09-08")
+            .await?
+            .is_none()
+    );
+    assert!(Store::open(fixture.root())?.is_eligible(&brief_only.opportunity)?);
+    let tailored = fixture.ready_candidate("two", true)?;
+    configure_override(&fixture)?;
+    let ad_hoc = platter::ad_hoc::preview(
+        fixture.root(),
+        "2026-09-08",
+        "tailored",
+        std::slice::from_ref(&tailored.id),
+        None,
+    )?;
+    let store = Store::open(fixture.root())?;
+    assert_eq!(
+        ad_hoc.attachments,
+        vec![
+            store
+                .run_artifact(&tailored.id, "resume-pdf")?
+                .context("PDF missing")?
+                .id
+        ]
+    );
+    workflow::set_resume_override(fixture.root(), None)?;
+    let daily = workflow::preview(fixture.root(), "2026-09-08")
+        .await?
+        .context("tailored edition missing")?;
+    assert_eq!(daily.packet_ids, vec![tailored.id]);
+    assert_eq!(daily.attachments, ad_hoc.attachments);
+    Ok(())
+}
+
+#[test]
+fn schema_six_migration_preserves_frozen_selection_bytes_and_receipt() -> Result<()> {
+    let fixture = Fixture::new("Accepted migration-receipt")?;
+    let original = workflow::send(fixture.root(), &fixture.edition.day)?;
+    let connection = rusqlite::Connection::open(fixture.root().join(platter::store::DATABASE))?;
+    connection.execute_batch("DROP TABLE edition_packets; PRAGMA user_version=6;")?;
+    drop(connection);
+    assert!(Store::open(fixture.root()).is_err());
+    let backup = fixture.root().join("backup.sqlite3");
+    platter::migration::migrate(fixture.root(), &backup)?;
+    let migrated = workflow::send(fixture.root(), &fixture.edition.day)?;
+    assert_eq!(
+        serde_json::to_value(migrated)?,
+        serde_json::to_value(original)?
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.email_output("calls"))?,
+        "invoked\n"
+    );
+    assert!(backup.is_file());
+    Ok(())
 }
 
 #[test]

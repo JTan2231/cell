@@ -6,7 +6,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: i64 = 6;
+pub const SCHEMA_VERSION: i64 = 7;
 pub const DATABASE: &str = "packets.sqlite3";
 
 pub struct Store {
@@ -47,8 +47,7 @@ pub struct Artifact {
     pub content: Vec<u8>,
 }
 
-/// The packet IDs and hashes are read projections of the ordered artifacts.
-/// They are not separately persisted on an edition.
+/// Selected packets and ordered attachments are independent frozen associations.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edition {
     pub day: String,
@@ -90,6 +89,11 @@ CREATE TABLE edition_attachments(
  position INTEGER NOT NULL CHECK(position >= 0),
  artifact_id TEXT NOT NULL REFERENCES artifacts(id),
  PRIMARY KEY(edition_id,position), UNIQUE(edition_id,artifact_id));
+CREATE TABLE edition_packets(
+ edition_id TEXT NOT NULL REFERENCES editions(id),
+ position INTEGER NOT NULL CHECK(position >= 0),
+ run_id TEXT NOT NULL REFERENCES runs(id),
+ PRIMARY KEY(edition_id,position), UNIQUE(edition_id,run_id));
 CREATE TRIGGER immutable_artifact BEFORE UPDATE ON artifacts
  BEGIN SELECT RAISE(ABORT,'artifact content is immutable'); END;
 CREATE TRIGGER immutable_inputs BEFORE UPDATE OF opportunity,inputs ON runs
@@ -98,6 +102,8 @@ CREATE TRIGGER immutable_edition BEFORE UPDATE OF id,day,subject,body,idempotenc
  BEGIN SELECT RAISE(ABORT,'edition payload is immutable'); END;
 CREATE TRIGGER immutable_attachment BEFORE UPDATE ON edition_attachments
  BEGIN SELECT RAISE(ABORT,'edition attachments are immutable'); END;
+CREATE TRIGGER immutable_edition_packet BEFORE UPDATE ON edition_packets
+ BEGIN SELECT RAISE(ABORT,'edition packets are immutable'); END;
 ";
 
 impl Store {
@@ -125,7 +131,7 @@ impl Store {
         };
         let version = store.version()?;
         ensure!(
-            matches!(version, 0 | 1 | 2 | 3 | 4 | 5 | SCHEMA_VERSION),
+            matches!(version, 0..=SCHEMA_VERSION),
             "unsupported Platter database schema"
         );
         if version == 0 {
@@ -521,12 +527,14 @@ impl Store {
             .collect::<rusqlite::Result<Vec<_>>>()?;
         for id in ids {
             let artifact = self.artifact(&id)?;
-            if let Some(run) = artifact.run_id {
-                edition.packet_ids.push(run);
-            }
             edition.attachments.push(id);
             edition.attachment_sha256.push(artifact.sha256);
         }
+        edition.packet_ids = self
+            .connection
+            .prepare("SELECT run_id FROM edition_packets WHERE edition_id=?1 ORDER BY position")?
+            .query_map([id], |row| row.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
         Ok(Some(edition))
     }
 
@@ -536,17 +544,14 @@ impl Store {
 
     pub fn freeze_as(&self, id: &str, edition: &Edition, spend: bool) -> Result<()> {
         ensure!(
-            (1..=3).contains(&edition.attachments.len()),
-            "edition must contain one through three attachments"
+            (1..=3).contains(&edition.attachments.len())
+                && (1..=3).contains(&edition.packet_ids.len()),
+            "edition must contain one through three packets and attachments"
         );
         let tx = self.connection.unchecked_transaction()?;
         self.insert_edition(id, edition)?;
         if spend {
-            for artifact_id in &edition.attachments {
-                let artifact = self.artifact(artifact_id)?;
-                let run = artifact
-                    .run_id
-                    .context("selected PDF has no preparation run")?;
+            for run in &edition.packet_ids {
                 ensure!(self.connection.execute("UPDATE jobs SET eligible=0 WHERE eligible=1 AND opportunity=(SELECT opportunity FROM runs WHERE id=?1 AND status='ready')", [run])? == 1, "job is ineligible or packet is not ready");
             }
         }
@@ -556,6 +561,7 @@ impl Store {
 
     fn insert_edition(&self, id: &str, edition: &Edition) -> Result<()> {
         self.connection.execute("INSERT INTO editions(id,day,status,subject,body,idempotency_key,receipt) VALUES(?1,?2,?3,?4,?5,?6,?7)", params![id,edition.day,edition.status,edition.subject,edition.body,edition.idempotency_key,edition.receipt])?;
+        self.insert_edition_packets(id, &edition.packet_ids)?;
         for (position, artifact_id) in edition.attachments.iter().enumerate() {
             let artifact = self.artifact(artifact_id)?;
             ensure!(
@@ -565,6 +571,16 @@ impl Store {
             self.connection.execute(
                 "INSERT INTO edition_attachments VALUES(?1,?2,?3)",
                 params![id, i64::try_from(position)?, artifact_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn insert_edition_packets(&self, id: &str, packets: &[String]) -> Result<()> {
+        for (position, run) in packets.iter().enumerate() {
+            self.connection.execute(
+                "INSERT INTO edition_packets VALUES(?1,?2,?3)",
+                params![id, i64::try_from(position)?, run],
             )?;
         }
         Ok(())
@@ -629,6 +645,7 @@ impl Store {
             "SELECT * FROM artifacts ORDER BY id",
             "SELECT * FROM editions ORDER BY id",
             "SELECT * FROM edition_attachments ORDER BY edition_id,position",
+            "SELECT * FROM edition_packets ORDER BY edition_id,position",
             "SELECT * FROM maintenance_holds ORDER BY owner",
         ] {
             hash.update(query.as_bytes());

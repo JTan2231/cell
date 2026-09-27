@@ -3,7 +3,7 @@
   "provider": {
     "id": "platter",
     "name": "Platter",
-    "release": "0.2.20"
+    "release": "0.2.21"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -23,7 +23,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "The current-user CLI operates private state. New Platter jobs use captured career reads and draft submission only, with workspace, shell and web disabled. Weaver owns project research and prose. Historical jobs retain their original access policy. Installer selection establishes no send authority."
+      "The current-user CLI operates private state. New Platter jobs use captured career reads and draft submission only, with workspace, shell and web disabled. Weaver owns project research and prose. Historical jobs retain their original access policy. Installer selection establishes no send authority. Daily override jobs use the existing brief submission and career-read tools only."
     ],
     "shared_privacy_and_retention": [
       "Original and fixed project templates, captured career/posting inputs, Weaver requests and documents, packet artifacts, PDFs and editions remain private. Weaver and Nucleus retain source reads separately. Authorized sends disclose frozen message and attachments through Email.",
@@ -31,7 +31,7 @@
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
-      "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
+      "Preparation contract 14 adds daily_brief_v1 and a flat resume_override path for one shared daily PDF. Installation contract 11 migrates schemas one through six to schema seven and retains ordered packet selections separately from attachments. Historical inputs, requests, artifacts and delivery identities remain intact."
     ],
     "operational_limits": [
       "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."

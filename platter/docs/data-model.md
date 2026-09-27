@@ -1,6 +1,6 @@
 # Platter data model
 
-Schema six uses one private SQLite database. The core tables are:
+Schema seven uses one private SQLite database. The core tables are:
 
 | Table | Owned information |
 | --- | --- |
@@ -8,6 +8,7 @@ Schema six uses one private SQLite database. The core tables are:
 | runs | One preparation's captured inputs, status, timestamps and compact execution correlation |
 | artifacts | Immutable bytes, producing run reference, kind, filename, media type and integrity hash |
 | editions | Frozen subject/body, date, occurrence identity, idempotency key, delivery state and acceptance |
+| edition_packets | Edition, position and selected preparation run |
 | edition_attachments | Edition, position and artifact reference |
 
 Settings contain configuration and the current original-template artifact
@@ -19,7 +20,7 @@ A packet is a run with its content. Brief and resume-content artifacts contain
 the accepted structured domain outputs; source and PDF artifacts contain the
 rendered bytes. Imported originals have a null run reference. The captured
 posting/career snapshot lives on its run and references its exact template.
-New runs capture `generation=weaver_projects_v1`, the Jackson editorial policy
+Tailored runs capture `generation=weaver_projects_v1`, the Jackson editorial policy
 and three exact directions: Cell, Wrought and optional shortening. New captures
 append the separate project editorial policy to all three directions. The
 resolved directions retain that policy with the run. Historical captures retain
@@ -91,9 +92,9 @@ the existing ad hoc edition namespace. It resolves a normal Cast job, prepares
 or reuses a normal packet, and freezes one ordinary edition while setting the
 selected job ineligible.
 
-Edition read results project packet IDs and attachment hashes from their
-referenced artifacts for CLI compatibility. These are not extra stored
-edition-item data. Artifact IDs replace path references. Historical attachment
+Edition read results obtain packet IDs from ordered `edition_packets` records
+and attachment hashes from their referenced artifacts. Packet selection is
+independent of attachment selection. Artifact IDs replace path references. Historical attachment
 names and bytes are preserved during migration, even where this requires
 separate imported frozen artifacts.
 
@@ -101,13 +102,23 @@ There is no artifact deletion API. Fixed content and frozen messages remain
 immutable; any future retention policy must preserve every referenced artifact
 and all delivery uncertainty. Explicit exports never become dependencies.
 
-Migration imports schema one transactionally, records a complete schema-six
+Migration imports schema one transactionally, records a complete schema-seven
 backup, and removes only hashed legacy files on its durable cleanup manifest.
 Nucleus tool history is not copied. Unknown remaining regular runtime files
 are retained as imported artifacts. The database backup is self-contained for
 Platter history; rendering programs and Nucleus runtime/authentication remain
 separate dependencies.
 
-Schema-two through schema-five migration advances the database version without changing retained
-inputs, requests or artifact bytes. Older binaries refuse schema six. New
+Schema-two through schema-six migration populates `edition_packets` from the
+ordered historical attachment-to-run references, then advances the database
+version. It preserves retained inputs, requests, selections and artifact bytes. Older binaries refuse schema seven. New
 stage toolsets coexist with the retained legacy decoders.
+
+Daily override runs capture `generation=daily_brief_v1`, posting, career entries
+and prompt selection. They have no template, project directions or resume
+artifacts. Their accepted pursuit brief establishes readiness for daily override
+selection. Ordinary tailored selection excludes these runs. The flat
+`resume_override` setting contains an optional absolute PDF path. A daily
+invocation validates one snapshot; freezing retains it as a `resume-override`
+artifact with no producing run. One ordered attachment can serve up to three
+selected packets. Frozen editions use retained bytes after the source changes.

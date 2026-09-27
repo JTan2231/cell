@@ -181,6 +181,7 @@ esac
             email_executable: self.home.join(".local/bin/email"),
             weaver_executable: self.home.join(".local/bin/weaver"),
             original_resume: root.join("fixture-original.tex"),
+            resume_override: None,
         };
         if store.setting::<Value>("config").unwrap().is_none() {
             store.initialize(&settings, &template).unwrap();

@@ -190,6 +190,7 @@ fn frozen_state(root: &Path, home: &Path) -> Result<()> {
         email_executable: home.join(".local/bin/email"),
         weaver_executable: root.join("unused-weaver"),
         original_resume: original,
+        resume_override: None,
     };
     Store::open(root)?.initialize(&settings, &template)?;
     Ok(())
@@ -288,6 +289,8 @@ fn global_hold_prevents_mutation_in_every_state_directory() -> Result<()> {
         vec!["init", "--resume", "/fixture/never-read.tex"],
         vec!["prepare", "never-discovered"],
         vec!["prepare-daily"],
+        vec!["config", "--resume-override", "/fixture/never-read.pdf"],
+        vec!["config", "--clear-resume-override"],
         vec!["preview", "2026-09-06", "--ad-hoc", "test-one"],
         vec!["send", "2026-09-06", "--ad-hoc", "test-one"],
     ] {
