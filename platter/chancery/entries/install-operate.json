@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 10,
+  "contract_version": 11,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -73,11 +73,12 @@
   "effects": [
     "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
     "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
-    "An explicit transaction imports legacy records and files into schema six, writes a complete schema-six backup, then removes only the hashed legacy files on its retained cleanup manifest. Schema-two through schema-five migration advances the version without changing captured inputs, exact requests or artifact bytes.",
+    "An explicit transaction imports legacy records and files into schema seven, writes a complete schema-seven backup, then removes only hashed legacy files on its cleanup manifest. Schema-two through schema-six migration adds ordered edition_packets from attachment-to-run references and preserves captured inputs, requests, packet selections, artifact bytes and delivery identities.",
     "Migration verifies local state before dependency paths are rebound. Full readiness follows deployment configuration. Optional completion-receipt recovery writes or verifies the coordinator's exact backup path and digest after migration and local verification under the existing owner and activity locks.",
     "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
     "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases.",
-    "For selected Platter with read-only-proved schema-six state, the sealed candidate can perform protocol-one maintenance before publication, including recovery and release. Current installation ownership, exact candidate identity, durable hold owners and drain checks remain required; this performs no migration or domain work."
+    "For selected Platter with read-only-proved schema-seven state, the sealed candidate can perform protocol-one maintenance before publication, including recovery and release. Current installation ownership, exact candidate identity, durable hold owners and drain checks remain required; this performs no migration or domain work.",
+    "Deployment preserves the flat optional resume_override setting. The config command validates and sets or clears this private PDF path under normal mutation admission; it starts no preparation or delivery."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -90,8 +91,8 @@
   ],
   "failure_and_recovery": [
     "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
-    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema six plus originals and cleanup recovery metadata. Schema-two through schema-five records retain their legacy workflow after the version advance.",
-    "Older binaries cannot operate schema six. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
+    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema seven plus originals and cleanup recovery metadata. Schema-two through schema-six records retain their legacy workflow after the version advance.",
+    "Older binaries cannot operate schema seven. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
     "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
     "The daily runner marks jobs ineligible when posting retrieval fails and continues with other candidates. Other preparation errors stop the run before sending. Declined opportunities and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
   ],
@@ -172,7 +173,7 @@
       },
       {
         "status": "declared",
-        "statement": "Selected Platter may use candidate maintenance only after the installer proves current installation ownership and a read-only product check proves schema-six state. Supported predecessor schemas and existing affected-only Platter retain installed maintenance; foreign installations and unsupported state are refused."
+        "statement": "Selected Platter may use candidate maintenance only after the installer proves current installation ownership and a read-only product check proves schema-seven state. Supported predecessor schemas and existing affected-only Platter retain installed maintenance; foreign installations and unsupported state are refused."
       }
     ],
     "inputs": [
@@ -192,7 +193,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-six SQLite backup with a resumable legacy cleanup manifest."
+        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-seven SQLite backup with a resumable legacy cleanup manifest."
       }
     ],
     "data_semantics": [
@@ -234,7 +235,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import is transactional. A complete schema-six backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
+        "statement": "Schema-one import is transactional. A complete schema-seven backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
       },
       {
         "status": "declared",
@@ -262,7 +263,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 12 captures weaver_projects_v1 and uses Weaver contract 2 for project bullets, then platter/draft/2 for brief and Jackson. Installation contract 9 migrates schemas one through five to schema six without changing historical inputs, requests, artifacts or workflows."
+        "statement": "Preparation contract 14 supports tailored weaver_projects_v1 runs and daily_brief_v1 runs with a shared resume_override PDF. Installation contract 11 migrates schemas one through six to schema seven with independent ordered edition packet selections. Historical inputs, requests, artifact bytes and deliveries remain unchanged."
       },
       {
         "status": "declared",

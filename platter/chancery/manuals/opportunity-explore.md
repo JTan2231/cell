@@ -20,7 +20,8 @@ Each item contains `reference`, `cast_job_id`, `company`, `title`, `urls`, and
 `packets`. Treat `reference` as opaque. It is the retained Platter opportunity
 key. Further preparation and regeneration preserve it. Each packet contains
 its run `id`, UTC `created_at`, `preparation_status`, and `has_resume`.
-`has_resume` means that a retained PDF artifact exists. These fields do not
+`has_resume` means that a PDF artifact belongs to that run. A daily brief-only
+run can be ready with `has_resume=false`; its shared PDF belongs to the edition. These fields do not
 establish application submission or employer response.
 
 The read includes every opportunity with at least one retained preparation run,
@@ -40,7 +41,7 @@ opens state read-only and performs no preparation, source request, dependency
 call, eligibility change, edition freeze or send. Closing a public posting does
 not prevent this read. Platter preparation dependencies need not be ready.
 
-The canonical database must exist at schema six. Missing or incompatible state
+The canonical database must exist at schema seven. Missing or incompatible state
 fails; follow the [installation contract](install-operate.md). The interface
 does not repair or initialize state. Results cover retained records only, not
 current employer availability. Full reads use memory proportional to the

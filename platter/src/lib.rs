@@ -56,6 +56,9 @@ pub struct Config {
     pub cast_executable: PathBuf,
     pub email_executable: PathBuf,
     pub original_resume: PathBuf,
+    /// One shared PDF for future daily editions. Ad hoc work remains tailored.
+    #[serde(default)]
+    pub resume_override: Option<PathBuf>,
     #[serde(default = "default_weaver")]
     pub weaver_executable: PathBuf,
 }
@@ -76,6 +79,7 @@ impl Config {
             cast_executable: bin.join("cast"),
             email_executable: bin.join("email"),
             original_resume,
+            resume_override: None,
             weaver_executable: bin.join("weaver"),
         })
     }
@@ -90,6 +94,12 @@ impl Config {
             "delivery is at 09:00"
         );
         let _: chrono_tz::Tz = self.timezone.parse().context("invalid time zone")?;
+        if let Some(path) = &self.resume_override {
+            anyhow::ensure!(
+                path.is_absolute(),
+                "resume_override must be an absolute PDF path"
+            );
+        }
         for path in [
             &self.cast_executable,
             &self.email_executable,

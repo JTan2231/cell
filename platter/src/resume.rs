@@ -708,6 +708,50 @@ fn isolate_environment(command: &mut Command, directory: &Path) -> Result<()> {
     Ok(())
 }
 
+/// A validated snapshot of the user-selected PDF, kept unchanged through one daily run.
+pub(crate) struct ResumeOverride {
+    pub filename: String,
+    pub pdf: Vec<u8>,
+}
+
+impl ResumeOverride {
+    pub(crate) fn load(path: &Path, root: &Path) -> Result<Self> {
+        ensure!(
+            path.is_absolute(),
+            "resume_override must be an absolute PDF path"
+        );
+        ensure!(
+            fs::metadata(path)
+                .context("read resume_override metadata")?
+                .is_file(),
+            "resume_override must name a regular PDF file"
+        );
+        let filename = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("resume_override filename must be UTF-8")?
+            .to_owned();
+        ensure!(
+            !filename.chars().any(|c| c.is_control() || c == '\\'),
+            "invalid resume_override filename"
+        );
+        let pdf = fs::read(path).context("read resume_override PDF")?;
+        ensure!(pdf.starts_with(b"%PDF-"), "resume_override is not a PDF");
+        let scratch = tempfile::Builder::new()
+            .prefix("resume-override-")
+            .tempdir_in(root)?;
+        fs::write(scratch.path().join("resume.pdf"), &pdf)?;
+        let mut command = Command::new(crate::readiness::renderer("python3")?);
+        command.current_dir(scratch.path()).env("PYTHONDONTWRITEBYTECODE", "1").args([
+            "-c",
+            "from pypdf import PdfReader; r = PdfReader('resume.pdf', strict=True); assert not r.is_encrypted, 'encrypted PDF'; assert len(r.pages) > 0, 'empty PDF'; [p.get_contents() for p in r.pages]",
+        ]);
+        run_checked(&mut command, scratch.path(), "override-inspection")
+            .context("resume_override must be a valid, unencrypted PDF")?;
+        Ok(Self { filename, pdf })
+    }
+}
+
 fn run_checked(command: &mut Command, directory: &Path, label: &str) -> Result<String> {
     let stdout_path = directory.join(format!("{label}.stdout"));
     let stderr_path = directory.join(format!("{label}.stderr"));

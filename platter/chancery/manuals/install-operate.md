@@ -49,7 +49,7 @@ Altered releases, foreign selectors or changed candidate identities stop
 publication. Product and catalog writer locks protect atomic selection and
 file compensation.
 
-All durable runtime content and maintenance holds live in schema-six
+All durable runtime content and maintenance holds live in schema-seven
 `packets.sqlite3` at the canonical root. Fresh state uses
 `~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
 in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
@@ -106,7 +106,7 @@ domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
 For selected Platter, the coordinator can use its sealed candidate for
-maintenance before publication when a read-only check proves schema-six state.
+maintenance before publication when a read-only check proves schema-seven state.
 This permits a corrected observer to replace a slow installed observer without
 changing the public selection first. The installer still proves ownership of
 the current installation before this choice. Foreign selectors, changed
@@ -118,7 +118,7 @@ same choice applies during recovery and release before publication. Supported
 predecessor schemas and existing affected-only Platter use the installed command.
 Actual installed-program identity and readiness remain required after publication.
 
-Migration is an explicit one-way schema-one to schema-six import. It preserves
+Migration is an explicit one-way schema-one to schema-seven import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
 bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
 Legacy reserved/sent jobs become ineligible; their preparation runs remain
@@ -127,23 +127,25 @@ do not determine job eligibility. Any remaining owned runtime files are
 retained as imported artifacts. Duplicate tool history is not imported.
 
 The import commits transactionally before filesystem cleanup. It then writes
-a complete schema-six backup and records a hashed cleanup manifest. A missing,
+a complete schema-seven backup and records a hashed cleanup manifest. A missing,
 conflicting or changed source file stops import; backup or cleanup failure
 retains originals and recovery information. Reinvocation resumes cleanup only
 when the chosen backup and remaining source hashes still agree. Only manifest
-files are removed. A backup created here is a schema-six recovery image, not an
+files are removed. A backup created here is a schema-seven recovery image, not an
 old-binary rollback image. No production migration is implied by a source edit.
 
-Old binaries cannot operate schema six. Do not restore an old binary against
+Old binaries cannot operate schema seven. Do not restore an old binary against
 the migrated database. Recovery after this boundary requires a compatible
 candidate or an explicitly selected complete predecessor database/files backup
 with its matching binary. Installation file compensation does not undo schema
 migration. Preserve holds after unresolved recovery.
 
-Schema-two through schema-five migration advances the database version with the same table layout.
-It preserves exact captured inputs, requests and artifact bytes. Existing runs
+Schema-two through schema-six migration adds ordered `edition_packets` records
+from the existing attachment-to-run references and advances the database version.
+It preserves exact selections, captured inputs, requests and artifact bytes. Existing runs
 keep their legacy workflow. The version guard prevents an older binary from
-resuming a Weaver-project run through an older workflow. Each
+interpreting a daily brief as a complete tailored packet or deriving packet
+selection from the shared attachment. Each
 migration retains a complete current-schema recovery backup. It does not create
 an old-binary rollback image or start model work. Select a new backup path
 when a retained backup uses a predecessor schema.
@@ -173,7 +175,8 @@ after the command succeeds. Omit `--completion-receipt` for ordinary migration.
 
 ## Readiness and recovery
 
-`doctor` checks retained state, Cast/Annals/Email/Weaver executable identities, Cast's exact
+`doctor` validates a configured resume override and checks retained state,
+Cast/Annals/Email/Weaver executable identities, Cast's exact
 job-URL command, Email's byte-payload interface, renderer availability and
 strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
@@ -257,7 +260,10 @@ to the final installed releases. The `resume` setting cannot replace an initiali
 `projects_template` absolute path imports a private template through the same
 projects-only checks as `platter import-projects-template`. Import retains the
 old artifact and changes only the default template for future runs. `platter --json config` reads retained settings
-without loading dependency data or preparing packets. Career reads use the fixed
+without loading dependency data or preparing packets. Set or clear the flat
+`resume_override` path with `platter config --resume-override ABSOLUTE_PDF` or
+`platter config --clear-resume-override`. Deployment preserves this setting.
+The preparation contract defines validation, daily scope and frozen-file behavior. Career reads use the fixed
 `~/.local/bin/annals` command and its named `vita` library. Annals must support
 named libraries and work list/show. Stored `crm_executable` fields are ignored
 and omitted when configuration is saved. No Vita source setting is stored.

@@ -85,6 +85,9 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
     } else {
         Config::new(root.join("original-resume.json"))?
     };
+    if let Some(path) = &settings.resume_override {
+        crate::resume::ResumeOverride::load(path, root)?;
+    }
     let annals = crate::source::annals_executable()?;
     for (name, path) in [
         ("cast", &settings.cast_executable),
