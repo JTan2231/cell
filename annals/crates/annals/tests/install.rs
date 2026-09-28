@@ -25,9 +25,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Result<Self> {
-        let root = tempfile::Builder::new()
-            .prefix("annals-install-test-")
-            .tempdir_in("/private/tmp")?;
+        let root = tempfile::Builder::new().prefix("annals-").tempdir()?;
         let home = root.path().join("home");
         fs::create_dir(&home)?;
         let product = Path::new(env!("CARGO_MANIFEST_DIR"))

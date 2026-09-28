@@ -339,7 +339,7 @@ def _plist(release: Path, root: Path) -> bytes:
         "Umask": 0o077,
         "EnvironmentVariables": {
             "HOME": str(home()),
-            "PATH": f"{home() / '.local/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{home() / '.local/bin'}:{home() / '.cargo/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         },
         "StandardOutPath": str(logs / "worker.stdout.log"),
         "StandardErrorPath": str(logs / "worker.stderr.log"),
@@ -434,7 +434,7 @@ def service(action: str) -> dict:
             if action == "stop":
                 _require_idle(store)
                 _stop_if_loaded(plist)
-                with lock(state_root() / "worker.lock", blocking=False):
+                with _worker_lock_after_stop(state_root()):
                     _require_idle(store)
             elif not _loaded():
                 if plistlib.loads(plist)["ProgramArguments"] != _launch_arguments(release):

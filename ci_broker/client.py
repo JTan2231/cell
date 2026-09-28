@@ -28,6 +28,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ci_broker import broker
+from ci_manager import workspace
 
 
 SNAPSHOT_VERSION = 1
@@ -37,14 +38,7 @@ DEFAULT_CARGO_JOBS = 2
 def canonical_state_dir() -> Path:
     """Return the one production journal location for the current user."""
 
-    home = (
-        Path(pwd.getpwuid(os.getuid()).pw_dir)
-        if pwd is not None
-        else Path.home()
-    )
-    if sys.platform == "darwin":
-        return home / "Library" / "Application Support" / "Cell" / "ci-broker"
-    return home / ".local" / "state" / "cell" / "ci-broker"
+    return workspace.directory("ci-broker")
 
 
 def bootstrap_cargo_path() -> None:
@@ -57,14 +51,17 @@ def bootstrap_cargo_path() -> None:
         home = os.environ.get("HOME")
         if home:
             cargo_home = str(Path(home) / ".cargo")
-    if not cargo_home:
-        return
-    cargo_bin = Path(cargo_home).expanduser() / "bin"
-    if (cargo_bin / "cargo").is_file():
+    candidates = [Path(cargo_home).expanduser() / "bin"] if cargo_home else []
+    if pwd is not None:
+        candidates.append(Path(pwd.getpwuid(os.getuid()).pw_dir) / ".cargo/bin")
+    for cargo_bin in candidates:
+        if not (cargo_bin / "cargo").is_file():
+            continue
         existing = os.environ.get("PATH")
         os.environ["PATH"] = os.pathsep.join(
             part for part in (str(cargo_bin), existing) if part
         )
+        return
 
 
 def git(repository: Path, *arguments: str) -> bytes:
@@ -360,8 +357,9 @@ def run(arguments: argparse.Namespace) -> int:
                 "protocol_version": broker.PROTOCOL_VERSION,
             }
         )
-    primary_root = common.parent
-    target = primary_root / "target"
+    workspace.require_capacity()
+    work_environment = workspace.environment()
+    target = workspace.directory("targets/" + logical_repository_id(common).split(":")[1])
 
     broker_arguments = [
         "run",
@@ -409,7 +407,14 @@ def run(arguments: argparse.Namespace) -> int:
     for assignment in arguments.env:
         broker_arguments.extend(("--env", assignment))
     for name in arguments.unset_env:
+        if name in work_environment or name in {"CARGO_TARGET_DIR", "CARGO_BUILD_BUILD_DIR"}:
+            raise broker.BrokerError(f"cannot unset infrastructure storage setting: {name}")
         broker_arguments.extend(("--unset-env", name))
+    # Storage routing is infrastructure-owned, after caller environment options.
+    for name, value in {**work_environment, "CARGO_TARGET_DIR": str(target),
+                        "CARGO_BUILD_BUILD_DIR": str(target)}.items():
+        broker_arguments.extend(("--env", f"{name}={value}"))
+    command = workspace.confined_command(command)
     if arguments.attribution_json is not None:
         broker_arguments.extend(("--attribution-json", arguments.attribution_json))
     if clean and current_source_key == source_key:
@@ -458,7 +463,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.subcommand == "recover":
             return recover_command(arguments)
         raise broker.BrokerError(f"unsupported subcommand: {arguments.subcommand}")
-    except broker.BrokerError as error:
+    except (broker.BrokerError, workspace.WorkspaceError, OSError, subprocess.SubprocessError) as error:
         print(f"cell-ci: broker error: {error}", file=sys.stderr)
         return 78
 

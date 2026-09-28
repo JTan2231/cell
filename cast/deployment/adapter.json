@@ -6,6 +6,7 @@
   "description": "Install Cast and initialize private discovery configuration without collecting.",
   "adapter_binary": "cast-install",
   "companions": [
+    "clew",
     "platter"
   ]
 }

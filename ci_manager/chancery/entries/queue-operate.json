@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -17,6 +17,8 @@
   ],
   "outcome": "A pinned committed input receives a retained serial job outcome with separate validation, accepted-source, deployment, and Email-acceptance evidence, or remains paused or blocked with its unresolved operation preserved.",
   "interfaces": [
+    {"label": "Select an external work volume after quiescence", "invocation": "./ci.sh storage configure --volume /Volumes/CellWork"},
+    {"label": "Inspect external work storage", "invocation": "cell-ci storage status"},
     {"label": "Initialize a known accepted baseline", "invocation": "cell-ci init --repo /absolute/cell --accepted-baseline COMMIT"},
     {"label": "Install source manager and matching provider", "invocation": "./ci.sh install"},
     {"label": "Submit through the repository wrapper", "invocation": "./ci.sh submit COMMIT"},
@@ -77,6 +79,7 @@
       {"status": "unsupported", "statement": "This is not a multi-user service, a multi-repository scheduler, or a general workflow framework."}
     ],
     "preconditions": [
+      {"status": "declared", "statement": "Production requires one configured external APFS volume with ownership enabled, the recorded UUID and mount path, and at least 2 GiB free before new work. The current user owns the fixed workspace.json selection. Configure only after the previous CI queue and deployment have drained and the manager service has stopped. Configuration refuses a second destination, a live or unsettled legacy manager, and unresolved legacy deployment."},
       {"status": "declared", "statement": "Initialize one Git common repository with an explicitly selected known accepted baseline. Install a matching manager/provider, provide Python 3.11 or newer and the repository gate tools, and start the user service. Resume admission explicitly after initialization or an operator pause."},
       {"status": "declared", "statement": "Model repair requires the selected Bazaar prompt versions and a compatible ready Nucleus. Deployment requires its selected products and coordinator prerequisites. Notification requires the installed Email interface and provider access. Discovery establishes none of these live conditions."}
     ],
@@ -107,6 +110,7 @@
       {"status": "declared", "statement": "Nucleus jobs use requester program ci-manager, workspaceAccess read-only, ordinary local shell execution enabled and web search disabled. Only the manager applies final-response patches and performs Git, deployment and notification mutations."}
     ],
     "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "The external workspace holds manager, broker and deployment journals, worktrees, diagnostics, Cargo downloads, compiler outputs, release bundles, tool caches and temporary files. CI bodies and release compiler processes run under the macOS filesystem sandbox with writes confined to this workspace plus /dev/null and /dev/tty. Source Git metadata, installed programs, service configuration, credentials and live provider state remain host-owned. Nucleus runtime records keep their separate provider retention."},
       {"status": "declared", "statement": "FIFO submission records survive caller exit. The singleton worker keeps one active lifecycle through merge, checks, repair, acceptance, deployment and notification; it reconciles retained effects after interruption before claiming later work."},
       {"status": "declared", "statement": "Private input and candidate refs retain submitted and repaired history. Compare-and-swap advances accepted only from the captured base to the validated candidate. Model requests and external operation identities are saved before effects. A persisted private candidate records Git acceptance and establishes one refund under the frozen refund policy, independently of later CI success. Refunds preserve earlier failed-attempt charges for the whole job."},
       {"status": "declared", "statement": "Pause stops new admission without erasing active work. Cancellation drains active effects; queued cancellation prevents admission without email. Nucleus-only owner-qualified maintenance blocks new repair admission and releases only its own hold; it does not clear operator pause or unresolved work."},
@@ -119,7 +123,7 @@
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Manager release 0.4.0 uses journal schema 1, this operation contract 4, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
+      {"status": "declared", "statement": "Manager release 0.5.0 uses journal schema 1, this operation contract 5, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [

@@ -183,15 +183,26 @@ exit 0
 
 #[cfg(target_os = "macos")]
 fn process_is_running(pid: u32) -> bool {
-    let Ok(output) = Command::new("/bin/ps")
-        .args(["-o", "state=", "-p", &pid.to_string()])
-        .output()
+    // macOS cannot execute setuid ps inside the CI filesystem sandbox.
+    // Read the public proc_bsdinfo ABI, including its zombie state, instead.
+    let Ok(status) = Command::new("python3")
+        .args([
+            "-B",
+            "-c",
+            r"import ctypes, struct, sys
+read = ctypes.CDLL('/usr/lib/libproc.dylib').proc_pidinfo
+read.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
+read.restype = ctypes.c_int
+info = ctypes.create_string_buffer(136)
+found = read(int(sys.argv[1]), 3, 0, info, len(info)) == len(info)
+sys.exit(0 if found and struct.unpack_from('=I', info.raw, 4)[0] != 5 else 1)",
+            &pid.to_string(),
+        ])
+        .status()
     else {
         return false;
     };
-    let state = String::from_utf8_lossy(&output.stdout);
-    let state = state.trim();
-    output.status.success() && !state.is_empty() && !state.starts_with('Z')
+    status.success()
 }
 
 #[cfg(target_os = "macos")]

@@ -498,9 +498,10 @@ class RepositoryClientTests(unittest.TestCase):
             self.assertEqual(Path(client.shutil.which("cargo") or ""), cargo_bin / "cargo")
 
     def test_production_state_ignores_home_environment_override(self) -> None:
-        expected = client.canonical_state_dir()
-        with mock.patch.dict(os.environ, {"HOME": str(self.root / "other-home")}):
-            self.assertEqual(client.canonical_state_dir(), expected)
+        with mock.patch.object(client.workspace, "root", return_value=self.root):
+            expected = client.canonical_state_dir()
+            with mock.patch.dict(os.environ, {"HOME": str(self.root / "other-home")}):
+                self.assertEqual(client.canonical_state_dir(), expected)
 
     def test_expected_source_mismatch_is_stale_without_running_body(self) -> None:
         marker = self.root / "must-not-run"
@@ -529,6 +530,28 @@ class RepositoryClientTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 75, completed.stderr)
         self.assertFalse(marker.exists())
         self.assertEqual(json.loads(completed.stdout)["state"], "stale")
+
+    def test_storage_assignments_override_caller_and_cannot_be_unset(self):
+        external = Path(self.temporary.name) / "external"
+        external.mkdir(mode=0o700)
+        arguments = client.client_parser().parse_args([
+            "run", "--gate", "fixture", "--repo-root", str(self.root),
+            "--env", "CARGO_TARGET_DIR=/tmp/forbidden-target", "--env", "TMPDIR=/tmp",
+            "--", "/usr/bin/true",
+        ])
+        with mock.patch.object(client.workspace, "root", return_value=external), \
+                mock.patch.object(client, "toolchain_key", return_value="fixture"), \
+                mock.patch.object(client.broker, "main", return_value=0) as run:
+            self.assertEqual(client.run(arguments), 0)
+            command = run.call_args.args[0]
+            assignments = [command[index + 1] for index, value in enumerate(command) if value == "--env"]
+            values = client.broker.parse_environment_assignments(assignments)
+            for name in ("CARGO_HOME", "CARGO_TARGET_DIR", "CARGO_BUILD_BUILD_DIR", "TMPDIR"):
+                self.assertTrue(Path(values[name]).is_relative_to(external), name)
+            self.assertIn("/usr/bin/sandbox-exec", command)
+            arguments.unset_env = ["TMPDIR"]
+            with self.assertRaisesRegex(client.broker.BrokerError, "cannot unset"):
+                client.run(arguments)
 
 
 if __name__ == "__main__":

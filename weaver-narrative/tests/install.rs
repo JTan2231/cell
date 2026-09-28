@@ -88,7 +88,8 @@ impl Deployment {
         let hash = format!("sha256:{}", cell_install::file_digest(&encoded)?);
         candidate["candidate_id"] = json!(hash);
         let request = json!({"schema":1,"product":product(),"run_id":"weaver-fixture","run_dir":home.join("run"),"source_root":source,"candidate_dir":candidate_dir,"candidate":candidate,"prior":null,"selected_products":[product()],"recovery":null,"settings":{"annals_config":annals_config}});
-        let socket = PathBuf::from(format!("/tmp/worker-health-{}.sock", uuid::Uuid::now_v7()));
+        let socket =
+            std::env::temp_dir().join(format!("worker-health-{}.sock", uuid::Uuid::now_v7()));
         let listener = std::os::unix::net::UnixListener::bind(&socket)?;
         listener.set_nonblocking(true)?;
         let stop = Arc::new(AtomicBool::new(false));

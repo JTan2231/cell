@@ -11,6 +11,7 @@ import time
 import uuid
 
 from ci_manager import VERSION
+from ci_manager import workspace
 from ci_manager import git_ops as git
 from ci_manager.budget import repair_budget
 from ci_manager.notification import render
@@ -57,6 +58,7 @@ class Worker:
             row = self.store.db.execute("SELECT * FROM jobs WHERE phase='queued' ORDER BY sequence LIMIT 1").fetchone()
             if not row:
                 return None
+            workspace.require_capacity()
             job = self.store.decode(row)
             job.update(base_commit=git.commit(self.repository, git.ACCEPTED),
                        worker_version=VERSION, worker_path=str(Path(__file__).resolve()),
@@ -77,6 +79,7 @@ class Worker:
         self.save(job, "notifying")
 
     def step(self, job: dict) -> None:
+        workspace.root()
         # Cancellation drains a running child. It does not erase its effect evidence.
         if job["cancel_requested"] and job["phase"] in {"integrating", "repair_prepare", "applying", "accepting"}:
             self.finish(job, "cancelled", "Cancelled before the next external operation.")

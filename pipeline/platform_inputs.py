@@ -47,13 +47,13 @@ PRODUCT_RUNTIME_INPUTS = {
 # to consumer installation suites; ordinary shared dependencies do not.
 SHARED_INPUTS = {
     "pipeline": ("ci.sh", "ci_manager/*", "pipeline/*.py", "pipeline/*.sh", "pipeline/products/*.sh"),
-    "broker": ("ci_broker/*.py", "ci_broker/*.sh"),
+    "broker": ("ci_broker/*.py", "ci_broker/*.sh", "ci_manager/workspace.py"),
     "deployment": ("deploy.sh", "deployment/cli.py",
                    "deployment/candidate.py", "deployment/__init__.py",
-                   "deployment/test_coordinator.py"),
+                   "deployment/test_coordinator.py", "ci_manager/workspace.py"),
     "build": ("Cargo.toml", "rust-toolchain.toml", ".cargo/*",
               "deployment/build.py", "deployment/candidate.py", "deployment/__init__.py",
-              "deployment/test_build.py"),
+              "deployment/test_build.py", "ci_manager/workspace.py"),
     "cleanup": ("deployment/cleanup.py", "deployment/__init__.py", "deployment/test_cleanup.py"),
     "install": ("deployment/crates/cell-install/*", "deployment/tests/simple_fixture.rs"),
     "maintenance": ("deployment/crates/cell-maintenance/*",),

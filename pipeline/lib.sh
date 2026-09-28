@@ -140,6 +140,9 @@ pipeline_bootstrap_cargo() {
         if [ -n "$cargo_home" ] && [ -x "$cargo_home/bin/cargo" ]; then
             PATH="$cargo_home/bin:$PATH"
             export PATH
+        elif [ -n "${HOME:-}" ] && [ -x "$HOME/.cargo/bin/cargo" ]; then
+            PATH="$HOME/.cargo/bin:$PATH"
+            export PATH
         fi
     fi
 }

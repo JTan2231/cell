@@ -64,15 +64,17 @@ automatic redaction.
   stale state and returns `75` before submission. The client consumes this value
   without adding it to the gate environment. An otherwise identical direct
   call can therefore join the same execution.
-- The client points every worktree at the primary checkout's `target` directory
+- The client points every worktree at its repository's external compiler target
   and sets `CARGO_INCREMENTAL=0`. The heavy lane permits one writer at a time.
 - `CARGO_BUILD_JOBS` defaults to 2. `CELL_CI_CARGO_JOBS` may override it only
   with a positive integer. The chosen value is fixed in the broker scope and is
   also part of execution identity; a conflicting caller fails closed.
 
-The production client fixes its host identity, lane configuration, and journal:
-`~/Library/Application Support/Cell/ci-broker` on macOS and
-`~/.local/state/cell/ci-broker` elsewhere. Callers cannot override them, because
+The production client fixes its host identity, lane configuration, and journal.
+The journal is `ci-broker` under the configured external workspace. The macOS
+client requires that exact mounted volume and confines gate writes to it.
+See [external work storage](../ci_manager/STORAGE.md). Callers cannot override
+the state scope or redirect compiler and scratch paths to the host, because
 two heavy lanes could then write to the same Cargo target. Use low-level
 `broker.py` scope overrides only for isolated tests that do not use the
 production target. SQLite durably records queued, running, passed, failed,
