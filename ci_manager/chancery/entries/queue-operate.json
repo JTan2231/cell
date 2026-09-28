@@ -123,7 +123,7 @@
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Manager release 0.5.0 uses journal schema 1, this operation contract 5, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
+      {"status": "declared", "statement": "Manager release 0.5.1 uses journal schema 1, this operation contract 5, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [

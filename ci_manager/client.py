@@ -166,10 +166,12 @@ def main(argv: list[str] | None = None) -> int:
             from ci_manager import installation
             result = installation.install() if args.command == "install" else installation.service(args.action)
         else:
+            if args.command == "worker":
+                workspace.activate()
+                workspace.worker_output()
             store = Store(state_root())
             if args.command == "worker":
                 from ci_manager.manager import Worker
-                workspace.activate()
                 with lock(store.root / "worker.lock", blocking=False) as descriptor:
                     Worker(store, descriptor).run()
                 return 0

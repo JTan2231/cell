@@ -108,6 +108,27 @@ with tempfile.TemporaryDirectory() as temporary:
         with self.assertRaisesRegex(workspace.WorkspaceError, "second queue"):
             workspace.configure(self.volume)
 
+    def test_worker_opens_external_logs_after_launch(self):
+        from ci_manager import installation
+        value = plistlib.loads(installation._plist(self.config.parent / "release"))
+        self.assertEqual(value["StandardOutPath"], "/dev/null")
+        self.assertEqual(value["StandardErrorPath"], "/dev/null")
+        self.assertEqual(value["WorkingDirectory"], str(self.config.parent / "release"))
+        code = '''import pathlib, sys
+from ci_manager import workspace
+workspace.root=lambda: pathlib.Path(sys.argv[1])
+workspace.worker_output()
+print("fixture stdout")
+print("fixture stderr", file=sys.stderr)
+'''
+        with mock.patch.object(subprocess, "run", wraps=REAL_RUN):
+            result = subprocess.run([sys.executable, "-B", "-c", code, str(self.work)],
+                                    check=True, capture_output=True, text=True)
+        self.assertEqual((result.stdout, result.stderr), ("", ""))
+        for name in ("stdout", "stderr"):
+            path = self.work / "ci-manager/logs" / f"worker.{name}.log"
+            self.assertEqual(path.read_text(), f"fixture {name}\n")
+
     def test_selection_requires_the_legacy_queue_to_be_paused_empty_and_stopped(self):
         from ci_manager.storage import Store, lock
         self.config.unlink()

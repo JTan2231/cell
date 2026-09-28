@@ -152,6 +152,24 @@ def activate() -> None:
     tempfile.tempdir = None
 
 
+def worker_output() -> None:
+    """Open logs after launch, under the worker's own filesystem access."""
+    logs = directory("ci-manager/logs")
+    for name, target in (("stdout", 1), ("stderr", 2)):
+        descriptor = os.open(logs / f"worker.{name}.log",
+                             os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                    or stat.S_IMODE(info.st_mode) != 0o600):
+                raise WorkspaceError("worker logs must be private regular files")
+            os.dup2(descriptor, target)
+        finally:
+            os.close(descriptor)
+    sys.stdout.reconfigure(line_buffering=True)
+    sys.stderr.reconfigure(line_buffering=True)
+
+
 def require_capacity() -> None:
     if shutil.disk_usage(root()).free < 2 * 1024**3:
         raise WorkspaceError("external work volume has less than 2 GiB free; no new work can start")

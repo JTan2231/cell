@@ -403,6 +403,10 @@ mode 0700 and private files use mode 0600. The journal is `queue.sqlite3` with
 schema 1. Private worktrees, diagnostics and operation artifacts are below
 `jobs/JOB/`.
 
+Launchd starts the worker from its installed release with output directed to
+`/dev/null`. The worker validates storage and opens its own external stdout and
+stderr logs. Launchd does not open removable-volume paths before process startup.
+
 The manager retains exact model requests and final patch responses, candidate
 identities, CI logs and receipts, deployment correlations, and notification
 payloads and receipts. It provides no automatic pruning. Protect these files as

@@ -39,7 +39,9 @@ their databases or change their retention rules.
 The configured destination cannot be replaced by another invocation. Changing
 storage requires attended maintenance with all owners stopped. Never run an old
 manager against the former journal after switching. Installation replaces the
-worker and redirects its launchd logs to the external volume.
+worker. Launchd starts it from installed code with output directed to `/dev/null`.
+After validating storage, the worker opens its own logs on the external volume.
+This avoids launchd opening removable-volume paths before the worker can start.
 
 Old compiler targets, Cargo downloads, release caches and completed job
 artifacts can be discarded after their users stop. Preserve the Git accepted
