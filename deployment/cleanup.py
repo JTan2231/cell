@@ -19,6 +19,7 @@ import tomllib
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from deployment.inventory import applications, descriptor
+from ci_manager import workspace
 
 PRODUCTS = applications(Path(__file__).resolve().parent.parent)
 HEX = re.compile(r"[0-9a-f]{64}")
@@ -64,11 +65,11 @@ def read_record(path):
     return result
 
 
-def require_deployment_lock(home):
+def require_deployment_lock():
     descriptor = int(os.environ.get("CELL_DEPLOYMENT_LOCK_FD", "-1"))
     require(descriptor >= 3, "cleanup requires the coordinator's deployment lock")
     actual = os.fstat(descriptor)
-    expected = regular(home / "Library/Application Support/Cell/deployments/deployment.lock")
+    expected = regular(workspace.directory("deployments") / "deployment.lock")
     require((actual.st_dev, actual.st_ino) == (expected.st_dev, expected.st_ino),
             "cleanup inherited a different deployment lock")
 
@@ -281,7 +282,7 @@ def clean_installed_release_history(home: Path, usher_installer: Path | None = N
     """Prune known Cell installation trees using only supplied trusted candidates."""
     require(home.is_absolute() and home.resolve(strict=True) == home,
             "cleanup requires the canonical operator home")
-    require_deployment_lock(home)
+    require_deployment_lock()
     verifiers = trusted_installers(home, installers, usher_installer)
     source = Path(__file__).resolve().parents[1]
     base = home / "Library/Application Support"
