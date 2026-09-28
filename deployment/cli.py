@@ -809,10 +809,15 @@ class Run:
         read_fd, write_fd = os.pipe()
         process: subprocess.Popen[bytes] | None = None
         try:
-            with output_path.open("xb") as output, (self.path / "run.log").open("ab") as errors:
+            with contextlib.ExitStack() as stack:
+                # A heartbeat can interrupt pipe delivery before EOF. Give the
+                # adapter the complete retained request, independent of polling.
+                incoming = stack.enter_context(request_path.open("rb")) if request is not None else subprocess.DEVNULL
+                output = stack.enter_context(output_path.open("xb"))
+                errors = stack.enter_context((self.path / "run.log").open("ab"))
                 gate = [self.data["python"], str(self.source / "deployment" / "cli.py"),
                         "_exec", str(read_fd), str(self.lock_fd), *command]
-                process = subprocess.Popen(gate, stdin=subprocess.PIPE if request is not None else subprocess.DEVNULL,
+                process = subprocess.Popen(gate, stdin=incoming,
                                            stdout=output, stderr=errors, cwd=cwd or self.source,
                                            env=runtime_environment(), pass_fds=(read_fd, self.lock_fd))
                 os.close(read_fd)
@@ -825,15 +830,14 @@ class Run:
                 os.write(write_fd, b"1")
                 os.close(write_fd)
                 write_fd = -1
-                incoming = candidate.json_bytes(request) if request is not None else None
                 while True:
                     self.heartbeat()
                     timeout = max(0.1, HEARTBEAT_SECONDS - (time.monotonic() - self.last_heartbeat))
                     try:
-                        process.communicate(incoming, timeout=timeout)
+                        process.wait(timeout=timeout)
                         break
                     except subprocess.TimeoutExpired:
-                        incoming = None
+                        pass
                 active["returncode"] = process.returncode
                 active["finished_at"] = now()
                 self.save()
