@@ -89,7 +89,8 @@ raise SystemExit(int(os.environ["FIXTURE_CI_ENTRY_STATUS"]))
 
     def test_setup_commands_use_source_client(self):
         for arguments in (("init", "--repo", "repository with spaces",
-                           "--accepted-baseline", "HEAD"), ("install",)):
+                           "--accepted-baseline", "HEAD"), ("install",),
+                          ("storage", "status"), ("storage", "configure", "--volume", "volume")):
             with self.subTest(arguments=arguments):
                 self.assert_routed("source", arguments)
 

@@ -92,7 +92,7 @@ impl Deployment {
         if product() == "emt" {
             request["settings"]["cell_root"] = json!(source_root()?);
         }
-        let socket = PathBuf::from(format!("/tmp/worker-health-{}.sock", uuid::Uuid::now_v7()));
+        let socket = std::env::temp_dir().join(format!("worker-health-{}.sock", uuid::Uuid::now_v7()));
         let listener = std::os::unix::net::UnixListener::bind(&socket)?;
         listener.set_nonblocking(true)?;
         let stop = Arc::new(AtomicBool::new(false));

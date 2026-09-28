@@ -18,6 +18,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ci_manager import VERSION
+from ci_manager import workspace
 from ci_manager import git_ops as git
 from ci_manager.storage import ManagerError, Store, TERMINAL, lock, state_root
 
@@ -147,14 +148,27 @@ def main(argv: list[str] | None = None) -> int:
     upkeep.add_argument("--owner")
     service = commands.add_parser("service")
     service.add_argument("action", choices=("start", "stop", "status"))
+    storage = commands.add_parser("storage")
+    storage.add_argument("action", choices=("configure", "status"))
+    storage.add_argument("--volume", type=Path)
     args = parser.parse_args(argv)
     try:
-        if args.command == "init":
+        if args.command == "storage":
+            if args.action == "configure":
+                if args.volume is None:
+                    raise ManagerError("storage configure requires --volume")
+                result = workspace.configure(args.volume)
+            else:
+                result = {"root": str(workspace.root()), "environment": workspace.environment()}
+        elif args.command == "init":
             result = initialize(args)
         elif args.command in {"install", "service"}:
             from ci_manager import installation
             result = installation.install() if args.command == "install" else installation.service(args.action)
         else:
+            if args.command == "worker":
+                workspace.activate()
+                workspace.worker_output()
             store = Store(state_root())
             if args.command == "worker":
                 from ci_manager.manager import Worker
@@ -162,6 +176,7 @@ def main(argv: list[str] | None = None) -> int:
                     Worker(store, descriptor).run()
                 return 0
             if args.command == "submit":
+                workspace.require_capacity()
                 result = submit(store, args)
             elif args.command == "status":
                 result = status(store, args.job)

@@ -35,6 +35,8 @@ class CompanionReleaseTests(unittest.TestCase):
         self.run_git("remote", "add", "origin", str(origin))
         for name in ("lib.sh", "release.sh"):
             self.write(f"pipeline/{name}", (SOURCE / name).read_text(), executable=True)
+        # The fake compiler and builder remain inside this isolated fixture.
+        self.write("ci_manager/workspace.py", "print('')\n")
         self.write("pipeline/products/fixture.sh", """PIPELINE_SCHEMA=1
 PRODUCT_ID=fixture
 PRODUCT_NAME=Fixture

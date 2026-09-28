@@ -326,23 +326,23 @@ def _prepare_release(source: Path, python: Path) -> Path:
     return release
 
 
-def _plist(release: Path, root: Path) -> bytes:
-    logs = root / "logs"
-    private_directory(logs)
+def _plist(release: Path) -> bytes:
     return plistlib.dumps({
         "Label": LABEL,
         "ProgramArguments": _launch_arguments(release),
-        "WorkingDirectory": str(root),
+        # launchd cannot open removable-volume output paths before spawning.
+        # The worker validates storage and opens its own external logs.
+        "WorkingDirectory": str(release),
         "RunAtLoad": True,
         "KeepAlive": True,
         "ThrottleInterval": 10,
         "Umask": 0o077,
         "EnvironmentVariables": {
             "HOME": str(home()),
-            "PATH": f"{home() / '.local/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "PATH": f"{home() / '.local/bin'}:{home() / '.cargo/bin'}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
         },
-        "StandardOutPath": str(logs / "worker.stdout.log"),
-        "StandardErrorPath": str(logs / "worker.stderr.log"),
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": "/dev/null",
     }, sort_keys=True)
 
 
@@ -378,7 +378,7 @@ def install() -> dict:
                     switched = True
                     _link(paths["wrapper"], str(wrapper_target))
                     _link(paths["provider"], str(provider_target))
-                    _write_file(paths["plist"], _plist(release, root))
+                    _write_file(paths["plist"], _plist(release))
                 _launchctl("bootstrap", f"gui/{os.getuid()}", str(paths["plist"]))
             except Exception as error:
                 try:
@@ -434,7 +434,7 @@ def service(action: str) -> dict:
             if action == "stop":
                 _require_idle(store)
                 _stop_if_loaded(plist)
-                with lock(state_root() / "worker.lock", blocking=False):
+                with _worker_lock_after_stop(state_root()):
                     _require_idle(store)
             elif not _loaded():
                 if plistlib.loads(plist)["ProgramArguments"] != _launch_arguments(release):

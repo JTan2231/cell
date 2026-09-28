@@ -485,6 +485,15 @@ exports with the provider and update affected consumers.
 
 ## Serial CI delivery
 
+Cell's CI manager, broker, compiler targets, release cache, and deployment
+working state use one configured external APFS volume. CI bodies and release
+compiler processes cannot write generated material to the host. Source Git
+metadata, installed programs, configuration, and live product state retain
+their existing owners. Provider runtime records remain provider-owned.
+Read [external work storage](/Users/joey/rust/cell/ci_manager/STORAGE.md) before
+storage cutover or cleanup. A missing drive stops work; it never selects a
+fresh local queue. Resolve interrupted work before resetting any journal.
+
 The installed `cell-ci` manager owns one durable FIFO queue for one configured
 Cell Git common directory. Linked worktrees submit immutable commits to this
 queue. Development continues on `main`. The manager owns `refs/ci/accepted`,

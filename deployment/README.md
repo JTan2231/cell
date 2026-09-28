@@ -215,7 +215,7 @@ authentication state.
 ## Temporary state and failure handling
 
 Private active state is under
-`~/Library/Application Support/Cell/deployments/active` on macOS. While running,
+`deployments/active` inside the configured external workspace. While running,
 it contains operation inputs/outcomes, logs, sealed source, executable candidates,
 and the detached preparation worktree. These files may contain private paths
 and baseline state; adapters must exclude credentials and domain document bodies.
@@ -255,8 +255,11 @@ share the final diagnostic budget.
 
 Completed build bundles and
 the release Cargo target live outside that workspace and survive cleanup. The
-default cache is `cell-release-cache` under the repository's Git common
-directory, shared by linked worktrees; `CELL_RELEASE_CACHE_DIR` overrides it.
+default cache is `releases/REPOSITORY_HASH` inside the external workspace,
+shared by linked worktrees. `CELL_RELEASE_CACHE_DIR` can select another location
+inside that workspace. Explicit build outputs must also remain there.
+Compiler processes cannot write outside the external workspace. See
+[external work storage](../ci_manager/STORAGE.md) for setup and failure rules.
 The build cache has no automatic pruning.
 
 The final result preserves `schema`, `run_id`, `state`, `products`,

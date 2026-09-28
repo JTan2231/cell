@@ -48,6 +48,14 @@ class BuildTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.base = Path(self.temporary.name)
+        storage_patch = mock.patch.object(build.workspace, "root", return_value=self.base)
+        storage_patch.start()
+        self.addCleanup(storage_patch.stop)
+        # Fake compilers are confined by the enclosing CI gate. Storage's
+        # subprocess tests separately prove the production filesystem sandbox.
+        confinement_patch = mock.patch.object(build.workspace, "confined_command", side_effect=lambda command: command)
+        confinement_patch.start()
+        self.addCleanup(confinement_patch.stop)
         self.source = self.base / "source"
         self.source.mkdir()
         self.git("init", "-q", "-b", "main")

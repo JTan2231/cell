@@ -29,9 +29,10 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ci_broker import client as ci_client
-from ci_broker.broker import MINIMAL_ENVIRONMENT
+from ci_broker.broker import MINIMAL_ENVIRONMENT, process_token
 from deployment import candidate
 from deployment.inventory import descriptor
+from ci_manager import workspace
 
 SCHEMA = 1
 MUTATIONS = frozenset(("hold", "drain", "apply", "configure", "release", "activate", "recover"))
@@ -74,10 +75,7 @@ def bounded_text(value: Any, limit: int, *, tail: bool = False) -> str:
 
 
 def state_root() -> Path:
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    if sys.platform == "darwin":
-        return home / "Library" / "Application Support" / "Cell" / "deployments"
-    return home / ".local" / "state" / "cell" / "deployments"
+    return workspace.directory("deployments")
 
 
 def private_directory(path: Path) -> None:
@@ -481,6 +479,7 @@ def runtime_environment() -> dict[str, str]:
     environment["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
     environment["PYTHONUNBUFFERED"] = "1"
+    environment.update(workspace.environment())
     return environment
 
 
@@ -503,9 +502,7 @@ def deployment_lock(storage: Path) -> Iterator[int]:
 
 
 def process_birth(pid: int) -> str | None:
-    output = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], check=False,
-                            capture_output=True, text=True)
-    return output.stdout.strip() or None
+    return process_token(pid)
 
 
 def operation_path(storage: Path, request_id: str) -> Path:

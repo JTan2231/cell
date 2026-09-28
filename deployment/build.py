@@ -26,6 +26,7 @@ from ci_broker.client import bootstrap_cargo_path, common_git_directory, git
 from ci_broker.broker import MINIMAL_ENVIRONMENT
 from deployment import candidate
 from deployment.inventory import descriptor
+from ci_manager import workspace
 
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 CONFIG_ENV = ("AR", "CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "SDKROOT",
@@ -94,7 +95,7 @@ def selection(source: Path, products: list[str], unit: str | None,
 
 
 def tool_output(source: Path, environment: dict[str, str], *command: str) -> str:
-    result = subprocess.run(command, cwd=source, env=environment, check=True,
+    result = subprocess.run(workspace.confined_command(list(command)), cwd=source, env=environment, check=True,
                             capture_output=True, text=True, timeout=60)
     return result.stdout.strip()
 
@@ -111,6 +112,7 @@ def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict
     if jobs < 1:
         raise BuildError("CELL_RELEASE_BUILD_JOBS must be a positive integer")
     target = cache / "target"
+    environment.update(workspace.environment())
     environment.update(CARGO_TARGET_DIR=str(target), CARGO_BUILD_BUILD_DIR=str(target),
                        CARGO_BUILD_JOBS=str(jobs), CARGO_INCREMENTAL="0")
     cargo_version = tool_output(source, environment, "cargo", "--version")
@@ -169,7 +171,11 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         raise BuildError("build output already exists")
     if not products:
         raise BuildError("at least one product is required")
-    cache = Path(os.environ.get("CELL_RELEASE_CACHE_DIR", str(common_git_directory(source) / "cell-release-cache"))).expanduser()
+    workspace.require_capacity()
+    workspace.require_path(output)
+    repository_key = hashlib.sha256(os.fsencode(str(common_git_directory(source)))).hexdigest()
+    cache = Path(os.environ.get("CELL_RELEASE_CACHE_DIR", str(workspace.directory("releases/" + repository_key)))).expanduser()
+    workspace.require_path(cache)
     if not cache.is_absolute() or cache.is_symlink():
         raise BuildError("release cache must be an absolute non-symbolic directory")
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -207,7 +213,8 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
             for name in names:
                 command.extend(("--bin", name))
             build_started = time.monotonic()
-            subprocess.run(command, cwd=source, env=environment, check=True, stdout=sys.stderr)
+            subprocess.run(workspace.confined_command(command), cwd=source, env=environment,
+                           check=True, stdout=sys.stderr)
             build_seconds = time.monotonic() - build_started
             temporary = Path(tempfile.mkdtemp(prefix=".entry-", dir=cache / "entries"))
             try:

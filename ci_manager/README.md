@@ -25,6 +25,9 @@ installation, submission, cancellation, or recovery. It defines submission
 authority, model limits, Git patch application, deployment and email outcomes, and the
 conditions that pause the queue.
 
+Read [external work storage](STORAGE.md) for drive preparation, cache locations,
+the build write boundary, and recovery after drive loss.
+
 The root and product `ci.sh` wrappers use this manager. Bare invocations and
 direct validation flags are unsupported. The manager invokes the internal
 validator against its committed candidate and fixed accepted base.

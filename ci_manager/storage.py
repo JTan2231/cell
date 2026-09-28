@@ -10,11 +10,11 @@ from pathlib import Path
 import pwd
 import sqlite3
 import stat
-import sys
 import time
 import uuid
 
 from ci_manager.budget import repair_budget
+from ci_manager import workspace
 
 SCHEMA = 1
 TERMINAL = {"succeeded", "failed", "cancelled", "already_included"}
@@ -29,9 +29,7 @@ def home() -> Path:
 
 
 def state_root() -> Path:
-    if sys.platform == "darwin":
-        return home() / "Library/Application Support/Cell/ci-manager"
-    return home() / ".local/state/cell/ci-manager"
+    return workspace.directory("ci-manager")
 
 
 def private_directory(path: Path) -> None:

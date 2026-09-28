@@ -117,8 +117,11 @@ class Fixture:
         self.git("config", "user.email", "fixture@example.invalid")
         self.write(".gitignore", "target/\n__pycache__/\n")
         for relative in ("deployment/__init__.py", "deployment/cli.py", "deployment/candidate.py", "deployment/inventory.py",
-                         "ci_broker/__init__.py", "ci_broker/client.py", "ci_broker/broker.py"):
+                         "ci_broker/__init__.py", "ci_broker/client.py", "ci_broker/broker.py",
+                         "ci_manager/__init__.py", "ci_manager/workspace.py"):
             self.write(relative, (ROOT / relative).read_text())
+        with (self.repo / "ci_manager/workspace.py").open("a") as stream:
+            stream.write(f"\n# Isolated fixture storage; never inspect the live configuration.\ndef root():\n    return Path({str(self.base)!r})\n")
         # The pinned cleanup subprocess never touches actual installations in
         # this disposable fixture, including when run_worker is called directly.
         self.write("deployment/cleanup.py", "print('{}')\n")
@@ -178,6 +181,14 @@ class DeploymentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.base = Path(self.temporary.name)
+        storage_patch = mock.patch.object(cli.workspace, "root", return_value=self.base)
+        storage_patch.start()
+        self.addCleanup(storage_patch.stop)
+        home = self.base / "home"
+        home.mkdir()
+        home_patch = mock.patch.object(cli.pwd, "getpwuid", return_value=SimpleNamespace(pw_dir=str(home)))
+        home_patch.start()
+        self.addCleanup(home_patch.stop)
         self.fixture = Fixture(self.base)
 
     def tearDown(self) -> None:
@@ -591,6 +602,7 @@ class DeploymentTests(unittest.TestCase):
 
     def foreground(self, *, verbose=False):
         script = ("from pathlib import Path\nfrom deployment import cli\n"
+                  f"cli.workspace.root=lambda: Path({str(self.base)!r})\n"
                   f"result=cli.start(Path({str(self.fixture.repo)!r}), ['alpha'], "
                   f"Path({str(self.fixture.storage)!r}), verbose={verbose!r})\n"
                   "cli.print_result(result)\nraise SystemExit(result['exit_code'])\n")

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import ctypes
 import hashlib
 import json
 import os
@@ -24,6 +25,7 @@ import signal
 import socket
 import sqlite3
 import subprocess
+import struct
 import sys
 import time
 import uuid
@@ -382,6 +384,19 @@ def process_token(pid: int) -> str | None:
 
     if pid <= 0:
         return None
+    if sys.platform == "darwin":
+        # proc_bsdinfo from the public macOS sys/proc_info.h ABI. Reading the
+        # owning user's processes needs no setuid ps executable in a sandbox.
+        library = ctypes.CDLL("/usr/lib/libproc.dylib")
+        read = library.proc_pidinfo
+        read.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64,
+                         ctypes.c_void_p, ctypes.c_int]
+        read.restype = ctypes.c_int
+        info = ctypes.create_string_buffer(136)
+        if read(pid, 3, 0, info, len(info)) != len(info):
+            return None
+        seconds, microseconds = struct.unpack_from("=QQ", info.raw, 120)
+        return f"proc:{seconds}:{microseconds}"
     stat_path = Path(f"/proc/{pid}/stat")
     if stat_path.exists():
         try:

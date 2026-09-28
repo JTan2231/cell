@@ -16,6 +16,22 @@ presence does not establish live service, model, deployment, or email readiness.
 
 ## Initialize and install
 
+Configure one external APFS work volume with ownership enabled before
+initializing the queue. The host setting records its exact mount path and UUID:
+
+```sh
+./ci.sh storage configure --volume /Volumes/CellWork
+./ci.sh storage status
+```
+
+For a storage cutover, pause and drain the old queue, stop its service, and
+resolve every deployment first. Storage selection refuses a running or
+unsettled legacy manager and an unresolved legacy deployment. It refuses a
+different destination after configuration. A fresh external queue uses the
+existing accepted Git commit as its baseline; it does not import discarded
+job history or historical request-key deduplication. Do not reuse old request
+keys after an authorized reset. Preserve source refs and unresolved effects.
+
 Select an existing commit that is known to be an acceptable starting baseline.
 Initialization records that operator selection; it does not validate the commit
 or prove which source is installed.
@@ -35,8 +51,8 @@ Use the repository wrapper to initialize or install this source package:
 ./ci.sh install
 ```
 
-The wrapper always runs initialization and installation from the source package.
-It routes the other queue and service commands to the installed manager.
+The wrapper runs storage setup, initialization, and installation from the source
+package. It routes the other queue and service commands to the installed manager.
 The root and product `ci.sh` wrappers provide this same manager path. Use
 `./ci.sh submit COMMIT` to start CI. Bare invocations, product selection, and
 direct validation flags are unsupported; they return submission guidance.
@@ -126,7 +142,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.4.0 uses queue contract 4 and retains journal
+arguments. Manager release 0.5.0 uses queue contract 5 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
@@ -376,18 +392,35 @@ deployment failed.
 
 ## Protect retained state
 
-On macOS, manager state is under
-`~/Library/Application Support/Cell/ci-manager`. On other supported local
-process hosts, the state path is `~/.local/state/cell/ci-manager`; macOS launchd
-service installation is a separate platform requirement. State directories use
+Manager state is `cell/ci-manager` on the configured external APFS volume.
+The current user's `~/Library/Application Support/Cell/workspace.json` fixes
+the mount path and volume UUID. There is no local fallback or environment
+override. Production operation requires macOS and its filesystem sandbox.
+The same workspace holds broker and deployment state, compiler targets,
+release caches, Cargo downloads, tool caches and temporary files.
+State directories use
 mode 0700 and private files use mode 0600. The journal is `queue.sqlite3` with
 schema 1. Private worktrees, diagnostics and operation artifacts are below
 `jobs/JOB/`.
+
+Launchd starts the worker from its installed release with output directed to
+`/dev/null`. The worker validates storage and opens its own external stdout and
+stderr logs. Launchd does not open removable-volume paths before process startup.
 
 The manager retains exact model requests and final patch responses, candidate
 identities, CI logs and receipts, deployment correlations, and notification
 payloads and receipts. It provides no automatic pruning. Protect these files as
 private source and operational data. Provider retention remains separate.
+
+Admission verifies the mounted volume's identity, ownership and write access.
+New work requires at least 2 GiB free. CI bodies and release compiler processes
+cannot write outside the external workspace, except `/dev/null` and `/dev/tty`.
+Installed programs, source Git metadata, service configuration, credentials,
+and live product state retain their host locations. Nucleus retains its own
+runtime records. Drive loss blocks work and does not authorize a fresh queue,
+retry, deletion, or success inference. Reconnect the same volume and use the
+existing recovery interfaces. Clear working material only after all owners
+have stopped and all operations have settled.
 
 Nucleus may transmit source and diagnostics read by the agent to its model
 provider. Sending the outcome discloses product and check names, failed test
