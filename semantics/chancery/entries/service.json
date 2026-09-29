@@ -1,0 +1,190 @@
+{
+  "id": "semantics.service",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect and maintain the Semantics installation",
+  "summary": "Understand readiness, serial worker scheduling, run-owned admission, exact release publication, state migration, rollback, recovery, and retained-state uninstall.",
+  "use_when": [
+    "Semantics readiness, maintenance, installation ownership, migration, recovery, or worker failure policy must be understood.",
+    "The selected release, provider, binding, enabled intent, or retained transaction should be verified."
+  ],
+  "do_not_use_when": [
+    "Only maintained terminology or project lifecycle is the subject.",
+    "Uninstall is being used as authority to erase retained state."
+  ],
+  "outcome": "A selected, ownership-checked user installation or retained recovery condition whose admission, scheduler, persistent-state, and publication guarantees remain explicit.",
+  "interfaces": [
+    {
+      "label": "Readiness",
+      "invocation": "semantics --json doctor"
+    },
+    {
+      "label": "Maintenance admission",
+      "invocation": "semantics --database DATABASE --json maintenance status; semantics --database DATABASE --json maintenance hold RUN_ID; semantics --database DATABASE --json maintenance release RUN_ID"
+    },
+    {
+      "label": "Installer",
+      "invocation": "semantics-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE --clockwork ABSOLUTE_CLOCKWORK"
+    },
+    {
+      "label": "Retained transaction recovery",
+      "invocation": "semantics-install recover --transaction ABSOLUTE_TRANSACTION --clockwork ABSOLUTE_CLOCKWORK [--forward]"
+    },
+    {
+      "label": "Retained-state uninstall",
+      "invocation": "semantics-install uninstall --clockwork ABSOLUTE_CLOCKWORK"
+    }
+  ],
+  "effects": [
+    "Installation writes a content-addressed release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite after backup.",
+    "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
+    "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs."
+  ],
+  "authority": [
+    "Semantics owns program/provider selection, state migrations, update and worker locks, product holds, readiness checks, and product recovery.",
+    "Clockwork owns scheduled activation, process history, incident halts and notification; Nucleus owns runtime evidence. Shared coordination retains each product commit boundary."
+  ],
+  "success": [
+    "Doctor reports schema 3 and green database, markers, Annals feed, and Nucleus reconciliation checks without creating domain work.",
+    "The provider follows the matching release; the binding selects its exact runner and preserved enabled intent with existing pauses/halts still effective."
+  ],
+  "failure_and_recovery": [
+    "Foreign/changed artifacts, unsafe state files, unavailable existing runtime, or unknown ownership fail closed.",
+    "Pre-commit rollback restores proved database plus sidecars, selectors, and at most one prior scheduler. Unproved rollback keeps maintenance and recovery evidence.",
+    "Committed transactions recover forward. Prior-null selected-candidate recovery requires explicit --forward for the authenticated exact candidate."
+  ],
+  "privacy": [
+    "State and backups can contain complete private documents, meanings, paths, correlations, and history.",
+    "Clockwork receives exact program/schedule/process and bounded incident metadata; it does not read product log bodies."
+  ],
+  "does_not_authorize": [
+    "Clearing another owner hold or marker, resetting project pause/incident halt, canceling or retrying durable work implicitly, concurrent direct binding mutation, or retained-state deletion."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators, the product installer, and the Cell deployment adapter inspect and maintain one current-user Semantics installation."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Effects require authorized matching validated candidates, proved owned selectors/files and worker/database quiescence, private complete backup, and compatible dependencies. Unsupported old public admission needs its documented compatibility release first."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are exact candidate binary/provider/Clockwork artifacts, selected private state, captured scheduler intent and ownership, run-owned holds, optional explicit final legacy watermark, or one retained transaction."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Doctor returns typed checks; maintenance returns protocol_version 1, contract_version 1, holds and drained; installer receipts, retained transaction/backup, exact release selectors, and selected definition describe the installation outcome."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Readiness, live-command drain, durable-job quiescence, runtime exit, semantic success, enabled intent, operator pause, maintenance, and incident halt are distinct observations or controls."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Content release identity covers runner/template/provider bytes; definition digest pins exact runner/schedule; maintenance owner ID identifies only its own durable hold; database schema and contracts are independently versioned."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Doctor checks one fixed Annals watermark and repeats complete bounded pages from each distinct cursor through unchanged empty, rejecting more than 1,000 pages per cursor. A selected definition ownership check is point-in-time, not compare-and-swap. Drain covers live admitted commands and requires separate durable-job proof."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No launchd availability, worker wake-up latency, or source-to-revision deadline is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local interfaces and owned private files are the trust boundary. Existing state/receipt/log shapes and permissions are checked; catalog queries are not runtime readiness or authorization."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Installer and uninstall serialize updates, hold the worker flock, fence public work, prove SQLite closed, and back up database plus sidecars before candidate doctor. Pre-commit rollback restores captured evidence; durable commit recovers forward."
+      },
+      {
+        "status": "declared",
+        "statement": "A public run hold fences all other public/typed commands before database access, survives exit, and releases only its owner. Installer markers/receipts have separate exact ownership. Group activation preserves captured intent, project pauses, and incident halts."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The worker requests 60-second interval, no run-at-load, overlap skip, no timeout, exact interpreter/runner hashes and scrubbed environment. Only one reconciliation is processed per serial pass."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, storage capacity, service response objective, retention horizon, or future support/deprecation window is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "SQLite schema 3 preserves legacy and account history, source/cursor bytes, receipts and admitted immutable requests. Explicit one-time activation is separate from ordinary updates. Provider schema 4 adds overview publication without changing runtime behavior or old entry versions."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Readiness and controlled installation verify the exact selected Annals decisions feed/library through exchange 2.",
+        "target": "annals",
+        "kind": "readiness",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies runtime/drain, health, capabilities and retained job evidence; a held proof requires the same sole drained run owner.",
+        "target": "nucleus",
+        "kind": "readiness",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork owns immutable definitions, selected binding, scheduled process activation, incident halts and notifications.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "unspecified",
+        "statement": "Semantics promises no launchd availability or wake-up latency beyond Clockwork observations."
+      }
+    ]
+  },
+  "manual": "manuals/service.md",
+  "dependencies": [
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ]
+}

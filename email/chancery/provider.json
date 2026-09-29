@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "email",
     "name": "Email",
@@ -10,7 +10,8 @@
       "Email constructs and submits one caller-provided plain-text message with optional local attachments. It uses fixed addresses and owns bounded retries and command reporting.",
       "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance.",
       "Email owns synchronous bounded reads of one receiving page or one received message from the configured Resend account and returns provider metadata and available content without local retention.",
-      "Email owns explicit private local credential and receiving-domain setup, and bounded receiving-domain discovery without mail reads."
+      "Email owns explicit private local credential and receiving-domain setup, and bounded receiving-domain discovery without mail reads.",
+      "Email owns immutable current-user program releases, matching published documentation, selector integrity, and verified program installation and recovery. Private account settings remain separate from release selection."
     ],
     "not_authoritative_for": [
       "The caller owns send authorization, message meaning, product occurrence state, rendering, scheduling, and any supplied idempotency-key identity.",
@@ -21,11 +22,12 @@
       "covers": [
         "All supported user-facing Email CLI outcomes for immediate plain-text submission with optional local file attachments to the product-fixed recipient in this release.",
         "All supported user-facing Email receiving CLI outcomes for one bounded account metadata page or one received message, plus typed Rust transport and installed-wrapper client access.",
-        "Local account setup and receiving-domain discovery through email.account.operate."
+        "Local account setup and receiving-domain discovery through email.account.operate.",
+        "All supported current-user Email program installation and retained-release recovery routes, plus the matching publication and command-registration procedures."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help and version display, installation and release operations, drafting, previews, arbitrary recipients or senders, HTML sending, remote attachment URLs, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim.",
+        "Help and version display, drafting, previews, arbitrary recipients or senders, HTML sending, remote attachment URLs, copies, scheduling, queues, delivery tracking, and live external readiness are outside this inventory claim.",
         "Receiving attachment downloads, raw-mail downloads, sender authentication, inbound acknowledgements or deletion, automated polling are outside this inventory claim."
       ]
     },
@@ -42,7 +44,7 @@
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
-      "Provider release identifies the installed bundle, while entry contract version identifies the supported send semantics.",
+      "Provider release identifies the installed bundle. Entry contract versions identify their supported feature or operation semantics; program release selection and private account settings have separate recovery boundaries.",
       "No cross-release compatibility window, API deprecation period, or external-provider retention guarantee is promised beyond an entry's explicit declarations."
     ],
     "operational_limits": [
@@ -54,6 +56,10 @@
   "entries": [
     "entries/message-send.json",
     "entries/message-receive.json",
-    "entries/account-operate.json"
-  ]
+    "entries/account-operate.json",
+    "entries/account.json",
+    "entries/installation.json",
+    "entries/install-operate.json"
+  ],
+  "overview": "overview.md"
 }

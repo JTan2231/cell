@@ -1,38 +1,37 @@
 # Platter
 
-Platter prepares private job briefs and tailored resumes from Cast opportunities
-and Vita career material. Agents research Cell, Wrought and Krisis locally to
-write the projects section alongside Jackson work-experience bullets. Platter
-retains prepared content and email outcomes.
+Platter prepares private job briefs and resumes from Cast opportunities and
+Vita career material. Weaver supplies project bullets. Platter retains accepted
+packets, frozen editions, and authorized email submission outcomes.
 
 ## Example
 
-With an initialized library and its dependencies ready:
+With an initialized library and ready dependencies:
 
 ```sh
 platter prepare CAST_JOB_ID
-platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' --id OCCURRENCE_ID
 platter status
-platter export ARTIFACT_ID /absolute/chosen/resume.pdf
+platter export ARTIFACT_ID /absolute/private/chosen/resume.pdf
 ```
 
-`prepare` does not send. `run-ad-hoc` prepares one selected URL and sends its
-frozen packet. Uncertain sends remain held for recovery.
+Preparation does not send. Use the preparation operation for an authorized
+URL-selected, daily, or retained-material send.
 
-## CI
+## Documentation
 
-Commit the intended changes, then submit them from the Cell root:
+Read the [product overview](chancery/overview.md), or use `chancery product platter`
+for the installed release. Feature contracts own supported behavior:
 
-```sh
-./ci.sh submit COMMIT
-```
+- [Materials and templates](chancery/manuals/materials.md)
+- [Packet preparation](chancery/manuals/preparation.md)
+- [Editions and delivery](chancery/manuals/editions.md)
+- [Prepared opportunity reads](chancery/manuals/opportunity-explore.md)
+- [Maintenance and release](chancery/manuals/maintenance.md)
 
-The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
-repairs, deploys, and emails the outcome.
+Use [prepare and delivery procedures](chancery/manuals/packet-prepare.md) or
+[installation and maintenance procedures](chancery/manuals/install-operate.md).
+`chancery show ID` reads one page; `chancery resolve ID` includes required
+contracts. These reads do not probe readiness or authorize execution.
 
-## Further documentation
-
-- [Preparation, editions, and delivery](chancery/manuals/packet-prepare.md)
-- [Vita career library](chancery/manuals/vita.md)
-- [Stored records](docs/data-model.md)
-- [Installation and migration](chancery/manuals/install-operate.md)
+Submit committed changes through the [CI manager](../ci_manager/README.md) with
+`./ci.sh submit COMMIT` from the Cell root.

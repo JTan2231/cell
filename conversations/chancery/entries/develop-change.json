@@ -41,6 +41,8 @@
   ],
   "dependencies": [
     {"id": "conversations.history.explore", "min_contract": 4, "max_contract_exclusive": 5},
+    {"id": "conversations.runtime", "min_contract": 1, "max_contract_exclusive": 2},
+    {"id": "conversations.installation.operate", "min_contract": 1, "max_contract_exclusive": 2},
     {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
@@ -50,7 +52,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read `AGENTS.md` and the exact architecture, CLI, installation, and Chancery documents for the changed behavior.",
+    "Read `AGENTS.md`, the registered Semantics repository, and the exact product-owned feature and operation contracts affected by the change.",
     "Consult the current official Codex App Server documentation before changing protocol assumptions.",
     "Implement the smallest change with synthetic App Server fixtures and update shared contracts in the same change.",
     "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication and deployment outside that job require separate authority."
@@ -81,7 +83,7 @@
       {"status": "unsupported", "statement": "Ordinary history exploration, task mutation, release publication, deployment outside the submitted manager job, raw Codex storage access, daemon or index creation, and model interpretation are outside this operation."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The developer has current Conversations source, applicable Semantics and installed contract context, exact architecture, CLI, installation and Chancery documents, and authority for the requested change."},
+      {"status": "declared", "statement": "The developer has current Conversations source, applicable Semantics and installed contract context, required product-owned feature and operation contracts, and authority for the requested change."},
       {"status": "declared", "statement": "A protocol assumption change is grounded in current official version-matched Codex App Server documentation and preserves or explicitly versions the public typed boundary."}
     ],
     "inputs": [
@@ -101,7 +103,7 @@
       {"status": "not_applicable", "statement": "The development operation publishes no effort, cost, schedule, or accounting unit."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completion requires the smallest owning code and every affected CLI, architecture, installation and Chancery document to agree, with synthetic fixtures covering the exact protocol and normalization boundary and a verified retained manager job outcome."},
+      {"status": "declared", "statement": "Completion requires the smallest owning code and every affected product-owned feature, operation, and overview to agree, with synthetic fixtures covering changed boundaries and a verified retained manager job outcome."},
       {"status": "declared", "statement": "Process-lifecycle changes prove private-group descendant cleanup, and packaging changes prove content identity, tamper detection, retained selectors, and rollback as applicable."},
       {"status": "unsupported", "statement": "Passing source tests alone does not establish a released, deployed, runtime-compatible, metadata-refreshed, or complete live App Server result."}
     ],
@@ -118,7 +120,7 @@
       {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, future App Server support window, or deployment schedule is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Development contract version 3 requires synthetic version-matched App Server proof, explicit public-schema compatibility, synchronized exact documentation, and content-addressed packaging rollback."},
+      {"status": "declared", "statement": "Development contract version 3 requires synthetic version-matched App Server proof, explicit public-schema compatibility, synchronized authoritative documentation, and content-addressed packaging rollback."},
       {"status": "declared", "statement": "CI submission includes the manager deployment and outcome email. Release publication and installed deployment outside that job remain separately authorized operations."},
       {"status": "unspecified", "statement": "No perpetual support window or deprecation period for Conversations, Codex CLI, or App Server versions is promised."}
     ],

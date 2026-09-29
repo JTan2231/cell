@@ -30,4 +30,4 @@ RELEASE_UNITS='semantics|Semantics|package|semantics/Cargo.toml|semantics-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='semantics|target/release/semantics|semantics
 semantics|target/release/semantics-install|semantics-install'
-PROVIDERS='semantics|semantics|semantics/chancery|3'
+PROVIDERS='semantics|semantics|semantics/chancery|6'

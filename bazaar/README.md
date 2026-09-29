@@ -11,6 +11,9 @@ bazaar get example.prompt --version 1
 bazaar history example.prompt
 ```
 
-See the [Rust API](docs/rust-api.md), [read contract](chancery/manuals/string-read.md),
-[update contract](chancery/manuals/string-update.md), and
-[installation guide](chancery/manuals/install-operate.md).
+Read the [product overview](chancery/overview.md) for the feature contracts and
+operating procedure. The [Rust API entry point](docs/rust-api.md) directs
+programs to those same contracts.
+
+Installed documentation is available through `chancery product bazaar`,
+`chancery show ID`, and `chancery resolve ID`.

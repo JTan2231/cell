@@ -6,6 +6,11 @@ voice, length, selection, and emphasis from the direction. These are prompt
 concerns, not separate application fields. Weaver stores the authored Markdown.
 It does not certify the interpretation or require citations.
 
+Use `chancery show weaver.lifecycle` for configuration, private state, readiness,
+owned maintenance, and release guarantees. Use the configured current-user
+interfaces; installed documentation alone does not prove readiness or grant
+authority to author or disclose private sources.
+
 ## Write and read
 
 ```sh
@@ -110,10 +115,8 @@ There is no promised completion latency or comprehensive research coverage.
 
 ## Recovery
 
-One runner lock excludes other write, write-many, resume, and initialization
-operations. A write-many runner handles independent jobs concurrently within
-that lock. Weaver saves the exact
-Nucleus invocation before admission. Resume uses that same job and request;
+Weaver saves the exact Nucleus invocation before admission. Resume uses that
+same job and request;
 uncertain admission creates no replacement identity. A pending tool call and
 its exact reply are saved together, with Markdown when submitted. The reply
 is cleared after Nucleus acknowledges it. Nucleus retains its own tool history.
@@ -132,12 +135,12 @@ state stops work instead of creating a replacement database.
 
 ## Privacy and authority
 
-State is under `~/Library/Application Support/Weaver`. `weaver.sqlite` contains
-one `documents` table: output, exact invocation, optional pending reply, and
-execution metadata. `config.json` selects the Annals reader. Nucleus owns
-credentials and execution records. It may retain the full direction, source
-reads, and document. Weaver's pending reply can temporarily contain a source
-page. Private files use mode 0600 and state directories use mode 0700.
+Weaver owns saved Markdown, exact requests, pending replies, and observed
+execution outcomes. Annals owns accepted source text; Krisis owns decision
+identification. Nucleus owns credentials and execution records. It may retain
+the full direction, source reads, and document. Weaver's pending reply can
+temporarily contain a source page. `weaver.lifecycle` owns state locations,
+permissions, backups, and maintenance guarantees.
 
 Writing does not send email, publish, mutate Annals, operate source intake, or
 schedule future work. There is no automatic pruning. Source reading grants no
@@ -151,7 +154,11 @@ change command results.
 
 ## Bazaar prompt selection
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.weaver selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+Prompt preparation requires initialized private Bazaar state and a complete
+`cell.prompts.weaver` selection. The default database is
+`~/.local/share/bazaar/bazaar.sqlite3`; callers accept an absolute
+`CELL_BAZAAR_DATABASE` override. Reads fail without creating state or using
+embedded fallback text.
 
 Read `cell.prompts.weaver` with Bazaar's supported `get` interface. Its content
 is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
@@ -159,19 +166,26 @@ pinned to a positive integer version. Publish component text first, then publish
 the complete selection. A text append alone does not change the selected set.
 Missing or invalid selections stop new request preparation before model admission.
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+The caller freezes resolved instructions in the exact request. Resume retains
+that selection; later edits do not rewrite saved work. Models, permissions,
+schemas, tool execution, domain commits, and recovery remain Weaver-owned.
+Selection version 1 and all referenced text versions preserve compatibility
+with the migration baseline. Changed tool descriptions use new immutable
+Nucleus toolset identities. The historical initial toolset is
+`weaver/narrative/1`; new selection toolsets use the selection version plus one.
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+Runtime reads never import the migration seed. Deployment does not supply
+missing prompt contents. Use `weaver.install.operate` for deployment
+prerequisites and `weaver.develop.change` for prompt editing and rollback.
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.weaver --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+No provider latency, maximum source age, throughput, perpetual retention,
+automatic retry service objective, future compatibility lifetime, or deprecation
+interval is promised.
+
+## Related contracts
+
+- Read `chancery show weaver.lifecycle`.
+- Read `chancery show weaver.install.operate`.
+- Read `chancery show weaver.develop.change`.
+- Read `chancery show annals.decision-account.exchange`.
+- Read `chancery show bazaar.string.read`.

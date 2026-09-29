@@ -7,7 +7,7 @@
   "title": "Investigate and respond to incidents by email",
   "summary": "Have an agent investigate a Clockwork halt, author its email, and handle each user reply as one intervention while retaining the exchange and Nucleus reference.",
   "use_when": [
-    "The requested outcome matches this EMT operation and its standing or explicit authority."
+    "A Clockwork halt must be investigated, incident correspondence inspected, or a recognized reply handled as one authorized intervention."
   ],
   "do_not_use_when": [
     "The user needs another recipient, sender authentication, continuous repair, or a replacement for product-owned recovery."
@@ -84,6 +84,16 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "emt.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "emt.quota-notices",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -153,13 +163,13 @@
       },
       {
         "status": "declared",
-        "statement": "Callers resolve cell.prompts.emt to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "EMT resolves cell.prompts.emt to exact component versions before new preparation and freezes rendered instructions with its saved request. Retries retain that selection; later edits do not rewrite saved work."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One agent; 100 incidents and four receiving pages per pass; 300/900-second assignments; 64 KiB email bodies; two transport invocations at least five minutes apart within 23 hours. Worker interval 15 seconds and activation timeout 300 seconds."
+        "statement": "One agent assignment; one 100-incident feed page and at most four 100-record receiving pages per pass; 300/900-second active limits within absolute five/15-minute deadlines; 256-byte subjects and 64 KiB bodies; at most two transport invocations five minutes apart within 23 hours."
       }
     ],
     "compatibility_and_evolution": [
@@ -173,7 +183,7 @@
       },
       {
         "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "Selection version 1 and its exact referenced immutable text versions preserve the migration baseline. Caller rendering and agent authority remain EMT-owned; runtime reads never import missing seed text."
       }
     ],
     "reliances": [
@@ -217,6 +227,20 @@
         "target": "bazaar",
         "kind": "data",
         "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "EMT worker admission, configuration, schedule and retained installation state follow their own service contract.",
+        "target": "emt-service",
+        "kind": "readiness",
+        "contract": "emt.service"
+      },
+      {
+        "status": "declared",
+        "statement": "Shared quota observations defer new model work and drive independent frozen condition notices.",
+        "target": "emt-quota-notices",
+        "kind": "control",
+        "contract": "emt.quota-notices"
       }
     ]
   },

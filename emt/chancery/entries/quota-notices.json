@@ -1,0 +1,153 @@
+{
+  "id": "emt.quota-notices",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Defer model work and deliver shared quota notices",
+  "summary": "Observe shared Nucleus quota conditions, retain admission deferral and deliver one frozen deterministic condition email without starting an agent.",
+  "use_when": [
+    "A shared quota condition, deferred model assignment, deterministic quota notice or uncertain notice delivery must be understood."
+  ],
+  "do_not_use_when": [
+    "The goal is to configure Nucleus quota policy, prove billing, or establish product-domain success."
+  ],
+  "outcome": "Observe shared Nucleus quota conditions, retain admission deferral and deliver one frozen deterministic condition email without starting an agent.",
+  "interfaces": [
+    {
+      "label": "Advance worker observations and delivery",
+      "invocation": "emt worker"
+    },
+    {
+      "label": "Inspect ordinary retained state",
+      "invocation": "emt --json status"
+    }
+  ],
+  "effects": [
+    "The worker observes quota, defers new model work and submits condition mail under standing authorization; no Nucleus job authors or sends the notice."
+  ],
+  "authority": [
+    "EMT owns quota-notice records and transport progress. Nucleus owns quota observations and admission policy; Email owns transport and credentials."
+  ],
+  "success": [
+    "A retained condition notice ends transport when Email returns provider acceptance. This is not a final-delivery or requester-work success assertion."
+  ],
+  "failure_and_recovery": [
+    "Preserve the frozen record and exact key through restarts and private backups. Keep exhausted ambiguity uncertain; do not delete records or create another send identity to retry."
+  ],
+  "privacy": [
+    "Condition notice records are private and retained separately from incident/exchange tables. EMT stores no Email credentials; providers retain independent copies."
+  ],
+  "does_not_authorize": [
+    "Unrequested recipients, account reads or activation, quota-policy changes, product intervention or automatic replacement agent jobs."
+  ],
+  "dependencies": [
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and the authorized EMT worker observing shared Nucleus quota conditions."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Worker account observations and condition mail must be authorized; compatible Nucleus quota observations and Email send are required for their respective progress."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Nucleus GET /v1/quota returns the observed shared quota condition. An exact condition ID selects its frozen deterministic notice record and Email key."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Quota deferral retains unadmitted work until recovery or its existing deadline. Each new condition retains a deterministic notice and its acceptance receipt or uncertain submission outcome."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Quota waiting is an admission pause, not a Clockwork failure halt or product-domain outcome. A notice needs no incident or Nucleus job; Email acceptance is separate from inbox delivery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Private quota-notifications/CONDITION_ID.json records use the Nucleus condition identity and exact Email key emt/quota/CONDITION_ID. Transport bounds use elapsed seconds and a 23-hour window."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The worker uses a current Nucleus quota observation without launching an agent. Missing or unavailable observations postpone new model work; a legacy quota-endpoint 404 permits rollout without the gate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No quota-refresh, timer, account-availability or final-delivery deadline is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user worker reads quota and calls Email directly. No dedicated quota-notice retry CLI is supported, and reading the contract adds no account, mail, activation or intervention authority."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One deterministic payload is frozen per new condition before transport. A receipt ends sending. Restarts retain the record and exact key; an exhausted ambiguous send remains uncertain without a new identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Existing exchange deadlines, operator pauses and failure halts remain independent. Expired quota deferrals and quota_exhausted attempts retain outcomes without individual fallback mail; frozen agent and condition mail continue on their delivery paths."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Each frozen notice has at most two transport invocations at least five minutes apart and within 23 hours of the first attempt. Email owns its bounded HTTP retries and external idempotency policy."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "EMT release, schema-one domain state, Nucleus quota endpoint and Email contract versions evolve separately. The exact saved notice and mail identity survive worker recovery."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No additional external idempotency-lifetime, future retention-horizon or final-delivery guarantee is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Nucleus owns the shared quota condition, account observation and admission policy.",
+        "target": "nucleus",
+        "kind": "data",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Email owns fixed-recipient submission, provider acceptance, bounded retries, external idempotency and credentials.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      }
+    ]
+  },
+  "manual": "manuals/quota-notices.md"
+}

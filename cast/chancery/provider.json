@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "cast",
     "name": "Cast",
@@ -22,14 +22,15 @@
       ]
     },
     "shared_access_and_trust": [
-      "Cast is a local CLI for the current user. It stores its database in the selected private state directory and reads provider credentials from the environment. The installed wrapper sources ~/.zshrc and passes only the two provider keys and the documented environment variables."
+      "Cast is a local current-user CLI with private selected state. The Rust payload reads provider credentials from environment. The installed frontend executes user-owned ~/.zshrc and preserves only documented state, usage and provider-key environment values; cast.installation defines that trust boundary."
     ],
     "shared_privacy_and_retention": [
       "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs.",
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
-      "Cast provider release, capability contract version, database schema and export schema are distinct. Collection contract 5 separates exact-job observation from ordinary collection. Installation contract 3 adds automatic_excluded_ats, defaulting to Ashby. Database and export schema numbers are unchanged; older programs may reject the new configuration field. Installed bundles change only through a matching product release."
+      "Cast release, feature contract versions, installation format and database/config/export schemas are distinct. Compatible existing collection 5, read 2 and operation 3 identities are preserved. State and installation feature contracts consolidate existing behavior without changing supported routes. Installed documentation changes only with the matching product release.",
+      "Configuration schema 1 includes automatic_excluded_ats. Older programs that reject unknown fields can reject configuration written with it. Program recovery does not restore discovery state or configuration."
     ],
     "operational_limits": [
       "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
@@ -38,6 +39,9 @@
   "entries": [
     "entries/discovery-collect.json",
     "entries/discovery-explore.json",
+    "entries/state.json",
+    "entries/installation.json",
     "entries/install-operate.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

@@ -1,99 +1,80 @@
 # Change Clockwork
 
-Read Clockwork's product instructions and the exact architecture, CLI,
-data-model, installation, semantic-seed, packaging, and Chancery documents for
-the behavior being changed. Preserve the product scope: immutable strict
-definitions, stable bindings, generated current-user LaunchAgents, per-key
-admission, one directly supervised child, and runtime history.
+Use this procedure for an authorized change to Clockwork source, tests,
+packaging, or documentation. Read product instructions and the required feature
+contracts: `clockwork.definitions`, `clockwork.bindings`,
+`clockwork.activations`, `clockwork.incidents`, `clockwork.notifications`, and
+`clockwork.installation`. They own behavior. Read `chancery.provider.publish`
+for publication rules and `semantics.repository.explore` for terminology.
 
-Preserve the executable contract. Runtime callers and the private launchd
-entry supply one stable `owner/name` key and no process context. Registration
-alone accepts the exact release, top-level program or interpreter/script
-hashes, literal arguments, exact scrubbed environment, absolute cwd and output
-paths, schedule, timeout, and skip-overlap policy. The recognized-Mach-O
-product program or executable script stays beneath an immutable non-symbolic
-release.
+## Prepare the change
 
-Schema one permits only exact, separately hashed, root-owned `/bin/sh` as an
-interpreter. Every launch image is canonical, symlink-free, executable,
-non-writable by group or world, and reverified before spawn. Never add PATH
-lookup, mutable selectors, shell strings, interpolation, implicit shebang
-choice, inherited environment, or runtime argv.
+1. Query Cell for shared maintained terminology until the `clockwork` Semantics
+   project is explicitly registered and seeded. After that transition, use its
+   registered repository. Source, tests, and product contracts remain behavior
+   authority. Do not register, seed, or edit semantic state as a side effect.
+2. Identify the smallest affected boundary, supported interfaces, persistent
+   meaning, compatibility axes, authority, privacy, and recovery obligations.
+   Read `nucleus manual` before public, persistent, deployment, or integration
+   changes. Use its applicable change playbook.
+3. Preserve the short-lived current-user broker scope. Runtime callers supply
+   only stable keys. Products keep durable work, retries, locks, secrets, output
+   retention, and domain success. launchd keeps timer-delivery authority.
+4. Implement the owning change and update its feature contract, relevant
+   procedure, overview, and release packaging together. Keep README and legacy
+   references as entry points. Required contract dependencies must remain
+   acyclic. Related reading does not imply runtime calls or compatibility.
 
-Clockwork verifies the registered top-level
-launch images at the documented times. It does not attest transitive libraries,
-configuration opened later, subprocesses, network peers, same-user tampering
-after verification, or product meaning.
+Stop for a new boundary review before a daemon, network surface, agent runner,
+arbitrary command interface, workflow, work queue, retry/backoff engine, secret
+store, output capture, distributed coordination, system service, or domain
+success policy is introduced.
 
-Preserve authority:
+## Validate the affected promises
 
-- Clockwork owns declared scheduling failure enforcement, durable incidents and pause notifications, immutable definition and activation identity, binding
-  selection, its generated plists, overlap admission, direct supervision, and
-  runtime history.
-- The product owns release publication, durable work, locks, retry,
-  idempotency, secrets, output content and rotation, recovery, and domain
-  success.
-- launchd owns timer delivery in the current user's GUI session. Clockwork
-  publishes the reliance and no delivery SLA.
+1. Use synthetic release and state roots, launchd doubles, and child processes.
+   Fixtures contain no credential, private path, production definition, output,
+   or activation history. Diagnostics identify fields and stable IDs without
+   echoing full environment or product output.
+2. Select checks for the changed boundary. Preserve strict manifests, immutable
+   identities, direct-image containment and hashes, stable-key-only runtime
+   invocation, overlap, process-group supervision, termination, timeout, and
+   proof before lost recovery. Do not attest transitive execution or treat exit
+   zero as domain success.
+3. Exercise binding first enable, update, idempotence, active refusal,
+   bootout/bootstrap failure, compensation, journal recovery, and attributable
+   fail-disabled behavior when affected. Never permit intentional dual schedules.
+4. Use a successor schema, explicit quiescent database-plus-sidecar backup,
+   migration, old-state fixture, and database-aware rollback for persistent
+   meaning changes. Retain old definition identity and decoding. Deployment
+   must not migrate storage implicitly or clear an incident.
+5. Check policy changes against nonzero exit, startup failure, signal, timeout,
+   lost proof, reported failure with exit zero, overlap, re-observation after
+   approval, and halt preservation. Use only local Email doubles. Preserve
+   fixed payload, idempotency horizon, eligible checks, and non-expiring claims.
+6. Check packaging version matching, complete content identity, candidate-reader
+   validation before selector mutation, installed discovery, idempotent
+   deployment, foreign/tampered refusal, rollback, and selector-only uninstall
+   when affected. Validate the source provider and review product, show, and
+   resolve with a temporary registry. Preserve explicit unknown and
+   uncontracted reliance gaps; structural validation cannot prove prose complete.
 
-Each activation has at most one direct child and no retries.
-Exercise start failure, exit, signal, timeout, scheduled and manual overlap,
-termination forwarding, and lost-process proof independently. Never turn exit
-zero into `succeeded`, store output bodies, or retry automatically.
+Stop when migration, compatibility, external agreement, ownership, privacy, or
+coherent recovery evidence is missing. Keep every affected contract consistent.
 
-Binding transitions use an exclusive stable-key gate while activations use its
-shared side plus an exclusive admission lock. They treat database selection,
-atomic plist bytes and digest, and launchd loaded state as values that must
-agree. Tests should cover first enable, idempotence, update, active refusal,
-bootout/bootstrap failures, compensation, and fail-disabled behavior. They
-must prove that no recovery leaves old and new schedules intentionally loaded
-together.
+## Deliver when authorized
 
-Use isolated synthetic release roots, state roots, plists, launchd doubles, and
-child programs. Fixtures contain no credential, real product path, production
-definition, or private output. Errors should name a field or stable ID without
-dumping a whole stored environment.
+1. Commit the intended change and submit `./ci.sh submit COMMIT` from the Cell
+   root. Verify the retained manager outcome. Focused checks do not replace
+   manager validation and delivery.
+2. Treat `release.sh` as separate publication authority: it commits, tags, and
+   pushes. Manual deployment outside a submitted job, real binding operation,
+   destructive state work, and semantic registration or seeding are separate
+   operations with their own authority.
+3. Report the verified endpoint and material remaining limits. If the user
+   requested an uncommitted review, leave the reviewed changes uncommitted and
+   report that manager validation and deployment remain pending.
 
-A storage change needs a successor schema, quiescent database-plus-sidecar
-backup, explicit migration command, old-state fixture, and database-aware
-rollback. Do not migrate during program deployment. A changed immutable
-definition meaning receives a new identity rather than an in-place rewrite.
-
-Packaging checks must cover binary/provider version matching, exact
-content-addressed release trees, candidate-reader validation of the exact
-staged provider before selector mutation, idempotent redeploy, update, foreign
-and tampered selector refusal, pre-commit rollback, and selector-only
-uninstall without opening runtime state or touching product plists.
-
-Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
-installed manager integrates, validates, attempts bounded repairs, deploys,
-and emails the outcome. Verify the retained job outcome. `release.sh` creates
-a commit, tag, and remote push. Manual deployment, schedule commands, and
-Semantics registration and seeding are separate operations that require their
-applicable authority.
-
-Until `clockwork` is explicitly registered and seeded, query Cell for shared
-maintained terminology. After that transition, query the Clockwork repository.
-In both cases, code, tests, and product documentation remain authoritative for
-behavior.
-
-Stop for a new contract review before adding a daemon, network surface, agent
-execution, arbitrary command interface, workflow graph, product-work queue, product retry/backoff,
-secret storage, product output retention, distributed coordination, system
-service, or domain-success policy.
-
-For failure-policy changes, keep configuration and domain interpretation with
-the product. Clockwork owns durable admission halts and explicit incident-bound
-continuation. Preserve schema-one definition identities and legacy semantics;
-new policy semantics require schema two. Exercise nonzero exit, startup failure,
-signal, timeout, lost proof, reported failure with exit zero, normal overlap,
-re-observation after approval, and halt preservation across binding transitions.
-Notification tests use only synthetic local Email doubles. Preserve the fixed
-payload and provider idempotency horizon; transport failure never reopens work.
-
-## Command usage
-
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery retains
+command identity, time, and thread ID without arguments, output, or outcomes.
+Internal product calls are excluded. Recording errors preserve command results.

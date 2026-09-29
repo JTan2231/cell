@@ -1,32 +1,59 @@
-# Operate the installed Annals release
+# Install or recover Annals
 
-Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it.
+Use this procedure for an authorized macOS installation, update, dedicated
+decisions-library provision, retained-transaction recovery, older-installation
+migration, or packaged Linux setup. Read `annals.installation` for the release,
+maintenance, compatibility, and rollback guarantees; `annals.libraries` for
+library configuration and schema; and `annals.inbox` for dispatch and recovery.
 
-The user-owned macOS deployment installs Annals and Annals Usage together,
-plus configuration, content-addressed releases, and the scheduled inbox
-Clockwork binding `annals/inbox`. Nucleus remains a separately installed
-execution and credential service; Clockwork remains a separately installed
-activation and process-history service.
+## Prepare the operation
 
-The primary deployer also discovers registered named libraries in Annals'
-`catalog.db`. It records identity and paths, fences new command admission,
-drains admitted work, takes consistent per-library backups, and journals
-schema migrations. Rollback restores each changed library from its own backup.
-Schema 6 stores default instruction revision 1 without attributing it to legacy
-examinations; existing source, graph, kind, spool, and instruction history are
-preserved. Registered names are not evidence of runtime readiness.
+1. Select the exact installation and effect. An ordinary update preserves the
+   active library and spool. Fresh state replaces them and requires explicit
+   destructive authority. Decisions provisioning owns only the separate
+   decisions state and `annals/decisions-inbox`.
+2. Select binaries and both provider bundles from a validated source candidate.
+   Ordinary delivery uses `cell-ci submit COMMIT`; its manager integrates,
+   validates, attempts bounded repairs, deploys, and emails the outcome.
+   Use the commands below for separately authorized manual operations.
+3. Check the reachable Nucleus binary and socket, compatible Clockwork, and the
+   current user's graphical session before macOS activation. Keep Nucleus
+   installation and authentication under Nucleus's own procedure.
+4. Prepare the complete private Bazaar `cell.prompts.annals` selection. Import
+   the reviewed migration seed before deploying these callers. Runtime reads
+   do not initialize state or supply missing text. Read `annals.work.integrate`
+   for the format and exact-version policy. For the original seed, review
+   `prompting/seed.json`, then run this explicit import from the Cell checkout:
 
-New libraries use `annals library create NAME`. Creation and ordinary
-installation add no named-library schedules and do not automatically register
-existing primary or decisions paths as names. The decisions provisioner retains
-its separate admission and binding authority.
+   ```sh
+   cargo run --locked --offline --package cell-prompts -- \
+     /absolute/private/bazaar.sqlite3 prompting/seed.json
+   ```
 
-## Deploy or update
+   The importer initializes only that selected private path, preserves unrelated
+   IDs, reuses identical latest text, and publishes each selection after its
+   components exist. An interrupted import can leave unused versions; repeat
+   the same import and inspect history after uncertain writes. Publication is
+   per owner, without an atomic all-requester cutover. Verify exact referenced
+   versions through Bazaar before deployment. Use the same database for all
+   callers of the product; an interactive override does not configure a
+   scheduled environment. Preserve selection version 1 and its components.
+5. Check capacity for release, backups, migration, and recovery writes. A closed
+   inbox storage gate alone does not reject deployment. A probe error or failed
+   write does. Do not clear user data or lower or disable the reserve without
+   explicit consent for the exact target and scope.
+6. Prove ownership of the complete selected Clockwork definition, rendered
+   legacy plist, and command/provider selectors before mutation. Stop on
+   foreign, changed, or uninspectable state. Do not mutate the same binding
+   concurrently. Retain prior state and exact transaction identities.
+7. Hold new affected work and drain admitted commands and durable dependency
+   jobs before replacement. A candidate cannot fence an older installed
+   command that lacks maintenance support. Use that installation's supported
+   deployer and quiescence route for its compatibility update.
 
-For ordinary CI delivery, submit a committed candidate with `cell-ci submit COMMIT`.
-The manager integrates, validates, attempts bounded repairs, deploys, and emails
-the outcome. For an explicitly authorized manual installation or recovery, use
-artifacts from a validated source candidate:
+## Deploy or update on macOS
+
+1. Run the candidate installer from the Cell root with absolute inputs:
 
 ```sh
 cd /Users/joey/rust/cell
@@ -40,85 +67,27 @@ cd /Users/joey/rust/cell
   --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
 ```
 
-The deployer stages a complete content-addressed release and checks candidate
-programs and the Nucleus boundary. It starts Annals maintenance, drains
-scheduled work, and performs supported migration. It then switches the release
-and exact Clockwork definition digest, and checks the installed commands.
-The definition is first registered inactive. Before the deployer disables or
-replaces a binding, it verifies the current release and compares every stored
-executable-definition field with it. A foreign definition with the same key
-stays untouched. The first handoff similarly removes only an exactly owned
-legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
-Clockwork.
+2. Let the installer stage and verify the complete release, establish
+   maintenance, drain owned activation, back up each selected library, migrate
+   supported schemas, switch exact selectors/binding, and check installed
+   commands. Preserve operator pauses and pre-existing disabled schedules.
+   Stop if ownership, drain, migration, or restoration is unproved.
+3. Use `ANNALS_UPDATE_WAIT_SECONDS` only for the documented inbox-lock wait
+   when necessary; its default is 3,900 seconds. `--no-start` leaves scheduler
+   state unchanged and does not complete a scheduled installation.
+4. Select only the boolean `enabled` deployment setting when the coordinator
+   needs an override. `{"annals":{"enabled":false}}` keeps both owned inbox
+   bindings disabled after activation. Omission preserves captured intent and
+   a new schedule defaults enabled; recovery preserves prior intent and ignores
+   the override. Preserve incident halts and operator pauses.
+5. Run the verification below. Release only the operation's maintenance and
+   pause after complete matching evidence. Do not clear Clockwork incident
+   halts through deployment.
 
-Definition inspection and binding mutation are not a compare-and-swap.
-Concurrent same-user direct Clockwork mutation of `annals/inbox` during deploy
-or migration is unsupported; reinspection detects attributable changes where
-possible, fails the handoff closed, and may retain maintenance for recovery.
+## Provision the dedicated decisions library
 
-The immutable definition requests run-at-load and a 300-second interval. It
-skips overlap and has no activation timeout. It pins the native release-local
-Rust Annals runner by SHA-256. The runner executes only its sibling
-release payload as `annals --quiet inbox run` in the Annals state directory
-with an explicit nonsecret environment and umask `077`. Clockwork records
-process outcomes but does not inspect Annals domain state or ingest
-Annals-owned log bodies.
-
-The inbox storage gate is not a deployment lock. A closed gate does not by
-itself reject an Annals deployment, globally stop the Nucleus service or
-independent Nucleus jobs, or block another product's deployment. The deployer
-still needs enough physical capacity to stage the release and write its backup,
-migration, and rollback artifacts; any of those writes can fail
-when the shared filesystem is actually full. A probe error is distinct from a
-measured closed gate and can fail deployment status inspection with
-`storage_probe_failed`. A deployment request authorizes only the deployer's
-documented effects. It does not authorize a model or agent to clear user data
-as separate storage remediation or to lower or disable the reserve. Either
-action remains a user decision requiring explicit consent for the exact target
-and scope.
-
-An ordinary pre-commit failure restores the captured release, configuration,
-library, and spool, then restores the exact prior Clockwork definition only if
-its binding was enabled, or restores the legacy LaunchAgent, never both. A
-previously absent or disabled binding stays disabled without transient
-activation; its inactive selected digest may remain the candidate digest. If
-that exclusive restoration cannot be proved, Annals leaves unproved scheduler
-state untouched, keeps maintenance, removes its public selectors, and retains
-private recovery material. Do not remove maintenance markers, edit
-receipts, or swap database files manually after interruption. Run the exact retained
-`annals-install recover TRANSACTION_PATH`; it proves the product journal and
-release evidence before restoring pre-commit state or completing a committed
-operation. Recovery material is retained in `backups/deployments/`.
-
-Database restoration copies each retained backup through SQLite. Copying progress
-does not consume the one-minute lock-wait allowance. Recovery stops if database
-access remains blocked for that interval. After a copy completes, recovery
-checkpoints the restored database and retains its WAL coordination files. A
-blocked checkpoint retains maintenance and the transaction for recovery.
-
-The attended migration from the former system LaunchDaemon uses a narrower
-handoff. Its child fresh-state deploy keeps Annals maintenance in place and
-renders the exact Clockwork definition, but does not register or select it.
-The outer migration verifies that inert file and durably records its committed phase
-before registration or binding selection, so the definition never points at a
-state root that rollback can move away. RunAtLoad remains maintenance-gated
-while the outer migration registers the definition, records its digest,
-selects `annals/inbox`, and retires the system files. It clears maintenance
-only after `system/org.annals.inbox` is proved absent and those steps complete.
-A failed bootout or still-loaded service retains the legacy files,
-transaction, and maintenance marker. A committed interruption retains the
-transaction and handoff so a rerun can finish the same definition and binding
-idempotently. Before commit the migration accepts only an absent Clockwork
-binding or a disabled tombstone with no selected digest. Legacy plist removal
-and restoration additionally require the complete file to match Annals'
-rendered template, expected owner, and mode. A familiar label or executable is
-not ownership, and an extra launchd key is treated as foreign.
-
-## Provision the decisions library
-
-The dedicated decisions account library is a separate, explicitly authorized
-installation surface. After the primary installer has produced a verified
-immutable content release, run as the current (non-root) user:
+1. Complete and verify the immutable primary content release first.
+2. Invoke its exact release-local installer as the current non-root user:
 
 ```sh
 release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-release-id>"
@@ -128,121 +97,135 @@ release="$HOME/Library/Application Support/Annals/install/releases/<64-hex-relea
   --clockwork /Users/joey/.local/bin/clockwork
 ```
 
-The Rust provisioner is the exact release-local installer in the strict
-`cell-install-v2` file inventory. Its configuration and native definition
-rendering are compiled into those admitted bytes. A source sibling, mutable
-selector, or tampered executable is rejected before state or binding mutation.
+3. Check the returned `data`: `contract_version`, absolute config path,
+   persistent library ID, Clockwork key and digest, selected/enabled booleans,
+   maintenance state, and release ID. Check the decisions config, library,
+   spool identity, and immutable `decisions` role agree.
+4. Preserve private `0600`, operator-owned regular files with one hard link
+   for existing config, database/sidecars, spool controls, and maintenance
+   state. Require distinct private stdout/stderr logs. Stop on foreign owner,
+   symlink, hard link, broader permissions, changed binding, or general role.
+5. Use `--keep-maintenance` only for an outer authorized cutover. A successful
+   later invocation without it releases only that receipt's hold; an unrelated
+   maintenance marker stays engaged. `--home` selects an explicit alternate
+   home. `--release-root` must be the content-addressed directory, not `current`.
 
-This authorizes creation or supported migration only under
-`$HOME/Library/Application Support/Annals/decisions` and registration or
-switching only of `annals/decisions-inbox`. It does not deploy release bytes,
-change Nucleus, or inspect or mutate the primary `annals/inbox` binding. It
-shares Annals' product-wide `install/.update-lock`, so it cannot race the
-primary deployer.
+This procedure creates or migrates only
+`$HOME/Library/Application Support/Annals/decisions` and selects only
+`annals/decisions-inbox`. It serializes with the primary update lock and changes
+neither the primary inbox binding nor Nucleus. A failed pre-commit operation
+restores captured state and the exact prior enabled intent. If that restoration
+cannot be proved, keep maintenance and use the retained transaction.
 
-The provisioner validates the complete release and selected prior definition.
-It creates and binds fresh state outside live paths, then starts maintenance
-before a run-at-load definition can be selected. It registers the candidate
-inactive, drains an enabled owned prior binding, and takes a consistent backup
-before migration. It checks inbox and feed readiness, then switches the exact
-definition.
+## Operate run-owned admission
 
-Fresh state has the immutable `decisions` role. A `general` database fails
-readiness even if its persistent ID matches the config. Foreign or
-concurrently changed state stops the operation. A pre-commit failure restores
-captured state and the exact prior selection and enabled state. A previously
-disabled schedule stays disabled throughout recovery. If exact restoration
-cannot be proved, the library retains maintenance. The provisioner disables
-only an attributable candidate and reports retained transaction material for
-recovery.
+Use `annals-install adapter` for the Cell coordinator interface.
 
-Before opening existing state, the provisioner requires its config, database
-and SQLite sidecars, spool identity and control files, and maintenance files to
-be operator-owned `0600` regular files with one hard link. It creates or
-validates distinct private stdout and stderr log files before selection. A
-symbolic link, extra hard link, foreign owner, or broader mode fails closed.
-
-Success emits a single JSON envelope whose `data` contains contract version,
-absolute config path, persistent library ID, Clockwork key and definition
-digest, selected/enabled booleans, maintenance state, and release ID. With
-`--keep-maintenance`, an Annals-owned receipt leaves the decisions gate engaged
-for an outer Krisis/Semantics cutover. A later successful invocation without
-that option clears only that matching owned hold. A pre-existing unreceipted
-maintenance gate remains engaged.
-
-## Run-owned deployment admission
-
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
-
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
+1. Choose one valid run ID: 1–128 ASCII letters, digits, hyphens, underscores,
+   or periods, with no leading period.
+2. Inspect and hold the exact library admission boundary:
 
 ```text
 annals --library DATABASE --json maintenance status
 annals --library DATABASE --json maintenance hold RUN_ID
+annals --library DATABASE --json maintenance status
+```
+
+3. Wait for `drained` and also prove durable Annals and Nucleus work is settled.
+   This read alone describes command admission. An unavailable existing
+   Nucleus service is not an empty job inventory. Do not cancel or retry to
+   manufacture drain.
+4. Use a controlled `CELL_DEPLOYMENT_RUN_ID` only with that sole matching hold
+   and exclusive drained activity. Stop on an unknown owner or incomplete
+   recovery. Follow the coordinator's apply, configure, verify, release, then
+   activate order. Configure keeps scheduling disabled; activation restores
+   captured enabled intent after all affected holds are released.
+5. Release only the hold owned by this run:
+
+```text
 annals --library DATABASE --json maintenance release RUN_ID
 ```
 
-These commands use the private sibling `<database>.cell-maintenance` without
-opening, initializing, or migrating the database. Status leaves an absent
-gate absent. Its standard `ok/data` envelope contains `protocol_version: 1`,
-`contract_version: 1`, all `holds`, and `drained`. Drain describes live command
-admission; the product adapter must also prove durable work and dependency
-jobs are settled before relying on domain quiescence.
+Corpus/feed reads and inbox pause/interrupt remain available while held.
+Release preserves operator pauses and scheduling incident halts.
 
-Holds atomically fence new mutations and survive process exit. Existing
-commands may finish. Hold and release are idempotent, and release removes
-only its named owner. Read-only corpus/feed commands and inbox pause or
-interrupt remain available. Operator pause is never cleared by deployment.
-Run IDs have 1–128 ASCII letters, digits, hyphens, underscores, or periods and
-cannot begin with a period. Invalid IDs or unprovable admission fail closed.
+## Recover an interrupted installation
 
-A controlled installer command can set `CELL_DEPLOYMENT_RUN_ID` only for the
-same sole hold and exclusive drained activity; with no hold, the command uses
-ordinary admission. Annals Usage doctor can prove intentionally held Nucleus
-readiness for this same owner through the typed deployment-health interface;
-that proof does not enable normal Nucleus job submission.
-
-The Cell adapter explicitly composes the primary deployer and this exact
-release's decisions provisioner, preserves operator pauses and prior schedule
-enabled booleans, and does not choose a legacy activation watermark. It first
-requires maintenance support from the installed CLI. Unsupported old binaries
-stop coordinated inspection before effects and need one compatibility update
-through the existing deployers and quiescence procedure; the new candidate
-cannot fence an old binary. Recovery invokes each retained product transaction with the matching outer
-run owner before it verifies the recovered installation. Unknown ownership,
-changed evidence, or incomplete recovery retains the outer hold.
-
-## Fresh-state cutover
-
-`--fresh-state` is a distinct destructive operation for a documented schema
-boundary:
+1. Select the retained `install/transaction.primary.OWNER` or
+   `install/transaction.decisions.OWNER` journal. Do not delete maintenance,
+   rewrite receipts, exchange database files, or rely on a release selector
+   as proof of database compatibility.
+2. Run the exact retained candidate installer when public commands are
+   suspended; otherwise use its verified installed selection:
 
 ```sh
-./target/release/annals-install install \
+"$HOME/.local/bin/annals-install" recover \
+  "$HOME/Library/Application Support/Annals/install/transaction.primary.OWNER"
+```
+
+3. Let recovery restore pre-commit state through SQLite backup or finish the
+   committed handoff. Its one-minute wait covers blocked database access,
+   not copying progress. A blocked restoration checkpoint keeps maintenance
+   and the transaction. Recovery material is retained in `backups/deployments/`.
+4. Check exclusive scheduler restoration and matching release/library/spool
+   state. A previously disabled binding stays disabled; failed proof can leave
+   public selectors removed and maintenance engaged. Stop until exact journal
+   recovery succeeds. Coordinated recovery uses the same outer run owner.
+5. Run verification before releasing this operation's boundary. Nucleus
+   credentials stay outside binary or database rollback.
+
+## Replace a pre-version-3 library
+
+1. Obtain explicit destructive authority and verify the prior-state backup,
+   uncompleted-backlog import plan, and recovery plan.
+2. Run the macOS install command with `--fresh-state`. Do not add `--no-start`.
+3. Verify `rollback_generation` and `imported_backlog` in
+   `install/last-update.json`, the fresh library/spool pair, and queued count.
+   The operation moves old library/WAL/spool into `backups/generations/`,
+   preserves source bytes and lane order, and gives imported items new unstarted
+   identities. Attempted processing jobs become terminal and are not rerun.
+4. Check the fresh-state pause transition before activation: this distinct
+   operation clears the operator pause while maintenance still blocks dispatch,
+   then commits, removes maintenance, and wakes the worker. Retain the old
+   generation for explicit recovery. An obsolete `usage.db` and sidecars are
+   retained inside the uncommitted transaction for rollback and discarded only
+   after successful commit.
+5. Verify the installation. Do not infer fresh-state authority from an update
+   request or delete its retained generation.
+
+## Migrate a root-owned macOS installation
+
+1. Select a validated candidate and verify the old system state and rollback
+   plan. Log into the operator's graphical session.
+2. Require `annals/inbox` to be absent or a disabled tombstone without a
+   selected digest. Stop on any selected digest, enabled or disabled.
+3. Run the attended migration from the Cell root:
+
+```sh
+sudo ./target/release/annals-install migrate-to-user \
   --binary <ABSOLUTE_ANNALS_BINARY> \
   --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
   --bundle "/Users/joey/rust/cell/annals/chancery/annals" \
   --usage-bundle "/Users/joey/rust/cell/annals/chancery/annals-usage" \
   --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
   --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
-  --clockwork <ABSOLUTE_CLOCKWORK_BINARY> \
-  --fresh-state
+  --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
 ```
 
-It replaces the active library and spool as one rollback generation, imports
-the uncompleted backlog in preserved lane order, and resumes only after the new
-generation passes its checks. Require explicit authority, retained prior state,
-and a verified backlog/recovery plan. It must not be inferred from a routine
-update request.
+4. Let the migration disable and drain `system/org.annals.inbox`, move its whole
+   state on one filesystem with WAL sidecars, rewrite the two legacy absolute
+   paths, and perform the authorized fresh-state transition. It retains the
+   old library/spool generation and imports only uncompleted sources.
+5. Check the inert child definition and retained outer committed phase before
+   Clockwork registration/selection. Keep maintenance until the system job is
+   proved absent and exact legacy-file retirement is complete. Never run both
+   the system job and Clockwork binding intentionally together.
+6. Stop if bootout or retirement fails. Keep files, transaction, and maintenance.
+   A pre-commit failure restores old state without registering a definition.
+   After outer commit, rerun the same migration to finish the retained handoff
+   idempotently. Require the complete legacy plist, owner, and mode to match
+   Annals' template; a matching label or executable is insufficient.
+7. Run installed verification and preserve recovery material.
 
 ## Verification
 
@@ -261,87 +244,148 @@ After an authorized cutover, verify:
 
 Resume only the pause or maintenance boundary established for deployment.
 
-Installed libraries, spools, rollback generations, logs, and Nucleus output
-may contain complete private source and model context. Preserve private
-ownership and permissions. Deployment does not authorize
-`annals/release.sh`, deletion of prior recovery material, or a fresh-state
-replacement.
 
-There is no supported raw path-only retirement sequence. A shared Clockwork
-key, launchd label, command pathname, or provider pathname is not ownership;
-leave it intact unless a product-owned operation has proved the exact current
-definition, fully rendered legacy plist, and selector targets before mutation.
+For a decisions installation, also read its explicit config's
+`decision-feed watermark` and inspect `annals/decisions-inbox`. Check the
+installed Chancery product overview, list, feature `show`, and operation
+`resolve`; documentation presence is separate from runtime readiness.
 
-The deployment adapter verifies library statistics, inbox status, the decisions
-feed watermark, and Annals Usage doctor while preserving operator pauses.
-When Annals is selected for upgrade, verification requires the exact admitted
-candidate. When it participates only in maintenance, verification requires its
-installed release to remain identical to the captured inspection baseline.
-Verification does not create works, reconciliations, or Nucleus jobs.
+Run `annals --register-usage` and `annals-usage --register-usage` after installation
+or update. This registers command inventory without domain work.
 
-## Scheduled failure policy
+Keep full sources, instructions, corpus evidence, spools, model context, logs,
+and backups private. This procedure does not authorize Git publication,
+`annals/release.sh`, data cleanup, reserve reduction, prior-generation deletion,
+or raw path-only retirement. Any retirement must prove exact product ownership
+before mutation.
 
-Both `annals/inbox` and `annals/decisions-inbox` use Clockwork definition schema
-2 with `[failure] on_abend = "halt-until-approved"`. The release-local runner
-selects `inbox run --stop-on-failure`. This batch option stops after its first
-failed job, including an item-local source failure, and returns nonzero before
-claiming a successor. It does not create an Annals scheduling-pause record.
-Ordinary manual `inbox run` retains its item-local continuation behavior.
+## Linux installation and maintenance
 
-Clockwork retains the incident, halts later activations, and queues one email
-notification through `HOME/.local/bin/email`. Inspect `clockwork incident list
-annals/inbox` or the `annals/decisions-inbox` key and `clockwork incident show
-INCIDENT_ID`. Only explicit approval followed by `clockwork binding resume KEY
-INCIDENT_ID` releases that scheduling halt. Definition switches, deployment,
-Annals `inbox resume`, and dependency recovery do not release it.
+Use the packaged systemd route with a separately deployed and authenticated
+Nucleus service. Select explicit library/spool/socket paths and the service
+account. Read `annals.installation` for this platform's lifecycle and limitations.
+Run the remaining commands from the Annals source directory. They use the
+packaged paths; adjust configs and service if executables or the socket are
+elsewhere. The packaged service sets
+`ANNALS_USAGE_CONFIG=/etc/annals/usage.toml`.
 
-A low-storage readiness result, operator pause, maintenance, or empty queue is
-not an abend. A storage-probe or authentication error is an abend. Annals retains
-operator pauses, bounded retry-event halts, exact attempts, and domain recovery.
-Scheduling continuation neither retries a failed delivery nor clears these
-product controls. Existing failed archives are history, not new incidents.
+Build Annals, create a non-login service account, and install the files:
 
-Deployment settings accept only `enabled`. `enabled` must be a boolean.
-For example, `{"annals":{"enabled":false}}` keeps the candidate schedule
-disabled after group activation. This setting applies to both installer-owned inbox bindings. An omitted value preserves
-captured intent; a new schedule defaults to enabled. Recovery to the prior
-configuration preserves captured intent and ignores this override. Incident
-halts and operator pauses remain in force.
+```sh
+cargo build --release --package annals --package annals-usage
 
-## Command usage
+sudo groupadd --system annals
+sudo useradd --system --gid annals --home-dir /var/lib/annals \
+  --shell /usr/sbin/nologin annals
+sudo install -m 0755 ../target/release/annals /usr/local/bin/annals
+sudo install -m 0755 ../target/release/annals-usage \
+  /usr/local/bin/annals-usage
 
-After each installation or update, run `annals --register-usage` and
-`annals-usage --register-usage`.
-This registers command inventory without product work.
+sudo install -d -o root -g annals -m 0750 /etc/annals
+sudo install -d -o annals -g annals -m 0700 /var/lib/annals
+sudo install -d -o annals -g annals -m 0710 /var/spool/annals
+sudo install -d -o annals -g annals -m 0770 \
+  /var/spool/annals/incoming
+sudo install -d -o annals -g annals -m 0700 \
+  /var/spool/annals/queued \
+  /var/spool/annals/processing \
+  /var/spool/annals/done \
+  /var/spool/annals/duplicates \
+  /var/spool/annals/failed \
+  /var/spool/annals/skipped
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+sudo install -o root -g annals -m 0640 \
+  packaging/systemd/annals.toml /etc/annals/config.toml
+sudo install -o root -g annals -m 0640 \
+  packaging/systemd/usage.toml /etc/annals/usage.toml
+sudo install -o root -g root -m 0644 \
+  packaging/systemd/annals-inbox.service \
+  /etc/systemd/system/annals-inbox.service
+sudo install -o root -g root -m 0644 \
+  packaging/systemd/annals-inbox.timer \
+  /etc/systemd/system/annals-inbox.timer
+```
 
-## Bazaar prompt selection
+Adjust the executable and socket paths in the configs and service if Nucleus
+or Annals is installed elsewhere. Authenticate through the Nucleus service so
+login, account reads, and model jobs remain under its single credential
+authority:
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+```sh
+sudo -u annals env HOME=/var/lib/annals \
+  ANNALS_USAGE_CONFIG=/etc/annals/usage.toml \
+  /usr/local/bin/annals-usage login --device-auth
+```
 
-Read `cell.prompts.annals` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+The configured Nucleus service owns its private credential directory. Do not
+give Annals a second Codex home or invoke Codex directly as a fallback.
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+Initialize the library and enable the timer:
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+```sh
+sudo -u annals env HOME=/var/lib/annals \
+  /usr/local/bin/annals --config /etc/annals/config.toml init
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.annals --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+sudo -u annals env HOME=/var/lib/annals \
+  /usr/local/bin/annals-usage doctor \
+  --config /etc/annals/usage.toml
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now annals-inbox.timer
+```
+
+Check both configs select the same reachable Nucleus socket. No companion
+ledger is created.
+
+Inspect or trigger it with:
+
+```sh
+sudo systemctl start annals-inbox.service
+sudo systemctl status annals-inbox.timer annals-inbox.service
+sudo journalctl -u annals-inbox.service
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox status
+```
+
+Read `annals.inbox.operate` for status fields, pause, priority,
+interruption, retry, and delivery history. Run those commands as the `annals`
+service account with the explicit config path shown above.
+
+### Supply source files
+
+For an explicit priority handoff that also keeps the source file in place, use:
+
+```sh
+sudo -u annals /usr/local/bin/annals \
+  --config /etc/annals/config.toml inbox enqueue --priority ./report.md
+```
+
+Do not also copy that file into `incoming/`; the enqueue command has already
+created its queued job envelope.
+
+A direct copy is supported by the settling interval:
+
+```sh
+sudo -u annals cp -n ./report.md /var/spool/annals/incoming/report.md
+```
+
+For an atomic handoff, use a private staging directory beside the inbox. The
+final move is on the same filesystem and keeps the original basename:
+
+```sh
+sudo install -d -o annals -g annals -m 0700 /var/spool/annals/staging
+sudo -u annals cp ./report.md /var/spool/annals/staging/report.md
+sudo -u annals mv /var/spool/annals/staging/report.md \
+  /var/spool/annals/incoming/report.md
+```
+
+Do not overwrite an existing inbox pathname. Reusing a basename with different
+bytes may also conflict with the immutable work label derived from that name;
+Annals records that job as failed rather than silently changing the label.
+
+
+### Maintain the Linux service
+
+Stop `annals-inbox.timer` before maintenance. Let the active service finish
+before replacing executables, configuration, or library state. Restart the
+timer after readiness checks. Use `inbox pause` for ordinary dispatch control.

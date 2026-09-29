@@ -22,70 +22,44 @@ documentation dependency closure, facet and gap classification, and display.
 
 ## 2. Author a self-contained bundle
 
-For provider schemas 3 and 4, declare product authority and its limits. Name
-the class of public outcomes covered by the inventory and whether coverage is complete
-or partial within that class. State shared access, privacy, compatibility,
-retirement, and operating limits. Define the inventory class independently of
-the index.
+Read the required `chancery.bundle.validate` feature for the complete manifest,
+entry format, normalization, path rules, schema compatibility, and publication
+guarantees. Use `chancery resolve chancery.provider.publish` to include it with
+the catalog, resolver, usage, and maintained-terminology contracts.
 
-Use schema 4 to index an optional product overview with `overview` in
-`provider.json`. The path is relative to the bundle and must identify nonempty
-UTF-8 Markdown under the same path, size, and control-character rules as a
-manual. The overview explains product purpose, authority, and how features fit
-together. It has no separate contract version. `chancery product PROVIDER_ID`
-reads it with the provider inventory. Providers without an overview remain
-readable and explicitly report `not_published`. Do not replace installed
-content with repository links.
+Declare the product's authority, exclusions, and inventory class independently
+of the entry index. State whether coverage is complete or partial within that
+class. Select feature boundaries by the coherent outcomes readers need to
+understand and rely on. Keep one `capability` entry and full detailed manual for
+each feature. Keep its supported interfaces, behavior, data meaning,
+authority, lifecycle, failures, recovery, privacy, evolution, and limits there.
 
-Add or revise an explicitly indexed entry and its detailed manual under the
-product's owned provider source. Normalize consumers, preconditions, inputs,
-outputs, data semantics, identity and units, selected-record coverage and
-observation times, access, lifecycle and consistency, limits, evolution, and
-substantive reliances. For `completeness_and_freshness`, name the selected
-records or operation and explain its counts and timestamps. Use
-`not_applicable` when those measurements do not apply. Each claim must say
-`declared`, `unsupported`, `unspecified`, or
-`not_applicable`; do not infer a positive promise from silence. Keep stable IDs
-when semantics and authority remain compatible; increment the contract version
-for incompatible semantic changes.
+Index a schema-4 product overview to explain the whole product and how its
+features fit together. Give every entry a discriminative title and summary.
+Keep stable IDs and compatible contract versions; increment the contract
+version for incompatible meaning. Preserve supported operating routes.
 
-Declare contract-version bounds for other entries whose documented semantics
-are required. Those `dependencies` edges mean documentation compatibility,
-not runtime calls or data lineage. Publish substantive data, control,
-authority, readiness, and external reliances separately. A declared reliance
-without a dedicated installed contract remains an intentional resolver gap.
-Use ordinary Chancery entry references for related reading that is not a
-required contract. Those references do not affect compatibility or dependency
-closure. Required dependencies must remain acyclic; related topics can refer
-to each other.
+Normalize the same promise that the manual explains. Name the selected records
+or operation when describing counts, timestamps, completeness, and freshness.
+Retain explicit declared, unsupported, unspecified, and not-applicable claims;
+do not infer support from silence. Declare version-bounded required contracts
+and substantive reliances separately. An uncontracted reliance is an
+intentional resolver gap. Related references provide navigation only.
 
-Give each entry a distinct title and a summary of its user-visible result.
-An agent must be able to select plausible entries from that text. Use
-`use_when` and `do_not_use_when` to define the detailed selection boundaries.
+Publish procedures as operations when they coordinate capabilities or volatile
+session surfaces. Keep exact actions, prerequisites, consequential effects,
+authority, success evidence, checkpoints, recovery, privacy, exclusions, and
+stop conditions in the procedure. Put the full behavioral explanations in its
+required feature contracts. The procedure's ordinary `show` page must remain
+usable; `resolve` assembles required features once each. Use semantic UI actions
+instead of volatile selectors or pixel coordinates. There is no include engine
+or workflow executor.
 
-A feature is one coherent capability contract and its detailed manual. Keep
-`kind: capability`; do not create parallel feature and capability records for
-the same promise. Put the feature's full behavior, interfaces, data meaning,
-lifecycle, recovery, access, compatibility, and material limits in that page.
-An operation supplies the procedure that uses its required features.
-
-The manual is the complete ordinary `show` view. Include applicability,
-interfaces, effects, authority, success, recovery, privacy, exclusions, and
-operation checkpoints. Keep prerequisites, consequential effects, stop
-conditions, and all other operating essentials with the procedure. Readers must
-be able to carry out its steps without the source tree or structured authoring
-fields. Detailed behavioral explanations can live in required feature
-contracts; `resolve` assembles those complete documents once each. Chancery
-does not expand Markdown includes or selected sections. Keep normalized claims
-aligned with the manual for `resolve`. Ordinary `show` does not repeat those claims;
-`show --full` includes all authoring fields. Review both views before
-publication. Structural validation cannot establish that the prose is complete.
-
-For a cross-capability or UI-dependent procedure, publish an `operation`.
-Describe goals, participant capabilities, semantic UI actions, checkpoints,
-proof, authorization, adaptation, recovery, and stop conditions. Never encode
-volatile selectors, pixel positions, or claims that Chancery will orchestrate
-the participants.
+Review `show`, `show --full`, and `resolve`. Keep prose and normalized claims
+aligned. Structural validation cannot prove that a manual is complete. Remove
+competing explanations from older documents and replace them with entry points
+to the product-owned installed content. Keep public details in the published
+bundle rather than substituting repository links.
 
 ## 3. Validate before changing installed state
 
@@ -102,9 +76,11 @@ participate in installed discovery.
 
 ## 4. Couple documentation to the product release
 
-Stage the exact bundle under the product's content-addressed release, normally
-as `share/chancery/PROVIDER_ID`. Include its bytes in the release identity and
-integrity manifest. The product installer owns exactly its selector under:
+Stage the exact bundle as `share/chancery/PROVIDER_ID` under the owning
+content-addressed release. Include its bytes in the release identity and
+integrity manifest. Follow the required `chancery.bundle.validate` publication
+guarantees and the product's own installation contract. The product installer
+owns exactly its selector under:
 
 ```text
 ~/Library/Application Support/Chancery/providers/PROVIDER_ID
@@ -125,7 +101,13 @@ When schema compatibility and providers change together, deploy the compatible
 Chancery reader first, then provider releases, then any cross-system operation
 bundle, and only then make a global bootstrap depend on the new catalog.
 
-After product deployment:
+After product deployment, run each updated participating program's exact
+`--register-usage` mode through its owning installation procedure. Registration
+is separate from bundle publication and binary selection. Preserve existing
+history and stop on unsupported journal state; read `chancery.usage.operate`
+for recovery.
+
+Read the installed publication:
 
 ```sh
 /Users/joey/.local/bin/chancery doctor

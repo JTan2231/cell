@@ -21,4 +21,4 @@ RELEASE_UNITS='clockwork|Clockwork|package|clockwork/crates/clockwork/Cargo.toml
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='clockwork|target/release/clockwork|clockwork
 clockwork|target/release/clockwork-install|clockwork-install'
-PROVIDERS='clockwork|clockwork|clockwork/chancery|3'
+PROVIDERS='clockwork|clockwork|clockwork/chancery|9'

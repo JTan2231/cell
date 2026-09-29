@@ -55,7 +55,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "SQLite waits up to five seconds for lock contention. Content and complete version lists are held in memory. There is no service-level latency, content-size, or throughput guarantee."
+        "statement": "SQLite waits up to five seconds for lock contention. Content and complete version lists are held in memory. There is no service-level latency, content-size, or throughput guarantee. A connection is not shared concurrently between threads; callers can open independent handles."
       }
     ],
     "compatibility_and_evolution": [
@@ -79,7 +79,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Get returns id, version, and exact content. History returns the ID and every retained version number in descending order. Rust methods return Record or Vec<i64> with typed errors. CLI results use schema-one JSON."
+        "statement": "Get returns id, version, and exact content. History returns the ID and every retained version number in descending order. Rust methods return Record or Vec<i64> with typed errors. CLI results use schema-one JSON. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error."
       }
     ],
     "completeness_and_freshness": [

@@ -1,198 +1,171 @@
 # Install and operate EMT
 
-EMT's root is ~/Library/Application Support/EMT. Its installer stages the
-binary, matching installer and Chancery bundle in an immutable cell-install-v2
-release. Clockwork owns emt/worker. Installation, initialization,
-configuration, admission and scheduling are separate effects.
+Use this operation to install matched EMT bytes, configure an installation,
+activate its worker, inspect readiness, take a drained backup or recover a
+coordinated update. EMT owns its configuration, correspondence, maintenance
+holds and installation. Clockwork owns the worker schedule and failure halt;
+Nucleus owns jobs; Email owns transport and credentials.
 
-## Prepare and activate
+Read required features `emt.service`, `emt.incident.respond` and
+`emt.quota-notices` for detailed behavior, authority, record meaning, deadlines
+and recovery. This procedure keeps its operating prerequisites, consequential
+effects, stop conditions and verification here. Reading it does not authorize
+live jobs, account reads, messages, installation or activation.
 
-After separately authorized installation:
+## Prepare dependencies
 
-~~~sh
-emt init
-emt configure --receiving-domain YOUR-RECEIVING-DOMAIN --cell-root /absolute/cell
-emt doctor
-emt resume
-emt schedule enable
-~~~
+1. Establish authorization for the selected action. Activation permits automatic
+   investigation, account receiving reads and incident email. Agents have
+   unrestricted current-user execution with Codex approval prompts disabled;
+   recognized replies authorize one-off interventions and do not authenticate
+   the sender. An older reply does not approve a newer halt.
+2. Select compatible Email send, receiving and account interfaces, Nucleus with
+   invocation policy version two and `workspace-unrestricted`, Clockwork incident
+   feed and notification handoff, and Iatreion read-only service checks.
+3. Review the prompt migration seed and select the intended private database.
+   Run the explicit importer from the Cell checkout before deploying callers:
 
-Init creates schema-one state and paused configuration. Configure also accepts
---agent-cwd, --model, --email-executable and --clockwork-executable. Omitted
-values remain unchanged. Changes require paused admission and drained work.
-The receiving domain must belong to Email's configured receiving account.
-EMT stores no credentials.
+   ~~~sh
+   cargo run --locked --offline --package cell-prompts -- \
+     /absolute/private/bazaar.sqlite3 prompting/seed.json
+   ~~~
 
-The default agent cwd is the user's home, with local execution and unrestricted
-current-user filesystem, process, local socket, and network access. Approval
-prompts are disabled. This is deliberate operational authority. Cell source is
-supplied separately. Nucleus must support invocation policy version two and
-advertise `workspace-unrestricted` before EMT submits new assignments.
+   The importer initializes only that selected path and publishes selections
+   after their components exist. Read `cell.prompts.emt` with Bazaar's `get`
+   interface and verify all exact referenced versions. Preserve selection version
+   1 and its components. Repeat the same import after interruption; inspect
+   history after an uncertain write. Deployment and runtime reads create no
+   missing text. Use an absolute `CELL_BAZAAR_DATABASE` override only when that
+   database is also configured for the caller; an interactive override does not
+   configure Clockwork's scheduled environment.
+4. Resolve the receiving domain through Email `receive settings` before
+   maintenance if none was supplied. Use an explicit domain when the account
+   result is empty or ambiguous; do not inspect received mail to infer settings.
+5. Select an existing stable absolute Cell root and absolute provider and agent
+   paths. Refresh all active generated Clockwork broker plists to the compatible
+   release before EMT routing. Stop if an old broker can run while claims exist.
 
-Before EMT resume, deploy Clockwork's incident-feed and notification-handoff
-interfaces and refresh all active generated broker plists to that release.
-An older pinned broker ignores EMT claims. Routing uses a version-one
-metadata sidecar beside Clockwork's unchanged schema-two database. Never
-run old brokers while claims exist.
+Stop if authority, dependencies, prompt selection, receiving domain, ownership
+or stable configuration cannot be established. Compatible installed documents
+alone do not prove readiness.
 
-Install compatible Iatreion for Clockwork's bounded read-only service checks.
-Both basic alerts and EMT diagnosis use the shared Clockwork notification
-policy: five failed checks at least 60 seconds apart by default. Configure its
-threshold and interval with `clockwork notification policy`; EMT supplies its
-configured stable `cell_root` when advancing checks. Keep Clockwork's
-`notification-checks.json` with its routing metadata and incident database in
-backups. This gate delays alerts and diagnosis, not the scheduling halt.
+## Install before initialization
 
-Doctor checks local configuration/schema, SQLite quick_check, the Clockwork
-feed interface, Nucleus health and Email executable presence. It submits no
-job and sends no mail. Returned Nucleus health is an observation. Email
-receiving permission and final delivery remain not_probed.
+1. Select separately authorized matched program, installer and provider bytes.
+2. Run `emt-install install --binary ABS --bundle ABS`. Use shared `--home` and
+   `--expected-current` options when needed to select and guard the installation.
+3. Verify that the selected binary and provider release match. Run
+   `emt --register-usage` to register command inventory without product work.
 
-## Worker and admission
+This installs bytes without initializing state, starting agents, sending mail
+or enabling a schedule. Use the coordinated procedure below for initialized
+updates; direct initialized selector recovery is unsupported.
 
-~~~sh
-emt schedule status
-emt pause
-emt schedule disable
-~~~
+## Initialize, configure and activate
 
-The worker runs every 15 seconds without run-at-load, skips overlap and has a
-300-second activation timeout. It does not wait for model completion. Ordinary
-Nucleus or Email unavailability is reported as waiting. Unexpected local state
-or Clockwork interface failure exits nonzero and can halt emt/worker, whose
-alert always uses Clockwork's basic path.
+1. Run `emt init` to create schema-one state and paused configuration.
+2. Run `emt configure --receiving-domain DOMAIN --cell-root /absolute/cell`.
+   Select `--agent-cwd`, `--model`, `--email-executable` or
+   `--clockwork-executable` only as needed. Omitted values remain unchanged.
+   Keep admission paused and work drained during configuration changes.
+3. Run `emt doctor`. Verify local schema, SQLite check, Clockwork interface,
+   Nucleus health and Email executable presence. Receiving permission and final
+   delivery remain `not_probed`; stop if a required observation is unavailable.
+4. Run `emt resume` after activation is authorized. This validates configuration,
+   configures the Clockwork EMT route and opens admission. It does not enable
+   scheduling or approve a failure halt.
+5. Run `emt schedule enable`. Inspect `emt schedule status` and
+   `emt --json status` to verify the intended schedule and admission states.
 
-EMT pause, disabled scheduling, deployment holds and failure halts are distinct.
-Install, schedule switch and EMT resume never clear a failure halt. Inspect
-and approve its exact ID with clockwork binding resume emt/worker INCIDENT_ID.
+The worker may read accounts, start authorized agents and submit email. EMT
+stores no credentials. Worker output uses counts and bounded waiting codes;
+explicit exchange reads expose private correspondence. Keep state and backups private.
 
-## Installation and updates
+## Inspect, pause or recover a worker
 
-Before initialization, emt-install install accepts --binary ABS --bundle ABS
-and shared --home and --expected-current options. It installs bytes without
-initializing state, running agents, sending mail or enabling a schedule.
+1. Read `emt --json status`, `emt schedule status` and `emt maintenance status`.
+   Treat counts as retained records, not lifetime totals or product health.
+2. Run `emt pause` when discovery must stop. Admitted exchanges and frozen
+   deliveries continue. Run `emt schedule disable` when worker scheduling must
+   also stop; schedule state and admission pause are separate.
+3. Inspect an unexpected worker failure through Clockwork and the owning product
+   interfaces. Ordinary dependency unavailability can be waiting; a nonzero
+   worker activation can create an exact `emt/worker` halt.
+4. Resume an exact failure halt only when explicitly approved, with
+   `clockwork binding resume emt/worker INCIDENT_ID`. Do not substitute
+   `emt resume`, installation or a schedule switch for this approval.
+5. Verify current schedule, pause, holds and halt evidence before reopening
+   authorized admission with `emt resume` or enabling the schedule.
 
-Initialized updates use `./deploy.sh emt`. The coordinator captures configuration
-and worker intent, disables the worker, holds and drains EMT, installs the matched
-release and provider, selects a disabled exact worker definition, and verifies
-readiness. It releases admission and restores enabled state. Existing pauses
-and failure halts remain. Configuration must be valid before maintenance.
-A requester-only update leaves Nucleus admission open. Nucleus replacement
-waits for EMT's existing exchanges before holding the service.
+Preserve unknown outcomes. Inspect the saved exchange, Nucleus activity and
+affected product state before repeating an external action. Do not create an
+automatic replacement job or a new mail identity. Keep frozen quota-notice
+records; deleting one to retry delivery is unsupported.
 
-~~~sh
-emt maintenance hold OWNER
-emt maintenance status
-emt maintenance drain
-emt maintenance release OWNER
-emt migrate --backup /absolute/private/emt-backup.sqlite3
-~~~
+## Maintain and back up
 
-Drain advances existing exchanges without discovering more incidents or mail.
-Status reports protocol_version, holds, drained and outstanding exchanges.
-Unknown counts are not zero. Nucleus restart cannot resume old agent processes.
+1. Validate configuration and capture current pause, schedule and failure-halt
+   intent before maintenance.
+2. Run `emt maintenance hold OWNER` for the exact operation owner.
+3. Run `emt maintenance drain` and inspect `emt maintenance status`. Drain
+   advances existing exchanges without discovering new incidents or mail.
+   Require `drained` and known outstanding counts; unknown is not zero.
+4. Run `emt migrate --backup /absolute/private/emt-backup.sqlite3`. Select a
+   destination separate from the live database and configuration. Preserve the
+   database and companion `.config.json`; existing destinations must match and
+   are never overwritten. With no database, migration initializes paused state
+   and reports `backup:null`.
+5. Preserve `quota-notifications/` and Clockwork's `notification-checks.json`,
+   routing metadata and incident database with their private backups. EMT
+   backups do not restore Nucleus or Email records.
+6. Release only this operation's hold with `emt maintenance release OWNER`
+   after verification. Recheck the captured operator intent and exact halt.
 
-Migration accepts only EMT schema one. Existing drained state is copied into
-the database backup and a companion .config.json file. Backups contain
-correspondence. Existing destinations must match and are never overwritten.
-The coordinator stores these backups in EMT's state directory. The backup
-destination must be absolute and separate from the live database and config.
-With no database, migration initializes paused state and reports backup:null.
+Stop on unsupported schema, failed backup verification, unknown drain,
+unestablished hold ownership or unresolved external effects. Never release
+another owner's hold or silently resume a halt. Nucleus restart cannot resume
+old agent processes.
 
-Direct selector recovery is unsupported for initialized EMT. Use maintained
-coordinator recovery and retain unresolved holds. Backups do not restore
-Nucleus or Email records. Never release another operation's hold or silently
-resume a halt.
+## Update and recover through the coordinator
 
-EMT declares Email, Nucleus and Clockwork dependencies. Nucleus maintenance
-includes EMT. Shared cleanup recognizes EMT's root and preserves active pins.
-See emt.incident.respond for standing authority, agent policy, record meaning,
-notification ownership, deadlines and recovery.
+1. Run the authorized initialized update through `./deploy.sh emt`. The
+   coordinator captures configuration and worker intent, disables the worker,
+   holds and drains EMT, records migration evidence, installs matched bytes,
+   selects a disabled exact definition and verifies readiness before release.
+2. Supply setup configuration or `enabled` and `paused` intent only when
+   authorized. Omitted settings preserve saved values. Fresh valid deployment
+   defaults to activation after verification; an existing absent binding remains
+   absent unless activation is explicitly requested. Incoming-mail progress
+   changes are not setup inputs.
+3. Verify the retained coordinator migration receipt, completed schema and
+   original backup digests. Confirm restored pause, enabled state and existing
+   failure-halt evidence. A requester-only update leaves Nucleus admission open;
+   Nucleus replacement waits for EMT exchanges before holding the service.
+4. Run the next authorized ordinary `./deploy.sh emt` command after an
+   interrupted phase to let the coordinator recover its retained transaction.
+   Read `nucleus manual` for shared coordination. Reuse the original verified
+   backup and captured configuration. Restore a disabled exact
+   definition before release, then apply captured operator intent. Do not replace
+   the original backup with already configured state.
+5. Run `emt --register-usage` and verify matched binary and installed provider
+   publication after installation or update.
 
-## Deployment setup and recovery
+Retain unresolved holds when recovery evidence cannot be established. Stop an
+initialized direct-selector recovery attempt. Installation, initialization,
+configuration, admission and scheduling remain separate effects.
 
-Product setup accepts the existing configuration fields and an `enabled` boolean.
-It does not accept incoming-mail progress changes. Omitted settings preserve the
-saved values. A fresh deployment uses the default daily/worker schedule, with
-activation enabled and domain pause removed after verification. An explicit
-`paused` or `enabled` value overrides that default.
+## Verify the endpoint
 
-Before maintenance, resolve a missing receiving domain through Email's
-`receive settings` interface. A domain supplied with this product or the selected
-Email setup takes precedence. An empty or ambiguous result requires a supplied
-domain; deployment does not inspect received mail to infer account settings.
-An initialized product's absent binding remains absent unless activation is
-explicitly requested.
-
-Recovery uses the original captured configuration and worker intent. It restores
-a disabled exact definition before release and then applies the captured pause
-and enabled settings. Fresh initialization's temporary pause is not operator
-intent. Existing pause and failure halt evidence survives every phase.
-
-The retained coordinator directory holds this product's migration receipt. It
-records the completed schema and original backup digests before configuration
-changes. Recovery checks that evidence and reuses the backup; it does not
-replace the original backup with already configured state.
-EMT initialization can finish an interrupted empty schema or missing empty-state
-configuration. It refuses missing configuration when incident or exchange
-records exist. Set `cell_root` to an existing stable checkout when the default
-`~/rust/cell` does not apply. Deployment worktree paths are not retained as Cell
-configuration.
-
-## Shared quota notices
-
-The worker reads Nucleus `GET /v1/quota` without starting an agent. While quota
-blocks admission, unadmitted exchanges wait until recovery or their existing
-deadline. Expired quota deferrals and `quota_exhausted` attempts retain their
-outcome without generating an individual fallback failure email. Retained agent
-emails still use the ordinary delivery path. Unrelated incidents retain their
-normal handling. Existing pauses and failure halts are not cleared.
-
-Each new shared condition freezes one deterministic email in the private
-`quota-notifications/CONDITION_ID.json` record under EMT's state root. Email is
-invoked directly with key `emt/quota/CONDITION_ID`; no Nucleus job authors or sends
-this notice. The same frozen payload has at most two transport invocations,
-at least five minutes apart and within 23 hours of the first attempt. A receipt
-ends sending. An unresolved exhausted send remains uncertain for inspection.
-Keep this directory in backups; do not delete records to retry delivery.
-A missing or unavailable quota observation postpones new model work while frozen
-email delivery continues. An old daemon's quota-endpoint 404 permits rollout
-without a quota gate. Worker recovery and operator pause stop discovery of new
-quota notices but allow frozen notice delivery.
+Require the selected program and provider to match, configuration and schema to
+be valid, maintenance counts to be known, and schedule, pause and halt intent to
+match the authorized operation. Interpret each operation receipt separately.
+Email acceptance proves submission to the provider; product evidence establishes
+intervention success. Receiving authorization and final delivery require their
+own evidence. No timer, model accuracy or final-delivery deadline is promised.
 
 ## Command usage
 
-After each installation or update, run `emt --register-usage`.
-This registers command inventory without product work.
-
 CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
-
-## Bazaar prompt selection
-
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.emt selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.emt` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.emt --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+journal records command identity, time and thread ID, not arguments, output or
+outcomes. Internal product calls are excluded. Recording errors do not change
+command results.

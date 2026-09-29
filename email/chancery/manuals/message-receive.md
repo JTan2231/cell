@@ -1,7 +1,7 @@
 # Read received account email
 
-Email reads messages from the Resend account selected by the installed
-wrapper's `RESEND_API_KEY`. A read requires user authority or an installed
+Email reads messages from the Resend account selected by its configured private
+credential or `RESEND_API_KEY` fallback. A read requires user authority or an installed
 caller's standing authority for that account mail. The send recipient limit
 does not restrict the receiving API to messages from that recipient.
 
@@ -86,18 +86,31 @@ needed. A client timeout can leave send acceptance unknown. The client does
 not automatically retry commands or infer that a failed process had no effect.
 
 The corresponding free Rust functions run transport in the caller process and
-read `RESEND_API_KEY` from that environment. They do not source shell files.
+use the process environment for the credential fallback. They do not source shell files.
 The CLI uses those functions. `Message`, `Receipt`, the old send functions,
 attachment paths and byte payloads remain supported.
+
+`email::api::list_received(&ReceivedPageRequest)` returns one `ReceivedPage`.
+`get_received(id)` returns one `ReceivedMessage`. The asynchronous
+`Client::list_received` and `Client::get_received` methods return those same
+types through the selected installed wrapper. The caller owns read authority,
+traversal, routing, deduplication, and retained records for both routes.
+
+Unknown provider fields are not returned. Missing metadata collections are
+empty. Unexpected types, including null where a collection is required, fail
+decoding. Attachment `size`, when present, counts bytes.
 
 Resend source references: [list API](https://resend.com/docs/api-reference/emails/list-received-emails),
 [retrieve API](https://resend.com/docs/api-reference/emails/retrieve-received-email),
 [pagination](https://resend.com/docs/api-reference/pagination), and
 [reply headers](https://resend.com/docs/dashboard/receiving/reply-to-emails).
 
-Email selects its explicitly configured private credential first, then the
-existing `RESEND_API_KEY` environment fallback. Local setup and domain discovery
-use the separate [account operation](account-operate.md).
+## Related contracts
+
+- Read `chancery show email.message.send` for outgoing reply fields and send authority.
+- Read `chancery show email.account` for credentials and receiving domains.
+- Read `chancery show email.account.operate` for account setup steps.
+- Read `chancery show email.installation` for wrapper and release guarantees.
 
 ## Command usage
 

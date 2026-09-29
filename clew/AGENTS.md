@@ -12,3 +12,14 @@ Semantics-Project: clew
 - Preserve ledger entries. Corrections append replacements or retractions.
 - Preserve exact write identity and legacy reference aliases during migration.
 - Keep private application notes outside the repository.
+
+## Documentation ownership
+
+- Keep full feature explanations in `chancery/manuals/`. Update their normalized
+  claims in `chancery/entries/` when meaning changes.
+- Keep the product overview in `chancery/overview.md`. Keep prerequisites, action
+  steps, consequential effects, stop conditions, and verification in operation
+  manuals. Declare required feature contracts as bounded dependencies.
+- Keep README text to purpose, a small example, and documentation entry points.
+  Publish the complete provider bundle with the matching release. Preserve
+  compatible entry identities and versions.

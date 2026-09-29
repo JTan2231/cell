@@ -1,0 +1,130 @@
+{
+  "id": "chancery.bundle.validate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Understand and validate a provider bundle",
+  "summary": "Read the complete provider and entry format, schema compatibility, path and size rules, publication guarantees, and standalone validation result.",
+  "use_when": [
+    "A provider bundle must be authored or structurally validated.",
+    "A consumer needs the supported provider format, normalized declaration rules, or release publication boundary."
+  ],
+  "do_not_use_when": [
+    "The caller needs a product domain outcome or live readiness.",
+    "The caller wants the installed catalog rather than the bundle format."
+  ],
+  "outcome": "The caller receives the complete bundle-format contract or an inspectable standalone structural validation report.",
+  "effects": [
+    "Reads the selected provider manifest, indexed overview, entries, and manuals.",
+    "Validation preserves bundle and registry state; CLI dispatch can append metadata-only command usage."
+  ],
+  "authority": [
+    "Chancery owns format, structural validation, path and size limits, and documentation dependency checks.",
+    "Each publishing product owns the claims and release selection; validation does not prove prose completeness or runtime conformance."
+  ],
+  "success": [
+    "A valid report confirms the selected indexed bundle shape and compatible acyclic internal dependencies.",
+    "External dependencies remain explicitly not_checked until installed registry diagnosis."
+  ],
+  "failure_and_recovery": [
+    "An invalid report preserves detected issues with exit 1; repair the owning source bundle and validate again.",
+    "Do not edit an installed content-addressed release or substitute a source-checkout selector for release publication."
+  ],
+  "privacy": [
+    "Bundle documents are local release artifacts and must contain no secrets, credentials, private source material, or transient output."
+  ],
+  "interfaces": [
+    {
+      "label": "Validate a standalone bundle",
+      "invocation": "/Users/joey/.local/bin/chancery validate <ABSOLUTE_BUNDLE_PATH>"
+    },
+    {
+      "label": "Decode provider documents",
+      "invocation": "chancery::api::{ProviderManifest, EntryDocument}::decode"
+    }
+  ],
+  "dependencies": [],
+  "does_not_authorize": [
+    "Executing represented interfaces, taking another provider selector, proving implementation conformance, or changing installed state."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Product maintainers and local document consumers may rely on the bundle format and standalone validator."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The selected bundle is locally readable. Publication requires a reader compatible with the bundle schema and the owning release process."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "An exact local bundle directory containing provider.json and its explicitly indexed JSON and Markdown documents; provider schemas 1 through 4 are supported."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "The complete format explanation or a schema-three ValidateResult envelope containing valid, optional provider and entries, bundle, external_dependencies, and issues."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Provider scope names authority and a non-circular inventory class. Entries distinguish declared, unsupported, unspecified, and not_applicable claims; absent normalized facets resolve as undeclared. Dependencies mean documentation compatibility, while related references provide navigation."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Provider ID and release, provider schema, entry ID and contract version, and output schema are separate. File and field sizes are measured in UTF-8 bytes; basis digests use exact raw bytes."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Standalone validation covers the selected manifest and every indexed overview, entry, and manual at its read boundary. Unindexed objects are ignored by the reader, while release packaging validates the complete tree. External contracts are not checked by standalone validation."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The local validator reads beneath the fixed canonical bundle root. Provider selectors can be symlinks, but indexed inner symlinks, path escapes, non-files, invalid UTF-8, unsupported control characters, and oversized inputs are rejected."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Validation creates an in-memory report and changes no provider state. Publishing includes exact bundle bytes in the owning release and advances or rolls back its single selector coherently with that release."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The reader permits 1,024 provider selectors, 4,096 entries per provider, 1,048,576-byte manifest and entry files, 4,194,304-byte manual and overview files, and 65,536-byte text fields. Required dependencies are acyclic with positive version minima and greater exclusive maxima."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No wall-clock validation latency, registry-size service objective beyond structural bounds, universal deprecation window, or legacy-schema retirement date is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Schemas 1 through 4 remain readable. Schema 1 alone ignores routable and routing; schemas 3 and 4 require scope and permit complete normalized declarations; schema 4 alone permits overview. Deploy a compatible reader first. Incompatible entry meaning requires a new contract version."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Bundle validation uses local declarative files and creates no runtime, data, authority, or readiness reliance on represented products."
+      }
+    ]
+  },
+  "manual": "manuals/bundle-validate.md"
+}

@@ -1,0 +1,207 @@
+{
+  "id": "cast.state",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Manage Cast state and collection policy",
+  "summary": "Select and initialize private state, inspect or replace complete collection configuration, control source enrollment, interpret local budgets, and reconcile older employer ownership.",
+  "use_when": [
+    "The selected Cast state, configuration, source enrollment or conservative local budget must be understood or changed.",
+    "Older retained employer ownership needs the supported local reconciliation or state recovery limits must be understood."
+  ],
+  "do_not_use_when": [
+    "A collection run or exact public job-URL retrieval is required.",
+    "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream job selection."
+  ],
+  "outcome": "Selected initialized private state, a locally verified complete configuration or source enrollment, or one transactionally reconciled retained ownership state.",
+  "interfaces": [
+    {
+      "label": "Initialize state",
+      "invocation": "/Users/joey/.local/bin/cast init"
+    },
+    {
+      "label": "Inspect readiness",
+      "invocation": "/Users/joey/.local/bin/cast doctor"
+    },
+    {
+      "label": "Show configuration",
+      "invocation": "/Users/joey/.local/bin/cast config show"
+    },
+    {
+      "label": "Replace configuration",
+      "invocation": "/Users/joey/.local/bin/cast config set --file PATH"
+    },
+    {
+      "label": "Add a careers source",
+      "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
+    },
+    {
+      "label": "Disable collection from a source",
+      "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
+    },
+    {
+      "label": "Reconcile retained employer ownership",
+      "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
+    }
+  ],
+  "effects": [
+    "Initialization creates missing private discovery state and preserves existing records and consumed budgets without collecting.",
+    "Configuration replacement affects later collection without resetting usage or purchasing provider credits.",
+    "Source controls retain explicit source enrollment and evidence; disabling ordinary collection does not block explicit job collect.",
+    "Ownership reconciliation uses stored records under one mutation lock and one transaction, corrects older associations, and preserves retained IDs, paid usage, run history, query coverage and cursors."
+  ],
+  "authority": [
+    "Cast owns state schema, complete configuration validation, source enrollment, local counters and supported ownership reconciliation.",
+    "The caller chooses policy and accounts; providers own external balances and billing."
+  ],
+  "success": [
+    "The selected state operation completes and supported reads confirm its intended local result.",
+    "Reconciliation returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts; affected material records retain identity and gain revisions."
+  ],
+  "failure_and_recovery": [
+    "Stop callers and make a private consistent SQLite backup, including live sidecars when relevant, before state recovery.",
+    "Preserve successful observations and conservative usage after collection failure. Do not erase state to clear budgets or hand-edit individual rows.",
+    "Program recovery leaves discovery state and configuration unchanged; an older program can reject newer configuration fields."
+  ],
+  "privacy": [
+    "Private state, exports and diagnostics can contain search interests, locators, posting text and collection history.",
+    "Credentials remain outside saved configuration, database rows, arguments and logs."
+  ],
+  "does_not_authorize": [
+    "A provider purchase, credential replacement, state deletion, scheduled activation, model job or downstream application workflow."
+  ],
+  "dependencies": [
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may select and initialize Cast state, inspect or replace collection configuration, control sources and invoke the supported ownership repair."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Select the intended private state directory. Except explicit initialization, operations require supported initialized state and valid inputs. Stop callers before state recovery or ownership reconciliation and preserve a consistent private backup before state recovery."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "State defaults to ~/.local/share/cast and can be selected with --state-dir PATH or CAST_STATE_DIR. The CLI flag selects independently of environment. config set --file supplies a complete schema-one configuration; config show returns the current complete input."
+      },
+      {
+        "status": "declared",
+        "statement": "automatic_excluded_ats accepts distinct ashby, greenhouse or lever names. It defaults to [\"ashby\"] when omitted; an explicit empty array removes ATS exclusions while retaining source enabled policy."
+      },
+      {
+        "status": "declared",
+        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS sources reject that override and use canonical provider/tenant owners. source disable selects one source ID."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "State commands return local readiness, complete configuration, source enrollment or ownership-repair counts. Repair counts describe the selected local transaction rather than external collection coverage."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Configuration retains query families, terms, intervals, adapter settings and request caps. Changes affect future collection and do not reset consumed allowance, buy credits or configure provider billing."
+      },
+      {
+        "status": "declared",
+        "statement": "Local budgets are conservative admission counters. TheirStack total covers this state's retained lifetime rather than a provider monthly balance."
+      },
+      {
+        "status": "declared",
+        "statement": "Reconciliation moves ATS associations to canonical provider/tenant companies, sets older or affected shared-host JSON-LD jobs to unknown, marks their sources for collection, restores affected candidate names and clears shared-host domains, website URLs and identity aliases."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The selected state directory identifies an independent discovery database named cast.sqlite3. Paid accounting uses TheirStack credits, Brave requests, HTTP requests and elapsed seconds; daily and monthly windows use UTC."
+      },
+      {
+        "status": "declared",
+        "statement": "Repair preserves source/job IDs, paid request usage, run history, query coverage and cursors. Changed jobs and companies gain revisions. Each repair invocation advances snapshot_revision."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Configuration and doctor reads describe selected local state at invocation. Doctor can check configuration and credential presence; current provider balance, authentication and successful retrieval require actual provider interactions."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Installed documentation, initialization and local diagnosis do not establish current provider allowance or successful collection."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user CLI is the state administration boundary. The state directory uses mode 0700 and cast.sqlite3 uses mode 0600. Configuration is stored in database metadata."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct SQLite reads and writes are not supported integration or repair surfaces."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Initialization preserves existing records and usage. Only one writer uses a selected directory, with a kernel-backed mutation lock. Ownership reconciliation commits one transaction and makes no provider request."
+      },
+      {
+        "status": "declared",
+        "statement": "Repeating reconciliation leaves material records unchanged but advances snapshot_revision. Later collection uses corrected associations."
+      },
+      {
+        "status": "declared",
+        "statement": "Source disable retains records and removes ordinary enrollment while exact job collect remains available. Ordinary website source add without a company ID creates or reuses a hostname candidate."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Defaults permit 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run, 50 careers-source collections per run and 50 targeted adapter pages via max_verifications_per_run."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No automatic database migration, pruning, destructive reset or state uninstaller is provided."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future migration, retention horizon, state-size bound or deprecation window is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Database, configuration, export, contract and release versions are distinct. Configuration schema remains 1 with automatic_excluded_ats. Older programs that reject unknown fields cannot read configuration written with that field. Program recovery restores no previous state or configuration."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future database migration or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Supported record reads establish retained identities, revisions, attribution and post-repair evidence.",
+        "target": "cast",
+        "kind": "data",
+        "contract": "cast.discovery.explore"
+      }
+    ]
+  },
+  "manual": "manuals/state.md"
+}

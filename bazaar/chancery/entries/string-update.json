@@ -53,13 +53,13 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The current user's filesystem permissions protect state. Rust readers open SQLite read-only and expose no writes. CLI dispatch separately attempts metadata-only Chancery usage recording; direct API reads do not."
+        "statement": "The current user's filesystem permissions protect state. Writer::open requires initialized private state and creates no files. Direct API appends record no CLI usage; CLI dispatch separately attempts metadata-only Chancery usage recording."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "SQLite waits up to five seconds for lock contention. Content and complete version lists are held in memory. There is no service-level latency, content-size, or throughput guarantee."
+        "statement": "SQLite waits up to five seconds for lock contention. Content and complete version lists are held in memory. There is no service-level latency, content-size, or throughput guarantee. A connection is not shared concurrently between threads; callers can open independent handles."
       }
     ],
     "compatibility_and_evolution": [
@@ -77,13 +77,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "One nonempty exact ID and one complete UTF-8 content string. The CLI accepts exactly one of a positional string, --file, or --stdin. Empty strings are valid; files and stdin must decode as UTF-8."
+        "statement": "One nonempty exact, case-sensitive ID and one complete UTF-8 content string. The CLI accepts exactly one of a positional string, --file, or --stdin. Empty strings are valid; files and stdin must decode as UTF-8."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "The committed Record contains id, newly allocated version, and exact content. CLI wraps it in schema-one JSON; the in-process Writer returns Record or a typed error."
+        "statement": "The committed Record contains id, newly allocated version, and exact content. CLI wraps it in schema-one JSON; the in-process Writer returns Record or a typed error. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error. CLI operational errors use ok:false with error.detail and exit 1; syntax errors use a stderr diagnostic and exit 2. The optional --json flag does not change output."
       }
     ],
     "completeness_and_freshness": [
@@ -95,7 +95,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Each update allocates the next per-ID version and inserts the full string in one immediate SQLite transaction with synchronous FULL. Concurrent writers serialize. Identical content appends another version. SQL triggers reject updates, deletes, replacement, and nonsequential inserts."
+        "statement": "Each update allocates the next per-ID version and inserts the full string in one immediate SQLite transaction with synchronous FULL. Concurrent writers serialize. Identical content appends another version. SQL triggers reject updates, deletes, replacement, and nonsequential inserts. Separate update calls have no shared transaction."
       }
     ]
   },

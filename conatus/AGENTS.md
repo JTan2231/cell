@@ -26,3 +26,13 @@ Semantics-Project: conatus
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. A user-requested stop before CI
   takes precedence; report CI as not run.
+
+## Documentation ownership
+
+- Keep each full feature explanation in its indexed Chancery manual. The
+  provider overview explains product purpose, boundaries and feature relations.
+- Keep procedures, prerequisites, consequential effects, stop conditions and
+  verification in operation manuals. Declare required feature dependencies.
+- Keep README and `docs/` references as entry points to the authoritative pages.
+  Publish the complete bundle with the matching Conatus release. Validate the
+  source bundle and inspect its product, show and resolve views before delivery.

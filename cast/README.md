@@ -29,7 +29,13 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Collect jobs](chancery/manuals/discovery-collect.md)
-- [Read and export records](chancery/manuals/discovery-explore.md)
-- [Installation, configuration, and recovery](chancery/manuals/install-operate.md)
-- [Record terminology](docs/vocabulary.md)
+- [Product overview and feature inventory](chancery/overview.md)
+- [Collection contract](chancery/manuals/discovery-collect.md)
+- [Records and read handoff](chancery/manuals/discovery-explore.md)
+- [State and collection policy](chancery/manuals/state.md)
+- [Installation contract](chancery/manuals/installation.md)
+- [Installation, configuration, and recovery procedure](chancery/manuals/install-operate.md)
+
+Use `chancery product cast` for the installed overview, `chancery show ID` for
+one contract, and `chancery resolve cast.install.operate` for the procedure and
+its required feature contracts.

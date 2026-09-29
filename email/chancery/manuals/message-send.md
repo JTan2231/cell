@@ -5,6 +5,10 @@ The sender and recipient are fixed. Use Email when the user explicitly asks to
 send the supplied or approved message. An installed product can also use Email
 if its contract grants standing authority for that exact kind of notification.
 
+The addresses are `Codex <codex@joeytan.dev>` and `j.tan2231@gmail.com`.
+The subject and body are required UTF-8 strings. A body of exactly `-` reads
+the complete body from standard input. The body remains plain text.
+
 ## Send
 
 For a short literal body:
@@ -45,6 +49,11 @@ never source paths. File-read errors do not echo paths or contents. Remote attac
 URLs are unsupported. The full payload stays in memory until the command
 ends, and provider message-size and file-type limits still apply.
 
+[Resend's send API](https://resend.com/docs/api-reference/emails/send-email)
+documents a 40 MB email limit after attachment base64 encoding. Resend also
+applies file-type restrictions. These are provider limits; Email does not
+promise acceptance of every file or size.
+
 Attachment order, filenames, and bytes belong to the exact idempotent payload.
 Retries within one invocation never reopen files. A later invocation reads
 them again: the caller must preserve the exact files and ordering for the same
@@ -56,10 +65,13 @@ Resend retains idempotency keys for 24 hours; the same key and payload
 deduplicate, while a changed payload under the same key is rejected. Without
 the option, Email generates a fresh `email/<UUIDv7>` key.
 
-The installed wrapper reads `RESEND_API_KEY` from `~/.zshrc`, scrubs unrelated
+Email selects its explicitly configured private credential first. The installed
+wrapper loads the `RESEND_API_KEY` fallback from `~/.zshrc`, scrubs unrelated
 caller environment variables, supplies a minimal runtime environment, and
-preserves standard input for the payload. Do not place the API key in the
-command arguments, message text, product files, or Chancery contract.
+preserves standard input. A credential must be nonblank and whitespace-clean.
+Do not place credential bytes in arguments, message text, deployment settings,
+or Chancery documentation. Read `chancery show email.account` for credential
+selection and retained settings.
 
 ## Authority and result
 
@@ -85,7 +97,8 @@ delivery tracking. The option does not itself authorize a send.
 On input, credential, network, or Resend failure, preserve the error for
 diagnosis without exposing the API key. One invocation retries transport
 errors, rate limits, and server errors at most twice with the same frozen
-request and idempotency key. Email retains no queued work to resume. After an
+request and idempotency key, after two short bounded delays. Other provider
+rejections fail immediately. Email retains no queued work to resume. After an
 ambiguous transport failure, inspect Resend before explicitly sending again
 when a duplicate would be harmful.
 
@@ -97,7 +110,7 @@ discovery remains separate and does not authorize or execute a send.
 When Resend accepts the message, Email exits zero and prints `Accepted` followed
 by the message ID. This confirms submission acceptance. Check Gmail separately
 for delivery. On failure, Email exits nonzero and reports a bounded error
-without the response body or credential.
+to stderr with the `email: ` prefix, without the response body or credential.
 
 ## Byte payloads on stdin
 
@@ -158,9 +171,21 @@ submission acceptance does not establish threading or final delivery. Email
 retains no thread state. Receiving is separately documented by
 `email.message.receive` and requires its own read authority.
 
-Rust callers keep `Message`, `send` and `send_with_attachments`. The additive
-`ReplyOptions` and `send_with_options` API carries the reply fields. Direct
-free functions read the process credential. `api::Client::new` selects one
+## Rust interfaces
+
+`email::api::{Message, Receipt, send}` exposes the same submission contract.
+`api::sender` and `api::recipient` expose the fixed addresses. `Receipt` means
+Resend acceptance. The caller owns authority and any occurrence identity.
+
+`Attachment { filename, content }` and `send_with_attachments(&message,
+&attachments)` accept captured bytes and a safe basename. The Rust API does
+not read attachment files or fetch remote content. `ReplyOptions { reply_to,
+in_reply_to, references }` and `send_with_options(&message, &attachments,
+&options)` add the optional reply fields. Existing `Message`, `Receipt`,
+`send`, and `send_with_attachments` callers retain their behavior.
+
+Direct free functions use the caller process environment for the credential
+fallback and do not source shell files. `api::Client::new` selects one
 absolute installed wrapper and supplies the body and attachment bytes on
 stdin; it does not read the credential. That client performs no process retry,
 bounds each command to 120 seconds, and reads at most 4096 receipt bytes.
@@ -170,9 +195,12 @@ leave send acceptance unknown. The HTTP transport does not follow redirects.
 The new `receive list/get` CLI forms are reserved. Use `--` before literal send
 positionals to avoid a collision, for example `email -- receive list`.
 
-Email selects its explicitly configured private credential first, then the
-existing `RESEND_API_KEY` environment fallback. Local setup and domain discovery
-use the separate [account operation](account-operate.md).
+## Related contracts
+
+- Read `chancery show email.message.receive` for receiving data and read authority.
+- Read `chancery show email.account` for credentials and receiving domains.
+- Read `chancery show email.account.operate` for account setup steps.
+- Read `chancery show email.installation` for wrapper and release guarantees.
 
 ## Command usage
 

@@ -4,11 +4,12 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Preserve a source document in Annals",
-  "summary": "Store one unchanged text source in the library without interpreting it or changing the corpus.",
+  "title": "Retain sources and read Annals delivery activity",
+  "summary": "Preserve unchanged source bytes, retrieve retained works, and read delivery metadata with explicit lifecycle and timestamp meaning.",
   "use_when": [
     "Immutable source bytes should enter the Annals library while interpretation is intentionally deferred.",
-    "A retained work must be listed or inspected by its work label."
+    "A retained work must be listed or inspected by its work label.",
+    "Retained source text or recent source-delivery activity must be read without model interpretation."
   ],
   "do_not_use_when": [
     "The source should be reconciled with the evidence-backed idea map now.",
@@ -33,18 +34,38 @@
   "failure_and_recovery": [
     "An existing label attached to different bytes is a conflict and no replacement occurs.",
     "When exact bytes already exist, use the canonical retained work rather than assuming the requested alternate label was created.",
-    "Use a registered named library or explicit operator config/path; Annals never falls back to `./annals.db`."
+    "Use a registered named library or explicit operator config/path; Annals never falls back to `./annals.db`.",
+    "Invalid source or label conflict leaves retained bytes unchanged. Interrupted source-bearing manual commands are finalized by the next command with manual_ingestion_interrupted. Choose first-seen or completed to inspect failures without ingestion time."
   ],
   "privacy": [
     "The complete unchanged source is retained in the selected local Annals library.",
     "No source content is sent to Nucleus or a model by this capability."
   ],
   "interfaces": [
-    {"label": "Retain in a named library", "invocation": "/Users/joey/.local/bin/annals library <NAME> work add <UTF8_INPUT> --name <LABEL>"},
-    {"label": "Retain file", "invocation": "/Users/joey/.local/bin/annals work add <UTF8_INPUT> --name <LABEL>"},
-    {"label": "Retain standard input", "invocation": "/Users/joey/.local/bin/annals work add - --name <LABEL>"},
-    {"label": "List works", "invocation": "/Users/joey/.local/bin/annals work list"},
-    {"label": "Show work", "invocation": "/Users/joey/.local/bin/annals work show <LABEL>"}
+    {
+      "label": "Retain in a named library",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> work add <UTF8_INPUT> --name <LABEL>"
+    },
+    {
+      "label": "Retain file",
+      "invocation": "/Users/joey/.local/bin/annals work add <UTF8_INPUT> --name <LABEL>"
+    },
+    {
+      "label": "Retain standard input",
+      "invocation": "/Users/joey/.local/bin/annals work add - --name <LABEL>"
+    },
+    {
+      "label": "List works",
+      "invocation": "/Users/joey/.local/bin/annals work list"
+    },
+    {
+      "label": "Show work",
+      "invocation": "/Users/joey/.local/bin/annals work show <LABEL>"
+    },
+    {
+      "label": "Read source-delivery activity",
+      "invocation": "/Users/joey/.local/bin/annals lately [--since TIME] [--until TIME] [--by created|modified|first-seen|ingested|completed] [--status processing|completed|failed] [--channel manual|inbox]"
+    }
   ],
   "does_not_authorize": [
     "Model-assisted examination or reconciliation.",
@@ -53,55 +74,164 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "General libraries can retain supplied wants, preferences, career accounts, notes, and other nonblank UTF-8 source documents. This preserves wording without creating application workflow or inferred fields."},
-      {"status": "declared", "statement": "A local user or agent that needs to preserve one immutable source while deliberately deferring interpretation may use this capability."},
-      {"status": "unsupported", "statement": "This is not a note, summary, action-backlog or model-assisted interpretation surface."}
+      {
+        "status": "declared",
+        "statement": "General libraries can retain supplied wants, preferences, career accounts, notes, and other nonblank UTF-8 source documents. This preserves wording without creating application workflow or inferred fields."
+      },
+      {
+        "status": "declared",
+        "statement": "A local user or agent that needs to preserve one immutable source while deliberately deferring interpretation may use this capability."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This is not a note, summary, action-backlog or model-assisted interpretation surface."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The caller selects a configured readable Annals library with the immutable general role. Retention requires a writable library and nonblank UTF-8 bytes. Standard input requires an explicit label."},
-      {"status": "declared", "statement": "A requested work label must not already identify different retained bytes."}
+      {
+        "status": "declared",
+        "statement": "The caller selects a configured readable Annals library with the immutable general role. Retention requires a writable library and nonblank UTF-8 bytes. Standard input requires an explicit label."
+      },
+      {
+        "status": "declared",
+        "statement": "A requested work label must not already identify different retained bytes."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Input is one UTF-8 file or standard-input stream, an optional explicit work label for files, and the normal Annals library/configuration selectors."},
-      {"status": "unsupported", "statement": "Binary, blank, multi-work, reconciliation, replacement, deletion, and model instructions are not accepted by this capability."}
+      {
+        "status": "declared",
+        "statement": "Input is one UTF-8 file or standard-input stream, an optional explicit work label for files, and the normal Annals library/configuration selectors."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Binary, blank, multi-work, reconciliation, replacement, deletion, and model instructions are not accepted by this capability."
+      },
+      {
+        "status": "declared",
+        "statement": "Activity accepts UTC half-open since/until windows, one timestamp basis, and status/channel filters. Positive relative durations use s,m,h,d,w; RFC3339 or UTC date input is accepted."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Retention returns its durable work/delivery receipt. Work list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Work show returns the selected work's complete content and structure."}
+      {
+        "status": "declared",
+        "statement": "Retention returns its durable work/delivery receipt. Work list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Work show returns the selected work's complete content and structure."
+      },
+      {
+        "status": "declared",
+        "statement": "lately returns delivery metadata, lifecycle/retention/missing-time counts, resolved UTC window and filters, without source text, headings, quotations, document-internal dates, raw runner diagnostics, row IDs, or dedicated source-path fields."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Content identity and duplicate recognition are local to the selected library. Separate libraries have separate retained sources and corpus history."},
-      {"status": "declared", "statement": "Retention stores previously unseen exact bytes or recognizes an existing byte-identical work; recognition does not create the requested alternate label."},
-      {"status": "declared", "statement": "A completed manual source delivery records the occasion of supply, while the work is the immutable content object and the corpus remains unchanged."}
+      {
+        "status": "declared",
+        "statement": "Content identity and duplicate recognition are local to the selected library. Separate libraries have separate retained sources and corpus history."
+      },
+      {
+        "status": "declared",
+        "statement": "Retention stores previously unseen exact bytes or recognizes an existing byte-identical work; recognition does not create the requested alternate label."
+      },
+      {
+        "status": "declared",
+        "statement": "A completed manual source delivery records the occasion of supply, while the work is the immutable content object and the corpus remains unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "Each delivery has independent processing/completed/failed lifecycle, new/duplicate retention disposition, and retained/pending/applied/recorded result. Only applied names a corpus revision. Retention and work-add completion are atomic; input-integration applied result and corpus revision are atomic."
+      },
+      {
+        "status": "declared",
+        "statement": "first_retained_at belongs to exact retained work bytes. first_seen_at, ingested_at, and completed_at belong to one delivery. Captured filesystem times are metadata, not authorship, publication, source events, or continued path watching."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Exact SHA-256 content identity selects one immutable work, and its normalized-unique work label is the supported public selector."},
-      {"status": "declared", "statement": "Captured source filesystem times are metadata timestamps, not authorship, publication, or document-content dates."},
-      {"status": "not_applicable", "statement": "Retention publishes no usage, price, or accounting measurement."}
+      {
+        "status": "declared",
+        "statement": "Exact SHA-256 content identity selects one immutable work, and its normalized-unique work label is the supported public selector."
+      },
+      {
+        "status": "declared",
+        "statement": "Captured source filesystem times are metadata timestamps, not authorship, publication, or document-content dates."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Retention publishes no usage, price, or accounting measurement."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Work show returns the complete unchanged retained UTF-8 text and first-retained metadata for the selected work."},
-      {"status": "declared", "statement": "A successful command reports the library result committed by that invocation; no cached catalog or remote copy is served."}
+      {
+        "status": "declared",
+        "statement": "Work show returns the complete unchanged retained UTF-8 text and first-retained metadata for the selected work."
+      },
+      {
+        "status": "declared",
+        "statement": "A successful command reports the library result committed by that invocation; no cached catalog or remote copy is served."
+      },
+      {
+        "status": "declared",
+        "statement": "Activity basis governs membership and newest-first ordering. Missing basis timestamps omit matching deliveries and contribute to missing_time_count. --until defaults to report start and --since to seven days before resolved end."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
-      {"status": "declared", "statement": "The supported boundary is the local Annals CLI and an explicitly resolved library selected by command line, environment, or configuration."},
-      {"status": "unsupported", "statement": "No network, remote sharing, direct SQLite write, or implicit current-directory database surface is provided."}
+      {
+        "status": "declared",
+        "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."
+      },
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the local Annals CLI and an explicitly resolved library selected by command line, environment, or configuration."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No network, remote sharing, direct SQLite write, or implicit current-directory database surface is provided."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "One successful supply records one manual source delivery and either creates one immutable work or selects the existing byte-identical work without advancing corpus HEAD."},
-      {"status": "declared", "statement": "A label conflict fails without replacing either retained work, and retained bytes have no update-in-place lifecycle."}
+      {
+        "status": "declared",
+        "statement": "One successful supply records one manual source delivery and either creates one immutable work or selects the existing byte-identical work without advancing corpus HEAD."
+      },
+      {
+        "status": "declared",
+        "statement": "A label conflict fails without replacing either retained work, and retained bytes have no update-in-place lifecycle."
+      },
+      {
+        "status": "declared",
+        "statement": "Invalid source or label conflict leaves retained bytes unchanged. Interrupted source-bearing manual commands are finalized by the next command with manual_ingestion_interrupted. Choose first-seen or completed to inspect failures without ingestion time."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "One invocation accepts one nonblank UTF-8 source; standard input requires an explicit label."},
-      {"status": "unspecified", "statement": "No maximum accepted source size, retention capacity, throughput, or wall-clock latency is promised by this contract."}
+      {
+        "status": "declared",
+        "statement": "One invocation accepts one nonblank UTF-8 source; standard input requires an explicit label."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum accepted source size, retention capacity, throughput, or wall-clock latency is promised by this contract."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 3 identifies these retention semantics independently of the Annals provider release and library schema."},
-      {"status": "unspecified", "statement": "No cross-release client compatibility window or deprecation period is promised."}
+      {
+        "status": "declared",
+        "statement": "Capability contract version 3 identifies these retention semantics independently of the Annals provider release and library schema."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No cross-release client compatibility window or deprecation period is promised."
+      }
     ],
     "reliances": [
-      {"status": "not_applicable", "statement": "Retention invokes no model, Nucleus, network, or other product and has no substantive cross-system reliance."}
+      {
+        "status": "not_applicable",
+        "statement": "Retention invokes no model, Nucleus, network, or other product and has no substantive cross-system reliance."
+      }
     ]
   },
-  "manual": "manuals/work-retain.md"
+  "manual": "manuals/work-retain.md",
+  "dependencies": [
+    {
+      "id": "annals.libraries",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
 }

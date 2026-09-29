@@ -1,6 +1,6 @@
 # Read Conatus sources and associations
 
-Use this capability to inspect captured wants, accepted decision projections,
+Use this capability to inspect captured wants, accepted decision documents,
 their available Annals evidence and associations, or processing state. These
 commands start no model and change no domain records.
 
@@ -38,10 +38,24 @@ and Annals associations can evolve. Only a direct user request can change the
 state through `want archive ID` or `want unarchive ID`. These reads do not
 authorize either transition.
 
-Want wording is the supplied source assertion. A decision document is a
-deterministic rendering of accepted feed fields, not original account Markdown
-or retrieved conversation quotation. A decision's authority anchor remains a
-reference. Acceptance does not prove enactment, progress, or current force.
+Want wording is the supplied source assertion. New decision intake preserves
+the complete unchanged document from Annals, its original feed event, filename,
+digest, acceptance time and transport identities. Earlier deterministic
+structured projections remain historical sources; do not invent missing context
+or treat them as full retrieved conversations. Acceptance does not prove
+enactment, progress or current force.
+
+A record contains `id`, `kind`, `source`, `wording`, `source_data`, `work_name`,
+`captured_at`, `queued_at`, `receipt` and `error`. `wording` is exact want text or
+the complete supplied decision document. `source_data` preserves the source
+reference or original typed event. A nullable handoff time or receipt describes
+enqueue, not successful interpretation. Work name is the intake ID; outgoing
+filename adds `.md`.
+
+`related_records` maps returned associations to captured wants and decisions,
+with exact wording, reference, direction and direct or path relationship. It
+includes only intake records grounded in the returned graph. The association
+view's completeness flags apply to this projection.
 
 Conatus IDs distinguish local intake. Want IDs use `want-` plus UUIDv7; decision
 IDs use `decision-` plus SHA-256 of the source library ID, colon, and event ID.
@@ -60,8 +74,11 @@ not interpreted coverage. Annals inbox state or its read error is separately
 reported. A partially failed update retains its report before returning an
 error; status exposes it even when Annals is unavailable. `captured_at` and
 `queued_at` are UTC Unix-second times of local
-capture and successful handoff; decision occurrence retains its supplied
-precision. Annals revision times describe corpus changes.
+capture and successful handoff. Feed `accepted_at` describes Annals document
+acceptance, not decision occurrence. Historical source occurrence retains its
+supplied precision. Annals revision times describe corpus changes.
+
+## Completeness and freshness
 
 Graph and history preserve the selected Annals interfaces' bounds and identity
 semantics. Graph and association views return at most 200 concepts. Each concept
@@ -84,3 +101,10 @@ CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
+
+## Related contracts
+
+Read `conatus.processing` for intake and interpretation behavior,
+`conatus.want.lifecycle` for explicit state changes, and
+`conatus.update.operate` for processing recovery. These references do not grant
+mutation authority.

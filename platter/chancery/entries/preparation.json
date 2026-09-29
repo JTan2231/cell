@@ -1,0 +1,254 @@
+{
+  "id": "platter.preparation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Prepare and continue Platter packets",
+  "summary": "Understand source capture, job eligibility, tailored and brief-only workflows, authoring authority, mechanical acceptance, exact continuation, and limits.",
+  "use_when": [
+    "A reader needs packet readiness, source freshness, current/historical authoring boundaries, eligibility, regeneration, or interruption behavior."
+  ],
+  "do_not_use_when": [
+    "The goal is sending, recurring activation, job discovery, source-library writing, employer contact, or direct model execution outside Platter."
+  ],
+  "outcome": "Captured source material produces a retained accepted brief and, for tailored work, a validated one-page resume; expected decline and quota outcomes preserve their stated meaning.",
+  "interfaces": [
+    {
+      "label": "Prepare a job",
+      "invocation": "platter prepare CAST_JOB_ID"
+    },
+    {
+      "label": "Prepare daily pool",
+      "invocation": "platter prepare-daily"
+    },
+    {
+      "label": "Fresh incomplete restart",
+      "invocation": "platter prepare CAST_JOB_ID --fresh"
+    },
+    {
+      "label": "Regenerate one job",
+      "invocation": "platter regenerate CAST_JOB_ID --id REQUEST_ID"
+    },
+    {
+      "label": "Change explicit eligibility",
+      "invocation": "platter eligibility CAST_JOB_ID true|false"
+    }
+  ],
+  "effects": [
+    "Preparation captures full posting, all listed Vita works, exact prompt instructions, and applicable template/project directions. It can consume Nucleus model allowance and retrieve employer HTTPS sources.",
+    "Current tailored work obtains sequential Weaver project documents, then one Platter brief/Jackson draft. Final accepted content and retained LaTeX/PDF commit together. Brief-only daily override work captures no template/project directions and invokes no Weaver author or LaTeX renderer.",
+    "Retrieval failure or decline sets eligibility false. Initial retrieval failure creates no run; freshness failure retains accepted artifacts with deferred status. Regeneration preserves prior runs and does not enable a job or send."
+  ],
+  "authority": [
+    "Platter owns selection eligibility, capture, content conversion, mechanical acceptance, and packet success. Weaver authors project prose and owns its Annals reads. Nucleus owns admission, execution, and tool history.",
+    "The Platter draft can author only brief and Jackson. Workspace, local execution, and web access are disabled; retrieved text cannot expand those permissions."
+  ],
+  "success": [
+    "Tailored readiness requires accepted brief, assembled resume content, and validated retained one-page PDF. Daily brief-only readiness requires an accepted pursuit brief. Decline retains assessment and no resume."
+  ],
+  "failure_and_recovery": [
+    "Exact retained requests and Weaver IDs continue the same assignments after interruption or quota deferral. A terminal failure receives no automatic replacement identity or direct Codex fallback; accepted content survives later runtime failure.",
+    "Fresh restart requires an eligible incomplete latest run with no accepted resume and terminal or absent prior model jobs. Regeneration IDs bind one captured Cast job and run; changed-job reuse is refused and terminal failure needs a new request ID.",
+    "Renderer infrastructure failure stops work and requests exact-job cancellation. Content/layout rejection permits its bounded correction path. Daily retrieval failures are skipped with ineligibility; other preparation/export failures stop."
+  ],
+  "privacy": [
+    "Captured career/posting text and directions are private and are disclosed through Nucleus to the model. Employer retrieval discloses HTTP requests. Weaver and Nucleus retain separate research/execution evidence."
+  ],
+  "does_not_authorize": [
+    "An email, recurring activation, source-library changes, a new attempt after terminal failure, employer contact, or application submission."
+  ],
+  "dependencies": [
+    {
+      "id": "platter.materials",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "cast.discovery.collect",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "annals.corpus.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "weaver.narrative.write",
+      "min_contract": 2,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user CLI callers and authorized product workflows prepare, continue, freshly restart, or regenerate private Platter packets."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Canonical supported state, compatible Cast export/exact URL collection, nonempty complete Annals vita work list, full supported posting text, complete Bazaar prompt selection, and authenticated compatible Nucleus are required. Tailored work also requires supported template, compatible Weaver, Tectonic, and Python/pypdf."
+      },
+      {
+        "status": "declared",
+        "statement": "An optional daily PDF must validate before source/model work or eligibility changes. Its failure has no generation fallback."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Cast job identity or an exact public URL resolved through Cast; complete captured posting and career text; applicable immutable template; pinned prompt components; captured Weaver directions; optional deadline and regeneration identity. Vita work label is career entry ID, first heading is title or label fallback, and complete text is body."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Runs retain captured inputs, exact requests, compact execution correlation, status, and immutable accepted artifacts. Current tailored acceptance retains brief, resume-content, resume-source, and resume-pdf together. Daily brief-only runs can be ready without resume artifacts."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "jobs.eligible is explicit selection policy, separate from preparation readiness and delivery history. Retrieval failure, stale posting, and decline set it false; explicit enabling does not bypass freshness."
+      },
+      {
+        "status": "declared",
+        "statement": "generation=weaver_projects_v1 uses fixed project presentation, Weaver project bullets, and a brief/Jackson-only Platter draft. daily_brief_v1 uses brief/career tools only. Historical single_draft_v1 and captures without generation retain their original instructions, tools, artifacts, and continuation."
+      },
+      {
+        "status": "declared",
+        "statement": "Brief sections are evidence-grounded Why it works, Role specifics, and optional supported Culture. Role/Culture make no comparison with the user's experience. Displayed text omits caveats, downsides, and hedging while pursuit criteria remain private; career references identify captured entries. Unsupported Culture is omitted without extra research or an uncertainty note."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Regeneration REQUEST_ID contains 1 through 80 ASCII letters, digits, underscores, or hyphens and binds one Cast job/run atomically with capture. Repeated exact identity continues or returns that run. --stop-after-seconds uses seconds and requests cancellation of the exact live Nucleus job."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Platter lists up to 1000 Annals vita works and reads every returned complete work; empty/incomplete lists fail. Works added after that list enter later preparations. Cast excerpts are supplemented by full posting retrieval."
+      },
+      {
+        "status": "declared",
+        "statement": "Ashby caches a complete board response for less than 14 days; missing/invalid/expired/future-dated cache or missing selected posting refreshes it. retrieved_at is original board download time. Failed refresh preserves old bytes but fails retrieval; changes/closures can remain undetected until next download."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Supported Cast and Annals CLI/client interfaces supply source data. Current draft tools are career reads and submit_draft; workspace, local execution, and web are disabled. Fixed Vita selection is ~/.local/bin/annals library vita."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Preparation retains exact requests and Weaver identities before admission, and final accepted artifacts commit before acknowledgement. Normal repetition continues exact saved work. Quota deferral preserves progress; terminal failures receive no replacement jobs. One mutation admission serializes commands."
+      },
+      {
+        "status": "declared",
+        "statement": "The caller resolves cell.prompts.platter to complete pinned positive component versions before new work and freezes instructions with capture. Later text/selection edits do not rewrite saved work; runtime never initializes Bazaar or imports migration seeds."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Current draft uses gpt-5.6-sol at max effort. Brief sections permit 45/30/25 words with 90 total; unsupported Culture is omitted. Each project accepts one flat unordered list with one through three bullets, at most 1000 characters per bullet and no controls; one shortening round revises both projects, then a second rejection stops."
+      },
+      {
+        "status": "declared",
+        "statement": "Posting HTTP timeout is 30 seconds; each selected posting limit is 1,000,000 bytes, other responses 4,000,000 bytes, board download uncapped. Generated PDFs must pass one-page/text/overflow checks. There is no candidate or token budget."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No preparation-latency, completion-time, delivery-time, or throughput guarantee exists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Current and historical captures keep exact generation, template, tools, directions, and accepted output meanings. Daily override and tailored workflows never resume incomplete work through the wrong stage; prior model jobs must be terminal or absent for a required new capture."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No arbitrary incompatible rollback, model support interval, or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Cast supplies retained discovery records and exact URL collection without changing disabled-source enrollment or board-scan policy.",
+        "target": "cast",
+        "kind": "data",
+        "contract": "cast.discovery.collect"
+      },
+      {
+        "status": "declared",
+        "statement": "Annals supplies complete Vita retained works through supported read interfaces.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.corpus.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Weaver authors project documents under caller-supplied exact request identity and retains its own source reads.",
+        "target": "weaver",
+        "kind": "control",
+        "contract": "weaver.narrative.write"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies compatible constrained execution, quota, requester tools, and exact-job cancellation.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable selected prompt text versions; Platter owns selection meaning and permissions.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "Full posting retrieval depends on employer HTTPS sources and supported ATS or JobPosting representations.",
+        "target": "employer-postings",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "PDF generation depends on locally available Tectonic, Python/pypdf, fonts, and template packages.",
+        "target": "resume-renderer",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Historical captures that retain repository resource instructions depend on readable local directories; Platter provides no repository snapshots or availability guarantee.",
+        "target": "local-projects",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/preparation.md"
+}

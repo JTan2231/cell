@@ -128,7 +128,8 @@ The default database is `~/.local/share/clew/ledger.sqlite3`, a private regular
 file with mode 0600 in a directory with mode 0700. `--state-dir ABSOLUTE_PATH`
 selects an explicit independent private ledger. Ordinary operations require
 initialized schema-two state and never initialize or migrate it implicitly.
-Use the [installation contract](install-operate.md) for initialization and recovery.
+Read the `clew.state` feature for initialization, migration and recovery
+guarantees. Read `chancery show clew.install.operate` for the ordered procedures.
 
 SQLite serializes short writes and waits up to five seconds for contention.
 Read operations use memory proportional to retained history. No hard size,

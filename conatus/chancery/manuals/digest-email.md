@@ -77,28 +77,20 @@ returns its existing receipt without another send. After that window, inspect
 provider acceptance before explicitly authorizing a new ad hoc occurrence;
 Conatus does not retry the old occurrence automatically.
 
-## Schedule and maintenance
+## Scheduled admission and related contracts
 
-Generate the separate schema-two Clockwork definition:
+The independent `conatus/daily-email` binding grants standing authority for this
+exact daily content. Clockwork owns activation and durable failure halts.
+Send holds product admission; scheduled admission during maintenance is a
+successful skip. Scheduling continuation does not retry an uncertain message.
 
-```sh
-conatus-install schedule-definition --daily-email --state-dir ABS_STATE --output ABS_NEW_FILE
-```
+Read `conatus.service` for definition, installation, maintenance and failure
+policy. Use `conatus.update.operate` to prepare, activate or recover the binding.
+Read `conatus.want.lifecycle` for active selection. Existing frozen occurrences
+retain their bytes after a want changes state.
 
-It uses `conatus/daily-email`, local 09:00, no run-at-load, skipped overlap,
-a 180-second activation limit and `halt-until-approved`. The existing update
-binding retains its independent schedule. Definition generation does not
-register or activate either binding. Login, sleep and launchd control actual
-activation; no maximum start delay or catch-up guarantee is provided.
+## Command usage
 
-Cell deployment settings accept `daily_email_enabled` separately from update
-`enabled`. Omission preserves the prior daily-email selection and enabled
-intent; an absent binding remains absent. Deployment captures, suspends,
-retargets and restores both exact bindings. It preserves existing failure
-halts. Send holds the product admission guard; deliberate scheduled admission
-during deployment returns a successful maintenance skip.
-
-Inspect `clockwork incident list conatus/daily-email` after a scheduled failure.
-Resolve the cause and any uncertain acceptance before explicitly approving
-`clockwork binding resume conatus/daily-email INCIDENT_ID`. Continuation permits
-future scheduling; it does not retry an uncertain email or clear an update halt.
+CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
+journal records command identity, time and thread ID, not arguments, output or
+outcomes. Internal calls are excluded. Recording errors preserve product results.

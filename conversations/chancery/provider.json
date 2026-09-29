@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "conversations",
     "name": "Conversations",
@@ -16,7 +16,7 @@
     ],
     "inventory": {
       "covers": [
-        "All supported public Conversations CLI and embedded-library outcomes for history exploration, exact task-summary reads, completed-turn activity, refresh, and development in this release."
+        "All supported public Conversations CLI and embedded-library outcomes for history exploration, exact task-summary reads, completed-turn activity, refresh, runtime readiness, installation and recovery, and development in this release."
       ],
       "completeness": "complete",
       "excludes": [
@@ -43,6 +43,9 @@
   },
   "entries": [
     "entries/history-explore.json",
+    "entries/runtime.json",
+    "entries/installation-operate.json",
     "entries/develop-change.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

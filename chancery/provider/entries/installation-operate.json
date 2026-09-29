@@ -1,0 +1,179 @@
+{
+  "id": "chancery.installation.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or recover the Chancery reader",
+  "summary": "Select a tested user-owned macOS Chancery release, verify its matching bundle and selectors, register its commands, or recover a verified retained release.",
+  "use_when": [
+    "The Chancery reader must be installed, upgraded, inspected, verified, or recovered."
+  ],
+  "do_not_use_when": [
+    "Another product must be deployed or its provider selector repaired.",
+    "The caller needs to alter or delete usage history."
+  ],
+  "outcome": "The intended tested Chancery program and matching bundle are coherently selected and verified, with other provider selectors and journal history preserved.",
+  "effects": [
+    "Stages and selects a content-addressed current-user program release with matching documentation.",
+    "Changes only owned command, installer, current/previous, and Chancery provider selectors.",
+    "Post-install registration separately initializes only an empty supported journal and adds command identities."
+  ],
+  "authority": [
+    "Chancery owns its reader installation and provider selector. Each other product owns its release and selector.",
+    "The tested installer and installed checks establish selection; catalog discovery does not prove represented readiness."
+  ],
+  "success": [
+    "The installer verifies the intended current release and matching bundle; installed version, product, list, show, resolve, and doctor reports preserve their separate meanings.",
+    "Other provider selectors and usage history remain intact, and registration has an explicit outcome."
+  ],
+  "failure_and_recovery": [
+    "Stop on a foreign selector, invalid candidate, failed integrity check, or unsupported existing installation.",
+    "Use a trusted tested installer to verify and recover the canonical owned retained release; never execute an unverified retained installer."
+  ],
+  "privacy": [
+    "Install public local documentation without secrets. The separate private journal retains only command identity, thread, and observation time."
+  ],
+  "interfaces": [
+    {
+      "label": "Inspect installation",
+      "invocation": "chancery-install inspect"
+    },
+    {
+      "label": "Install tested candidate",
+      "invocation": "chancery-install install --binary <ABSOLUTE_BINARY> --bundle <ABSOLUTE_BUNDLE>"
+    },
+    {
+      "label": "Verify retained release",
+      "invocation": "chancery-install verify-release <ABSOLUTE_RELEASE>"
+    },
+    {
+      "label": "Recover retained release",
+      "invocation": "chancery-install recover --release <ABSOLUTE_RELEASE>"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "chancery.bundle.validate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "chancery.directory.discover",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "session_surfaces": [
+    "current-user macOS installation",
+    "trusted tested binary and installer",
+    "product release environment"
+  ],
+  "does_not_authorize": [
+    "Changing another product release or provider selector.",
+    "Executing represented capabilities, clearing usage history, or editing installed immutable releases."
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Identify and validate the tested binary, matching installer, and reviewed bundle.",
+    "Inspect and capture the owned current selection; verify the candidate before selection.",
+    "Install the intended candidate and explicitly register its command inventory.",
+    "Confirm matching installed program and documentation with preserved other selectors.",
+    "Verify and recover only an exact canonical owned retained release when recovery is required."
+  ],
+  "checkpoints": [
+    "The candidate is tested and the bundle validates before selection.",
+    "Existing selectors are owned and any expected-current guard matches the captured selection.",
+    "Installed selection and post-install registration have separately verified outcomes."
+  ],
+  "adaptation": [
+    "Use absolute tested paths and the intended user-home override when an isolated installation is required.",
+    "Treat doctor issues as provider-owned diagnostics rather than assuming all are reader installation failures."
+  ],
+  "stop_when": [
+    "A selector has a foreign target or the candidate/retained release fails integrity verification.",
+    "The intended tested release or supported installation cannot be identified.",
+    "Journal registration fails because state is unsupported; do not recreate it."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user macOS operators may install, inspect, verify, or recover the Chancery reader."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "A tested binary, matching trusted tested installer, reviewed bundle, and owned target installation are available. Nucleus health and authentication are not required."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Absolute candidate binary and bundle paths or an exact canonical owned retained release; optional absolute user-home override and exact expected-current guard."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Verified intended program and bundle selection, retained other provider selectors and history, and explicit command-registration outcome."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Reader installation selects documentary artifacts only. A catalog issue, compatibility result, registration result, and represented live readiness have distinct meanings."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Release identity is content-addressed; current and previous select exact releases. Expected-current is absent or releases/HASH. The bundle provider release and entry contract versions remain independent."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Verification covers the selected release inventory, owned selectors, and installed documentation at the inspection boundary. The procedure promises no live represented-product probe."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user macOS installer modifies only its owned installation and selectors and rejects foreign targets. Optional --home selects an explicit user home."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Installation stages a release and advances program and provider selectors coherently with rollback support. Recovery validates an exact retained owned release before selecting it. The journal and other providers remain preserved."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "No service or schedule is installed. Stop on invalid bundles, integrity failures, foreign ownership, or unsupported state; source presence is not candidate proof."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Bundle publication deploys compatible reader support first. Current cell-install-v2 exact inventory and verified supported legacy layouts remain distinct. Program recovery does not erase usage observations."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "This attended current-user operation uses local owned artifacts and creates no reliance on represented product runtime, network services, or Nucleus readiness."
+      }
+    ]
+  },
+  "manual": "manuals/installation-operate.md"
+}

@@ -27,12 +27,17 @@ Commit the intended changes, then submit them from the Cell root:
 The [CI manager](../ci_manager/README.md) integrates, validates, attempts bounded
 repairs, deploys, and emails the outcome.
 
-## Further documentation
+## Documentation
 
-- [Command usage journal and API](docs/usage.md)
+Read `chancery product chancery` for the installed overview and inventory.
+Use `chancery show ID` for a focused feature or procedure and
+`chancery resolve ID` for its required contracts.
 
-- [Commands and output](docs/cli.md)
-- [Provider bundle format](docs/manifest.md)
-- [Publish a provider](provider/manuals/provider-publish.md)
-- [Architecture and Rust interface](docs/architecture.md)
-- [Installation](docs/system-installation.md)
+- [Product overview](provider/overview.md)
+- [Catalog, CLI output, and Rust client](provider/manuals/directory-discover.md)
+- [Outward-promise resolution](provider/manuals/capability-resolve.md)
+- [Provider bundle format and validation](provider/manuals/bundle-validate.md)
+- [Command usage feature and API](provider/manuals/usage-record.md)
+- [Provider publication](provider/manuals/provider-publish.md)
+- [Reader installation and recovery](provider/manuals/installation-operate.md)
+- [Usage registration, backup, and restore](provider/manuals/usage-operate.md)

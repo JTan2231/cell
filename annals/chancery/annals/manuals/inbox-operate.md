@@ -1,223 +1,190 @@
 # Operate the Annals inbox
 
-Read-only inbox operations need no filesystem write permission. Status takes a shared lock through the existing read-only control file. Worker-lock probes use read-only handles and propagate access errors. Setup or migration creates the control file. An absent spool stays absent; incomplete initialized state requires setup or recovery.
+Use this operation to inspect or operate one configured inbox. Read the
+[inbox feature](inbox.md) for queue, attempt, control, retry, status, and recovery
+semantics. Use [installation](installation.md) for program or scheduler changes.
+These commands do not authorize receipt editing, archive moves, unbounded
+retry, or storage cleanup.
 
-The Annals inbox is a durable filesystem spool driven by external scheduling.
-Annals has no resident inbox daemon and every job has at most one processing
-attempt. Operate it through supported commands; never edit `job.json`, move
-terminal envelopes back to the queue, or infer delivery state from processes.
+## Select and inspect
 
-Named inbox commands use `annals library NAME inbox ...` and the registered
-library's database, identity, and spool. New named libraries receive private
-configs and spools but no schedule. A background invocation keeps the configured
-expected library ID so a path cannot silently select a replacement database.
+1. Select the registered library with `annals library NAME inbox ...`, or use
+   its explicit config. Confirm the expected database, library ID, kind, and
+   spool. A decisions config permits only producer originals and their retries.
+2. Run `annals inbox status`. Inspect the active and next jobs, worker state,
+   storage readiness, operator pause, maintenance, and terminal counts. Reads
+   require prepared state and do not initialize or recover it.
+3. Stop if identity, kind, locks, storage probes, or initialized state cannot
+   be verified. Use the supported setup or recovery operation. Preserve the
+   complete error instead of inferring readiness from processes.
 
-Dispatch freezes the current library instructions with HEAD for each new
-examination. Retried pending proposals can be reused only while both remain
-current; otherwise the retry begins a fresh examination under current
-instructions. Already committed or recorded results remain authoritative
-after later instruction changes or Nucleus failures.
+Status, retry preview, and event reports are read-only. They require read
+access to selected config, library, prepared SQLite sidecars, and applicable
+spool locks and receipts. Registration/enqueue require a configured general
+library and spool. Dispatch additionally requires authenticated compatible
+Nucleus and complete Bazaar prompt selection.
 
-## Observe and admit work
+## Admit general-library files
 
-```sh
-/Users/joey/.local/bin/annals inbox status
-/Users/joey/.local/bin/annals inbox register
-/Users/joey/.local/bin/annals inbox enqueue <FILE>
-/Users/joey/.local/bin/annals inbox enqueue --priority <FILE>
-```
-
-A configured decisions library also has a producer-specific admission path:
-
-```sh
-/Users/joey/.local/bin/annals --config DECISIONS_CONFIG inbox accept \
-  --producer krisis --key DECISION_ID ACCOUNT.md
-```
-
-It publishes one complete unstarted envelope and immutable acceptance event,
-but no source-delivery row or model attempt. Exact key-and-byte replay returns
-the original job; changed bytes conflict. This path requires the explicit
-decisions config or a registered decisions name bound to that config and its
-expected persistent library ID. It never falls back to the primary library.
-
-That config rejects direct work add or integration, generic enqueue, ordinary
-incoming registration, and backlog import. Its dispatcher binds or verifies
-the dedicated spool, ignores `incoming/`, and accepts only producer envelopes
-or explicit retry children. The generic admission behavior below applies when
-`[decision_feed]` is absent and the database's immutable role is `general`.
-Decision-config operations require a `decisions` database; generic admission
-and dispatch require a `general` database, so changing configs, spools, or a
-direct library selector cannot bypass the split.
-
-Registration moves settled top-level files from `incoming/` into complete
-queued envelopes. It creates no database source-delivery record. Direct
-enqueue copies explicit regular files into complete envelopes and leaves the
-originals unchanged, but rejects a copy that would cross the configured spool
-storage reserve. Priority is a binary lane; it does not renumber jobs and does
-not preempt a processing job.
-
-Dispatch is explicit or externally scheduled:
+Register settled top-level arrivals:
 
 ```sh
-/Users/joey/.local/bin/annals inbox run
+annals inbox register
+annals inbox register --settle-seconds 60
 ```
 
-Scheduling is outside this cross-platform inbox contract. The macOS
-installation contract documents its scheduler binding and lifecycle.
+Registration moves eligible source files into complete queued envelopes. It
+starts no source delivery or model attempt. Pause permits registration;
+deployment maintenance prevents spool mutation. Hidden entries, directories,
+and `.part` files are ignored. An arrival still settling waits for a later scan.
 
-Before every new claim, Annals checks the configured available-byte reserve on
-both the library and spool filesystems. Low storage leaves the next job queued
-with attempts zero and no delivery record; the ordinary activation exits and a
-later scheduled or explicit run checks again without requiring `resume`. A
-storage probe failure also leaves the job unattempted but exits nonzero.
-
-## Storage recovery authority and scope
-
-Low storage stops dispatch without authorizing cleanup. Preserve queued work and
-report the affected paths and available bytes. Neither the Annals liaison nor
-an operating model or agent may, as storage remediation, delete, truncate,
-rotate, prune, move, compress, overwrite, or otherwise clear user data, or
-lower or disable the configured reserve, without the user's explicit consent
-for the exact target and scope. A request to run, continue, retry, update, or
-deploy Annals authorizes only that operation's documented effects, not
-additional cleanup. Scheduled rechecks only observe capacity and may resume
-ordinary queued work after the configured reserve becomes available.
-
-The gate applies to new ordinary and retry-child claims. The related
-direct-enqueue headroom check applies separately to an explicit spool copy. A
-gated inbox item does not submit its associated liaison job to Nucleus. The gate
-is not a host-wide lock and does not itself block an Annals deployment,
-globally stop the Nucleus service or independent Nucleus jobs, or block another
-product's deployment; manual `annals integrate` is also outside this gate.
-Actual filesystem exhaustion can still make any operation sharing that storage
-fail when it needs to stage a release, create a backup, migrate a database, or
-write state or logs. An unreadable probe is distinct from measured low space
-and can make deployment status inspection fail with `storage_probe_failed`.
-
-When storage is ready, Annals performs an authenticated Nucleus account
-preflight. Failure leaves the next job queued with attempts zero and no
-delivery record. A claimed job moves to processing, increments from zero to
-one attempt, and begins its source delivery. New work enters integration with
-immediate application. Fresh exact-byte duplicates stop at retention without
-a new examination.
-
-## Pause, ordering, and interruption
+Copy explicitly selected regular files into the spool:
 
 ```sh
-/Users/joey/.local/bin/annals inbox pause
-/Users/joey/.local/bin/annals inbox resume
-/Users/joey/.local/bin/annals inbox prioritize <JOB_ID>
-/Users/joey/.local/bin/annals inbox deprioritize <JOB_ID>
-/Users/joey/.local/bin/annals inbox interrupt <JOB_ID> --as failed
+annals inbox enqueue FILE...
+annals inbox enqueue --priority FILE...
 ```
 
-Pause prevents a new dispatch claim after any active job finishes, but
-registration continues and explicit enqueue remains subject to the storage
-reserve. Resume removes only the
-operator-owned pause and does not start a worker or clear deployment
-maintenance. Prioritize/deprioritize accept queued ordinary jobs only.
+Enqueue leaves original files unchanged and rejects a copy that would cross
+the configured reserve. Check the returned job IDs, immutable sequence,
+priority, queued count, and next job. Keep producer-only decisions admission
+on [the exchange inlet](decision-account-exchange.md).
 
-Interruption names one exact processing job and records either `failed` or
-`skipped`. It does not pause successors, so pause first when the next job must
-remain queued. A skipped job receipt corresponds to a failed source delivery
-with the dedicated skipped error; keep those lifecycle namespaces distinct.
+## Change priority or dispatch
 
-## Bounded retry events
-
-Retry is an explicit recovery event over an inclusive interval in failed
-source-delivery completion order:
+Change only named queued ordinary jobs:
 
 ```sh
-/Users/joey/.local/bin/annals inbox retry preview \
-  --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>
-/Users/joey/.local/bin/annals inbox pause
-/Users/joey/.local/bin/annals inbox retry start \
-  --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>
-/Users/joey/.local/bin/annals inbox retry status <EVENT_ID>
-/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>
+annals inbox prioritize JOB_ID...
+annals inbox deprioritize JOB_ID...
 ```
 
-There is no retry-all or open-ended event. Preview is read-only and reports
-eligibility. Start requires the inbox paused, no processing job, no unfinished
-event, and no maintenance. It freezes exact membership, preserves every
-original job and delivery, and creates a fresh linked retry child per member.
-A child still has one attempt. Only failures with retained-work identity are
-eligible; correct a pre-retention source error and deliver it as new input.
+Verify the requested lane and next job. These commands do not renumber jobs,
+preempt an active job, or control retry children. A terminal or processing ID
+is an error.
 
-An unexpected model/runtime failure or interruption halts the event. Continue
-advances only unattempted items and never retries a failed child. The durable
-event report, rather than process exit alone, is the accounting authority.
-Insufficient or unreadable storage also halts an attended retry before claiming
-the next child; correct the condition and continue that event explicitly.
+Run one activation when source examination and automatic application are
+intended:
 
-Spool archives retain unchanged source material. Nucleus state may retain the
-complete model request and output. Treat both as private. A Nucleus restart
-makes an unfinished attempt lost; Annals, not Nucleus, decides subsequent
-domain recovery.
+```sh
+annals inbox run
+annals inbox run --stop-on-failure
+```
 
-## Output selection
+The runner registers arrivals, recovers an interrupted envelope, and drains
+sequentially while controls permit it. New work can invoke Nucleus, consume
+allowance, and apply a reconciliation immediately. Fresh exact-byte duplicates
+stop at retention. Every claimed job has one attempt.
 
-Inbox reports retain queue, gate, storage, domain, and failure facts. Retry
-start/continue and event status return identity, window, state, counts,
-remaining work, and last halt. `retry status EVENT --details` includes the full
-original-to-child mapping. Event listing defaults to 20 and reports `has_more`.
-Increase positive `--limit` to read more. Retry preview retains the complete
-proposed selection.
+Inspect the run report's attempted, applied, recorded, duplicate, failed,
+skipped, remaining, and gate facts. Manual ordinary draining can continue past
+item-local failures. `--stop-on-failure` returns nonzero before a successor
+claim after the first failure; installed scheduled runners use this option.
+An unexpected model or runtime failure also ends the activation. Preserve any
+Annals result already recorded before a later runtime failure.
 
-## Scheduled failure policy
+Low storage leaves the next job queued with attempts zero and no delivery
+record. An ordinary activation exits successfully and rechecks on the next
+activation. A failed probe or authenticated preflight exits nonzero with the
+job unattempted. Report affected paths and capacity. Do not clear user data or
+change the reserve without explicit user consent for the exact target and scope.
 
-Both `annals/inbox` and `annals/decisions-inbox` use Clockwork definition schema
-2 with `[failure] on_abend = "halt-until-approved"`. The release-local runner
-selects `inbox run --stop-on-failure`. This batch option stops after its first
-failed job, including an item-local source failure, and returns nonzero before
-claiming a successor. It does not create an Annals scheduling-pause record.
-Ordinary manual `inbox run` retains its item-local continuation behavior.
+## Pause, resume, or interrupt
 
-Clockwork retains the incident, halts later activations, and queues one email
-notification through `HOME/.local/bin/email`. Inspect `clockwork incident list
-annals/inbox` or the `annals/decisions-inbox` key and `clockwork incident show
-INCIDENT_ID`. Only explicit approval followed by `clockwork binding resume KEY
-INCIDENT_ID` releases that scheduling halt. Definition switches, deployment,
-Annals `inbox resume`, and dependency recovery do not release it.
+Prevent successor claims before stopping an exact active job:
 
-A low-storage readiness result, operator pause, maintenance, or empty queue is
-not an abend. A storage-probe or authentication error is an abend. Annals retains
-operator pauses, bounded retry-event halts, exact attempts, and domain recovery.
-Scheduling continuation neither retries a failed delivery nor clears these
-product controls. Existing failed archives are history, not new incidents. A runtime failure after
-a recorded reconciliation preserves the completed delivery and result, then
-stops the scheduled batch before its successor.
+```sh
+annals inbox pause
+annals inbox status
+annals inbox interrupt JOB_ID --as failed --reason 'Operator context'
+```
 
-## Command usage
+Use `--as skipped` only when that disposition is intended. Pause permits the
+active job to finish and blocks later claims. Interruption alone does not pause
+successors. It can conflict as too late when a terminal outcome or recorded
+reconciliation already exists. A skipped receipt corresponds to a failed
+source delivery with `inbox_job_skipped`.
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+Verify the named terminal archive and source-delivery outcome. Resume ordinary
+dispatch only when that operator pause should be removed:
 
-## Bazaar prompt selection
+```sh
+annals inbox resume
+```
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+Resume starts no worker and clears only the operator pause. It cannot clear
+maintenance, unfinished retry events, or a Clockwork failure halt.
 
-Read `cell.prompts.annals` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+## Recover a bounded failed-delivery interval
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+1. Run `annals inbox retry preview --from FAILED_JOB --through FAILED_JOB`.
+   Both anchors are required and inclusive in failed-delivery completion order.
+   Use the same ID twice for one failure. Inspect the whole frozen proposal.
+2. Correct a pre-retention source failure and deliver it as new input. Do not
+   select skipped jobs, already selected originals, changed or missing material,
+   or an interval containing an ineligible member.
+3. Run `annals inbox pause`, then inspect status. Wait for paused quiescence:
+   no processing job, no unfinished retry event, and no maintenance.
+4. Run `annals inbox retry start --from FAILED_JOB --through FAILED_JOB`.
+   Add `--reason TEXT` only for trimmed, nonempty context of at most 1,000
+   characters. Start preserves every original and creates fresh linked children.
+5. Read `annals inbox retry status EVENT_ID`. Add `--details` to verify the
+   complete original-to-child mapping. Inspect item outcomes and remaining work;
+   exit zero alone does not mean every member succeeded.
+6. Correct an actionable halt, then run `annals inbox retry continue EVENT_ID`
+   in the same paused, quiescent, non-maintenance state. Continue advances only
+   unattempted members and never gives a failed or skipped child another attempt.
+7. Verify `completed` and the durable outcomes. Resume the operator pause only
+   when ordinary dispatch is intended.
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+Start freezes the exact selection; later failures never enter it. Missing or
+changed archive material rejects the whole window. Only failures with retained
+work identity are eligible. There is no retry-all or open-ended event.
+Insufficient or unreadable storage and failed preflight halt attended retry
+without claiming the next child. A failed unexpected attempt or interruption
+also halts the event. Ordinary scheduling never continues it.
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.annals --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+A later bounded event can select a failed child to make another explicit link
+in the retry chain. It cannot rewrite the original failure. Use event status
+as the accounting authority; `lately` and Annals Usage report each delivery
+separately.
+
+## Recover interrupted processing and scheduling
+
+Run the supported runner or retry continue command. Recovery finishes durable
+success when possible, otherwise fails and archives the interrupted job. It
+never invokes a second liaison for an attempted receipt, adopts an unrelated
+reconciliation, or moves a terminal envelope back to queued. Verify the exact
+job and linked Annals domain result after recovery.
+
+For a scheduled halt, inspect the matching incident:
+
+```sh
+clockwork incident list annals/inbox
+clockwork incident show INCIDENT_ID
+```
+
+Use `annals/decisions-inbox` for that binding. Diagnose the Annals delivery and
+its recovery separately. Resume the binding only after explicit approval for
+that incident:
+
+```sh
+clockwork binding resume KEY INCIDENT_ID
+```
+
+Annals resume, retry, dependency recovery, definition switches, and deployment
+do not release the Clockwork halt. Scheduling continuation neither retries a
+failed delivery nor clears an Annals control. Verify the binding and product
+state separately. Low storage, pause, maintenance, and an empty queue are
+normal readiness conditions; failed storage probes and authentication are
+abends. Existing archives are history, not new incidents.
+
+## Private state and command usage
+
+Keep source envelopes, library state, logs, backups, and Nucleus context private.
+This operation grants no publication, deletion, credential, or service-restart
+authority. A request to continue authorizes its documented effects only.
+
+CLI usage recording requires nonempty `CODEX_THREAD_ID`. Chancery records
+command identity, time, and thread ID, not arguments, output, or outcomes.
+Internal calls are excluded. Recording errors preserve command results.

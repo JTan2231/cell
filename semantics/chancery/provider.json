@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "semantics",
     "name": "Semantics",
@@ -37,7 +37,11 @@
   },
   "entries": [
     "entries/repository-explore.json",
+    "entries/projects.json",
+    "entries/reconciliation.json",
+    "entries/service.json",
     "entries/project-operate.json",
     "entries/develop-change.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

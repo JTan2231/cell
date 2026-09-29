@@ -1,0 +1,233 @@
+{
+  "id": "annals.corpus.change",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Validate and change the Annals corpus",
+  "summary": "Submit strict evidence-grounded reconciliations, inspect and apply current proposals, and read, normalize, or revert append-only corpus history.",
+  "use_when": [
+    "A proposed corpus transition must be submitted, inspected, validated, or explicitly applied.",
+    "A reader needs commit, diff, normalization, or reversion guarantees."
+  ],
+  "do_not_use_when": [
+    "An AI examination, source retention, or scheduled inbox operation is wanted.",
+    "The proposed change bypasses evidence, graph invariants, currentness, or supported history interfaces."
+  ],
+  "outcome": "A complete validated interpretation, atomic authorized corpus transition, or exact read of append-only history.",
+  "effects": [
+    "Submission records normalized reconciliation intent and provenance without changing corpus state.",
+    "Application atomically appends one commit and its canonical effects; mechanically equal results are recorded without a commit.",
+    "Confirmed nonempty shake removes only transitively implied direct edges; revert appends the inverse of one earlier transition.",
+    "Inspection, validation, log, and diff are read-only."
+  ],
+  "authority": [
+    "Annals owns strict reconciliation input, structural validation, currentness, canonical effects, application, and append-only corpus history.",
+    "Stored library instructions define semantic interpretation; structural validity does not assert conceptual truth."
+  ],
+  "success": [
+    "The selected request resolves and validates against its original base.",
+    "An authorized change commits atomically at its current corpus and instruction basis, or an exact read or no-change result is returned."
+  ],
+  "failure_and_recovery": [
+    "Stale corpus or instruction state fails without force or silent rebase.",
+    "A normalization plan fails atomically if its identity, HEAD, graph, or instruction basis is stale.",
+    "Relevant intervening changes cause an atomic revert_conflict; unrelated facts survive.",
+    "History replay failure invalidates the library; direct SQL edits and skipped effects are unsupported recovery."
+  ],
+  "privacy": [
+    "Library and backup state retain complete source material, exact evidence, instruction revisions, reconciliation provenance, and corpus history. Keep them private."
+  ],
+  "interfaces": [
+    {
+      "label": "Submit a strict reconciliation",
+      "invocation": "annals change submit INPUT --work LABEL --base REVISION"
+    },
+    {
+      "label": "Inspect or validate a proposal",
+      "invocation": "annals change show --work LABEL; annals change validate --work LABEL"
+    },
+    {
+      "label": "Apply a proposal",
+      "invocation": "annals change apply --work LABEL"
+    },
+    {
+      "label": "Inspect accepted transition",
+      "invocation": "annals change show --at REVISION"
+    },
+    {
+      "label": "Preview or confirm normalization",
+      "invocation": "annals shake [--yes]"
+    },
+    {
+      "label": "Read corpus history",
+      "invocation": "annals log [--limit N]; annals diff FROM TO"
+    },
+    {
+      "label": "Append one inverse transition",
+      "invocation": "annals revert REVISION"
+    },
+    {
+      "label": "Parse provider-owned input",
+      "invocation": "annals::api::Reconciliation; annals::api::parse_reconciliation"
+    }
+  ],
+  "does_not_authorize": [
+    "Applying, normalizing, or reverting without authority for material effects.",
+    "Direct SQL, source rewriting, force application, history deletion, or disclosure."
+  ],
+  "dependencies": [
+    {
+      "id": "annals.libraries",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.corpus.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local users, agents, and callers of the provider-owned reconciliation types may submit, inspect, validate, or explicitly apply one corpus transition and inspect or change history."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The selected prepared Annals library contains the scoped retained work and base revision. Application requires unchanged HEAD and selected instruction revision. Material effects require explicit authority."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Strict JSON has a nonempty summary, one or more operations, and optional inert nonempty annotations. Unknown fields are rejected. The host selects work and base outside that semantic request."
+      },
+      {
+        "status": "declared",
+        "statement": "Concept selectors use public cN IDs or same-request local creation handles. Evidence uses exact quotation plus optional heading and immediately adjacent-text filters, never source byte offsets."
+      },
+      {
+        "status": "declared",
+        "statement": "The seven actions create, add/remove parent, add/remove evidence, reword with explicit evidence disposition, or nonrecursively retire with optional replacement."
+      },
+      {
+        "status": "declared",
+        "statement": "Concept labels and handles cannot contain outer whitespace or control characters; labels may repeat and never select identities."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No move, sibling position, primary parent, arbitrary graph write, force application, or history deletion is supported."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Full reconciliation reads distinguish resolved_operations from material effects and give evidence occurrence_count without byte ranges, actor/time, original request and relevant instruction provenance. Applied and recorded receipts are compact; pending proposals retain complete review content. change list defaults to 20 and uses schema-two items/has_more."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A reconciliation is a provisional interpretation, not a unique semantic decomposition. It projects complete state at its original base. Every final leaf has evidence and the parent graph remains acyclic with valid endpoints."
+      },
+      {
+        "status": "declared",
+        "statement": "Annotations are retained context and do not affect projection, equality, validation, or application. A selector matches all remaining quotation occurrences subject to bounded fan-out."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals stores normalized intent and append-only typed effects, derives current and historical state by the same strict reducer, and has no current-graph snapshot or stored resolved JSON authority."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Public cN identities survive rewording and are never reused, including IDs reserved during pending or superseded requests. Revision zero is empty; each accepted material transition advances exactly one contiguous integer revision."
+      },
+      {
+        "status": "declared",
+        "statement": "Local handles and draft operation IDs are not concept identities. Work, reconciliation, and commit identity remain distinct."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Validation resolves the whole projected state at the original base. Application rechecks HEAD and instructions inside its committing transaction. Historical reads replay the requested immutable state."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No response-latency, corpus-size, or throughput objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Registered names and operator config/path selection use the libraries contract. Inspection and validation need read access to prepared state; mutations use the supported CLI and its typed client."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct SQLite edits and internal storage-row or source-offset integration are unsupported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "At most one reconciliation per work is pending. Same-or-later-base submissions supersede the prior pending record; older-base submissions do not displace newer pending results."
+      },
+      {
+        "status": "declared",
+        "statement": "Mechanical equality is recorded without a commit. Material apply atomically appends canonical effects, marks the reconciliation applied, and completes linked delivery state when applicable; failures leave corpus and workflow state unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "shake confirms an exact identity, HEAD, graph, and instruction basis. It preserves reachability but can change direct-neighbor counts, shared flags, paths, and hop distances. A later JSON preview does not bind a new invocation."
+      },
+      {
+        "status": "declared",
+        "statement": "Revert appends an inverse to current HEAD without erasing history. Relevant incompatible intervening facts conflict atomically; unrelated facts survive."
+      },
+      {
+        "status": "declared",
+        "statement": "Recorded and committed domain results survive later instruction changes and later execution failure. Legacy null instruction provenance remains unknown and cannot supply a current pending interpretation."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Evidence links cover at most 8 KiB. Selection pages are bounded, while replay and in-memory state cost grow with history and corpus size. Normalization and reversion each create at most one new commit per successful material operation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general corpus capacity, completion latency, throughput, or cross-release historical support window is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Feature contract, release, library schema, reconciliation grammar, output schema, and Nucleus protocol evolve separately. Supported migration does not invent legacy instruction provenance."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general pending-reconciliation or history deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals libraries own selection, identity, kind, prepared-state access, and instructions. Corpus reading owns graph/evidence meaning and revision-bound read semantics.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.libraries"
+      },
+      {
+        "status": "not_applicable",
+        "statement": "These deterministic operations do not invoke a model, Nucleus, or a network service."
+      }
+    ]
+  },
+  "manual": "manuals/corpus-change.md"
+}

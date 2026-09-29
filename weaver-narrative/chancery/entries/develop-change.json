@@ -1,7 +1,7 @@
 {
   "id": "weaver.develop.change",
   "contract_version": 1,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "develop",
   "support": "supported",
   "title": "Change Weaver narrative authoring",
@@ -34,7 +34,7 @@
     "The changed behavior meets the agreed endpoint and preserves requester authority and recovery. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome."
   ],
   "failure_and_recovery": [
-    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+    "Stop when the change needs a new scope or authority, incompatible state recovery, unknown ownership, or unsupported provider behavior. Preserve saved output and exact recovery identities; use the owning operation for runtime or deployment recovery."
   ],
   "privacy": [
     "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
@@ -42,94 +42,34 @@
   ],
   "dependencies": [
     {
-      "id": "annals.decision-account.exchange",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "nucleus.execution.operate",
+      "id": "weaver.narrative.write",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "weaver.lifecycle",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "ci-manager.queue.operate",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
     "Source-document mutation, unrelated remote disclosure, narrative publication or email, state deletion, automatic authoring retry, or effects outside the user-approved endpoint."
   ],
   "promise": {
-    "data_semantics": [
-      {
-        "status": "declared",
-        "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
-      }
-    ],
-    "identity_and_units": [
-      {
-        "status": "declared",
-        "statement": "A document ID is its unique Nucleus job ID. Local creation and observed terminal times are Unix seconds. Text bounds count UTF-8 bytes. Annals acceptance time describes storage, not decision occurrence."
-      }
-    ],
-    "completeness_and_freshness": [
-      {
-        "status": "declared",
-        "statement": "List selects at most 100 document rows, default 20, newest first with has_more. Show returns one exact row. Live source traversals are bounded by Annals pagination. Source selection and interpretation are agent-driven; no complete historical recall or reproducible source snapshot is asserted."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No provider latency, maximum source age, end-to-end completion time, or comprehensive research coverage is promised."
-      }
-    ],
-    "access": [
-      {
-        "status": "declared",
-        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
-      }
-    ],
-    "lifecycle_and_consistency": [
-      {
-        "status": "declared",
-        "statement": "Save the exact request before admission. Resume the same job after uncertainty. Save Markdown and a pending tool reply atomically, and clear the reply after Nucleus acknowledgement. A saved document survives later runtime failure. New revisions are separate requests without a stored revision relationship."
-      }
-    ],
-    "operational_limits": [
-      {
-        "status": "declared",
-        "statement": "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No throughput, perpetual retention, source latency, or automatic retry service objective is declared."
-      }
-    ],
-    "compatibility_and_evolution": [
-      {
-        "status": "declared",
-        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolsets: historical version 1 and new selection version plus 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No future compatibility lifetime or deprecation interval is promised."
-      }
-    ],
-    "reliances": [
-      {
-        "status": "declared",
-        "statement": "Annals supplies complete accepted Krisis text through its start, watermark, and page reading client.",
-        "target": "annals",
-        "kind": "data",
-        "contract": "annals.decision-account.exchange"
-      },
-      {
-        "status": "declared",
-        "statement": "Nucleus supplies constrained execution, managed authentication, and the durable requester mailbox.",
-        "target": "nucleus",
-        "kind": "control",
-        "contract": "nucleus.execution.operate"
-      }
-    ],
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current local user and authorized Cell agents or deployment coordinator."
+        "statement": "The current local user and authorized Cell agents follow this procedure within the agreed change or maintenance endpoint."
       }
     ],
     "preconditions": [
@@ -147,9 +87,107 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+        "statement": "An agreed source/contract change and its focused evidence are produced. When delivery is authorized, the committed input and retained manager outcome prove that separate delivery endpoint."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A source edit, focused test, accepted commit, installed release and outcome email are separate results. The retained manager job establishes only its declared validation and deployment scope."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Source commit and retained manager job identities select the delivery. Exact run IDs own maintenance holds. These are separate from authoring document/job identities."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Verification describes the exact selected candidate and retained delivery outcome. Readiness is observed separately at the corresponding check; a source change or catalog entry does not establish installed readiness."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No end-to-end delivery, source-read or authoring completion latency is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, backups, sources, and runtime records private."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Read current contracts and terminology before changing the boundary. Preserve exact request and pending reply recovery; changed tool meaning uses a new immutable identity with historical decoding. Publish owned documentation with matching program bytes through authorized delivery."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Readiness probes create no model jobs or synthetic narratives. The procedure preserves private state, owned holds, exact authoring recovery and source authority."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, retention horizon, future model availability, or automatic authoring retry objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Preserve existing public command routes, schema 1, historical exact requests, immutable tool identities and matched program/provider selection. The owned features declare their detailed compatibility rules."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The installed CI manager owns serial integration, validation, bounded repair, exact-source deployment and the deterministic outcome email.",
+        "target": "ci-manager",
+        "kind": "control",
+        "contract": "ci-manager.queue.operate"
       }
     ]
   },
-  "manual": "manuals/develop-change.md"
+  "manual": "manuals/develop-change.md",
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "session_surfaces": [
+    "Weaver current-user CLI and private configuration",
+    "Cell source tree and installed CI manager",
+    "Cell deployment coordinator and product-owned installation evidence"
+  ],
+  "steps": [
+    "Read instructions, maintained terminology, the installed Nucleus manual and affected feature contracts.",
+    "Agree the endpoint and identify public meanings, state compatibility, exact requests, immutable tool identities, prompts and consumers.",
+    "Make the smallest change while preserving source, execution, domain success and recovery authority.",
+    "Update owning feature claims and procedures and verify focused behavior and the complete source provider bundle.",
+    "For authorized prompt edits, append component text, publish a complete selection, verify exact versions and retain historical selections.",
+    "When delivery is authorized, commit and submit the exact input through the installed manager.",
+    "Verify its retained outcome and installed product, show and resolve views through the agreed endpoint."
+  ],
+  "checkpoints": [
+    "The approved endpoint and current public contracts establish scope before implementation.",
+    "Focused evidence covers affected exact identity, mailbox restart, independent batches and runtime/domain outcomes.",
+    "Changed immutable meaning has a new identity and historical decoding.",
+    "Source provider validation and manual review preserve complete operating essentials and intentional gaps.",
+    "Authorized delivery has an exact retained manager outcome; source edits alone do not establish installed behavior."
+  ],
+  "adaptation": [
+    "Select checks for the changed behavior; do not use model jobs as installation readiness probes.",
+    "Use provider-owned Rust clients and views rather than private database or copied wire structures.",
+    "Resolve the correct private Bazaar database, publish text before complete selection, and append prior selection content for rollback.",
+    "Use the install operation for deployment and recovery; preserve the user's explicit draft-only or publication endpoint."
+  ],
+  "stop_when": [
+    "The change requires a new scope, unsupported authoring expansion, or additional authority.",
+    "State, retained request decoding, provider compatibility, ownership or recovery cannot be proved.",
+    "The requested endpoint excludes delivery or its consequential effects.",
+    "Private material would be exposed outside the authorized product or manager contract."
+  ]
 }

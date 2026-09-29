@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "usher",
     "name": "Usher",
@@ -15,7 +15,7 @@
     ],
     "inventory": {
       "covers": [
-        "All supported Usher recognition report/check outcomes and its installation and development operations."
+        "All supported Usher repository-declaration report/check outcomes, its public operational declaration projection, and its installation and development operations."
       ],
       "completeness": "complete",
       "excludes": [
@@ -33,7 +33,7 @@
     ],
     "compatibility_and_retirement": [
       "Provider release, capability contract version, and JSON output schema are separate. Recognition rule changes require explicit product contract review.",
-      "Usher installation contract two uses the cell-install-v1 manifest and Rust installer CLI. Retained Rust recovery supports legacy shell releases, detaches their unsupported public installer selector, and can later reselect a Rust release. The archived legacy deployer cannot handle a new-format current release."
+      "usher.install.operate contract two uses the cell-install-v1 manifest and Rust installer CLI. Retained Rust recovery supports legacy shell releases, detaches their unsupported public installer selector, and can later reselect a Rust release. The archived legacy deployer cannot handle a new-format current release."
     ],
     "operational_limits": [
       "Recognition reads at most 256 descriptors, 512 entries per provider, and 1 MiB per regular UTF-8 evidence file. It rejects paths escaping owning roots and symbolic evidence; callers keep the checkout stable.",
@@ -42,7 +42,9 @@
   },
   "entries": [
     "entries/recognition-inspect.json",
+    "entries/installation.json",
     "entries/install-operate.json",
     "entries/develop-change.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

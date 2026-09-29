@@ -27,7 +27,8 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Commands and output](docs/cli.md)
-- [Architecture and Rust interface](docs/architecture.md)
-- [Installation](docs/system-installation.md)
-- [Operating contracts](chancery/provider.json)
+- [Product overview and contract inventory](chancery/overview.md)
+- [History, metadata, and completed-turn activity](chancery/manuals/history-explore.md)
+- [Runtime and installation guarantees](chancery/manuals/runtime.md)
+- [Installation and recovery procedure](chancery/manuals/installation-operate.md)
+- [Development procedure](chancery/manuals/develop-change.md)

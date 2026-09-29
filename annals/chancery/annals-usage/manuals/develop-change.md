@@ -6,18 +6,18 @@ access, and credentials. Annals Usage must not create a second
 telemetry authority.
 
 Before development, read the complete canonical Semantics repository and
-telemetry contract:
+the owning feature contracts:
 
 ```sh
 /Users/joey/.local/bin/chancery show semantics.repository.explore
 /Users/joey/.local/bin/semantics repository show annals
-cd /Users/joey/rust/cell/annals
-less docs/telemetry.md
+/Users/joey/.local/bin/chancery show annals-usage.consumption.inspect
+/Users/joey/.local/bin/chancery show annals-usage.execution.operate
 ```
 
-Semantics owns contributor terminology; telemetry documentation, code, and
-tests remain authoritative for reporting behavior. Never put Semantics
-repository output in an Annals liaison prompt.
+Semantics owns contributor terminology. The two feature contracts own the
+complete reporting and account explanations; code and tests establish actual
+behavior. Never put Semantics repository output in an Annals liaison prompt.
 
 Run the installed Nucleus manual before changing output decoding, account or
 authentication behavior, compatibility, deployment, or any other shared
@@ -51,8 +51,9 @@ absent, report a gap.
    Nucleus.
 2. Make the smallest change in `annals/crates/annals-usage` and its projection
    tests.
-3. Update `annals/docs/telemetry.md` and configuration or installation
-   contracts when affected.
+3. Update the owning Annals Usage feature contract and its normalized claims.
+   Update configuration or Annals installation procedures when affected. Keep
+   `annals/docs/telemetry.md` as an entry point.
 4. Commit the changes and submit them through the installed CI manager:
 
    ```sh

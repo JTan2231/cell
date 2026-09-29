@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "chancery",
     "name": "Chancery",
@@ -17,7 +17,7 @@
     ],
     "inventory": {
       "covers": [
-        "All supported public Chancery CLI outcomes for product overview reading, installed catalog discovery and provider filtering, exact contract reading, exact-ID promise resolution, registry validation, provider publication, and command-usage registration, recording and reports in this release."
+        "All supported public Chancery outcomes for installed product and contract reading, exact-ID promise resolution, provider format and validation, product-owned publication, user-owned reader installation and recovery, and command-usage registration, recording and reports in this release."
       ],
       "completeness": "complete",
       "excludes": [
@@ -46,6 +46,10 @@
     "entries/directory-discover.json",
     "entries/capability-resolve.json",
     "entries/provider-publish.json",
-    "entries/usage-record.json"
-  ]
+    "entries/usage-record.json",
+    "entries/bundle-validate.json",
+    "entries/installation-operate.json",
+    "entries/usage-operate.json"
+  ],
+  "overview": "overview.md"
 }

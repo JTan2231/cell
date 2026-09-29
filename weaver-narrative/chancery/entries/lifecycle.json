@@ -1,0 +1,233 @@
+{
+  "id": "weaver.lifecycle",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect Weaver configuration, readiness, and maintenance",
+  "summary": "Interpret Weaver reading configuration, private state, live readiness, owned admission holds, release selection, and installation recovery without authoring a document.",
+  "use_when": [
+    "Weaver reading configuration, state compatibility, readiness, maintenance drain, release selection, backup, or installation guarantees must be understood."
+  ],
+  "do_not_use_when": [
+    "A narrative must be authored or revised, or Annals source intake, Nucleus authentication, scheduling, or retired Weaver workflows must be operated."
+  ],
+  "outcome": "Weaver configuration, state, readiness, maintenance, or release evidence is interpreted through its supported current-user interfaces.",
+  "interfaces": [
+    {
+      "label": "Read configuration",
+      "invocation": "weaver config"
+    },
+    {
+      "label": "Initialize or configure reading",
+      "invocation": "weaver init --annals-config /absolute/decisions/config.toml [--annals-binary /absolute/annals]"
+    },
+    {
+      "label": "Read readiness",
+      "invocation": "weaver doctor"
+    },
+    {
+      "label": "Read declared status",
+      "invocation": "weaver status-snapshot --json"
+    },
+    {
+      "label": "Read maintenance",
+      "invocation": "weaver maintenance status"
+    },
+    {
+      "label": "Hold admission",
+      "invocation": "weaver maintenance hold RUN_ID"
+    },
+    {
+      "label": "Prove drain",
+      "invocation": "weaver maintenance drain"
+    },
+    {
+      "label": "Release an owned hold",
+      "invocation": "weaver maintenance release RUN_ID"
+    },
+    {
+      "label": "Inspect installed release",
+      "invocation": "weaver-install inspect"
+    },
+    {
+      "label": "Verify exact release",
+      "invocation": "weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID"
+    }
+  ],
+  "effects": [
+    "Configuration initialization creates schema 1 only in absent or empty state and atomically stores the Annals reader selection. Existing documents remain unchanged.",
+    "Run-owned maintenance holds block new authoring and preserve exact resume; release removes only the selected owner. Readiness and release inspection create no model job or narrative.",
+    "The maintained installer selects immutable local program and provider bytes through the Cell coordinator; uninstall detaches owned selectors and retains private state."
+  ],
+  "authority": [
+    "Weaver owns its reading configuration, private document and recovery state, runner exclusion, deployment admission, and program/provider release selection.",
+    "Annals owns source identity and accepted text. Nucleus owns execution, authentication, job inventory, and its separate retained state. Cell owns shared deployment coordination."
+  ],
+  "success": [
+    "The selected operation supplies compatible state, complete live readiness or drain evidence, or exact release integrity as required. Documentation presence or an incomplete snapshot cannot establish live readiness or successful drain."
+  ],
+  "failure_and_recovery": [
+    "Unsupported state, unavailable job inventory, foreign selectors, altered candidates, and unproved drain stop the operation. Do not edit SQLite or delete a hold.",
+    "The coordinator recovers its retained transaction. Before candidate publication the prior installation remains selected; after publication Weaver can finish forward with the recorded reading configuration and supported state. Unproved recovery retains the named hold."
+  ],
+  "privacy": [
+    "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
+    "CLI usage recording requires a nonempty CODEX_THREAD_ID. Chancery records command identity, time, and thread ID in its private journal. Arguments, output, outcomes, and internal product calls are excluded. Recording errors do not change command results."
+  ],
+  "dependencies": [
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.jobs",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "nucleus.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "does_not_authorize": [
+    "Narrative authoring, source mutation, Nucleus credential changes, publication, email, automatic retry, deletion of private state, or release of another owner's hold."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current local user, authorized Cell deployment coordinator, and read-only status consumers may use the supported local surfaces within their own authority."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "State must be absent or supported schema 1. Reading configuration must identify an existing identity-bound Annals decisions library. Live doctor and drain need compatible reachable Nucleus and Annals interfaces."
+      },
+      {
+        "status": "declared",
+        "statement": "A held doctor requires CELL_DEPLOYMENT_RUN_ID to match the sole Weaver hold; unheld doctor uses ordinary admission even when an ID is supplied."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Init accepts an absolute Annals decisions config path and an optional absolute Annals executable. Deployment settings accept only weaver.annals_config and reuse stored configuration when it is omitted on later deployments."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance selects an exact run owner. Release verification selects one exact immutable release directory."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Configuration reports the Annals reader selection. Doctor reports database integrity, source readiness, and required Nucleus capabilities without domain records or model work."
+      },
+      {
+        "status": "declared",
+        "statement": "Maintenance reports maintenance.protocol_version=1, holds, drained and nonterminal_jobs. status-snapshot --json declares weaver/author as on demand and explicitly incomplete. Installer reads report selected release or integrity evidence."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Drain requires no admitted Weaver process and no nonterminal Weaver Nucleus job. An unavailable inventory remains unknown and cannot prove drain. An incomplete status snapshot does not assert current readiness."
+      },
+      {
+        "status": "declared",
+        "statement": "Configuration identifies a reading client and source library, not ownership of that library or a source feed checkpoint. Init does not change existing document content."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Weaver uses SQLite schema 1 and maintenance protocol 1. A run ID owns one hold. Program and provider selectors identify one content-addressed release; these identities are independent of document/job identity."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Doctor and maintenance describe the selected local state and available dependency evidence at invocation. A selected release verification checks that exact candidate. status-snapshot has incomplete readiness coverage."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No live-read latency, readiness horizon, service availability, or release cadence is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user CLI and maintained coordinator are the supported surfaces. weaver.sqlite and config.json are private; files use mode 0600 and state directories use mode 0700."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct installer install and recover, foreign selector takeover, direct SQLite integration, a background worker, and a Weaver service or Clockwork binding are unsupported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Init creates schema 1 only in an absent or empty database and atomically saves reading configuration. Unsupported state is refused. One runner lock excludes concurrent write, write-many, resume and initialization; a batch handles its independent jobs within that lock."
+      },
+      {
+        "status": "declared",
+        "statement": "A hold blocks new writes, batches and revisions. Resume can settle an existing exact assignment. Hold and release preserve other owners' holds; unavailable inventory cannot establish drain."
+      },
+      {
+        "status": "declared",
+        "statement": "Public program and Chancery selectors follow the selected immutable release. The shared Cell transaction owns publication and interrupted deployment recovery; unproved recovery keeps the named hold. Uninstall retains private state."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Readiness verification creates no narrative or model job. Weaver has no background worker, schedule or service. There is no automatic pruning or predecessor schema migration."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No retention horizon, database capacity, general recovery latency, or release cadence is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Cell source and active Semantics project are weaver-narrative. The predecessor weaver project is permanently retired; its workflow records are not imported or replaced. Matched program and provider releases preserve schema 1 and immutable historical execution identities."
+      },
+      {
+        "status": "declared",
+        "statement": "The installer refuses foreign selectors, altered candidates and unsupported legacy installation formats. Keep a consistent Weaver database/configuration backup and Nucleus state/credentials under separate provider rules."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Annals supplies the explicit decisions-library identity and read-only source cursor used for configuration and readiness.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus supplies live job inventory, compatible execution readiness and its owned maintenance evidence.",
+        "target": "nucleus",
+        "kind": "readiness",
+        "contract": "nucleus.service"
+      },
+      {
+        "status": "declared",
+        "statement": "The Cell coordinator owns ordered maintenance, content-addressed publication and retained transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
+        "target": "cell-deployment",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/lifecycle.md"
+}

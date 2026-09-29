@@ -55,6 +55,10 @@
     {
       "label": "Write an atomic private export",
       "invocation": "/Users/joey/.local/bin/cast export --output PATH"
+    },
+    {
+      "label": "Read the provider-owned Rust snapshot",
+      "invocation": "cast::store::Store::open(&Path)?.snapshot() -> cast::models::Snapshot"
     }
   ],
   "effects": [
@@ -131,7 +135,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of stored companies, jobs and collection records. Source timestamps describe ordinary board collection. Targeted job observation updates its selected job and run record while preserving board-scan state; consult the last run note for its scope and outcome."
+        "statement": "Export is one consistent view of all retained companies, jobs and collection records. captured_at describes snapshot capture; record dates describe retained observations. Source timestamps describe ordinary board collection. Targeted job observation updates the selected job and run record while preserving board-scan state; consult the run note for scope and outcome."
       },
       {
         "status": "declared",
@@ -141,7 +145,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Supported consumers use the local CLI or exported Cast Rust API; direct SQLite is not a consumer boundary."
+        "statement": "Supported consumers use the local CLI or the provider-owned Rust read surface cast::store::Store::open and Store::snapshot, returning cast::models::Snapshot. Direct SQLite is not a consumer boundary."
       }
     ],
     "lifecycle_and_consistency": [

@@ -1,0 +1,370 @@
+{
+  "id": "annals.inbox",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Understand Annals inbox imports and recovery",
+  "summary": "Read durable admission, one-attempt dispatch, queue controls, storage gates, bounded retry provenance, and scheduled failure policy.",
+  "use_when": [
+    "The configured filesystem inbox, its one-attempt job envelopes, dispatch controls, or bounded retry events must be observed or operated.",
+    "A scheduled delivery failure must be diagnosed across Annals domain state and its correlated Nucleus job."
+  ],
+  "do_not_use_when": [
+    "One explicitly selected source should be integrated manually.",
+    "The proposed recovery edits receipts or archive directories directly.",
+    "The desired retry window is omitted, open-ended, or based on future failures."
+  ],
+  "outcome": "A durable and inspectable inbox state transition or report that preserves immutable attempts, archive history, explicit priority, and bounded retry provenance.",
+  "effects": [
+    "Registration moves settled incoming files into durable queued envelopes; direct enqueue copies explicit files and leaves originals unchanged.",
+    "Dispatch starts source deliveries and may invoke Nucleus, apply corpus reconciliations, and consume Codex allowance.",
+    "The storage gate defers an ordinary claim until the configured reserve is available on both Annals filesystems; direct enqueue rejects a copy that would cross the spool reserve.",
+    "Pause blocks new dispatch but permits registration; interruption archives one exact processing job as failed or skipped.",
+    "A retry event preserves originals and creates fresh linked child jobs for one frozen inclusive failed-delivery interval."
+  ],
+  "authority": [
+    "Annals owns spool envelopes, queue order, priority lanes, source-delivery records, retry events, reconciliation application, and recovery policy.",
+    "Nucleus owns only each liaison attempt and its raw runtime records; Nucleus never chooses an Annals retry."
+  ],
+  "success": [
+    "Status or event reports identify queue, active job, pause, maintenance, archive, and outcome state without relying on process inspection.",
+    "A storage-gated ordinary job remains queued with attempts zero and resumes automatically on a later activation once the condition clears.",
+    "A run or retry report, not process exit alone, accounts for every attempted item and durable result.",
+    "Original failed jobs and deliveries remain unchanged after retry."
+  ],
+  "failure_and_recovery": [
+    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
+    "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
+    "A storage probe failure prevents a claim and exits nonzero; insufficient storage halts an attended retry until the operator continues it.",
+    "When low storage closes the gate, preserve the queued work and leave storage remediation or a reserve change to the user under explicit target-scoped consent.",
+    "Unexpected model or runtime failure archives the current job and halts the activation or retry event; continue only through the supported command.",
+    "Pause before interruption when the next ordinary job must remain queued, and require paused quiescence before starting or continuing a retry event."
+  ],
+  "privacy": [
+    "Inbox envelopes retain unchanged source material and receipts; Annals and Nucleus operational state may retain complete source and model context.",
+    "Spool, database, logs, and retry archives belong to the user's private application boundary."
+  ],
+  "interfaces": [
+    {
+      "label": "Run a named inbox",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> inbox run"
+    },
+    {
+      "label": "Inbox status",
+      "invocation": "/Users/joey/.local/bin/annals inbox status"
+    },
+    {
+      "label": "Register settled arrivals",
+      "invocation": "/Users/joey/.local/bin/annals inbox register"
+    },
+    {
+      "label": "Enqueue explicit files",
+      "invocation": "/Users/joey/.local/bin/annals inbox enqueue <FILE>"
+    },
+    {
+      "label": "Run dispatch",
+      "invocation": "/Users/joey/.local/bin/annals inbox run"
+    },
+    {
+      "label": "Pause dispatch",
+      "invocation": "/Users/joey/.local/bin/annals inbox pause"
+    },
+    {
+      "label": "Resume dispatch",
+      "invocation": "/Users/joey/.local/bin/annals inbox resume"
+    },
+    {
+      "label": "Interrupt exact job",
+      "invocation": "/Users/joey/.local/bin/annals inbox interrupt <JOB_ID> --as <failed-or-skipped>"
+    },
+    {
+      "label": "Preview bounded retry",
+      "invocation": "/Users/joey/.local/bin/annals inbox retry preview --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>"
+    },
+    {
+      "label": "Start bounded retry",
+      "invocation": "/Users/joey/.local/bin/annals inbox retry start --from <FAILED_JOB_ID> --through <FAILED_JOB_ID>"
+    },
+    {
+      "label": "Inspect retry event",
+      "invocation": "/Users/joey/.local/bin/annals inbox retry status <EVENT_ID>"
+    },
+    {
+      "label": "Continue halted event",
+      "invocation": "/Users/joey/.local/bin/annals inbox retry continue <EVENT_ID>"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.libraries",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.work.integrate",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    }
+  ],
+  "does_not_authorize": [
+    "Editing spool receipts or moving archived envelopes manually.",
+    "Deleting, truncating, pruning, moving, compressing, or otherwise clearing user data as storage remediation, or lowering or disabling the storage reserve, without the user's explicit consent for the exact target and scope.",
+    "An unbounded retry or a second attempt for the same job.",
+    "Restarting Nucleus while an Annals attempt is active."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local Annals operator may observe or operate the configured filesystem inbox, its one-attempt jobs, scheduling controls, interruption, and bounded retry events."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This is not a manual one-work integration path, direct receipt editor, unbounded retry mechanism, or authorization for storage cleanup."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Registration and enqueue require a configured private general Annals library and spool. Decision-config operation requires a decisions library. Dispatch also requires the matching immutable role, configured storage reserve, a readable storage probe, and compatible authenticated Nucleus readiness."
+      },
+      {
+        "status": "declared",
+        "statement": "Retry start requires an exact inclusive failed-delivery interval, paused quiescence, no processing job, no unfinished retry event, and no deployment maintenance."
+      },
+      {
+        "status": "declared",
+        "statement": "Interruption names one exact processing job, and prioritize or deprioritize names one queued ordinary job."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are settled top-level incoming files, explicitly selected regular files, exact job or retry-event IDs, one binary priority lane, and a frozen inclusive failed-job interval."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Open-ended retry, retry-all, terminal-envelope requeue, receipt editing, future-failure selection, and a second attempt for one job are not accepted."
+      },
+      {
+        "status": "declared",
+        "statement": "The settling interval defaults to 60 seconds and can be zero. The configured storage reserve defaults to 7,000,000,000 bytes; zero disables it. Retry reason is trimmed nonempty text of at most 1,000 characters."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Inbox reports retain queue, gate, storage, domain, and failure facts. Retry start/continue and event status return identity, window, state, counts, remaining work, and last halt. retry status EVENT --details includes the full original-to-child mapping. Event listing defaults to 20 and reports has_more. Increase positive --limit to read more. Retry preview retains the complete proposed selection."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Each new examination freezes the selected library instructions and corpus revision through the same admission boundary as manual integration. A named library uses its registered database, config, spool, and expected identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Registration moves a settled arrival into a queued envelope and direct enqueue copies an explicit file; neither starts a source delivery or creates its database delivery record."
+      },
+      {
+        "status": "declared",
+        "statement": "Priority is a binary scheduling lane, not a mutable sequence or corpus property; selection is priority-first then immutable sequence order with no fairness promise."
+      },
+      {
+        "status": "declared",
+        "statement": "A closed storage gate is a non-durable dispatch condition that leaves work queued with zero attempts, while pause and maintenance are distinct durable operator and deployment controls."
+      },
+      {
+        "status": "declared",
+        "statement": "A retry event preserves original failed jobs and deliveries and creates fresh linked child jobs; it does not give an original job another attempt."
+      },
+      {
+        "status": "declared",
+        "statement": "Job receipts and database delivery records are different authorities. Retry item outcomes derive from linked child state and counts derive from outcomes, not rewritten original history. Queue registration and decision acceptance precede source delivery."
+      },
+      {
+        "status": "declared",
+        "statement": "Source files and basenames remain unchanged in envelopes. Fresh duplicate content selects the canonical retained work label before filename-label validation and ends at retention; explicit retry intent continues to interpretation."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Job ID identifies one durable spool item. Source-delivery ID identifies its Annals processing occasion. Retry-event ID identifies frozen recovery membership. A child job remains distinct from its original."
+      },
+      {
+        "status": "declared",
+        "statement": "Queue sequence is immutable and monotonic, attempts are counted from zero to at most one per job, and storage gates compare available bytes with configured reserve bytes on both filesystems."
+      },
+      {
+        "status": "declared",
+        "statement": "Retry interval order is ascending failed-delivery completion time with delivery identity as the deterministic tie-break described by Annals."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Status reports current durable spool control and job state for one invocation; a retry event freezes complete eligible membership for its exact inclusive interval at start."
+      },
+      {
+        "status": "declared",
+        "statement": "The durable run or retry report, not process exit alone, accounts for every item attempted during that activation or event."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No schedule interval, queue-drain deadline, starvation bound, storage-restoration time, or model-completion latency is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Read-only inbox operations need no filesystem write permission. Status takes a shared lock through the existing read-only control file. Worker-lock probes use read-only handles and propagate access errors. Setup or migration creates the control file. An absent spool stays absent; incomplete initialized state requires setup or recovery."
+      },
+      {
+        "status": "declared",
+        "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."
+      },
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the local Annals inbox CLI and its configured private spool and library; dispatch may use the configured local Nucleus requester interface."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct job.json editing, manual archive moves, direct SQLite writes, and host-wide service or storage control are not supported inbox surfaces."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."
+      },
+      {
+        "status": "declared",
+        "statement": "An exact original pending reconciliation is reusable by a retry child only while its corpus and instruction revisions remain current. Otherwise the child examines under current instructions. Already committed or recorded results survive later instruction changes or execution failures."
+      },
+      {
+        "status": "declared",
+        "statement": "Each job moves from a complete queued envelope to at most one processing attempt and one terminal archive; terminal jobs never return to queued."
+      },
+      {
+        "status": "declared",
+        "statement": "A known item-local failure archives that item. Manual ordinary draining may continue; --stop-on-failure, used by scheduled runners, returns nonzero before a successor claim. Unexpected model or runtime failure also ends the activation. A later runtime failure preserves an already recorded or applied result."
+      },
+      {
+        "status": "declared",
+        "statement": "Pause prevents the next claim after active work finishes but permits registration. Maintenance separately blocks spool mutation. Resume clears only pause."
+      },
+      {
+        "status": "declared",
+        "statement": "A halted retry continues only its unattempted children and never retries a failed child; original failed history remains unchanged."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.annals to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+      },
+      {
+        "status": "declared",
+        "statement": "Authenticated preflight occurs before the first queued dispatch in an ordinary or retry invocation and may wait up to 30 seconds. Failure leaves the next job queued with zero attempts and no delivery or model-run record."
+      },
+      {
+        "status": "declared",
+        "statement": "The library and spool cannot commit together. Product recovery idempotently finishes exact durable success or archives the interrupted attempt without a second liaison. Child publication preserves frozen membership and one immutable child link per original; failed children can enter a later bounded event."
+      },
+      {
+        "status": "declared",
+        "statement": "Resume refuses an unfinished retry event. Retry children cannot be prioritized independently. Skipped job receipts correspond to failed deliveries with inbox_job_skipped and are not failed-job retry candidates."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Creating a named library initializes a private config and spool but creates no timer or Clockwork binding. A background config pins the expected immutable library ID; readiness and scheduling remain separate operations."
+      },
+      {
+        "status": "declared",
+        "statement": "Every job has at most one attempt, priority has two lanes, retry membership is an explicit bounded inclusive interval, and ordinary claims require configured free-space reserve on both Annals filesystems."
+      },
+      {
+        "status": "declared",
+        "statement": "Low storage is a stop only; this operation cannot clear user data or alter the reserve without separate exact target-scoped user consent."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No queue capacity, maximum file size, throughput, scheduling fairness, or wall-clock completion bound is promised here."
+      },
+      {
+        "status": "declared",
+        "statement": "Read-only status uses existing prepared locks and leaves absent spools absent. The ordinary gate checks both filesystems before each claim; direct enqueue checks copy headroom separately. The gate is not host-wide authority and does not itself block manual integration or independent deployment."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Feature contract version 1, Annals provider release, spool receipt shape, library schema, and Nucleus protocol are separate compatibility axes."
+      },
+      {
+        "status": "declared",
+        "statement": "Supported installation and recovery procedures preserve historical envelopes and use product-owned migration rather than manual reinterpretation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No cross-release spool-format support window or deprecation period is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Scheduled failure enforcement uses Clockwork schedule contract 3; Annals configures the policy and retains domain attempts and recovery.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Dispatch and retry-child processing rely on Nucleus for authenticated one-attempt model execution and raw runtime records; Annals retains queue, retry, and domain-result authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "New examinations and exact reusable results follow Annals interpretation contract four, including instruction/context capture and requester tool validation. Decision acceptance remains a separately owned Annals feature and cannot open generic admission.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.work.integrate"
+      }
+    ]
+  },
+  "manual": "manuals/inbox.md"
+}

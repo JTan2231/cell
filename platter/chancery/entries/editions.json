@@ -1,0 +1,195 @@
+{
+  "id": "platter.editions",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Freeze and deliver Platter editions",
+  "summary": "Understand ordinary and retained selection, shared daily attachments, occurrence identity, exact sending, acceptance, uncertainty, and external daily activation.",
+  "use_when": [
+    "A reader needs edition/attachment meaning, daily or URL-selected occurrences, retained-material composition, explicit send behavior, or scheduling authority."
+  ],
+  "do_not_use_when": [
+    "The goal is application submission, employer contact, inbox delivery certification, automatic uncertain-send reconciliation, or catalog-authorized scheduling."
+  ],
+  "outcome": "An edition freezes exact selected packets, message, attachment bytes, and send identity; an applicable authorized send retains provider submission acceptance or unresolved uncertainty.",
+  "interfaces": [
+    {
+      "label": "Ordinary preview",
+      "invocation": "platter preview YYYY-MM-DD"
+    },
+    {
+      "label": "Authorized frozen send",
+      "invocation": "platter send YYYY-MM-DD"
+    },
+    {
+      "label": "Authorized daily run",
+      "invocation": "platter run-daily"
+    },
+    {
+      "label": "Authorized URL-selected run",
+      "invocation": "platter run-ad-hoc JOB_URL --id OCCURRENCE_ID"
+    },
+    {
+      "label": "Retained-material preview",
+      "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID"
+    },
+    {
+      "label": "Retained-material send",
+      "invocation": "platter send YYYY-MM-DD --ad-hoc RUN_ID --email-executable /absolute/private/email-wrapper"
+    },
+    {
+      "label": "Print external activation definition",
+      "invocation": "platter schedule-definition"
+    }
+  ],
+  "effects": [
+    "Ordinary preview retrieves freshness under the posting cache policy, freezes selected packet and attachment identities, and sets selected jobs ineligible atomically. It sends nothing.",
+    "Retained-material preview freezes the same edition representation without changing eligibility or calling source, model, or renderer dependencies. Daily override can freeze one shared PDF for independently selected packets.",
+    "Authorized send durably records sending before invoking Email with exact body and base64 attachment bytes, then retains recognized acceptance. A run command may prepare and freeze before sending, under one mutation lock. Definition printing registers or enables nothing."
+  ],
+  "authority": [
+    "Platter owns edition identity, selection, frozen bytes, and delivery state. Email/Resend own provider submission acceptance; Gmail owns final receipt. Clockwork owns scheduled activation and incident halts.",
+    "Every send needs applicable user authority. Standing daily authorization covers ordinary daily briefs and resumes to the fixed personal recipient. An explicitly requested URL-selected occurrence authorizes one email. Preparation, preview, installation, and model output authorize none."
+  ],
+  "success": [
+    "Preview retains exact message/attachments without sending. A recognized Accepted ID establishes provider acceptance; accepted editions return that receipt without resending. No selected packets produces no edition/email."
+  ],
+  "failure_and_recovery": [
+    "Interrupted or uncertain sends remain held without automatic reconciliation or replacement key. Exact occurrence retries use retained bytes before source/preparation and preserve original date. Conflicting URL/date/selection/body reuse is refused.",
+    "Daily work skips expected posting retrieval failures and decline, but stops before send for other preparation errors. Clockwork resume permits future activation and does not retry preparation, reconcile uncertainty, or rewrite an edition."
+  ],
+  "privacy": [
+    "Authorized sending discloses exact frozen message and private resume bytes through Email, Resend, and Gmail. Incident alerts disclose bounded operational metadata rather than product content or private failure output."
+  ],
+  "does_not_authorize": [
+    "An employer application/contact, final receipt, a new uncertain send, or separate Clockwork activation/continuation without its applicable authority."
+  ],
+  "dependencies": [
+    {
+      "id": "platter.materials",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "platter.preparation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user callers and an authorized exact Clockwork runner freeze and send Platter editions through supported CLI operations."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Supported canonical state and complete selected material are required. Ordinary selection must pass posting freshness and workflow readiness. Sending needs applicable user authority and an Email executable advertising --payload-stdin. Daily activation is a separately authorized Clockwork operation."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Configured-local date, eligible ready packets or explicit retained complete tailored packet IDs, optional shared daily PDF, occurrence ID, optional valid brief-override map, and optional absolute one-send Email executable override."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "A frozen edition retains exact subject/body, date, occurrence identity, idempotency key, delivery state/receipt, ordered selected packet IDs, and ordered artifact references/filenames. Run output reports date, delivery status, and packet count or no-edition, not message/PDF bytes."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "All editions share one model. --ad-hoc is a selection operation, not an edition type. Packet selection is independent of attachments: a daily override can provide one shared PDF artifact for up to three briefs. Ordinary selection spends job eligibility; retained selection does not."
+      },
+      {
+        "status": "declared",
+        "statement": "Acceptance means external submission, not inbox receipt, an application, or employer response. Delivery records never infer or reset explicit eligibility."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "YYYY-MM-DD names an ordinary configured-local-date occurrence. Ad hoc occurrence IDs contain 1 through 80 ASCII letters, digits, underscores, or hyphens. Date, frozen body, selection, and send key remain exact across retries; reuse for conflicting input is refused."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A new ordinary preview retrieves posting text under the cache policy; Ashby changes/closures can remain undetected for up to 14 days. An existing frozen occurrence reads retained bytes without recapture or configured-file access. Retained-material preview refreshes no source."
+      },
+      {
+        "status": "declared",
+        "statement": "run-daily captures one configured date after admission and retains it across midnight. Existing occurrences take the send path before preparation, missed dates are not backfilled, and no selected packet creates no edition."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Supported local CLI commands manage exact Platter occurrences. Email receives byte payload through --payload-stdin and owns its fixed recipient and credential. Clockwork activation uses the exact installed runner with literal run-daily argument."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Ordinary freeze and eligibility changes commit together. Sending intent is durable before transport; only recognized acceptance stores a receipt. Accepted is never resent and uncertain stays held. run-daily and run-ad-hoc hold one mutation lock across prepare/freeze/send."
+      },
+      {
+        "status": "declared",
+        "statement": "Daily override freezes source PDF bytes once, with original filename and no producing run; replacing/clearing its configuration changes future editions only. Brief overrides freeze body text without mutating accepted artifacts and need exact agreement on reuse."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Ordinary/retained editions select at most three packets, an URL-selected occurrence exactly one. Retained selection without explicit packets chooses ID order. Brief-only runs cannot supply a tailored edition. There is no final-delivery observer or automatic ambiguous-send reconciliation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No delivery-time, inbox-arrival, or throughput guarantee exists; 18:00 activation gives no completion-time promise."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Retained historical subject, body, packet selection, attachment name/order/bytes, and receipt identities stay exact, including legacy TEST subjects. Definition schema two declares halt-until-approved; changing bindings or deploying preserves incident halts."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No perpetual external idempotency-retention or arbitrary incompatible rollback promise is supplied."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Email submits the exact frozen private payload to its fixed personal recipient and reports recognized acceptance.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork owns separate activation, process history, failure halts, incident notifications, and explicit continuation.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  },
+  "manual": "manuals/editions.md"
+}

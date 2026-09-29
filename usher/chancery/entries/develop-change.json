@@ -36,7 +36,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read Usher instructions and maintained terminology through Semantics, using Cell while usher registration remains absent.",
+    "Read Usher instructions and query its maintained Semantics repository. Use Cell for shared terminology; report an unavailable project instead of inferring registration.",
     "Implement the smallest change and update exact product contracts and shared operational documentation.",
     "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, inspect Usher findings, and verify the retained manager job outcome. Release publication remains separate."
   ],
@@ -60,6 +60,16 @@
       "id": "semantics.repository.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "usher.recognition.inspect",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "usher.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "promise": {

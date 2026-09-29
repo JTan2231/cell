@@ -21,4 +21,4 @@ RELEASE_BINARY_CHECKS='usher|target/release/usher|usher
 usher|target/release/usher-install|usher-install'
 CI_BINARY_CHECKS='usher|target/release/usher|usher
 usher|target/release/usher-install|usher-install'
-PROVIDERS='usher|usher|usher/chancery|3'
+PROVIDERS='usher|usher|usher/chancery|4'

@@ -1,122 +1,262 @@
-# Discover installed capabilities and operations
+# Installed catalog and contract reading
 
-Chancery answers four questions from installed, version-matched documentation:
+Chancery reads product-owned versioned documentation. Each invocation fixes
+one canonical bundle for each provider selector and builds its view in memory.
+It retains no catalog database or daemon state. A malformed provider is
+excluded as a unit; valid providers remain readable. Duplicate global entry IDs
+are excluded independently of filesystem order. A missing or incompatible
+contract dependency remains visible and propagates to dependent entries.
 
-1. What does one installed product do, and how do its features fit together?
-2. Which capabilities and adaptive operations are installed, and what result
-   does each one offer?
-3. What exactly does a plausible capability claim to do, and where do its
-   authority, side effects, recovery, privacy, and live-readiness boundaries
-   end?
-4. Once one exact entry is selected, what complete outward promise, provider
-   scope, dependency closure, exact basis, and unresolved gaps does it expose?
+The owning product decides what its documented interface does and what proves
+domain success. Chancery owns structural validation, installed enumeration,
+compatibility reporting, and display. The interactive caller compares user
+intent with the catalog, reads every plausible page, and invokes a selected
+interface separately. Catalog presence does not authorize work or establish
+live readiness. Chancery does not match user requests, call a model, access the
+network, or execute represented interfaces.
 
-Each provider explicitly indexes its entries. For each command, Chancery
-resolves every installed provider selector to one fixed canonical bundle.
-It validates the manifest, any indexed overview, and indexed entries and
-manuals. Malformed providers are excluded as units. Product packaging separately checks the complete tree
-before staging. Chancery does not search source trees or historical notes.
+For routine selection, read the complete `list`, compare all titles and
+summaries with the intended outcome, and read every plausible entry with
+`show`. If no entry fits, proceed normally. Use `product` when the owner is
+already known. Use `resolve` after selecting one exact ID when the request
+concerns a full outward promise or design reliance; read
+`chancery show chancery.capability.resolve` for its complete behavior. Required
+feature dependencies enter its closure. Related Markdown references are
+navigation only. Read `chancery show chancery.bundle.validate` for bundle shape,
+path rules, validation bounds, and schema evolution.
 
-## Routine discovery
+## Commands and registry
 
-For a request whose local-system route is not already established in the
-current session, read the complete installed catalog:
-
-```sh
-/Users/joey/.local/bin/chancery list
+```text
+chancery [--registry PATH] [--json] list [--provider PROVIDER_ID] [--mode MODE] [--kind KIND]
+chancery [--registry PATH] [--json] product PROVIDER_ID
+chancery [--registry PATH] [--json] show ID [--full]
+chancery [--registry PATH] [--json] doctor
 ```
 
-The catalog groups entries into `use`, `operate`, and `develop` work and shows
-every valid installed entry, including deprecated or dependency-unavailable
-ones. Each card includes its ID, title and summary. Shared support, availability,
-compatibility and readiness appear once; cards retain exceptions. `show`
-provides owner, release and contract version.
-Registry issues remain visible.
+The default registry is
+`~/Library/Application Support/Chancery/providers`. `--registry` takes
+precedence over `CHANCERY_REGISTRY`.
 
-Compare the intended outcome with the entries and select plausible matches.
-Chancery does not receive the request, call a model, search manuals, or select
-an entry. If no entry fits, proceed normally.
+Catalog and report computation preserve their source records. CLI dispatch separately attempts a command-usage append. Chancery does not test runtime readiness, execute
+a documented interface, call a model, or access the network. CLI syntax errors return
+exit code 2. Unreadable state, a missing provider or entry, or an invalid doctor
+or validation report returns 1. An unresolved dossier also returns 1 and preserves its full
+result for inspection. JSON output uses one versioned envelope.
 
-Read every plausible operating contract before invoking anything:
+The output below shows example formats. The selected registry supplies provider
+releases, installed entries, and counts.
 
-```sh
-/Users/joey/.local/bin/chancery show ENTRY_ID
+## `list`
+
+Use `list` for discovery. Without filters, it reports every entry from each
+structurally valid installed provider. This includes deprecated entries and
+entries with unavailable contract dependencies. Registry problems appear under
+`ISSUES` and in the JSON `issues` collection, even when other providers remain
+usable.
+
+Human output groups entries by ordinary work, administration, and development:
+
+```text
+Installed Chancery catalog
+Defaults: supported · installed · compatible · readiness not_checked (not probed). Exceptions appear below.
+
+USE — ordinary outcome work
+
+example.read — Read saved examples
+  Inspect retained examples without changing them.
+
+OPERATE — administration, diagnosis, and recovery
+
+example.recover — Recover saved examples
+  Verify and restore compatible saved example history.
 ```
 
-Use each complete operating manual to determine whether the outcome fits.
-Observe `use_when`, `do_not_use_when`, dependencies, effects, privacy, and
-authorization limits. If several different contracts still fit, use judgment
-or ask the user about the material choice. If the request authorizes use,
-invoke the selected interface separately. Chancery never invokes it.
+Each card contains the stable ID, title, and summary. JSON, groups, and filters
+also expose kind and mode. Shared support, availability, compatibility, and
+readiness appear once under `defaults`. Cards show exceptions. Use `show` for
+the provider release and contract version.
+`availability=installed` means valid indexed documentation, and
+`compatibility=unavailable` means a missing, incompatible or cyclic dependency.
+Readiness is never probed. Operation readiness remains `session_dependent`.
 
-When the request concerns a complete system promise or a design reliance,
-resolve the selected exact ID after discovery:
+The cards above illustrate the format; they do not assert an installed provider.
+
+To narrow the result, use `--provider PROVIDER_ID`,
+`--mode use|operate|develop`, or `--kind capability|operation`. Filters combine.
+The provider filter uses an exact provider ID and preserves registry issues.
+An unknown or excluded provider returns `provider_not_found`. Plain `list`
+returns the complete registered inventory. There is no separate `--all` mode.
+
+The interactive agent uses the titles and summaries to form a semantic
+shortlist. Chancery does not receive the user's request and does not choose an
+entry.
+
+## `product`
+
+Read one installed product's overview and inventory:
 
 ```sh
-/Users/joey/.local/bin/chancery resolve ENTRY_ID
+chancery product nucleus
+chancery list --provider nucleus
 ```
 
-Resolution deterministically assembles provider scope, normalized claims, root
-and transitive dependency contracts, exact source digests, and gaps. Preserve
-the distinctions between `unsupported`, `unspecified`, `not_applicable`, and
-`undeclared`. Do not turn a schema or implementation detail into a promise to
-fill a gap.
+`product` accepts one exact provider ID. It shows provider identity, release,
+schema version, promise scope when published, the authored overview when
+present, and every installed entry
+owned by that provider. Inventory cards use the same shared defaults and
+exceptions as `list`. Registry issues remain visible. An unknown or excluded
+provider returns `provider_not_found`.
 
-## Product and feature reading
+The overview comes only from the manifest's indexed Markdown file. It is
+optional in schema 4 and unavailable in earlier schemas. An absent overview
+returns `overview_status: not_published` and a null `overview` in JSON; the
+provider inventory remains available. A present overview returns
+`overview_status: published` and its complete text. This status describes
+published documentation, not live product readiness.
 
-When the product is known, read its installed overview and inventory:
+The overview provides context and navigation. Use `show` for a feature's
+complete page or a procedure's operating essentials. Use `resolve` for the
+selected entry and its required feature contracts. Product navigation neither
+executes an interface nor adds a separate entry contract or dependency.
+
+## `show`
+
+After identifying one or more plausible entries, read each complete contract:
 
 ```sh
-/Users/joey/.local/bin/chancery product PROVIDER_ID
-/Users/joey/.local/bin/chancery list --provider PROVIDER_ID
+/Users/joey/.local/bin/chancery show example.read
 ```
 
-`product` shows the provider identity, release, schema, promise scope when
-published, authored overview, and all its entry cards. The inventory uses the
-same status defaults and exceptions as `list`. The provider filter selects an
-exact ID and combines with `--mode` and `--kind`. Both reads preserve registry
-issues. An unknown or excluded provider returns `provider_not_found`.
+`show` prints identity, release, support, availability, compatibility, readiness,
+dependency statuses, and the complete operating manual once. JSON contains the
+same identity and manual. The manual must state applicability, exact interfaces,
+effects, authority, success, recovery, privacy, exclusions, and required
+operation checkpoints. A feature page owns the detailed explanation of its
+capability. A procedure can require feature contracts for that explanation,
+while retaining all conditions needed to carry out its own steps. `show`
+neither tests readiness nor executes an interface.
 
-Only schema 4 can index an optional overview. If the provider has none, the
-product view reports `overview_status: not_published`; its inventory remains
-readable. A published overview reports `overview_status: published`. These
-states describe documentation, not runtime readiness. Chancery does not invent
-an overview or follow repository links to obtain one.
+`show ID --full` includes the original structured authoring fields and
+normalized claims as well as the manual. Use it to inspect authoring or compare
+declarations. `resolve` remains the full outward-promise and dependency read.
 
-Features use the existing `capability` kind. `show FEATURE_ID` reads the full
-feature page. `show OPERATION_ID` reads the procedure and its complete operating
-essentials. `resolve OPERATION_ID` also reads required feature contracts through
-version-bounded `dependencies`. Related Chancery references in prose are
-navigation only and do not enter this closure. There is no section-include
-mechanism. The overview has no independent entry ID or contract version.
+## `doctor`
 
-## State and failure boundaries
+`doctor` validates the complete installed registry and cross-provider contract
+dependencies:
 
-`support` comes from the owning provider. `availability=installed` means the
-indexed bundle is structurally valid. `compatibility` describes declared
-documentation-contract dependencies. `readiness` is never established by
-Chancery: consult the represented product's own contract and live interface
-when readiness matters.
+```text
+Chancery registry
+  root: /absolute/path/to/providers
 
-Use `chancery doctor` to diagnose provider manifests, indexed files, duplicate
-IDs, and cross-provider compatibility. One broken provider must not prevent a
-valid provider from appearing in the catalog. Repair or redeploy the owning
-product; do not edit an installed content-addressed bundle in place.
+PASS  example  2.4.1  2 entries
 
-`show ID --full` also includes structured authoring fields and normalized
-claims. Ordinary `show` renders the operating manual once; authors must keep
-its operating essentials self-contained. Required feature contracts supply
-the full behavioral explanation through `resolve`. `resolve ID --summary`
-returns the same resolution outcome, requirements, readiness and gaps without
-dossier bodies. Use full `resolve`
-when the complete outward promise or a design reliance must be read.
-Both text and JSON honor these content choices; JSON output schema is 3.
-The reader accepts provider schemas 1 through 4. Earlier providers remain
-readable without a product overview.
+Providers: 1 valid, 0 excluded
+Entries:   2
+Status:    valid
+```
+
+An invalid provider is excluded and reported under `ISSUES`; valid providers
+remain queryable. Missing, out-of-range, transitively unavailable, or cyclic
+dependencies make doctor invalid. `doctor` never runs a product health command,
+checks an account, or contacts a service.
+
+## JSON
+
+`--json` writes exactly one compact JSON document and no ANSI or explanatory
+prose. A catalog result has this shape:
+
+```json
+{"schema_version":3,"ok":true,"data":{"defaults":{"support":"supported","availability":"installed","compatibility":"compatible","readiness":"not_checked"},"entries":[{"id":"example.read","title":"Read examples","summary":"Inspect saved examples.","kind":"capability","mode":"use"}],"issues":[]}}
+```
+
+Invalid doctor or validate reports retain the complete data report with
+`"ok":false`. Command errors use stderr:
+
+```json
+{"schema_version":3,"ok":false,"error":{"code":"entry_not_found","message":"installed entry not found: missing.entry"}}
+```
+
+Output schema 3 defines compact list and ordinary show results. The additive
+`ProductResult` contains `provider`, `provider_schema_version`,
+`promise_scope` (null for legacy providers), `overview`, `overview_status`,
+status `defaults`, `entries`, and `issues`.
+`FullShowResult` contains the complete entry for `--full`. `ResolveResult`
+contains the full dossier; `ResolveSummary` contains its outcome and gaps.
+Use the provider-owned Rust client and named fields. `--json` changes encoding
+only. Provider schemas are separate.
+
+## Exit status
+
+| Result | Exit |
+| --- | ---: |
+| List, product, show, or fully documented resolve success | 0 |
+| Valid doctor or standalone bundle | 0 |
+| Incomplete/incompatible resolve, invalid doctor/bundle, unreadable registry, or missing provider/entry | 1 |
+| CLI usage | 2 |
+
+## Rust interface
+
+Rust callers use `chancery::api::Client::new(executable)` and optional
+`with_registry(registry)`. The supported methods are `list(mode, kind)`,
+`list_provider(provider, mode, kind)`, `product(provider)`, `show(id)`,
+`show_full(id)`, `resolve(id, min_contract, max_contract_exclusive, require)`,
+`resolve_summary(id)`, `doctor()`, and `validate(bundle)`. The caller selects
+the executable and registry; the client adds `--json` and marks this dependency
+process internal for usage recording.
+
+Each method returns `Result<Output<T>, ClientError>`. An invalid doctor or
+validate report, or unresolved promise, is an inspectable report with
+`ok: false`. `ClientError::Io`, `Json`, `Provider { code, message }`, and
+`Protocol` distinguish process access, decoding, provider command errors, and
+unsupported or inconsistent envelopes. The client accepts output schema 3 and
+requires envelope `ok` to agree with the process status.
+
+`Output<T>` has `schema_version`, `ok`, and `data`. `ListResult` has `defaults`,
+`entries`, and `issues`. `CatalogEntry` has `id`, `title`, `summary`, `kind`, and
+`mode`; optional `support`, `compatibility`, and `readiness` carry exceptions
+only. `CatalogDefaults` has `support`, `availability`, `compatibility`, and
+`readiness`. `ShowResult` has `provider`, `entry`, `availability`,
+`compatibility`, `readiness`, `dependency_statuses`, `manual`, and `issues`.
+Its `entry` is `EntryIdentity`: `id`, `title`, `kind`, `mode`,
+`contract_version`, and `support`. `FullShowResult` substitutes the complete
+`EntryDocument`. `DoctorResult` has `valid`, `registry`, `providers`, `counts`,
+and `issues`. Its counts are `scanned_providers`, `valid_providers`,
+`excluded_providers`, and `entries`. Each provider summary has `id`, `name`,
+`release`, `root`, and `entries`.
+
+The `api` module also exports provider-owned document types and codecs.
+`ProviderManifest::decode(text)` and `EntryDocument::decode(text, schema_version)`
+use the CLI codecs, including schema-one legacy handling. Decoding checks the
+selected shape; it does not establish full bundle validity, installed presence,
+readiness, or authority. `ProviderIntroduction` and `EntryIntroduction` are
+partial identity and indexed-manual views for Usher. They ignore unrelated
+fields and do not evaluate promises or dependencies. Usher owns membership
+policy. Do not copy private parser or wire definitions into a consumer.
+
+## Privacy, limits, and recovery
+
+Documentation is processed locally and is not retained as a catalog snapshot.
+Provider bundles must contain no credentials, secrets, private source material,
+or transient output. Registry and filesystem permissions form the local
+access boundary. Each invocation rereads the selected installed registry;
+there is no timestamped cache or runtime observation. No wall-clock discovery
+latency or registry-size service objective is promised beyond documented
+validation bounds. Legacy schemas have no promised retirement date.
+
+Use `doctor` to locate an excluded provider or unavailable dependency, validate
+the owning source bundle, and repair or redeploy that product. Read its live
+operating interface when readiness matters. An unknown entry returns
+`entry_not_found`; an unknown or excluded provider returns `provider_not_found`.
+Do not repair content-addressed installed documents in place. Read
+`chancery show chancery.provider.publish` for publication and
+`chancery show chancery.installation.operate` for reader recovery.
 
 ## Command usage
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+CLI dispatch separately attempts a command-usage append. A nonempty
+`CODEX_THREAD_ID` is required. Internal calls are excluded, and recording errors
+preserve the query result. No arguments or output enter the journal. Read
+`chancery show chancery.usage.record` for the complete usage feature and
+`chancery show chancery.usage.operate` for registration and recovery.

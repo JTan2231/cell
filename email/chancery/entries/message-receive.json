@@ -71,7 +71,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A read requires an authorized account selection, a valid RESEND_API_KEY with receiving access, available provider records, local network access and Resend availability. Installed presence does not prove these conditions."
+        "statement": "A read requires an authorized account selection, a valid selected credential with receiving access, available provider records, local network access and Resend availability. Installed presence does not prove these conditions."
       }
     ],
     "inputs": [
@@ -119,7 +119,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The local current-user CLI uses the existing Email credential wrapper. Free Rust list_received/get_received methods read the caller environment credential. email::api::Client invokes one absolute installed Email wrapper path with a minimal environment and does not read the credential. No network credential is accepted in arguments or JSON."
+        "statement": "The local current-user CLI uses the existing Email credential wrapper. Free Rust list_received/get_received methods use the caller environment for the credential fallback. email::api::Client invokes one absolute installed Email wrapper path with a minimal environment and does not read the credential. No network credential is accepted in arguments or JSON."
       },
       {
         "status": "unsupported",

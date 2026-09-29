@@ -26,7 +26,7 @@
     "Until project `clockwork` is explicitly registered and seeded, Cell is the maintained shared-terminology authority; implementation and product contracts remain behavior authority."
   ],
   "success": [
-    "The smallest owning code and exact architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contracts agree.",
+    "The smallest owning code and owning feature contracts, operation procedures, semantic-seed, and packaging contracts agree.",
     "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
     "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
     "Packaging tests prove an explicit candidate Chancery reader validates the exact staged provider before any public selector mutation.",
@@ -48,7 +48,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read Clockwork's instructions and the exact architecture, CLI, data-model, installation, semantic-seed, and Chancery contracts affected by the change.",
+    "Read Clockwork's instructions and the owning feature contracts, operation procedures, semantic-seed, and packaging contracts affected by the change.",
     "Identify whether the change alters executable meaning, product authority, persistent state, cutover consistency, process containment, privacy, recovery, or another system reliance.",
     "Implement the smallest change with isolated synthetic releases, state roots, plists, launchd doubles, and child processes and update every affected product-owned contract.",
     "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication, deployment outside that job, Semantics, and unrelated product-binding operations require separate authority."
@@ -69,8 +69,46 @@
     "The requested behavior cannot be represented within Clockwork's reviewed short-lived v0.1 boundary."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "chancery.provider.publish", "min_contract": 4, "max_contract_exclusive": 5}
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "chancery.provider.publish",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clockwork.definitions",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.bindings",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.activations",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.incidents",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.notifications",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
   ],
   "does_not_authorize": [
     "Running `release.sh`, deploying outside the submitted manager job, switching an unrelated product binding, or invoking a product job.",
@@ -79,42 +117,90 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "An interactive contributor may change Clockwork within its reviewed short-lived scheduled-activation boundary while keeping implementation, tests, packaging, documentation, and public promises synchronized."}
+      {
+        "status": "declared",
+        "statement": "An interactive contributor may change Clockwork within its reviewed short-lived scheduled-activation boundary while keeping implementation, tests, packaging, documentation, and public promises synchronized."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, and identified every changed system boundary. CI submission supplies authority for the manager deployment and outcome email; publication, deployment outside that job, and unrelated real binding effects require separate authority."}
+      {
+        "status": "declared",
+        "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, and identified every changed system boundary. CI submission supplies authority for the manager deployment and outcome email; publication, deployment outside that job, and unrelated real binding effects require separate authority."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Inputs are the scoped request, current Clockwork source and public contracts, isolated synthetic release and state fixtures including a candidate Chancery reader, and any explicitly selected installed documentation contracts."}
+      {
+        "status": "declared",
+        "statement": "Inputs are the scoped request, current Clockwork source and public contracts, isolated synthetic release and state fixtures including a candidate Chancery reader, and any explicitly selected installed documentation contracts."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "The output is the smallest synchronized source, test, schema, documentation, packaging, provider, or release-tooling change with a verified retained CI manager job outcome."}
+      {
+        "status": "declared",
+        "statement": "The output is the smallest synchronized source, test, schema, documentation, packaging, provider, or release-tooling change with a verified retained CI manager job outcome."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Development preserves the distinction among immutable definition, stable binding, one-child activation, runtime evidence, product-domain success, and launchd trigger delivery."}
+      {
+        "status": "declared",
+        "statement": "Development preserves the distinction among immutable definition, stable binding, one-child activation, runtime evidence, product-domain success, and launchd trigger delivery."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Existing binding keys, immutable definition IDs, activation IDs, product release IDs, artifact digests, manifest and database schema versions, contract versions, and provider releases retain their documented meanings unless an explicit successor is introduced."}
+      {
+        "status": "declared",
+        "statement": "Existing binding keys, immutable definition IDs, activation IDs, product release IDs, artifact digests, manifest and database schema versions, contract versions, and provider releases retain their documented meanings unless an explicit successor is introduced."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Completion covers every affected Clockwork code, test, architecture, CLI, data-model, installation, semantic-seed, packaging, and Chancery contract and the retained manager validation, deployment, and notification outcomes."}
+      {
+        "status": "declared",
+        "statement": "Completion covers every affected Clockwork code, test, owning feature contract, procedure, overview, documentation entry point, semantic-seed, and packaging contract and the retained manager validation, deployment, and notification outcomes."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "Development uses the local repository filesystem and shell with isolated state; another product or live launchd operation requires its separately selected contract and authority. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."}
+      {
+        "status": "declared",
+        "statement": "Development uses the local repository filesystem and shell with isolated state; another product or live launchd operation requires its separately selected contract and authority. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; the manager validates before deployment and retains both outcomes; release publication remains separate."}
+      {
+        "status": "declared",
+        "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; the manager validates before deployment and retains both outcomes; release publication remains separate."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Development remains bounded to a current-user local broker with supported interval or daily triggers, stable-key runtime selection, direct-child supervision, skip-overlap, and no automatic retry."}
+      {
+        "status": "declared",
+        "statement": "Development remains bounded to a current-user local broker with supported interval or daily triggers, stable-key runtime selection, direct-child supervision, skip-overlap, and no automatic retry."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Incompatible executable, manifest, storage, scheduling, or packaging meaning receives a successor schema or contract with historical decoding and explicit integration migration."}
+      {
+        "status": "declared",
+        "statement": "Incompatible executable, manifest, storage, scheduling, or packaging meaning receives a successor schema or contract with historical decoding and explicit integration migration."
+      }
     ],
     "reliances": [
-      {"status": "declared", "statement": "Clockwork development relies on Semantics for maintained terminology: Cell until project `clockwork` is registered and seeded, then that project repository; source, tests, and product documentation remain authoritative for behavior.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
-      {"status": "declared", "statement": "Clockwork provider-publication changes rely on Chancery's candidate-reader validation contract; packaging must invoke that reader on the exact staged provider before selector mutation.", "target": "chancery", "kind": "control", "contract": "chancery.provider.publish"},
-      {"status": "unsupported", "statement": "This terminology authority does not create a represented-product runtime reliance for the Clockwork broker."}
+      {
+        "status": "declared",
+        "statement": "Clockwork development relies on Semantics for maintained terminology: Cell until project `clockwork` is registered and seeded, then that project repository; source, tests, and product documentation remain authoritative for behavior.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork provider-publication changes rely on Chancery's candidate-reader validation contract; packaging must invoke that reader on the exact staged provider before selector mutation.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.provider.publish"
+      },
+      {
+        "status": "unsupported",
+        "statement": "This terminology authority does not create a represented-product runtime reliance for the Clockwork broker."
+      }
     ]
   },
   "manual": "manuals/develop-change.md"

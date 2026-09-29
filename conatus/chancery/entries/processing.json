@@ -1,0 +1,218 @@
+{
+  "id": "conatus.processing",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Understand Conatus intake and Annals interpretation",
+  "summary": "Read initialization, unchanged decision-document handoff, feed coverage, library instructions, separate processing outcomes and bounded recovery semantics.",
+  "use_when": [
+    "Initialization, accepted-document intake, handoff, instruction selection, interpretation or recovery behavior must be understood."
+  ],
+  "do_not_use_when": [
+    "Only want capture, archive state, read-only record selection, email content or schedule behavior is needed.",
+    "Historical feed import, invented wants, progress measurement or direct Annals storage access is requested."
+  ],
+  "outcome": "A supported initialization, handoff, instruction selection or explicit Annals recovery result is understood with separate local and domain evidence.",
+  "effects": [
+    "Initialization pins both library identities, selects exact instructions and stores the current baseline; it starts no model or schedule.",
+    "Update commits complete decision intake and cursor, enqueues frozen sources and dispatches Annals. Retry and re-examination can use model allowance and apply valid material results.",
+    "Pause gates later updates; instruction selection starts no model and rewrites no history."
+  ],
+  "authority": [
+    "Conatus owns local intake, cursor, documents, receipts, gates and its selected instruction document.",
+    "Annals owns library and instruction identities, source retention, graph, evidence, revisions, model integration and domain recovery. Nucleus owns execution."
+  ],
+  "success": [
+    "Initialization verifies and pins intended identities. Processing success comes from separately named intake, handoff, work and interpretation receipts."
+  ],
+  "failure_and_recovery": [
+    "Update stops on the first feed, handoff or inbox error and retains its partial report. Input survives failure; normal update resumes pending work.",
+    "Failed attempts require explicit bounded Annals retry with a paused idle inbox. Re-examination requires a retained source. Inspect domain receipts after runtime failure."
+  ],
+  "privacy": [
+    "Conatus, Annals and Nucleus can retain full private statements, documents, references and context. Integration can send relevant source and corpus context to the configured model."
+  ],
+  "interfaces": [
+    {
+      "label": "Initialize",
+      "invocation": "/Users/joey/.local/bin/conatus init --annals <ABS> --decisions-config <ABS>"
+    },
+    {
+      "label": "Update",
+      "invocation": "/Users/joey/.local/bin/conatus update"
+    },
+    {
+      "label": "Retry interval",
+      "invocation": "/Users/joey/.local/bin/conatus retry --from <JOB_ID> --through <JOB_ID>"
+    },
+    {
+      "label": "Re-examine",
+      "invocation": "/Users/joey/.local/bin/conatus reexamine <ID>"
+    },
+    {
+      "label": "Select instructions",
+      "invocation": "/Users/joey/.local/bin/conatus instructions set --file <FILE>"
+    }
+  ],
+  "does_not_authorize": [
+    "Historical imports, invented wants, progress assertions, publication, credential operations, direct database or spool edits, cleanup or unrelated lifecycle actions."
+  ],
+  "manual": "manuals/processing.md",
+  "dependencies": [
+    {
+      "id": "annals.library.operate",
+      "min_contract": 4,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "annals.inbox.operate",
+      "min_contract": 4,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "annals.work.integrate",
+      "min_contract": 3,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators and integration designers need the complete initialization, intake, handoff, interpretation and recovery boundary."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Initialization requires writable state, supported Annals, an explicit existing decisions config, named general library and complete initialized Bazaar selection. Processing requires pinned identity and inbox readiness; interpretation requires Annals configured authenticated Nucleus path."
+      },
+      {
+        "status": "declared",
+        "statement": "Retry start requires the selected Annals inbox paused with no active processing job. Re-examination requires a retained work."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "init selects executable, decisions config, optional Annals state root and named library. update consumes new accepted events and pending handoffs. retry selects an inclusive failed Annals job-ID interval; reexamine selects one intake ID; instructions set accepts exact nonblank UTF-8 file bytes."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Product commands return JSON {ok:true,data:...} or {ok:false,error:string}; --json is optional. Initial configuration retains library identities and cursor. Rebinding reports initialized:false and rebound. Update and status expose separate local and Annals outcomes including a retained partial report."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Decision intake retains complete unchanged document text and original event, filename, digest, acceptance time and transport identities. Existing structured projections remain historical sources. Captured, queued, retained and interpreted are separate operations; acceptance and associations do not establish progress or current force."
+      },
+      {
+        "status": "declared",
+        "statement": "Child-to-parent associations express apparent service to a want under source-grounded library instructions. Multiple parents and unassociated decisions are allowed; model-created concepts are not captured wants."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The opaque cursor is source-library-bound. Source and target library identities are pinned. Each feed event and cursor advancement commit atomically. Retry boundaries are failed Annals job IDs in inclusive failed delivery-completion order. Captured_at and queued_at describe local operations in UTC Unix seconds; accepted_at and Annals revision times describe their own operations."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Each update consumes the new accepted prefix through its chosen watermark. Pages can stop at 4 MiB of document bytes before the requested count; update continues after every nonempty page until empty. The cursor measures intake coverage, not interpretation. Generic enqueue lacks producer-key idempotency and a retained duplicate does not prove examination."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local CLI selects private state through global --state-dir or CONATUS_STATE_DIR, defaulting to ~/Library/Application Support/Conatus. Supported Annals interfaces are the integration surface; no direct storage or remote API is supplied."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Initialization sets the current feed baseline without historical import. Repeated init verifies both identities before rebinding executable and preserves records, cursor, instructions and pause. New documents enter the inbox before retention. Conatus serializes updates but shares no transaction with Annals; uncertain handoff can create duplicate delivery."
+      },
+      {
+        "status": "declared",
+        "statement": "Pause gates later update without cancelling active Annals work or setting Annals or Clockwork pause. Instruction selection starts no model and does not reinterpret history. Annals freezes corpus and instruction revisions and rejects stale application; recorded domain results survive later runtime failure."
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar selection pins positive immutable component versions. Resolution fails without initialized state or complete selection and supplies no embedded fallback. Migration selection version 1 and referenced texts remain retained; resolved instructions become existing immutable library domain snapshots."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "No historical import or automatic graph transitive reduction is supplied. Failed model attempts require bounded explicit retry; enqueue duplicates do not request examination."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No storage capacity, activation delay, queue-drain deadline, interpretation completion time or throughput guarantee is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Conatus state schema 1, Annals exchange 2, library schema, provider release and feature contract versions are separate. Complete-document intake preserves existing cursor and historical records. Retained library revisions and source bytes are unchanged by prompt edits."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release support or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Named library creation, pinned identity and stored instruction selection depend on Annals.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.library.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Accepted documents and their bounded opaque-cursor feed supply decision intake. Consumers continue short nonempty pages until empty.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Queueing, retention, automatic integration and bounded retry depend on the Annals inbox.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.inbox.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Explicit re-examination uses Annals integration and its currentness and domain-result rules.",
+        "target": "annals",
+        "kind": "control",
+        "contract": "annals.work.integrate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      }
+    ]
+  }
+}

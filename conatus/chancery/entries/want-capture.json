@@ -25,7 +25,8 @@
     "The capture receipt identifies the committed local want record."
   ],
   "failure_and_recovery": [
-    "An input or storage error does not establish capture. Inspect the returned error before supplying a corrected input."
+    "An input or storage error does not establish capture. Inspect the returned error before supplying a corrected input.",
+    "After interrupted capture inspect local wants before repeating; capture has no caller-key idempotency and a repeated request can create another want."
   ],
   "privacy": [
     "The full wording and source reference remain in local Conatus state. Later update can provide them to Annals and its model integration."
@@ -75,7 +76,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Conatus state is initialized and writable. The caller supplies one nonblank UTF-8 statement and its source-reference string."
+        "statement": "Conatus state is initialized and writable. The caller supplies one nonblank UTF-8 statement and its source-reference string. Product maintenance holds block capture."
       }
     ],
     "inputs": [

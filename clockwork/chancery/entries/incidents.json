@@ -1,0 +1,159 @@
+{
+  "id": "clockwork.incidents",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect scheduling halts and approve continuation",
+  "summary": "Read failure policy, bounded product abend reports, deduplicated incidents, insertion-ordered feed, and exact user approval of future admission.",
+  "use_when": [
+    "A failure halt, its occurrence identity, policy exception, or explicit continuation must be understood.",
+    "A product reports a terminal domain failure or transfers a legacy failure-owned gate under maintenance."
+  ],
+  "do_not_use_when": [
+    "The intended effect is product-item retry, email uncertainty recovery or release installation.",
+    "The caller intends automatic resume or erase failure evidence."
+  ],
+  "outcome": "Retained immutable failure evidence and an exact open or explicitly resumed incident.",
+  "effects": [
+    "Schema-two abends retain deduplicated evidence and enforce selected policy; omission opens one halt and pending alert.",
+    "Resume records approval for one exact incident and opens future admission without enabling a disabled binding or retrying work.",
+    "Legacy halt import retains failure evidence and can create an inactive absent-key tombstone."
+  ],
+  "authority": [
+    "The product owns failure interpretation, configuration and item recovery; Clockwork owns policy enforcement and incident-bound admission."
+  ],
+  "success": [
+    "Runtime terminal evidence and its incident commit atomically; reports commit before returning; exact user-approved resume is visible in incident evidence."
+  ],
+  "failure_and_recovery": [
+    "Inspect product evidence and preserve committed work, pauses and newer incidents before continuation or storage recovery.",
+    "Same key/occurrence remains deduplicated after approval; a distinct failed attempt requires a distinct occurrence."
+  ],
+  "privacy": [
+    "Reports contain only bounded machine code and immutable occurrence identifier, never source content, credentials, mail body or unbounded errors."
+  ],
+  "interfaces": [
+    {
+      "label": "Report abend",
+      "invocation": "clockwork [--json] abend ACTIVATION_ID --code CODE --occurrence ID"
+    },
+    {
+      "label": "Import halt",
+      "invocation": "clockwork [--json] binding halt KEY --code CODE --occurrence ID"
+    },
+    {
+      "label": "Resume",
+      "invocation": "clockwork [--json] binding resume KEY INCIDENT_ID"
+    },
+    {
+      "label": "List",
+      "invocation": "clockwork [--json] incident list [KEY] [--limit N]"
+    },
+    {
+      "label": "Show",
+      "invocation": "clockwork [--json] incident show INCIDENT_ID"
+    },
+    {
+      "label": "Feed",
+      "invocation": "clockwork [--json] incident feed --after CURSOR --limit N"
+    }
+  ],
+  "does_not_authorize": [
+    "Resuming without explicit incident-bound user approval, enabling a disabled binding, retrying product work, recovering mail uncertainty or erasing newer halts."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local product may report bounded failures while its activation is running; an operator may inspect/import a halt and explicitly approve its exact incident."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Reports require complete schema-two correlation and a running activation; resume requires explicit user approval, exact open incident, no running activation and no pending transition."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Schema-two failure.on_abend defaults to halt-until-approved; the intentional continue-next-activation exception permits later work without retry. Optional absolute failure.email_cli freezes the Email wrapper; default HOME/.local/bin/email. Report code is at most 64 bytes and immutable occurrence at most 256 bytes, limited to ASCII letters/digits, dash, underscore, slash, dot and colon."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Incident records expose UUID, key, activation/definition when available, code, occurrence, creation/resumption times and Clockwork notification status/attempts. Lists use items/has_more with default 20 and positive limit. Feed uses insertion-ordered items/next_cursor/has_more, limits 1 through 1000."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "An abend is immutable key/occurrence evidence; runtime failure uses activation occurrence. An incident closes admission independently of enabled state, selection, maintenance and installation. Runtime completion remains separate from product success; notification state describes only Clockwork transport."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Incident identity is UUID; product occurrence is immutable within key; timestamps use whole Unix seconds. Feed cursor belongs to database insertion history rather than wall-clock time."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Show/list read retained local incident evidence; feed reads insertion order. Save cursor after retaining all items and re-establish it after restoring a different history."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No history retention duration or current product health is promised by these records."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "CLI and clockwork::api::report_abend are supported. The helper returns false outside Clockwork and rejects partial context; it invokes the exact broker, never direct storage."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "At most one open incident per key; admission checks this with its insert. Terminal runtime failure and halt commit together. Reports commit before return and deduplicate forever within retained history. Switch, disable, compensation, restart, reinstall and rollback preserve halts. Resume clears only its exact incident."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema-two child receives reserved CLOCKWORK_BROKER_PATH, CLOCKWORK_STATE_ROOT and CLOCKWORK_ACTIVATION_ID; products preserve them through environment scrubs. Reporting cannot retract already admitted product work or make its commits atomic with Clockwork."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Startup failure, nonzero exit, signal, timeout, lost activation and supervision failure apply schema-two policy. Overlap is normal; expected empty/waiting/deferred outcomes are product-owned normal exits."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Automatic resume, automatic retry, deletion of evidence and deriving domain success from exit zero are unsupported."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Schema-one definitions keep digest and legacy behavior after database migration; failure_policy_active exposes absence of schema-two enforcement until explicit selection. Incident, occurrence, provider release, manifest and store schema remain separate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal deprecation or migration window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The registering product owns domain failure meaning and safe recovery and stops successor admission at an abend; its concrete contract is selected by the definition.",
+        "target": "product",
+        "kind": "authority"
+      }
+    ]
+  },
+  "manual": "manuals/incidents.md"
+}

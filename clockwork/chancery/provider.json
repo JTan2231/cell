@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "clockwork",
     "name": "Clockwork",
@@ -33,12 +33,19 @@
       "Provider release, entry contracts, definition-manifest schema, database schema, and product definition identities have independent compatibility rules."
     ],
     "operational_limits": [
-      "Clockwork v0.1 is a short-lived current-user scheduled-activation broker with interval and daily local-calendar triggers; it has no daemon, HTTP surface, workflow graph, retry engine, shell language, secret store, or domain-success rule."
+      "Clockwork is a short-lived current-user scheduled-activation broker with interval and daily local-calendar triggers; it has no daemon, HTTP surface, workflow graph, retry engine, shell language, secret store, or domain-success rule."
     ]
   },
   "entries": [
     "entries/schedule-operate.json",
     "entries/install-operate.json",
-    "entries/develop-change.json"
-  ]
+    "entries/develop-change.json",
+    "entries/definitions.json",
+    "entries/bindings.json",
+    "entries/activations.json",
+    "entries/incidents.json",
+    "entries/notifications.json",
+    "entries/installation.json"
+  ],
+  "overview": "overview.md"
 }

@@ -22,4 +22,4 @@ RELEASE_UNITS='emt|EMT|package|emt/Cargo.toml|emt-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='emt|target/release/emt|emt
 emt|target/release/emt-install|emt-install'
-PROVIDERS='emt|emt|emt/chancery|3'
+PROVIDERS='emt|emt|emt/chancery|5'

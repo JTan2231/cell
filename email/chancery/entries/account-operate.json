@@ -44,7 +44,13 @@
     "Credentials remain in private mode-0600 files beneath the private Email settings directory and are omitted from stdout and errors. The supplied source stays caller-owned.",
     "Domain names are returned; no email metadata or content is read. Domain API requests reveal account selection to Resend."
   ],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "id": "email.account",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
   "does_not_authorize": [
     "Remote account login, key creation, key permission changes, DNS changes, receiving mail or sending a message.",
     "A setup or settings-read success does not grant another product account access or recurring-send authority."

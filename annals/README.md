@@ -14,7 +14,7 @@ annals stats
 ```
 
 Integration records an interpretation. Apply a pending reconciliation to change
-the corpus. See [integration and application](docs/cli.md#model-assisted-integration).
+the corpus. See [integration and application](chancery/annals/manuals/work-integrate.md).
 
 ## CI
 
@@ -29,10 +29,11 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Commands and records](docs/cli.md), including [inbox operations](docs/inbox.md)
-- [Installation and recovery](docs/system-installation.md)
-- [Architecture and graph meaning](docs/architecture.md)
-- [Stored records](docs/data-model.md)
-- [Search](docs/search.md) and [usage reporting](docs/telemetry.md)
-- [Rust interface](docs/rust-api.md)
-- [Operating contracts](chancery/annals/provider.json)
+- [Product overview and feature map](chancery/annals/overview.md)
+- [Library procedures](chancery/annals/manuals/library-operate.md) and [inbox procedures](chancery/annals/manuals/inbox-operate.md)
+- [Installation and recovery](chancery/annals/manuals/install-operate.md)
+- [Annals Usage](chancery/annals-usage/overview.md)
+- [Command navigation](docs/cli.md) and [Rust interface navigation](docs/rust-api.md)
+
+Installed documentation: `chancery product annals`, `chancery show ID`, or
+`chancery resolve ID` for a procedure and its required contracts.

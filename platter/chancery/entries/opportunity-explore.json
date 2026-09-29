@@ -81,7 +81,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Read contract and JSON output schema are one. Platter persistent schema remains six."
+        "statement": "Read contract and JSON output schema are one. Platter persistent schema is seven."
       }
     ],
     "reliances": [

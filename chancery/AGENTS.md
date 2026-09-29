@@ -10,3 +10,11 @@ Semantics-Project: chancery
   repository cannot be resolved, report the problem.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. Follow the root CI instructions.
+
+## Documentation ownership
+
+Keep full feature explanations in `provider/manuals` and index them as
+capability contracts. Keep prerequisites, consequential effects, checkpoints,
+stop conditions, and verification in operation manuals. Update the owning
+feature and affected procedures together. Keep the overview, README, and older
+documentation as context and navigation without competing explanations.

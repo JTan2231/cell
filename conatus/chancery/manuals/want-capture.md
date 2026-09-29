@@ -10,7 +10,8 @@ Each new want starts active. The capture response includes `record.state` as
 directly requested by the user, change its local lifecycle state. State never
 becomes part of the frozen outgoing source document.
 
-Conatus state must already be initialized. Select it with the global
+Conatus state must already be initialized and writable. Product maintenance
+holds block capture. Select it with the global
 `--state-dir ABS_PATH` when using a nondefault location. The default is
 `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`.
 
@@ -36,7 +37,9 @@ outgoing filename adds `.md`.
 Capture starts no model and changes no Annals corpus. It establishes durable
 Conatus intake, not enqueue, library retention, or interpretation. A later
 `conatus update` forwards pending documents through the selected Annals inbox.
-Do not report an input or storage error as successful capture.
+Do not report an input or storage error as successful capture. After an
+interrupted command, inspect local wants before repeating capture. Capture
+supplies no caller-key idempotency; a repeated request can create another want.
 
 The full statement and reference remain in private local Conatus state.
 Subsequent update can supply them to Annals and its configured Nucleus model
@@ -50,3 +53,9 @@ CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
+
+## Related contracts
+
+Read `conatus.processing` for later handoff, `conatus.want.lifecycle` for current
+state, and `conatus.library.explore` for retained record inspection. Use
+`conatus.update.operate` to initialize state or recover processing.

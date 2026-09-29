@@ -28,7 +28,14 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Sending commands and Rust interface](docs/cli.md)
-- [Read received mail](chancery/manuals/message-receive.md)
-- [Installation and credentials](docs/system-installation.md)
-- [Send effects and recovery](chancery/manuals/message-send.md)
+Read `chancery product email` for the installed overview and feature inventory.
+Read `chancery show ID` for one feature or procedure, and `chancery resolve ID`
+for required contracts.
+
+- [Product overview and feature inventory](chancery/overview.md)
+- [Send messages and attachments](chancery/manuals/message-send.md)
+- [Read received account mail](chancery/manuals/message-receive.md)
+- [Account access and receiving domains](chancery/manuals/account.md)
+- [Installation guarantees](chancery/manuals/installation.md)
+- [Configure account access](chancery/manuals/account-operate.md)
+- [Install or recover Email](chancery/manuals/install-operate.md)

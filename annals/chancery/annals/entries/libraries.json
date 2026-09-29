@@ -1,0 +1,240 @@
+{
+  "id": "annals.libraries",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Select Annals libraries and interpret their instructions",
+  "summary": "Understand separate library identity, configuration, stored librarian instructions, read access, supported schema migration, and consistent backups.",
+  "use_when": [
+    "A caller needs the library selection, identity, admission kind, instruction revision, configuration, read-access, or backup contract.",
+    "An application must use named libraries or provider-owned Annals Rust clients."
+  ],
+  "do_not_use_when": [
+    "The task is model interpretation, inbox recovery, accepted-document exchange, or corpus-history mutation.",
+    "Direct SQLite edits, implicit replacement, library deletion, or cross-library transactions are expected."
+  ],
+  "outcome": "One explicitly selected local library has understood identity, interpretation settings, schema, access, and recovery boundaries.",
+  "effects": [
+    "Library reads leave state unchanged. Creation and initialization prepare separate private state; instruction selection appends exact text atomically; migration changes only supported schema; backup creates a consistent absent destination.",
+    "Creation starts no model job or schedule. Instruction selection advances no corpus revision and schedules no reinterpretation."
+  ],
+  "authority": [
+    "Annals owns its catalog, library identity and immutable kind, exact stored instruction revisions, and library records.",
+    "Consuming applications define interpretation through stored instructions. Bazaar owns immutable text versions; Annals owns selection meaning and initialization."
+  ],
+  "success": [
+    "Selection verifies the intended persistent identity and returns the selected registration, instruction revision, schema, statistics, or backup result.",
+    "Creation is recoverable in provisioning; instruction selection and supported migration are atomic; initialization and backup refuse replacement."
+  ],
+  "failure_and_recovery": [
+    "Unknown names, conflicting state, mismatched identities, missing read prerequisites, and unsupported schemas fail without replacement.",
+    "Repeat the same name and kind to resume provisioning. Use authorized migration or installation recovery for missing prepared state; do not edit catalog, SQLite, or spool records."
+  ],
+  "privacy": [
+    "Catalogs, libraries, instructions, spools, backups, and outputs may contain private paths, complete source, exact evidence, and model context. Preserve their local privacy boundary."
+  ],
+  "interfaces": [
+    {
+      "label": "List named libraries",
+      "invocation": "/Users/joey/.local/bin/annals library list"
+    },
+    {
+      "label": "Create named library",
+      "invocation": "/Users/joey/.local/bin/annals library create <NAME> [--kind general|decisions]"
+    },
+    {
+      "label": "Show named library",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> show"
+    },
+    {
+      "label": "Set library instructions",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set <CONTENT>"
+    },
+    {
+      "label": "Set library instructions from file",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set --file <PATH>"
+    },
+    {
+      "label": "Set library instructions from stdin",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions set --stdin"
+    },
+    {
+      "label": "Read selected instructions",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> instructions show"
+    },
+    {
+      "label": "Initialize",
+      "invocation": "/Users/joey/.local/bin/annals init [--kind general|decisions]"
+    },
+    {
+      "label": "Migrate",
+      "invocation": "/Users/joey/.local/bin/annals migrate"
+    },
+    {
+      "label": "Statistics",
+      "invocation": "/Users/joey/.local/bin/annals stats"
+    },
+    {
+      "label": "Backup",
+      "invocation": "/Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>"
+    },
+    {
+      "label": "Use provider-owned read views",
+      "invocation": "annals::api::LibraryReader"
+    },
+    {
+      "label": "Invoke typed CLI operations",
+      "invocation": "annals::api::CliClient and CliClient::for_named_library; typed Request and Response"
+    }
+  ],
+  "does_not_authorize": [
+    "Corpus application, inbox retry, external disclosure, direct storage edits, destructive replacement, or storage cleanup.",
+    "Library rename or deletion, cross-library transactions, automatic adoption of operator paths, or reinterpretation after instruction selection."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local people, agents, and consuming applications select separate libraries, store exact librarian instructions, inspect compatible state, and use provider-owned CLI or Rust views."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Selection requires the intended readable or writable compatible state and appropriate mutation authority. Initialization and backup require absent paths; initialization requires initialized private Bazaar state and a complete cell.prompts.annals selection."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Names contain 1–64 lowercase ASCII letters, digits, underscores, or hyphens, start with a letter, and exclude list, create, and help. Instructions require exactly one nonblank UTF-8 document inline, from --file, or from --stdin."
+      },
+      {
+        "status": "declared",
+        "statement": "Operator config resolves from --config then ANNALS_CONFIG; library resolves from --library, ANNALS_LIBRARY, then config. Expected identity selections must agree. Unknown config keys fail."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Library list returns registrations and provisioning state. Show verifies identity and reports registration, corpus revision, and instruction revision. Instruction set returns changed and instructions with library_id, revision, exact content, sha256, and recorded_at."
+      },
+      {
+        "status": "declared",
+        "statement": "Common JSON success and error envelopes, documented exit categories, statistics, initialization/migration receipts, and consistent backup results retain their selected operation meaning. Client Request values return matching Response values."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Library records include retained sources, deliveries, instructions, corpus, examinations, reconciliations, and history. Only concepts, explicit edges, and evidence constitute corpus state. Library kind is immutable general or decisions; settings cannot bypass it."
+      },
+      {
+        "status": "declared",
+        "statement": "Instructions define concept and edge interpretation. Broader/narrower scope is the stored default, not a universal invariant. Instructions are trusted settings rather than evidence; choosing text starts no model, changes no corpus revision, and rewrites no history."
+      },
+      {
+        "status": "declared",
+        "statement": "Exact instruction bytes are immutable revisions. Identical current bytes are unchanged; A → B → A appends selections. recorded_at describes selection, not graph reinterpretation."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Annals catalog.db maps names and stable library IDs to managed database, config, and spool paths under ANNALS_STATE_DIR. New libraries live under libraries/LIBRARY_ID/. Backup preserves identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Library identity, immutable kind, instruction revision, corpus revision, feature contract, provider release, schema, and package generation are separate identities. Statistics count the selected library records and database bytes, not model consumption."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Instruction history identifies library_id and current_instruction_revision and returns newest-first instructions and has_more, default limit 20 and maximum 100. --before selects strictly older revisions."
+      },
+      {
+        "status": "declared",
+        "statement": "Show is identity and selected-record evidence, not runtime readiness. A backup is one consistent complete SQLite copy including instruction, source, examination, reconciliation, and corpus history."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No backup duration, maximum library size, migration latency, or long-term backup-retention guarantee is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Named scope verifies identity, rejects --library, ignores ANNALS_LIBRARY, and prevents config redirection of managed state. Unknown names fail without creation; existing operator paths remain supported without automatic registration."
+      },
+      {
+        "status": "declared",
+        "statement": "Read commands need only readable config, catalog, library, prepared SQLite sidecars, and required spool records and locks. Scratch tables and indexes stay in memory. Reads never initialize, migrate, checkpoint, or repair state."
+      },
+      {
+        "status": "declared",
+        "statement": "LibraryReader returns provider-owned read views. CliClient invokes an explicit executable and supports named selection, identity checks, and typed Request/Response. Construction is effect-free; calls have their selected CLI effects. Supplied bytes require explicit - or instructions --stdin."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No direct SQLite or catalog writes, remote administration, implicit current-directory database, or cross-library transaction is provided."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Creation reserves one provisioning identity, initializes matching state, then marks ready. Repeating the same name and kind resumes or returns it; conflicts fail without rebinding. Instruction selection and supported migrations commit atomically."
+      },
+      {
+        "status": "declared",
+        "statement": "Initialization and backup refuse replacement. Writers and authorized setup prepare persistent WAL state; migration also prepares the configured spool control lock. Backups remain standalone readable SQLite files."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Migration accepts schemas 3 through 6 to schema 7, preserves source and corpus history and library kind, seeds the schema 6 default instruction step, and leaves unknown historical instruction provenance null."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Library rename, deletion, cross-library queries and transactions, and automatic operator-path adoption are not supplied."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum library size, throughput, wall-clock latency, ABI support period, or backup-retention duration is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Unsupported older or newer schemas fail without partial reinterpretation. Schema7 preserves accepted-document sequence and delivery identity and retains earlier acceptance projections as legacy records."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No universal migration window, cross-release client support window, or deprecation period is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies immutable text versions required for library initialization. Annals owns selection JSON, rendering, interpretation, and execution; returned text grants no extra authority.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Local selection, instruction reads, statistics, and backups require no model, Nucleus job, or network service."
+      }
+    ]
+  },
+  "manual": "manuals/libraries.md",
+  "dependencies": [
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
+}

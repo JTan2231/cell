@@ -22,4 +22,4 @@ RELEASE_UNITS='chancery|Chancery|package|chancery/crates/chancery/Cargo.toml|cha
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='chancery|target/release/chancery|chancery
 chancery|target/release/chancery-install|chancery-install'
-PROVIDERS='chancery|chancery|chancery/provider|4'
+PROVIDERS='chancery|chancery|chancery/provider|7'

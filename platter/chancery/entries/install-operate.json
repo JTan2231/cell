@@ -1,7 +1,7 @@
 {
   "id": "platter.install.operate",
   "contract_version": 11,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install and maintain Platter",
@@ -71,14 +71,9 @@
     }
   ],
   "effects": [
-    "Coordinated installation publishes exact runtime/installer/provider bytes and owned selectors; it creates no domain work or schedule.",
-    "Owner-keyed SQLite holds fence the canonical library. A database-file activity lock serializes commands, while predecessor gate/runner locks are observed through cutover.",
-    "An explicit transaction imports legacy records and files into schema seven, writes a complete schema-seven backup, then removes only hashed legacy files on its cleanup manifest. Schema-two through schema-six migration adds ordered edition_packets from attachment-to-run references and preserves captured inputs, requests, packet selections, artifact bytes and delivery identities.",
-    "Migration verifies local state before dependency paths are rebound. Full readiness follows deployment configuration. Optional completion-receipt recovery writes or verifies the coordinator's exact backup path and digest after migration and local verification under the existing owner and activity locks.",
-    "Readiness checks validate state and executable/runtime prerequisites without preparing jobs, rendering PDFs or sending email.",
-    "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases.",
-    "For selected Platter with read-only-proved schema-seven state, the sealed candidate can perform protocol-one maintenance before publication, including recovery and release. Current installation ownership, exact candidate identity, durable hold owners and drain checks remain required; this performs no migration or domain work.",
-    "Deployment preserves the flat optional resume_override setting. The config command validates and sets or clears this private PDF path under normal mutation admission; it starts no preparation or delivery."
+    "Coordinated installation publishes matched runtime/installer/provider bytes through owned selectors. It starts no packet preparation or email.",
+    "Durable owner holds fence new mutations while exact admitted work drains. Explicit migration preserves retained identities, creates a current-schema backup, and removes only hashed legacy files after successful import/backup.",
+    "Read-only checks inspect installation/state/dependency readiness without domain work. Explicit supplied setup can initialize missing templates or activation intent. Existing schedules are retargeted disabled and captured intent is restored only after holds release."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -90,17 +85,21 @@
     "Inspection and doctor report the installation, configuration and dependency readiness checks they perform."
   ],
   "failure_and_recovery": [
-    "Foreign selectors, altered releases, ambiguous state roots, unsupported schemas, missing legacy content and conflicting holds stop the operation.",
-    "Schema migration preserves exact input and delivery identities. Failure before import commit leaves schema one; failure afterward retains schema seven plus originals and cleanup recovery metadata. Schema-two through schema-six records retain their legacy workflow after the version advance.",
-    "Older binaries cannot operate schema seven. A binary-only rollback is unsafe; recovery needs a compatible candidate or an explicitly selected complete predecessor database/files backup and matching binary.",
-    "Uncertain apply or recovery remains held. No automatic model retry, domain reset or direct installer rollback is supported.",
-    "The daily runner marks jobs ineligible when posting retrieval fails and continues with other candidates. Other preparation errors stop the run before sending. Declined opportunities and an empty ready pool remain expected domain outcomes. Clockwork owns durable halt-until-approved enforcement, incident notification and explicit continuation; deployment and binding changes preserve halts and do not authorize a retry or uncertain resend."
+    "Stop and retain evidence for unknown ownership, foreign selectors/holds, altered release/candidate bytes, ambiguous roots, unsupported state, incomplete drain, or readiness failure.",
+    "Use the exact retained owner, compatible candidate, selected backup, and completion evidence for interrupted migration/coordinator recovery. Do not perform direct installer rollback, reset domain state, or release unrelated holds.",
+    "Schema-seven state cannot use an older incompatible binary. Recover with a compatible candidate or explicitly selected complete predecessor data/files backup and matching binary; file compensation does not undo migration.",
+    "Preserve Clockwork halts and uncertain sends through deployment. Binding continuation does not authorize a preparation retry or ambiguous resend."
   ],
   "privacy": [
     "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",
     "Installation manifests retain executable/provider identity and local paths, never private resume bodies or provider keys. Model and email disclosures belong only to separately authorized runtime operations."
   ],
   "dependencies": [
+    {
+      "id": "platter.maintenance",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
@@ -151,109 +150,61 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and the Cell coordinator may operate the supported installation, readiness and maintenance interfaces."
+        "statement": "The current user and Cell coordinator use the supported inspection, readiness, maintenance, migration, and installation procedures."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Coordinated deployment requires committed local main source, a verified candidate, owned current-user paths and compatible maintenance interfaces throughout the Nucleus requester closure. Required runtime commands, Cast exact job-URL collection, Email attachment support and local renderer tooling must be available. When selected together, Cast, Annals, Email and Nucleus are applied before Platter; ordering declarations do not implicitly select their upgrades."
-      },
-      {
-        "status": "declared",
-        "statement": "A state backup requires the exact deployment hold and quiescence. Unsupported state or ambiguous default roots stop installation; initialization is a separate explicit runtime operation."
-      },
-      {
-        "status": "declared",
-        "statement": "Weaver must support authoring contract 2 and caller request identity before the Platter candidate is admitted. Initialized readiness checks Weaver doctor without writing. Maintenance includes exactly the Weaver jobs recorded in Platter runs."
-      },
-      {
-        "status": "declared",
-        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
-      },
-      {
-        "status": "declared",
-        "statement": "Selected Platter may use candidate maintenance only after the installer proves current installation ownership and a read-only product check proves schema-seven state. Supported predecessor schemas and existing affected-only Platter retain installed maintenance; foreign installations and unsupported state are refused."
+        "statement": "Use exact committed source, an owned verified candidate, compatible maintenance interfaces across affected requesters, the sole matching hold, and proved drain. Read platter.maintenance for admission, dependency readiness, candidate maintenance, and state compatibility. Unselected dependencies are not implicitly upgraded."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Cell selects exact committed source and supplies sealed adapter JSON. migrate requires the sole CELL_DEPLOYMENT_RUN_ID hold, drained requester work and an absolute backup path. Coordinated Platter backups use the canonical runtime root/backups directory. Renderer overrides remain absolute."
-      },
-      {
-        "status": "declared",
-        "statement": "Deployment accepts resume for missing initialization, projects_template for a projects-only immutable template import, and enabled for explicit activation intent. Other template bytes and existing run references remain fixed. config exposes retained Weaver, Cast and Email executable pins."
-      },
-      {
-        "status": "declared",
-        "statement": "Career reads use ~/.local/bin/annals and the fixed named library vita. No career-source setting is stored. Retired crm_executable fields are ignored on read and omitted when configuration is saved."
+        "statement": "Retain exact owner/candidate identity, absolute backup and optional recovery-receipt paths, and explicit supplied template/projects-template/activation setup when intended. Use the fixed Vita selection and complete Bazaar prompt prerequisites defined by required features."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Coherent immutable installation selectors and integrity manifests, maintenance/readiness outcomes, or a self-contained schema-seven SQLite backup with a resumable legacy cleanup manifest."
+        "statement": "Inspection/readiness outcomes, coherent matched runtime/installer/provider selectors, and maintained backup/cleanup/recovery evidence. Required features own exact release and state meaning."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Database schema 5 holds all packet content, explicit job eligibility and maintenance state. A consistent SQLite backup contains the complete packet history. Disposable Ashby board files in ashby-cache under the runtime root are outside SQLite and can be downloaded again; they are excluded from database backups. Nucleus history and credentials remain separately owned."
+        "statement": "Use platter.maintenance for release, canonical schema-seven state, hold/drain, backup, migration, and incident meaning. Platter state and Nucleus evidence/credentials remain separately owned."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Existing packet IDs become run IDs. Retained job-packets requester identities, Nucleus requests, edition keys, frozen bytes, attachment names/order and receipts remain exact. Hold ownership is durable and never expires automatically."
+        "statement": "Preserve the run-owned hold and exact committed candidate, backup digest, and recovery evidence. Maintain retained packet/request/edition/send identities under platter.maintenance without treating hold identity as process liveness."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Maintenance checks live admissions and every page of matching nonterminal Nucleus jobs for both requester identities. Doctor validates existing local state, Cast/Annals/Email executable identity, Cast job-collect help, Email attachment flag, renderer tools and compatible Nucleus health without exercising domain operations. It does not prove initialized Cast or Vita libraries or read their domain contents."
-      },
-      {
-        "status": "declared",
-        "statement": "Installation inspection reports selected releases and stored configuration; strict doctor checks the documented runtime dependencies."
-      },
-      {
-        "status": "declared",
-        "statement": "Maintenance reads all job-summary pages for platter and job-packets and, when assignments exist, Weaver summaries intersected with exact retained Weaver job IDs. It does not decode full historical job output for each assignment. Each maintenance observation has a 60-second bound; failed or incomplete evidence does not establish drain."
+        "statement": "Require complete bounded drain and the documented readiness observation before cutover/release. Unknown or incomplete evidence cannot establish success. Doctor starts no domain work and does not prove initialized source libraries or actual external binding readiness."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "Installed commands/provider retain their owned selectors under Application Support and ~/.local/bin. Runtime state is the single canonical ~/.local/share/platter root or a sole predecessor job-packets root. Independent --state-dir libraries are unsupported. Owner holds reside in SQLite; predecessor gate files are retired after drained release."
+        "statement": "Use Cell coordinated deployment and sealed version-one Platter installer adapter, not direct install/recover. Operate canonical current-user state with normal owner/activity admission and exact owned selectors."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Requester holds and draining precede Nucleus maintenance; verification precedes run-owned release and Nucleus is released last. Live command admission uses the database file itself. Existing legacy gate/runner activity is respected during transition."
-      },
-      {
-        "status": "declared",
-        "statement": "Schema-one import is transactional. A complete schema-seven backup precedes hashed legacy-file cleanup. Interrupted backup or cleanup is resumable without regenerating packets, resending or resetting identities."
-      },
-      {
-        "status": "declared",
-        "statement": "Cell deployment captures and disables an existing platter/daily binding, registers the exact new runner definition while disabled, and restores intended enabled state only after all maintenance releases. It retains timer, environment, paths and incidents. Prior binding and verified release evidence remain the recovery basis."
-      },
-      {
-        "status": "declared",
-        "statement": "Cell deployment initializes a missing template only from an explicit resume path, updates final Cast, Email and Weaver executable references, and retargets the existing daily definition disabled while preserving schedule, arguments, environment, outputs and incidents. Final activation follows all hold releases."
-      },
-      {
-        "status": "declared",
-        "statement": "Callers resolve cell.prompts.platter to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Hold/drain requesters before Nucleus; perform only authorized maintenance, verify the exact held candidate and supported state, restore captured activation intent, and release only the operation's hold with Nucleus last. Retain migration recovery evidence and all preexisting halts/pauses."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "No installation operation prepares packets, sends email, initializes a resume or enables a schedule. Renderer scratch remains under the runtime root; program installations and Nucleus state remain separate."
+        "statement": "Installation prepares no packets and sends no email. Missing-template initialization and activation require explicit supplied setup; candidate maintenance starts neither migration nor domain work. Exact cancellation excludes unrelated Weaver jobs."
       },
       {
         "status": "unspecified",
@@ -263,11 +214,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 14 supports tailored weaver_projects_v1 runs and daily_brief_v1 runs with a shared resume_override PDF. Installation contract 11 migrates schemas one through six to schema seven with independent ordered edition packet selections. Historical inputs, requests, artifact bytes and deliveries remain unchanged."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "Keep the existing operation ID/version and coordinator/recovery routes. Required features own supported state migration and binary/data pairing; no file compensation undoes a schema migration or restores older Nucleus credentials."
       }
     ],
     "reliances": [
@@ -319,5 +266,35 @@
       }
     ]
   },
-  "manual": "manuals/install-operate.md"
+  "manual": "manuals/install-operate.md",
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "session_surfaces": [
+    "Cell checkout and deployment coordinator",
+    "owned Platter release and canonical private state"
+  ],
+  "steps": [
+    "Inspect exact installed identity, canonical state, dependency compatibility, and maintenance ownership.",
+    "Select the authorized committed Cell candidate and prepare verified matching program/provider bytes.",
+    "Hold and drain affected requesters, then Nucleus, under the retained run owner.",
+    "Apply supported migration/cutover with a private consistent backup and exact recovery evidence.",
+    "Verify supported local state, exact installed program/provider identity, and full held readiness.",
+    "Release only the operation's holds with Nucleus last and restore only captured activation intent; retain all incident halts."
+  ],
+  "checkpoints": [
+    "The sole retained owner and complete bounded drain are proved before migration/cutover.",
+    "Selected release and backup/recovery evidence remain exact and owned.",
+    "Migration/local state verification precedes dependency rebinding and full readiness.",
+    "Full held readiness and coherent program/provider selection precede release/activation."
+  ],
+  "adaptation": [
+    "Use read-only inspection/state-only readiness without requiring domain execution.",
+    "Use sealed candidate maintenance only after ownership and read-only schema-seven proof; predecessor/affected-only cases retain installed maintenance.",
+    "Resume interrupted migration or coordinator recovery from exact owner/backup/receipt evidence rather than a direct installer rollback."
+  ],
+  "stop_when": [
+    "Ownership, sole hold, complete drain, candidate integrity, state compatibility, or readiness is absent or unknown.",
+    "Migration source/backup/receipt evidence changed or a binary-only rollback would cross incompatible state.",
+    "Recovery would reset domain history, resend uncertain mail, release a foreign hold, upgrade an unselected dependency, or clear a Clockwork halt."
+  ]
 }

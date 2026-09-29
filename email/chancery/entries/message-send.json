@@ -18,7 +18,7 @@
   ],
   "outcome": "Resend accepts one immediate plain-text submission with the caller-provided subject, body, optional attachment bytes and optional reply metadata for the fixed recipient.",
   "effects": [
-    "Reads `RESEND_API_KEY` from the process environment and makes an authenticated network request to Resend.",
+    "Email selects its explicitly configured private credential first, then RESEND_API_KEY supplied by the installed wrapper or direct caller, and makes an authenticated network request to Resend.",
     "Discloses the supplied subject, body, and any attachment filenames and bytes to Resend and the fixed recipient's Gmail provider.",
     "Uses either a fresh generated idempotency key or a validated caller-supplied key in the Resend request.",
     "Uses product-fixed sender and recipient addresses; callers cannot override either address.",
@@ -96,7 +96,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A real send requires explicit current-user authority or a calling product's documented standing authority, an approved exact subject and plain-text body, the product-fixed addresses, a valid RESEND_API_KEY, network access, and Resend availability. Any attachments must be authorized for disclosure and readable regular local files."
+        "statement": "A real send requires explicit current-user authority or a calling product's documented standing authority, an approved exact subject and plain-text body, the product-fixed addresses, a valid selected credential, network access, and Resend availability. Any attachments must be authorized for disclosure and readable regular local files."
       },
       {
         "status": "declared",
@@ -184,7 +184,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The supported surface is the current-user local Email CLI; the installed wrapper reads only RESEND_API_KEY from ~/.zshrc, preserves standard input, and starts the payload with a scrubbed minimal environment."
+        "statement": "The supported surface is the current-user local Email CLI; the installed wrapper loads only the RESEND_API_KEY fallback from ~/.zshrc, while an explicitly configured private credential takes precedence, preserves standard input, and starts the payload with a scrubbed minimal environment."
       },
       {
         "status": "declared",
@@ -196,7 +196,7 @@
       },
       {
         "status": "declared",
-        "statement": "email::api::Client selects one absolute installed wrapper path and supplies content on stdin without reading RESEND_API_KEY. Direct free Rust functions use the caller environment credential. Both preserve fixed outbound addresses. api::recipient and api::sender expose those provider-owned values."
+        "statement": "email::api::Client selects one absolute installed wrapper path and supplies content on stdin without reading RESEND_API_KEY. Direct free Rust functions use the caller environment for the credential fallback. Both preserve fixed outbound addresses. api::recipient and api::sender expose those provider-owned values."
       }
     ],
     "lifecycle_and_consistency": [

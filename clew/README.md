@@ -11,6 +11,12 @@ clew record --cast-job JOB_ID --id my-application --status applied --notes 'Appl
 clew list
 ```
 
+- [Product overview and feature inventory](chancery/overview.md)
 - [Record and read application history](chancery/manuals/application-track.md)
 - [Preview and send the daily email](chancery/manuals/digest-email.md)
+- [Private state and installation lifecycle](chancery/manuals/state.md)
 - [Install and verify Clew](chancery/manuals/install-operate.md)
+
+Read the release publication with `chancery product clew`. Use
+`chancery show ID` for a focused contract and `chancery resolve ID` for its
+required contracts and compatibility gaps.

@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "emt",
     "name": "EMT",
@@ -14,7 +14,7 @@
     ],
     "inventory": {
       "covers": [
-        "EMT incident diagnosis, email-directed interventions, exchange inspection, mail submission, configuration, worker, schedule, maintenance and installation operations."
+        "All supported EMT incident diagnosis, recognized-reply interventions, exchange inspection and submission, shared quota condition notices, configuration, worker, schedule, maintenance, installation and development operations in this release."
       ],
       "completeness": "complete",
       "excludes": [
@@ -37,7 +37,10 @@
   },
   "entries": [
     "entries/incident-respond.json",
+    "entries/quota-notices.json",
+    "entries/service.json",
     "entries/installation-operate.json",
     "entries/development-change.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

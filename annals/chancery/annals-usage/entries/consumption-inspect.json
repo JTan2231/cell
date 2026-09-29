@@ -45,6 +45,7 @@
   ],
   "dependencies": [
     {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 3},
+    {"id": "annals-usage.execution.operate", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
@@ -76,7 +77,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Report accepts an optional configuration path, JSON selection, and delivery limit; without a limit it selects the newest 20 Annals source deliveries."
+        "statement": "Report accepts an optional configuration path, JSON selection, details selection, and positive delivery limit; without a limit it selects the newest 20 Annals source deliveries. Shared configuration semantics are owned by annals-usage.execution.operate."
       },
       {
         "status": "unsupported",
@@ -140,6 +141,7 @@
       }
     ],
     "access": [
+      {"status": "declared", "statement": "annals_usage::api exposes typed reports through an explicitly selected reporting executable: Client::report returns ConsumptionSummary and report_details returns ConsumptionReport. The CLI emits those same types."},
       {
         "status": "declared",
         "statement": "The supported interface is the local annals-usage report CLI using its configured local Annals library, spool, and Nucleus socket; it reads no Nucleus credential files."

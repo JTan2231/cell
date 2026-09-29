@@ -1,0 +1,142 @@
+{
+  "id": "email.installation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Email installation and recovery guarantees",
+  "summary": "Understand immutable current-user releases, credential wrapper boundaries, matching documentation, and verified program rollback.",
+  "use_when": [
+    "A caller or operator needs the supported Email program selection, publication, or rollback guarantees."
+  ],
+  "do_not_use_when": [
+    "The goal is to prove live account readiness, authorize a message, or recover retained mail history."
+  ],
+  "outcome": "A complete explanation of Email program installation, selectors, wrapper access, and supported retained-release recovery.",
+  "interfaces": [
+    {
+      "label": "Installed Email command",
+      "invocation": "~/.local/bin/email"
+    },
+    {
+      "label": "Install matching validated artifacts",
+      "invocation": "<TESTED_EMAIL_INSTALL> install --binary <TESTED_EMAIL_BINARY> --bundle ABSOLUTE_BUNDLE"
+    },
+    {
+      "label": "Recover a verified retained release",
+      "invocation": "<TESTED_EMAIL_INSTALL> recover --release ABSOLUTE_RELEASE_DIRECTORY"
+    },
+    {
+      "label": "Register the installed command inventory",
+      "invocation": "email --register-usage"
+    }
+  ],
+  "effects": [
+    "Installation publishes immutable program and provider-bundle bytes and selects their current-user paths. Recovery verifies and selects a retained release.",
+    "Help/version checks and command registration read or send no mail. Private account settings remain separate from program release selection."
+  ],
+  "authority": [
+    "Email owns its installed release integrity, wrappers, selectors and provider publication. The operator selects matching trusted tested artifacts and authorizes installation.",
+    "Resend and Gmail own account and mail readiness; requesters own message or occurrence authority."
+  ],
+  "success": [
+    "Matching verified programs and their provider bundle are selected. A failed post-switch check restores selectors. Installer success establishes no real-send or receiving readiness."
+  ],
+  "failure_and_recovery": [
+    "Reject foreign provider selectors and unverified retained releases. Resolve previous to its canonical owned directory and use a trusted tested installer for recovery.",
+    "Preserve the reported error after failed verification or selection; do not rewrite immutable releases or execute an unverified retained installer."
+  ],
+  "privacy": [
+    "The wrapper extracts only the RESEND_API_KEY fallback from ~/.zshrc and starts the payload in a scrubbed environment. Credential bytes are absent from release artifacts and command arguments.",
+    "Explicit private account settings are separately retained. Installation/recovery probes bypass .zshrc and do not load mail credentials or mail content."
+  ],
+  "does_not_authorize": [
+    "Remote account provisioning, credential changes, reading mail, sending a validation message, or taking over foreign selectors."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user macOS operators and installed callers can rely on the documented program selection and wrapper boundaries."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Install or recover only matching trusted tested artifacts from a validated candidate under the required operator authority. Manual selection needs absolute binary, bundle or owned release paths."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Installation accepts a matching Email binary and provider bundle through the tested Rust installer. Recovery accepts an absolute canonical owned retained release. Usage registration selects the installed inventory."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "An immutable release and selected programs/documentation, or the installer error. Installation and recovery verify through help/version probes, never a real message."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Release identity covers payload, wrapper, Rust installer, public layout and the full Chancery bundle. Provider publication describes that selected release; private account settings are outside the program-release selection."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Content hashes identify immutable releases beneath ~/Library/Application Support/Email/install/releases. current and previous name owned selections; no mail identity is created by installation."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Matching documentation follows the selected program release. Installation or registration establishes no current Resend/Gmail access, delivery or receiving observation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No release-retention horizon or general installation-time service-availability objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user paths are ~/.local/bin/email and ~/.local/bin/email-install. The wrapper preserves stdin and supplies only the credential fallback, HOME, fixed PATH and ordinary shell bookkeeping; explicit private credentials take precedence. Help/version probes bypass shell credential loading."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Identical bytes reuse a validated immutable release. Upgrade retains the superseded release through previous. Foreign provider selectors are refused and failed post-switch verification restores all selectors. Retained legacy and cell-install-v2 releases are verified before recovery; account settings remain separate."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Email has no daemon, delivery database, scheduler or queue. Installation/recovery run only help/version checks. The provider selector is created even without Chancery, and the Email command remains usable without its binary or registry."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Immutable program release, provider publication and private account settings have separate identities and recovery boundaries. Legacy and cell-install-v2 retained releases are verified before selection."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release support interval or retirement policy is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Ordinary committed-candidate delivery uses the Cell CI manager; explicit authorized manual installation uses matching tested artifacts. The manager owns its integration, validation, repair, deployment and outcome-email semantics.",
+        "target": "ci-manager",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/installation.md"
+}

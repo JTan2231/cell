@@ -6,41 +6,31 @@ at their agent command boundary. Automatic workers, hooks and product-owned
 dependency calls are excluded. The journal records observed invocation, not completion,
 domain success, model consumption, arguments, or output.
 
-## Register and record
+## Registration interfaces
 
-After installing or updating each participating program, run its explicit
-registration mode, for example:
+A participating program's exact `PROGRAM --register-usage` mode initializes
+only an empty supported journal through Chancery's owning library and adds that
+program's full declared inventory. It runs no product work and is not itself
+observed. Existing identities and history remain. Unsupported or foreign state
+fails; product binaries never migrate a journal. Registration is separate from
+copying or selecting binaries and must be repeated when a release adds commands.
 
-```sh
-chancery --register-usage
-annals --register-usage
-annals-usage --register-usage
-```
+`chancery usage init` initializes supported empty state and registers Chancery's
+commands. `chancery usage register SYSTEM COMMAND_ID...` requires initialized
+state and adds the named system and commands. Each identity is idempotent. A
+later error can leave earlier registrations committed. Historical commands
+removed from a later release remain registered; this is not proof of current
+installation or instrumentation. Read `chancery show chancery.usage.operate`
+for registration and backup/restore procedures.
 
-Each mode initializes an empty Chancery journal through the owning library and
-adds that program's full declared command inventory. It runs no product work.
-It preserves existing registrations and history. An unsupported or foreign
-schema fails; product binaries never migrate a journal. Registration mode is
-an installation helper and does not itself count as a command invocation.
-Registration is a separate installation step; copying or selecting binaries
-does not imply registration. Repeat the step when a release adds commands.
-
-For explicit journal administration:
-
-```sh
-chancery usage init
-chancery usage register SYSTEM COMMAND_ID...
-```
-
-`init` registers Chancery's commands. `register` requires an initialized journal.
-It adds the system and each requested command. An error can leave earlier
-registrations committed; repeating the unchanged registration is safe.
-Registration preserves commands removed from later releases. These tables are
-historical identities, not proof of current installation or instrumentation.
+## Writer API and attribution
 
 Rust callers import `chancery_usage`. `Store::initialize` is the owning
 initialization interface; `Store::open` and ordinary recording never initialize
-or migrate. `register_system` and `register_command` add identities separately.
+or migrate. `Store::read` opens supported state for read queries.
+`register_system` and
+`register_command` add identities separately. Free registration functions open
+already initialized state through `default_path`; they do not initialize it.
 `record(system, command)` reads `CODEX_THREAD_ID` and returns
 `Result<Option<i64>>`: a committed row ID or `None` when skipped. Missing or empty
 thread attribution,
@@ -52,6 +42,21 @@ Services must pass
 request-scoped correlation; a daemon's startup environment does not identify
 its later callers. All these functions return a result. `observe` is the
 command adapter: it reports a bounded error on stderr and preserves execution.
+
+The public `chancery_usage::cli` adapter exposes `command_ids(command, prefix)`,
+`parse_command_from(arguments, prefix)`, `registration_requested()`,
+`register_ids(system, ids)`, `registration_exit(system, ids)`,
+`register_if_requested(system, prefix)`, `try_parse(system, prefix)`, and
+`parse(system, prefix)`. The generic parser helpers use the caller's Clap
+`Parser` type. `command_ids` enumerates the full declared inventory.
+`parse_command_from` parses without recording and returns the parsed value and
+optional canonical command ID. Products that need further dispatch can use
+this boundary before calling `observe`. `try_parse` handles registration mode,
+parses, and observes a valid selected command once; `parse` retains Clap's exit
+handling. Registration mode is recognized only when the complete argument list
+is exactly `--register-usage`. `register_ids` uses the owning initialization
+API and registers the supplied identities; the exit adapter returns exit 0 on
+success or a bounded diagnostic and exit 1 on failure.
 
 The Clap adapter uses canonical declared subcommand names joined with dots.
 Aliases do not create identities. Arguments, flags, external subcommand values,
@@ -99,6 +104,12 @@ and are not evidence of caller authorization or a verified Codex history record.
 
 ## Read
 
+```text
+chancery [--json] usage systems
+chancery [--json] usage commands [--system SYSTEM] [--thread THREAD | --unattributed] [--since UNIX_SECONDS] [--until UNIX_SECONDS]
+chancery [--json] usage events [--system SYSTEM] [--thread THREAD | --unattributed] [--since UNIX_SECONDS] [--until UNIX_SECONDS] [--after ID] [--limit COUNT]
+```
+
 ```sh
 chancery usage systems
 chancery usage commands --system annals --since 1700000000
@@ -112,13 +123,30 @@ chancery --json usage commands
 its latest selected observation time. Unused commands have zero and a null
 latest time. Counts select the requested system, thread and time range; zero
 means no selected recorded invocations, not proof the command was never used.
-`--since` is inclusive and `--until` exclusive, in Unix seconds. `--thread` and
+`--since` is inclusive and `--until` exclusive, in whole Unix seconds. Bounds
+must be nonnegative; when both are present, since must be less than until.
+`--thread` and
 `--unattributed` conflict. `events` returns insertion-ordered rows, `next_cursor`
 and `has_more`. Limits are 1–1000, default 100; cursors are nonnegative and belong
 to this database history. Re-establish them after restoring another history.
 Report invocations are themselves observed when registration and storage permit.
 Read queries do not modify journal rows; CLI dispatch can append its own usage.
 Output uses Chancery's schema-three envelope; journal schema is independently one.
+`usage systems` returns `items`, the registered ID list. `usage commands`
+returns the selected `scope` and `items`. Each `CommandCount` has `system_id`,
+`command_id`,
+`invocations`, and nullable `last_recorded_at`. `usage events` returns the
+selected `scope` and `page`. That `EventPage` has `items`,
+`next_cursor`, and `has_more`; each `Event` has `id`, `recorded_at`, nullable
+`codex_thread_id`, `system_id`, and `command_id`. The Rust read methods are
+`Store::systems`, `Store::counts(&Filter)`, and `Store::events(&Filter, after,
+limit)`. `Filter` has `system`, `thread`, `unattributed`, `since`, and `until`.
+Read-only `Store::read` and ordinary reads do not observe themselves; CLI
+dispatch is a separate boundary. Initialization returns `initialized: true`
+and journal `schema_version: 1`. Explicit registration returns `system_id`
+and `commands`. CLI syntax errors return exit 2,
+while unavailable or invalid journal state returns `usage_failed` with exit 1.
+Read `chancery.directory.discover` for the common output envelope.
 
 ## Storage, failure, and recovery
 
@@ -144,13 +172,13 @@ cannot enumerate missed observations or infer usage before instrumentation.
 No completeness percentage, retention horizon, throughput, or hard latency
 objective is promised. Rows contain no duration, outcome, token count or output.
 
-Back up this journal separately from product data with a consistent SQLite
-backup. Keep its sidecars with any quiescent file backup. Restore a compatible
-journal/schema pair after stopping its writers; preserve the old history.
-Program rollback does not erase new rows. Missing or unsupported state remains
-an explicit error; do not recreate a populated database or bypass its triggers.
-Chancery recording does not operate product databases, authenticate services,
-execute represented capabilities, or authorize domain actions.
+Recovery requires a consistent compatible journal/schema pair and stopped
+writers. Keep sidecars with any quiescent file backup and preserve the old
+history. Program rollback does not erase new rows. Missing or unsupported state
+remains an explicit error; never recreate a populated database or bypass its
+triggers. Chancery recording does not operate product databases, authenticate
+services, execute represented capabilities, or authorize domain actions. Read
+`chancery.usage.operate` for backup, restore, and registration steps.
 
 Rebuild participating binaries to adopt these rules; replacing Chancery alone
 does not update their compiled recorder. Deploy matching wrappers and hooks,

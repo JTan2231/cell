@@ -1,6 +1,12 @@
-# Inspect the discovery library
+# Cast records and read handoff
 
-Use Cast's local read interfaces to inspect stored records:
+Cast owns retained company and job identities, revisions, source metadata,
+collection evidence, and read projections. Local callers and downstream
+products can inspect that evidence or export one consistent snapshot. Reads
+require supported initialized state and start no collection, agent, remote
+request, or downstream workflow.
+
+## Read interfaces
 
 ```sh
 cast companies list
@@ -15,84 +21,129 @@ cast export --json
 cast export --output /absolute/private/snapshot.json
 ```
 
-Select independent state with the global `--state-dir PATH` option. Reads do
-not collect sources, start an agent, contact anyone or create downstream state.
-They require supported initialized Cast state.
+Select independent state with the global `--state-dir PATH` option. Output is
+JSON; the commands also accept an explicit `--json` flag. `snapshot` is an
+alias for `export`. Read `cast.state` for state selection and initialization.
 
-The schema-one JSON snapshot contains `schema_version`, `snapshot_revision`,
-`captured_at`, `companies`, `jobs`, `source_health` and query `coverage`.
-Export uses one database transaction to return a consistent view. Separate
-list/show calls may observe different committed states. `snapshot` is an alias
-for `export`. Output uses JSON; the commands also accept an explicit `--json`
-flag. `--output` writes a private temporary
-file, syncs it, atomically replaces the destination and syncs its directory.
-It rejects the selected Cast database, its SQLite sidecars and its mutation lock
-as destinations, including aliases to those paths.
+The provider-owned Rust read surface is `cast::store::Store::open(&Path)` and
+`Store::snapshot()`, returning `cast::models::Snapshot`. Use Cast's exported
+types. Direct SQLite reads and writes are not supported integration surfaces.
 
-Company and job IDs are opaque stable Cast identities; record revisions track
-stored changes. Source-native IDs are scoped to their source namespace.
-Domain fields, careers URLs and source locators are included in the records.
-Website-domain and ATS-tenant identities can describe the same real employer;
-the same name alone does not merge them. ATS sources are owned by their canonical
-provider/tenant identity. A corrected ownership association may change a job's
-`company_id` and revision while preserving its job ID.
+## Retained record meanings
 
-Reads and exports include all retained jobs. Collection applies no title
-substring requirement. Job counts describe retained records, not all postings
-available from external sources. Consumers choose jobs by title, seniority,
-location or other preferences.
+A company is a stored employer candidate keyed by a discovered domain or an
+ATS provider/tenant identity. New means first stored by Cast. Website-domain
+and ATS-tenant records can describe the same real employer; a matching name
+alone does not merge them.
 
-Job records retain Cast observation dates, source-supplied posting dates and a
-recorded availability status. Collection records retain the latest ordinary source attempt and
-last successful source observation separately. Targeted job collection updates
-the selected job and run record while preserving board-scan state. Its run note
-identifies scope `job`, the selected source and URL, and its outcome. Third-party discovery records `unknown`.
-The adapter assigns `employer_ats` or `employer_jsonld_owned` attribution using
-its provider/tenant and employer-root URL matching rules. Shared recruiting
-hosts require their own adapter. Ownership reconciliation applies these rules
-to older rows and sets older `employer_jsonld` and shared-host rows to `unknown`.
-An employer-source observation records `listed` or the source's explicit
-`unlisted` flag. Absence from a completed employer-source scan records `missing`;
-at least two such scans and 24 hours since the first absence record
-`presumed_closed`. Failed or partial scans do not add missing observations.
-An empty list contains no stored record matching the selected query and limits.
-Relevance reasons record discovery matches. Posting descriptions are excerpts
-limited to 1,200 characters, with a fingerprint for comparing descriptions.
-The source locator supports a separate fetch when a consumer needs posting text.
+A job is one observed posting with a source identity, extracted fields,
+evidence, observation timestamps, and recorded availability. It is not a
+recommendation, application, or hiring outcome. Relevance reasons describe
+discovery matches. Cast retains incoming jobs without a title substring
+requirement; consumers choose jobs by title, seniority, location, or other
+preferences.
 
-`search` matches substrings in company names, domains, job titles and
-descriptions. Matching ignores case. `unresolved` shows companies without
-domains and sources whose status is not a successful
-collection/resolution outcome. `status` reports counters, usage and the last run.
+A source is a careers collection endpoint associated with a company record.
+An observation is source-attributed information retained at a known time.
+Coverage describes the pages or items processed by a query or source,
+including limits and partial, failed, unsupported, or deferred work. Freshness
+is age of successful evidence, separate from the latest attempt.
 
-A consumer should use stable IDs and record revisions to compare snapshots.
-It owns its consumed state, selected or dismissed jobs, packets, applications
-and sent-message history. Cast exports stored companies, jobs and source metadata for
-those workflows. This release has no durable change-feed acknowledgement or
-consumer-retention protocol.
+Company, job, and source IDs are opaque stable Cast identities. Source-native
+IDs are scoped to their source namespace. Record revisions track retained
+changes. An ownership correction can change a job's `company_id` and revision
+while preserving job and source IDs. Read `cast.state` for the repair contract.
 
-Use the CLI or Cast's provider-owned Rust API. Direct SQLite reads and writes
-are not supported integration surfaces. Keep snapshots private: they can
-contain search interests, source locators and extracted posting text. Reads
-return stored records without making network requests.
+Records include domain fields, careers URLs, source locators, and extracted
+job fields. Posting descriptions are excerpts of at most 1,200 characters,
+with a fingerprint for comparing descriptions. A source locator supports a
+separate fetch when a consumer needs posting text; reading the locator causes
+no fetch. Whole provider responses and HTML documents are transient.
+
+## Availability and freshness
+
+`first_seen_at` and `last_seen_at` are Cast observation times. Source-supplied
+publication and update dates use separate fields. Each job includes its
+recorded availability and source collection timestamps. Collection records
+separate the latest ordinary source attempt from its last successful
+observation.
+
+| Availability | Meaning |
+| --- | --- |
+| `unknown` | Third-party discovery has not established employer-source availability. |
+| `listed` | An employer/ATS source observed the posting. |
+| `unlisted` | The source explicitly supplied that flag. |
+| `missing` | The posting was absent from a completed employer-source scan. |
+| `presumed_closed` | At least two complete scans found it missing, and at least 24 hours passed since the first missing observation. |
+
+Failed or partial scans do not add missing observations. Rapid repeated scans
+keep the same 24-hour requirement. A later employer-source observation
+restores `listed`.
+
+Attribution identifies the observation source. The adapter assigns
+`employer_ats` or `employer_jsonld_owned` under the source ownership rules in
+`cast.discovery.collect`. Ownership reconciliation sets older
+`employer_jsonld` and affected shared-host rows to `unknown`.
+
+Exact-job collection updates only the selected job and its run record while
+preserving board-scan state. Its run note identifies scope `job`, selected
+source and URL, and outcome. Source health continues to describe ordinary
+board collection. Use the selected job and run note for targeted retrieval.
 
 ## Output selection
 
 List and search return schema-two pages with `snapshot_revision`, compact
-items and `has_more`. The default limit is 20 items. Use `--limit` with a
-positive integer to change it.
+`items`, and `has_more`. The default limit is 20 items. `--limit` accepts a
+positive integer. An empty page has no stored record matching the selected
+query and limits; it is not evidence that no external jobs exist.
 
 Job rows contain stable ID and revision, company, title, location, remote
-eligibility, recorded availability and `last_seen_at`. Search adds
-`matched_field` and a marked excerpt of at most 240 Unicode characters.
+eligibility, recorded availability, and `last_seen_at`. Search matches
+substrings in company names, domains, job titles, and descriptions, ignoring
+case. Its rows add `matched_field` and a marked excerpt of at most 240 Unicode
+characters.
 
-Status schema 2 returns counts, budgets, usage, the last run and collection
-summaries for sources and queries. Show and export return full records, source
-metadata and collection outcomes. The export snapshot still uses schema 1.
+`unresolved` shows companies without domains and sources whose status is not
+a successful collection/resolution outcome. Status schema 2 returns counts,
+budgets, usage, the last run, and collection summaries for sources and queries.
+Counts describe retained records and selected collection work. They do not
+count all postings available from external sources. Show and export return
+full records, source metadata, and collection outcomes.
 
-## Command usage
+## Consistent export
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+The schema-one snapshot contains `schema_version`, `snapshot_revision`,
+`captured_at`, `companies`, `jobs`, `source_health`, and query `coverage`.
+A snapshot is one consistent current discovery view with identities,
+revisions, evidence, and coverage. Export uses one database transaction.
+`captured_at` describes snapshot capture; record observation times describe
+the retained evidence. Separate list/show calls may observe different
+committed states.
+
+`--output` writes a private temporary file, syncs it, atomically replaces the
+destination, and syncs its directory. It rejects the selected Cast database,
+SQLite sidecars, and mutation lock as destinations, including aliases to
+those paths. Stdout reads do not create an export file.
+
+Consumers use stable IDs and record revisions to compare snapshots. They own
+consumed state, selected or dismissed jobs, packets, applications, CRM cases,
+and sent-message history. Cast has no durable change-feed acknowledgement or
+consumer-retention protocol.
+
+## Failure, access, and compatibility
+
+Reads return stored evidence without refreshing it. Use the collection
+interfaces when source retrieval is required and the supported ownership
+repair when older associations need correction. Do not infer complete source
+coverage from an absent error or repair database rows by hand.
+
+CLI output, exports, and diagnostic captures remain private caller-owned
+data. They can contain search interests, source locators, and posting text.
+Reads send no information to remote systems and grant no authority to contact
+an employer or start a downstream workflow.
+
+Read contract 2, list/search/status schema 2, export schema 1, database schema,
+and Cast package version are distinct. No maximum database size, export size,
+read-latency service level, or future deprecation window is promised. These
+reads rely only on local retained Cast state; external source readiness is
+not a prerequisite for reading stored results.

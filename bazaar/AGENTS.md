@@ -9,6 +9,10 @@ Semantics-Project: bazaar
 - Preserve every committed version. Updates append complete content, including
   when the content matches an earlier version.
 - Keep the Rust API in process. Read operations must not create or repair state.
+- Keep full feature explanations in the product's Chancery feature contracts.
+  Procedures keep prerequisites, effects, stop conditions, and verification and
+  require the relevant features. Update the owning feature and affected procedures
+  together. Other documentation provides entry points to those explanations.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. CI includes deployment. Publication,
   caller migration, and live content updates remain separate operations.

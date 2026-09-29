@@ -7,12 +7,12 @@
   "title": "Change EMT incident response",
   "summary": "Change EMT while keeping incident correspondence and Nucleus references small, investigation agent-driven, and product recovery in supported interfaces.",
   "use_when": [
-    "The requested outcome matches this EMT operation and its standing or explicit authority."
+    "EMT source, owning documentation or selected prompts must be changed within an established scope."
   ],
   "do_not_use_when": [
     "The user needs another recipient, sender authentication, continuous repair, or a replacement for product-owned recovery."
   ],
-  "outcome": "A scoped source and contract change with validation and installation status stated separately.",
+  "outcome": "A scoped EMT source, documentation or prompt change with preserved authority, compatibility and exact recovery identities, plus the explicitly authorized validation endpoint.",
   "interfaces": [
     {
       "label": "Read installed shared manual",
@@ -23,119 +23,128 @@
       "invocation": "semantics repository show cell"
     },
     {
-      "label": "Submit committed CI input",
+      "label": "Publish authorized prompt version",
+      "invocation": "bazaar update PROMPT_ID --file ABS"
+    },
+    {
+      "label": "Publish authorized complete selection",
+      "invocation": "bazaar update cell.prompts.emt --file ABS"
+    },
+    {
+      "label": "Submit authorized committed CI input",
       "invocation": "./ci.sh submit COMMIT"
     }
   ],
   "effects": [
-    "Changes source and documentation. CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email. Publication and live incident exchanges remain separately authorized."
+    "Authorized source and documentation changes affect a candidate release; prompt append changes future selected preparation only after a complete selection is published. Live jobs, account reads, messages, installation, activation, publication and CI submission require their own authority."
   ],
   "authority": [
-    "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."
+    "EMT owns its source, detailed feature explanations, procedures, rendering and selection meaning. Providers own their exported interfaces; affected products own intervention results. User deferral sets the authorized endpoint."
   ],
   "success": [
-    "Interpret the exact operation receipt. A send succeeds at provider acceptance; an intervention needs product evidence."
+    "Owning feature/procedure declarations align, focused checks pass, compatible acyclic documentation closure is verified and the authorized endpoint is established. A deferred manager gate or deployment is not a passing or installed release."
   ],
   "failure_and_recovery": [
-    "Keep exact pending request and mail identities. Preserve unknown outcomes. Do not create another agent attempt automatically. Use the complete manual for cancellation, deadlines, maintenance and notification recovery."
+    "Preserve exact request and mail identities, historical prompt versions and unrelated work. Inspect Bazaar history after an uncertain append before repeating it. Stop if authority, public compatibility, scope or recovery cannot be established."
   ],
   "privacy": [
-    "Correspondence and pointers remain private and retained. Nucleus and email providers keep separate copies. Logs and ordinary status omit bodies."
+    "Keep private correspondence, prompt content, credentials and runtime records outside source and logs. Prefer private files for authorized Bazaar content updates."
   ],
   "dependencies": [
     {
-      "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "id": "emt.incident.respond",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
-      "id": "email.message.send",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
-    },
-    {
-      "id": "email.message.receive",
+      "id": "emt.service",
       "min_contract": 1,
       "max_contract_exclusive": 2
     },
     {
-      "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "id": "emt.quota-notices",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "bazaar.string.update",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
-    "Unrequested recipients, unrelated mutations, automatic failed-job replacement, or clearing a newer Clockwork halt."
+    "Live jobs, account reads, messages, installation, activation, publication or manager submission beyond the established user scope.",
+    "Operation adapters, activity mirrors, structured diagnosis or automatic failed-assignment replacement without a new user requirement."
   ],
   "promise": {
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and authorized local EMT worker or operator."
+        "statement": "An authorized developer changing EMT source, feature contracts, procedures or selected prompt content."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Compatible installed Clockwork feed and notification handoff, Email send/receive, and Nucleus local-execution capabilities; configured receiving account and explicit operation authority."
+        "statement": "Read EMT AGENTS.md, current required features, Cell Semantics when EMT is unregistered, and nucleus manual before shared boundary changes. Establish endpoint and user authority first."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Incident identity and metadata, installed contract and source pointers, current received email and preceding correspondence. Configuration selects absolute provider paths, Cell and agent directories and an accepted model."
+        "statement": "The agreed change, current public feature/procedure contracts, provider-owned types and clients, private authorized prompt files when applicable, and the explicitly authorized validation/submission endpoint."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Incident and exchange reads expose retained correspondence and Nucleus IDs. Status and worker output expose counts and waiting codes. Email text is agent-authored except deterministic failure notices."
+        "statement": "A scoped candidate change, aligned documentation, focused validation evidence and either retained manager outcome or explicit user deferral. Prompt receipts identify appended immutable versions and complete selection content."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "An exchange is correspondence, not an operation ledger. Nucleus job completion is runtime evidence. Product state determines intervention success; Email receipts prove provider acceptance only."
+        "statement": "Source work does not itself authorize live system effects. A Bazaar append changes no caller selection until a complete selection is published; saved requests retain frozen instructions."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Clockwork IDs identify incidents, provider IDs deduplicate received mail, RFC Message-IDs thread replies, and UUID exchange/job IDs correlate Nucleus. Deadlines use Unix seconds; content limits use bytes."
+        "statement": "Preserve stable entry IDs and compatible versions, exact request/mail/halt identities, positive prompt version numbers and the submitted commit identity when submission is authorized."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Bounded pages advance only after capture; cursors do not acknowledge provider mail."
+        "statement": "Review current selected contracts and candidate publication bytes. Focused checks establish their tested candidate boundary; only retained manager outcome establishes the manager job result."
       },
       {
         "status": "unspecified",
-        "statement": "No inbox completeness, authenticated sender identity, model accuracy, timer latency or final-delivery deadline is promised."
+        "statement": "Focused checks do not promise an installed release, live readiness, model accuracy, inbox completeness, timer latency or final-delivery deadline."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "Agents require Nucleus invocation policy version two and workspace-unrestricted for local execution with unrestricted current-user filesystem, process, local socket, and network access. Codex sandbox restrictions and approval prompts are disabled. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
+        "statement": "Repository and private authorized prompt work use current-user filesystem and shell access. Keep private content outside source; user deferral controls commits, manager submission, release and deployment."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Persist exact request before submission; retain job ID and digest after admission. Freeze outgoing mail before claiming initial delivery. One basic sender or EMT claim owns the initial alert. No automatic replacement agent job. Uncertain external actions require inspection through Nucleus and the owning product."
+        "statement": "Keep behavior in authoritative feature pages, procedure prerequisites and checkpoints in operation manuals, and release bytes matched. Append complete prompt selections after component publication; retain baseline and historical versions for recovery."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One agent; 100 incidents and four receiving pages per pass; 300/900-second assignments; 64 KiB email bodies; two transport invocations at least five minutes apart within 23 hours. Worker interval 15 seconds and activation timeout 300 seconds."
+        "statement": "Keep incident and exchange domain records, Nucleus references, bounded assignments and exact mail recovery. Do not add adapters, activity mirrors, structured diagnosis or automatic replacement without a new requirement."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "EMT schema one and Clockwork routing sidecar version one are separate from release versions. Old pinned Clockwork brokers must be replaced before routing is enabled."
+        "statement": "Preserve public meaning, provider compatibility, exact identities and historical versions. Validate source bundle, ordinary/full show and complete acyclic resolve before authorized release."
       },
       {
         "status": "unspecified",
@@ -145,37 +154,31 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clockwork owns incidents, notification ownership and worker scheduling.",
-        "target": "clockwork",
+        "statement": "EMT incident authority and exchange recovery constrain the change.",
+        "target": "emt-incidents",
+        "kind": "authority",
+        "contract": "emt.incident.respond"
+      },
+      {
+        "status": "declared",
+        "statement": "EMT service readiness, maintenance and publication recovery constrain the change.",
+        "target": "emt-service",
         "kind": "control",
-        "contract": "clockwork.schedule.operate"
+        "contract": "emt.service"
       },
       {
         "status": "declared",
-        "statement": "Nucleus owns agent invocation and durable activity.",
-        "target": "nucleus",
+        "statement": "Quota deferral and exact condition-mail progress constrain the change.",
+        "target": "emt-quota-notices",
         "kind": "control",
-        "contract": "nucleus.execution.operate"
+        "contract": "emt.quota-notices"
       },
       {
         "status": "declared",
-        "statement": "Email submits fixed-recipient messages.",
-        "target": "email",
+        "statement": "Bazaar owns authorized append receipts and immutable version retention; EMT owns selection content.",
+        "target": "bazaar",
         "kind": "control",
-        "contract": "email.message.send"
-      },
-      {
-        "status": "declared",
-        "statement": "Email supplies received-account observations.",
-        "target": "email",
-        "kind": "data",
-        "contract": "email.message.receive"
-      },
-      {
-        "status": "declared",
-        "statement": "Agents select the affected product contracts through Chancery; those products own recovery and success.",
-        "target": "affected-product",
-        "kind": "authority"
+        "contract": "bazaar.string.update"
       }
     ]
   },
@@ -187,21 +190,24 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read EMT instructions, maintained Cell terminology and the affected provider contracts.",
-    "Make the scoped source and contract change while retaining incident exchanges and Nucleus references.",
-    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job validation, deployment, and notification outcomes."
+    "Read product instructions, maintained vocabulary, current required features and the shared playbook.",
+    "Establish scope and authorized endpoint; preserve product authority and exact recovery identities.",
+    "Update only owning source, feature contracts, procedures and normalized declarations.",
+    "For an authorized prompt edit, append component text then the complete pinned selection; verify receipts and preserve history.",
+    "Validate focused behavior and isolated source publication; commit and submit only within user-authorized scope."
   ],
   "checkpoints": [
-    "Nucleus remains the owner of agent execution and activity.",
-    "Agents use supported product interfaces; EMT retains no operation ledger or structured diagnosis schema.",
-    "Uncertain requests and email keep their exact identities."
+    "Current meanings and authority remain compatible.",
+    "No private source content or runtime records enter documentation.",
+    "Candidate bundle show and resolve are coherent and dependency closure is compatible and acyclic.",
+    "The explicitly authorized endpoint is verified; deferred manager/deployment work remains visible."
   ],
   "adaptation": [
     "Update owning contracts and the shared Nucleus manual when public boundaries change.",
     "Use the Cell semantic repository until EMT is registered."
   ],
   "stop_when": [
-    "The change requires unapproved live incident exchanges, release publication, or installation outside the submitted manager job.",
-    "The requested scope or retry limit would be exceeded."
+    "Authority, scope, public compatibility or recovery cannot be established.",
+    "A live effect or manager submission lies beyond the user-authorized endpoint."
   ]
 }

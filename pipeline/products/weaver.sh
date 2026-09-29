@@ -22,4 +22,4 @@ RELEASE_UNITS='weaver|Weaver|package|weaver-narrative/Cargo.toml|weaver-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='weaver|target/release/weaver|weaver
 weaver|target/release/weaver-install|weaver-install'
-PROVIDERS='weaver|weaver|weaver-narrative/chancery|3'
+PROVIDERS='weaver|weaver|weaver-narrative/chancery|4'
