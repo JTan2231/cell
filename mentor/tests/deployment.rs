@@ -50,7 +50,9 @@ fn hourly_upgrade_preserves_existing_failure_halt() -> TestResult {
     fs::write(&path, serde_json::to_vec(&state)?)?;
 
     deployment.request["run_id"] = json!("hourly-upgrade");
-    deployment.request["run_dir"] = json!(deployment.home.join("hourly-upgrade-run"));
+    let run = deployment.home.join("hourly-upgrade-run");
+    fs::DirBuilder::new().mode(0o700).create(&run)?;
+    deployment.request["run_dir"] = json!(run);
     deployment.request["settings"] = Value::Null;
     deployment.inspect()?;
     for phase in ["hold", "drain", "apply", "configure", "release", "activate"] {

@@ -37,6 +37,7 @@ impl Deployment {
             .canonicalize()?
             .join(format!("worker-deployment-{}", uuid::Uuid::now_v7()));
         fs::DirBuilder::new().mode(0o700).create(&home)?;
+        fs::DirBuilder::new().mode(0o700).create(home.join("run"))?;
         let bin = home.join(".local/bin");
         fs::create_dir_all(&bin)?;
         let stub = include_str!("deployment_clockwork.py");
