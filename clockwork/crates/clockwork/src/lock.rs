@@ -7,8 +7,15 @@ use crate::error::{Context as _, Error, Result};
 use crate::paths::{Layout, current_uid};
 
 pub(crate) struct KeyLock {
-    #[allow(dead_code)]
     file: File,
+}
+
+impl Drop for KeyLock {
+    fn drop(&mut self) {
+        // A forked child can briefly retain this descriptor before exec.
+        // Unlock explicitly before advertising that the operation is complete.
+        let _ = FileExt::unlock(&self.file);
+    }
 }
 
 impl KeyLock {
