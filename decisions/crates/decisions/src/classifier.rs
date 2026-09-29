@@ -992,7 +992,6 @@ fn observation_schema_value() -> Value {
     })
 }
 
-#[allow(clippy::too_many_lines)]
 fn build_request(
     requester_id: &str,
     job_id: &str,
@@ -1001,6 +1000,29 @@ fn build_request(
     window_start: i64,
     window_end: i64,
     observation: Option<ObservationContract<'_>>,
+) -> AppResult<JobRequestV1> {
+    build_request_with_cwd(
+        requester_id,
+        job_id,
+        transcript,
+        toolset,
+        window_start,
+        window_end,
+        observation,
+        classifier_cwd,
+    )
+}
+
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn build_request_with_cwd(
+    requester_id: &str,
+    job_id: &str,
+    transcript: &ThreadTranscript,
+    toolset: ToolsetRef,
+    window_start: i64,
+    window_end: i64,
+    observation: Option<ObservationContract<'_>>,
+    working_directory: impl FnOnce(&str) -> AppResult<PathBuf>,
 ) -> AppResult<JobRequestV1> {
     let prompt_value = if let Some(observation) = observation {
         let authority_source_ids = transcript
@@ -1098,7 +1120,7 @@ fn build_request(
     let mut invocation = AgentInvocationV1::new(
         "codex",
         ModelId::new(MODEL),
-        AbsolutePath::new(classifier_cwd(job_id)?),
+        AbsolutePath::new(working_directory(job_id)?),
         WorkspaceAccess::None,
         BuiltinToolsV1 {
             local_execution: false,
@@ -1206,7 +1228,7 @@ fn platform_user_temporary_root() -> AppResult<PathBuf> {
     })
 }
 
-fn classifier_cwd_in(temporary_root: &Path, job_id: &str) -> AppResult<PathBuf> {
+pub(crate) fn classifier_cwd_in(temporary_root: &Path, job_id: &str) -> AppResult<PathBuf> {
     let root_metadata = fs::symlink_metadata(temporary_root).map_err(|_error| {
         AppError::new(
             "classification_cwd_invalid",
@@ -1972,9 +1994,11 @@ mod tests {
     use crate::model::{MessageRole, Precision, SourceMessage, ThreadTranscript};
     use crate::store::Store;
 
+    #[cfg(target_os = "macos")]
+    use super::platform_user_temporary_root;
     use super::{
         AbandonmentAction, ClassificationResult, ObservationContract, Runner, abandonment_action,
-        build_request, classifier_cwd, classifier_cwd_in, decode_and_validate,
+        build_request_with_cwd, classifier_cwd_in, decode_and_validate,
         decode_and_validate_observation, invalid_classification_result,
         post_result_or_resolve_terminal,
     };
@@ -2152,6 +2176,7 @@ mod tests {
         Box<dyn std::error::Error>,
     > {
         let directory = tempfile::tempdir()?;
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
         let socket = directory.path().join("nucleus.sock");
         let listener = tokio::net::UnixListener::bind(&socket)?;
         let job_id = if with_success_receipt {
@@ -2164,7 +2189,7 @@ mod tests {
             thread_id: "thread".to_owned(),
             messages: Vec::new(),
         };
-        let request = build_request(
+        let request = build_request_with_cwd(
             "requester",
             job_id,
             &transcript,
@@ -2176,6 +2201,7 @@ mod tests {
             0,
             1,
             None,
+            |id| classifier_cwd_in(directory.path(), id),
         )?;
         let terminal_job = serde_json::json!({
             "version": 1,
@@ -2259,34 +2285,43 @@ mod tests {
     #[test]
     fn classification_request_uses_bounded_medium_effort() -> Result<(), Box<dyn std::error::Error>>
     {
+        let directory = tempfile::tempdir()?;
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
         let transcript = ThreadTranscript {
             host_id: "host".to_owned(),
             thread_id: "thread".to_owned(),
             messages: Vec::new(),
         };
-        let request = build_request(
-            "requester",
-            "job-classification-request",
-            &transcript,
-            ToolsetRef {
-                provider: "decisions".to_owned(),
-                name: "daily-classification".to_owned(),
-                version: 1,
-            },
-            0,
-            1,
-            None,
-        )?;
+        let request_for_same_job = || {
+            build_request_with_cwd(
+                "requester",
+                "job-classification-request",
+                &transcript,
+                ToolsetRef {
+                    provider: "decisions".to_owned(),
+                    name: "daily-classification".to_owned(),
+                    version: 1,
+                },
+                0,
+                1,
+                None,
+                |id| classifier_cwd_in(directory.path(), id),
+            )
+        };
+        let request = request_for_same_job()?;
         assert_eq!(
             request.invocation.reasoning_effort,
             Some(ReasoningEffort::Medium)
         );
+        assert_eq!(request.digest()?, request_for_same_job()?.digest()?);
         Ok(())
     }
 
     #[test]
     fn krisis_request_uses_aliases_and_excludes_file_activity_and_local_ids()
     -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))?;
         let transcript = ThreadTranscript {
             host_id: "private-host-id".to_owned(),
             thread_id: "private-thread-id".to_owned(),
@@ -2301,7 +2336,7 @@ mod tests {
                 precision: Precision::Item,
             }],
         };
-        let request = build_request(
+        let request = build_request_with_cwd(
             "requester",
             "job-krisis-request-shape",
             &transcript,
@@ -2316,6 +2351,7 @@ mod tests {
                 authority_turn_id: "private-turn-id",
                 allow_needs_context: true,
             }),
+            |id| classifier_cwd_in(directory.path(), id),
         )?;
         assert!(request.prompt.contains("m0001"));
         for forbidden in [
@@ -2458,9 +2494,8 @@ mod tests {
         const CHILD_FLAG: &str = "KRISIS_CLASSIFIER_CWD_TEST_CHILD";
         if std::env::var_os(CHILD_FLAG).is_some() {
             let inherited = PathBuf::from(std::env::var_os("TMPDIR").ok_or("TMPDIR missing")?);
-            let cwd = classifier_cwd("inherited-project-tmpdir-test")?;
-            assert!(!cwd.starts_with(&inherited));
-            assert!(fs::read_dir(cwd)?.next().is_none());
+            let temporary_root = platform_user_temporary_root()?;
+            assert!(!temporary_root.starts_with(&inherited));
             return Ok(());
         }
 
