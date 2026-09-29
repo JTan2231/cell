@@ -27,6 +27,10 @@
       "invocation": "paperboy schedule enable"
     },
     {
+      "label": "Replace the daily Conversations executable pin",
+      "invocation": "CONVERSATIONS_CODEX=<ABSOLUTE_CODEX_PATH> paperboy schedule enable"
+    },
+    {
       "label": "Disable the daily binding",
       "invocation": "paperboy schedule disable"
     },
@@ -132,6 +136,10 @@
       {
         "status": "declared",
         "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. Backups at the same run path must match every held retained row."
+      },
+      {
+        "status": "declared",
+        "statement": "CONVERSATIONS_CODEX selects an absolute Codex executable for conversation reads. Schedule enable captures this selection in its environment. Supply an explicit replacement when repinning a conversation schedule; coordinated deployment preserves its selected environment. Decision report schedules do not use this executable."
       },
       {
         "status": "declared",

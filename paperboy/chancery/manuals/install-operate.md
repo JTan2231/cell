@@ -95,6 +95,19 @@ The absolute config must identify a decisions library and its expected persisten
 ID. Schedule arguments retain this selection across deployment. Doctor with the
 same source options checks the read-only Annals starting-cursor operation.
 
+Conversation schedules retain the selected Conversations Codex executable in
+`CONVERSATIONS_CODEX`. To replace this pin after an app update, enable the
+conversation schedule with an explicit absolute path:
+
+```sh
+CONVERSATIONS_CODEX=/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex \
+  paperboy schedule enable
+```
+
+This command selects conversation reports. Decision report schedules do not
+use the Conversations executable. Deployment preserves the selected
+environment, including an explicit Conversations pin.
+
 Enable registers and selects the exact `paperboy/daily` Clockwork definition.
 It succeeds when Clockwork commits that binding. The schedule starts at local
 09:00, has no run-at-load trigger, skips overlap, and limits an activation to

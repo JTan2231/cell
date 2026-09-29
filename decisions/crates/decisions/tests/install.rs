@@ -79,7 +79,13 @@ esac
         self.install_with_config(flags, &self.root.join("config.toml"))
     }
     fn install_with_config(&self, flags: &[&str], config: &Path) -> Output {
-        self.command()
+        self.install_command(flags, config, &self.root.join("codex"))
+            .output()
+            .unwrap()
+    }
+    fn install_command(&self, flags: &[&str], config: &Path, codex: &Path) -> Command {
+        let mut command = self.command();
+        command
             .arg("install")
             .arg("--binary")
             .arg(self.root.join("krisis"))
@@ -90,7 +96,7 @@ esac
             .arg("--clockwork")
             .arg(self.root.join("clockwork"))
             .arg("--codex")
-            .arg(self.root.join("codex"))
+            .arg(codex)
             .arg("--annals")
             .arg(self.root.join("annals"))
             .arg("--annals-config")
@@ -101,9 +107,8 @@ esac
                 "--launchctl",
             ])
             .arg(self.root.join("launchctl"))
-            .args(flags)
-            .output()
-            .unwrap()
+            .args(flags);
+        command
     }
     fn installed(&self) -> PathBuf {
         self.home
@@ -328,11 +333,7 @@ fn bundle_proofs(
     }
 }
 
-#[test]
-fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
-    use std::io::Write as _;
-    use std::process::Stdio;
-
+fn adapter_fixture() -> (Fixture, serde_json::Value) {
     let fixture = Fixture::new();
     let annals = fixture.home.join("Library/Application Support/Annals");
     fs::create_dir_all(annals.join("decisions")).unwrap();
@@ -402,7 +403,14 @@ fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
         "prior":{"controls":{},"annals_library_id":"0123456789abcdef0123456789abcdef"},
         "selected_products":["krisis"],"recovery":null
     });
-    let mut child = Command::new(candidate.join("bin/krisis-install"))
+    (fixture, request)
+}
+
+fn adapter_verify(fixture: &Fixture, request: &serde_json::Value) -> Output {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = Command::new(fixture.root.join("candidate/bin/krisis-install"))
         .args(["adapter", "verify"])
         .env("HOME", &fixture.home)
         .env_remove("CELL_DEPLOYMENT_RUN_ID")
@@ -415,12 +423,80 @@ fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
         .stdin
         .take()
         .unwrap()
-        .write_all(&serde_json::to_vec(&request).unwrap())
+        .write_all(&serde_json::to_vec(request).unwrap())
         .unwrap();
-    let output = child.wait_with_output().unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
+    let (fixture, request) = adapter_fixture();
+    let output = adapter_verify(&fixture, &request);
     Fixture::success(&output);
     let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(reply["status"], "verified");
+}
+
+#[test]
+fn adapter_explicit_codex_replaces_removed_pin_and_omission_retains_replacement() {
+    let (fixture, mut request) = adapter_fixture();
+    let replacement = fixture.root.join("codex-replacement");
+    write(&replacement, "#!/bin/sh\nexit 0\n", 0o755);
+    let prior_binding = fs::read(fixture.root.join("bindings/krisis_observer")).unwrap();
+    request["settings"] = serde_json::json!({"codex_bin":replacement});
+    request["dependency_settings"] = serde_json::json!({
+        "nucleus":{"codex_bin":fixture.root.join("codex")}
+    });
+    fs::remove_file(fixture.root.join("codex")).unwrap();
+
+    let output = adapter_verify(&fixture, &request);
+    Fixture::failure(&output);
+    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["status"], "stopped");
+    assert_eq!(
+        reply["detail"],
+        "candidate did not adopt exact Annals and Codex pins"
+    );
+    assert_eq!(
+        fs::read(fixture.root.join("bindings/krisis_observer")).unwrap(),
+        prior_binding
+    );
+
+    let config = fixture
+        .home
+        .join("Library/Application Support/Annals/decisions/config.toml");
+    Fixture::success(
+        &fixture
+            .install_command(&["--final-cutover"], &config, &replacement)
+            .env(
+                "CELL_DEPLOYMENT_RUN_ID",
+                request["run_id"].as_str().unwrap(),
+            )
+            .output()
+            .unwrap(),
+    );
+    let binding: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.root.join("bindings/krisis_observer")).unwrap())
+            .unwrap();
+    assert_eq!(binding["enabled"], false);
+    let selected: serde_json::Value = serde_json::from_slice(
+        &fs::read(
+            fixture
+                .root
+                .join("definitions")
+                .join(binding["definition_digest"].as_str().unwrap()),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        selected["environment"]["CONVERSATIONS_CODEX"],
+        replacement.to_str().unwrap()
+    );
+    Fixture::success(&adapter_verify(&fixture, &request));
+
+    request.as_object_mut().unwrap().remove("settings");
+    Fixture::success(&adapter_verify(&fixture, &request));
 }
 
 // This fixture records the entire legacy format recipe for transition coverage.

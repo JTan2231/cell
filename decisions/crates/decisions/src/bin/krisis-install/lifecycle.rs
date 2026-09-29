@@ -308,7 +308,7 @@ fn pins_from_receipt_with_fallback(
         annals_library_id: receipt["annals_library_id"].clone(),
         codex: codex.into(),
     };
-    pins.validate()?;
+    pins.validate_retained()?;
     require(
         definition
             == template(

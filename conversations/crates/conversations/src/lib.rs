@@ -31,7 +31,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Executable selected when no caller or environment override is supplied.
 #[cfg(target_os = "macos")]
-pub const DEFAULT_CODEX_PATH: &str = "/Applications/ChatGPT.app/Contents/Resources/codex";
+pub const DEFAULT_CODEX_PATH: &str =
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex";
 /// Executable selected when no caller or environment override is supplied.
 #[cfg(not(target_os = "macos"))]
 pub const DEFAULT_CODEX_PATH: &str = "codex";

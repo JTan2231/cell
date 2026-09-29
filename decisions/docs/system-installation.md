@@ -261,6 +261,14 @@ for explicit recovery. Normal deployment preserves the existing Annals library
 ID while updating its executable pin.
 
 Deployment settings accept only `codex_bin` and `enabled`. `enabled` must be a boolean.
+Set `codex_bin` to an absolute executable path to replace an existing reader pin.
+Omit it to retain the installed pin. For the current ChatGPT app layout, use
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
+The installer verifies the replacement and records it in the observer definition.
+The observer continues to use only that recorded path.
+An unavailable prior Codex executable does not prevent replacement when its
+retained receipt and exact observer definition still prove ownership.
+
 For example, `{"krisis":{"enabled":false}}` keeps the candidate schedule
 disabled after group activation. An omitted value preserves
 captured intent; a new schedule defaults to enabled. Recovery to the prior

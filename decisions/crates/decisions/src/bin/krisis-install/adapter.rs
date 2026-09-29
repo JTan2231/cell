@@ -53,23 +53,24 @@ impl Adapter {
         Ok(value)
     }
     fn codex(&self) -> Result<PathBuf> {
-        if let Some(info) = &self.snapshot()?.current {
-            return Ok(lifecycle::pins_from_receipt(&self.paths, &self.clockwork, info)?.codex);
-        }
-        if let Some(value) = self
+        let selected = self
             .context
             .request
             .settings
             .as_ref()
-            .and_then(|settings| settings.get("codex_bin"))
-            .or_else(|| {
-                self.context
-                    .request
-                    .dependency_settings
-                    .get("nucleus")
-                    .and_then(|settings| settings.get("codex_bin"))
-            })
+            .and_then(|settings| settings.get("codex_bin"));
+        if selected.is_none()
+            && let Some(info) = &self.snapshot()?.current
         {
+            return Ok(lifecycle::pins_from_receipt(&self.paths, &self.clockwork, info)?.codex);
+        }
+        if let Some(value) = selected.or_else(|| {
+            self.context
+                .request
+                .dependency_settings
+                .get("nucleus")
+                .and_then(|settings| settings.get("codex_bin"))
+        }) {
             let path = value
                 .as_str()
                 .map(PathBuf::from)
@@ -79,7 +80,7 @@ impl Adapter {
             return Ok(path);
         }
         for path in [
-            PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
+            PathBuf::from(conversations::DEFAULT_CODEX_PATH),
             PathBuf::from("/opt/homebrew/bin/codex"),
             self.paths.home.join(".local/bin/codex"),
         ] {

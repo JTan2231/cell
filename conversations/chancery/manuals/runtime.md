@@ -14,10 +14,11 @@ Read `conversations.history.explore` for data and query semantics.
 
 The CLI selects `--codex PATH`, then `CONVERSATIONS_CODEX`, then its platform
 default. On macOS the default is the ChatGPT app's bundled executable at
-`/Applications/ChatGPT.app/Contents/Resources/codex`. Other platforms use
-`codex` on `PATH`. `ClientConfig::default()` uses the same environment and
-platform defaults; explicit library `codex_path` takes precedence. A missing
-or unusable selected executable fails without trying another executable.
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`. Other
+platforms use `codex` on `PATH`. `ClientConfig::default()` uses the same
+environment and platform defaults; explicit library `codex_path` takes
+precedence. A missing or unusable selected executable fails without trying
+another executable.
 For an app installed elsewhere, select its executable explicitly.
 Conversations does not install or update Codex.
 
