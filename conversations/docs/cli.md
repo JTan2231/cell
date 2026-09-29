@@ -2,10 +2,10 @@
 
 All commands select Codex in this order: `--codex PATH`, `CONVERSATIONS_CODEX`,
 then the platform default. On macOS, the default is the ChatGPT app's bundled
-`/Applications/ChatGPT.app/Contents/Resources/codex`. Other platforms default
-to `codex` on `PATH`. A missing or unusable selected executable fails the
-command; Conversations does not try another executable. Use an explicit
-override if the app is installed elsewhere.
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`. Other
+platforms default to `codex` on `PATH`. A missing or unusable selected
+executable fails the command; Conversations does not try another executable.
+Use an explicit override if the app is installed elsewhere.
 
 All commands accept an optional stable `--host-id` (or
 `CONVERSATIONS_HOST_ID`). Without a host override, macOS

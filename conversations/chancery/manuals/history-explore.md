@@ -14,12 +14,13 @@ version compatibility is unknown, then select the narrowest operation:
 
 The CLI selects `--codex PATH`, then `CONVERSATIONS_CODEX`, then its platform
 default. On macOS, that default is the ChatGPT app's bundled executable at
-`/Applications/ChatGPT.app/Contents/Resources/codex`; other platforms use `codex`
-on `PATH`. `ClientConfig::default()` uses the same environment and platform
-defaults; an explicit `codex_path` takes precedence. A missing or unusable
-selected executable fails without trying another executable. For an app
-installed elsewhere, supply its executable explicitly. `doctor` reports the
-selected path and version. The app owns updates to its bundled executable.
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`; other
+platforms use `codex` on `PATH`. `ClientConfig::default()` uses the same
+environment and platform defaults; an explicit `codex_path` takes precedence.
+A missing or unusable selected executable fails without trying another
+executable. For an app installed elsewhere, supply its executable explicitly.
+`doctor` reports the selected path and version. The app owns updates to its
+bundled executable.
 
 An embedded Rust product that already has a canonical machine-local
 `ThreadRef` can call `AppServerClient::read_thread_summary(&ThreadRef)` for the

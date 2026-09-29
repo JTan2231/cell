@@ -618,7 +618,7 @@ fn codex_selection_preserves_overrides_and_reports_the_selected_path() {
     #[cfg(target_os = "macos")]
     assert_eq!(
         conversations::DEFAULT_CODEX_PATH,
-        "/Applications/ChatGPT.app/Contents/Resources/codex"
+        "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
     );
 
     let from_environment = must(

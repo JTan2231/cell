@@ -25,14 +25,18 @@ pub fn source_config() -> Result<ClientConfig> {
     let home = crate::home()?;
     let selected = std::env::var_os("CONVERSATIONS_CODEX").map(PathBuf::from);
     let candidates = [
-        PathBuf::from("/Applications/ChatGPT.app/Contents/Resources/codex"),
+        PathBuf::from(conversations::DEFAULT_CODEX_PATH),
         PathBuf::from("/Applications/Codex.app/Contents/Resources/codex"),
         home.join(".local/bin/codex"),
         PathBuf::from("/opt/homebrew/bin/codex"),
         PathBuf::from("/usr/local/bin/codex"),
     ];
     let path = selected
-        .or_else(|| candidates.into_iter().find(|path| path.is_file()))
+        .or_else(|| {
+            candidates
+                .into_iter()
+                .find(|path| path.is_absolute() && path.is_file())
+        })
         .context("Conversations Codex executable is unavailable")?;
     ensure!(
         path.is_absolute(),
