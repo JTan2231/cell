@@ -1,162 +1,162 @@
 # Operate an Annals library
 
-Library inspection, instruction reads, statistics, history, and reconciliation inspection require only read access to their selected state and prepared SQLite sidecars. Query scratch storage stays in memory. Initialization and migration prepare persistent WAL files; migration also prepares the configured spool control lock. Backups are standalone SQLite files. Reads never perform setup or recovery.
+Use this operation to create or configure a library, inspect or back up its
+state, or make an explicitly authorized corpus-history change. Read the required
+`annals.libraries` and `annals.corpus.change` feature contracts for selection,
+stored data, reconciliation format, limits, consistency, and recovery meaning.
+This procedure invokes no AI reader and does not operate the inbox.
 
-This capability covers deterministic library administration and explicit
-corpus-history changes. It does not operate the scheduled inbox or invoke the
-AI reader.
+Select a registered library with `annals library NAME COMMAND` or an explicit
+operator config or path. Verify its identity and immutable kind before mutation.
+Read operations need readable prepared state and never create or repair missing
+sidecars or locks. Initialization and backup require absent destinations.
+Keep libraries, source text, instruction history, model context, and backups private.
 
-## Named libraries and librarian instructions
+## Create or select a library
 
-```sh
-/Users/joey/.local/bin/annals library list
-/Users/joey/.local/bin/annals library create conatus
-/Users/joey/.local/bin/annals library conatus show
-/Users/joey/.local/bin/annals library conatus instructions set 'Organize wants and decisions by the wants they appear to serve.'
-/Users/joey/.local/bin/annals library conatus instructions set --file conatus.md
-/Users/joey/.local/bin/annals library conatus instructions set --stdin
-/Users/joey/.local/bin/annals library conatus instructions show
-/Users/joey/.local/bin/annals library conatus instructions history --limit 20
-```
+1. List registrations and inspect the intended target:
 
-A name scopes ordinary Annals commands. The catalog resolves it to one stable
-library ID, database, config, and spool. Names contain 1–64 lowercase ASCII
-letters, digits, underscores, or hyphens, start with a letter, and cannot be
-`list`, `create`, or `help`. Unknown names fail without creation. Creation
-reserves one identity in `provisioning`, initializes matching state, and marks
-it `ready`. Repeating the same name and kind resumes or returns that library;
-conflicting state fails without replacement. Creation starts no model or schedule.
+   ```sh
+   annals library list
+   annals library NAME show
+   ```
 
-The catalog lives at `ANNALS_STATE_DIR/catalog.db`, defaulting to
-`~/Library/Application Support/Annals` on macOS or `~/.local/share/annals`
-elsewhere. New state is under `libraries/LIBRARY_ID/`. Existing config/path
-selection remains supported and is not automatically registered. Named scope
-rejects `--library`, ignores `ANNALS_LIBRARY`, and checks identity before use.
-An explicit config may tune execution but cannot redirect the named database,
-spool, or admission kind. List reports registrations; show reports registration,
-corpus revision, and selected instruction revision. Neither proves runtime readiness.
+2. Create a new name only when that library is intended:
 
-`instructions set` accepts exactly one nonblank UTF-8 document, preserves its
-exact bytes, and atomically appends and selects an instruction revision in the
-library database. The receipt contains `changed` and an `instructions` object with `library_id`,
-`revision`, `content`, `sha256`, and `recorded_at`. Identical current bytes return unchanged;
-A → B → A appends three selections. `recorded_at` describes instruction selection,
-not graph reinterpretation. History identifies `library_id` and
-`current_instruction_revision` and returns newest-first `instructions` and
-`has_more`, default 20 and maximum 100; `--before REVISION` continues strictly
-older selections.
+   ```sh
+   annals library create NAME [--kind general|decisions]
+   ```
 
-Library instructions define what the librarian organizes and what concepts and
-parent connections mean. Annals still enforces source immutability, exact
-quotations, valid identities, an acyclic graph, and evidence requirements.
-The default stored instructions use broader/narrower scope. Instructions are
-trusted settings, separate from source evidence; changing them starts no model
-run, changes no corpus revision, and rewrites no committed history.
+3. Repeat the same name and kind to resume interrupted provisioning. Stop on
+   conflicting state or identity; do not replace it. Creation starts no model
+   or schedule. Verify `ready`, library ID, corpus revision, and instruction
+   selection with `show`. These values do not prove model or scheduler readiness.
 
-## Initialize, inspect, and back up
+## Select librarian instructions
 
-```sh
-/Users/joey/.local/bin/annals init [--kind general|decisions]
-/Users/joey/.local/bin/annals migrate
-/Users/joey/.local/bin/annals stats
-/Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>
-```
+1. Read the current selection and history:
 
-`init` creates revision zero with one immutable library kind and refuses to
-replace a path. It defaults to `general`; `--kind decisions` is only for a
-physically separate producer-accepted decisions library. `migrate` supports
-versions 3 through 6 to schema 7. It assigns version-3 and version-4 libraries
-the `general` kind, preserves existing version-5 kinds, and seeds the default
-instructions at instruction revision 1 in one transaction. Historical
-examination provenance stays null; migration does not invent its instruction
-basis or reinterpret the corpus. It refuses unsupported older or newer
-libraries without reinterpreting them. Configuration cannot change a library's
-kind. `stats` is read-only.
-`backup` creates a consistent SQLite copy and refuses to replace its
-destination.
+   ```sh
+   annals library NAME instructions show
+   annals library NAME instructions history --limit 20
+   ```
 
-Use the selected installed-system deployment procedure for a fresh-state
-cutover. Do not approximate one by deleting or editing the active database.
+2. Set exactly one nonblank UTF-8 document when an instruction change is authorized:
 
-## Direct reconciliations
+   ```sh
+   annals library NAME instructions set 'Complete librarian instructions'
+   annals library NAME instructions set --file /absolute/instructions.md
+   annals library NAME instructions set --stdin
+   ```
 
-An expert caller may submit strict reconciliation JSON without a model:
+3. Verify `changed`, exact selected text, SHA-256, and instruction revision.
+   Identical current bytes are unchanged. A new selection starts no examination,
+   changes no corpus revision, and rewrites no history. Review pending
+   reconciliations separately; a changed selection can make them stale.
 
-```sh
-/Users/joey/.local/bin/annals change submit <REQUEST_JSON> \
-  --work <LABEL> --base <REVISION>
-/Users/joey/.local/bin/annals change show --work <LABEL>
-/Users/joey/.local/bin/annals change validate --work <LABEL>
-/Users/joey/.local/bin/annals change apply --work <LABEL>
-```
+## Initialize, migrate, inspect, or back up
 
-Submission resolves and validates a complete projected corpus state but does
-not apply it. It freezes the current instruction revision when submitted.
-Application additionally requires HEAD and instructions to match the stored
-basis in the committing transaction and atomically updates concepts, edges, evidence, reconciliation status,
-history, and revision. There is no force path around stale state.
+1. Select the exact target. Confirm an absent path for initialization and the
+   intended immutable kind. Confirm initialized private Bazaar state and a
+   complete `cell.prompts.annals` selection before initialization. Do not import
+   prompt contents or substitute fallback text as a runtime repair.
+2. Run the authorized deterministic command:
 
-Existing concepts are selected by public `cN` ID and same-request creations by
-local handles. Evidence selectors use exact source quotations and optional
-heading or adjacent-text filters. Every resulting leaf requires evidence and
-the explicit parent graph must remain acyclic.
+   ```sh
+   annals init [--kind general|decisions]
+   annals migrate
+   annals stats
+   annals backup /absolute/absent-backup.db
+   ```
 
-## Normalize and revert history
+3. Verify the command's library identity, kind, schema, statistics, or backup
+   result. Migration supports schemas 3 through 6 to schema 7 transactionally,
+   preserves source and corpus history, and leaves unknown historical
+   instruction provenance null. Stop on unsupported state. Initialization and
+   backup refuse replacement. A destructive fresh-state cutover requires its
+   separately authorized installation procedure.
 
-```sh
-/Users/joey/.local/bin/annals shake
-/Users/joey/.local/bin/annals log
-/Users/joey/.local/bin/annals diff <FROM_REVISION> <TO_REVISION>
-/Users/joey/.local/bin/annals revert <REVISION>
-```
+## Submit and apply a direct reconciliation
 
-`shake` previews transitive reduction and asks for confirmation unless `--yes`
-is explicitly supplied. A confirmed nonempty plan is bound to the exact
-library identity, HEAD, and instruction revision, removes only direct parent edges already implied by
-longer paths, and creates one commit. It preserves reachability but not all
-direct-neighbor counts or hop distances. A direct relationship can carry meaning
-under the library instructions even when another path exists.
+1. Read the target work, current corpus revision, and current instructions.
+   Prepare strict reconciliation JSON using the corpus-change feature's input
+   contract. Use public `cN` IDs and exact source quotations, not concept labels,
+   paths, or source byte offsets.
+2. Submit and inspect the proposal:
 
-`revert` applies the inverse of one earlier commit to current HEAD and appends
-the result as a new commit. It never erases history. Relevant intervening
-changes cause an atomic conflict; unrelated facts survive.
+   ```sh
+   annals change submit /absolute/request.json --work LABEL --base REVISION
+   annals change show --work LABEL
+   annals change validate --work LABEL
+   ```
 
-The library and every backup contain retained sources, exact evidence,
-reconciliation and model-run provenance, instruction revisions, and complete corpus history. Keep
-them private. Application, shake confirmation, revert, migration, installed
-fresh-state replacement, and backup placement each require authority
-appropriate to their effects.
+3. Verify the projected concepts, edges, evidence, and instruction basis.
+   Submission validates but does not apply. A mechanically equal result is
+   recorded without a commit. Stop on invalid selectors, missing evidence,
+   graph invariants, or ambiguous pending selection.
+4. Apply only when corpus application is authorized:
 
-## Command usage
+   ```sh
+   annals change apply --work LABEL
+   ```
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+5. Verify the applied status, new revision, and exact commit effects. Application
+   checks HEAD and selected instructions in its committing transaction and
+   applies the complete transition atomically. If either basis changed, stop
+   and prepare under current context. No force path exists.
 
-## Bazaar prompt selection
+## Simplify or revert corpus history
 
-Library initialization requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+1. Preview simplification when it is intended:
 
-Read `cell.prompts.annals` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+   ```sh
+   annals shake
+   ```
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+2. Review every proposed direct-edge removal and the exact library, HEAD, and
+   instruction basis. A direct relationship can carry meaning even when a
+   longer path exists. Confirm only when removing those edges is authorized.
+   `--yes` supplies explicit confirmation; JSON without it returns an
+   informational `confirmation_required` preview. Cancellation changes nothing.
+3. Verify the new commit if a nonempty plan applied. Shake preserves reachability,
+   but can change direct-neighbor counts, shared flags, and hop distances.
+   Stop on a stale plan; do not force it.
+4. Inspect history before an authorized revert:
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+   ```sh
+   annals log
+   annals diff FROM_REVISION TO_REVISION
+   annals revert REVISION
+   ```
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.annals --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+5. Verify the new inverse commit and remaining unrelated state. Revert never
+   erases history. Relevant intervening facts cause an atomic conflict; inspect
+   that conflict rather than editing history.
+
+## Prompt selection maintenance
+
+Initialization relies on the complete Bazaar selection described by
+`annals.libraries`. Use this procedure only for an authorized Annals prompt edit:
+
+1. Publish component text with `bazaar update PROMPT_ID --file /absolute/prompt.txt`.
+2. Read each returned positive version and prepare the complete selection JSON.
+3. Publish it with `bazaar update cell.prompts.annals --file /absolute/selection.json`.
+4. Read the selection through Bazaar's supported `get` interface and verify every
+   pinned component. When Annals uses `CELL_BAZAAR_DATABASE`, use an explicit
+   `bazaar --database /absolute/private/bazaar.sqlite3` prefix for each command.
+5. Append the prior complete selection content to roll back an authorized edit.
+   Retain migration selection version 1 and historical text versions. A text
+   append alone does not select it, and later edits rewrite no frozen request.
+
+## Stop and recover
+
+Stop on conflicting identities, unsupported schemas, missing prepared read state,
+stale reconciliation or shake context, failed invariants, or a revert conflict.
+Use the owning feature and installation recovery route. Do not edit databases,
+catalogs, spool receipts, or history directly. Do not overwrite backups or infer
+application authority from read access. This operation authorizes only its
+selected effects, not external disclosure or storage cleanup.
+
+CLI usage recording follows `annals.libraries`; recording errors preserve results.
+Feature contracts expose unspecified capacity, latency, compatibility-window,
+and backup-retention promises rather than supplying additional guarantees here.

@@ -21,4 +21,4 @@ RELEASE_UNITS='email|Email|package|email/crates/email/Cargo.toml|email-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='email|target/release/email|email
 email|target/release/email-install|email-install'
-PROVIDERS='email|email|email/chancery|3'
+PROVIDERS='email|email|email/chancery|6'

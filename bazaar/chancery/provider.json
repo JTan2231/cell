@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "bazaar",
     "name": "Bazaar",
@@ -31,12 +31,14 @@
       "String versions, database schema one, output schema one, capability versions and product releases are independent. Unsupported or foreign state fails without automatic migration."
     ],
     "operational_limits": [
-      "Each update changes one ID. Reads of different IDs have separate snapshots. The service stores whole strings and returns whole version-number histories; no capacity, throughput or latency guarantee is supplied."
+      "Each update changes one ID. Reads of different IDs have separate snapshots. Bazaar stores whole strings and returns whole version-number histories; no capacity, throughput or latency guarantee is supplied."
     ]
   },
   "entries": [
     "entries/string-read.json",
     "entries/string-update.json",
+    "entries/installation.json",
     "entries/install-operate.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

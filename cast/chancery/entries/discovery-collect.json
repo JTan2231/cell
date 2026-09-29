@@ -102,7 +102,7 @@
       },
       {
         "status": "declared",
-        "statement": "automatic_excluded_ats defaults to [\"ashby\"], including omitted fields in existing configuration. Ordinary collection skips excluded boards and does not insert or update postings whose job or application URL identifies an excluded ATS. Existing jobs remain readable; source URLs may remain retained. Force and job refresh obey this policy."
+        "statement": "Ordinary collection skips excluded ATS boards and does not insert or update postings whose job or application URL identifies an excluded ATS. Existing jobs remain readable and source URLs may remain retained. Force and job refresh obey the same policy. cast.state owns the configuration fields and defaults."
       }
     ],
     "identity_and_units": [
@@ -144,7 +144,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Default local caps are 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, a 600-second run deadline and 50 careers-source collections per run."
+        "statement": "Collection must fit the configured HTTP, provider-credit, runtime and careers-source caps. Targeted collection also obeys max_verifications_per_run for adapter pages. cast.state defines the default values, accounting units and UTC windows."
       },
       {
         "status": "unspecified",
@@ -154,7 +154,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Collection contract 5 separates exact-job observation from ordinary source collection and adds automatic_excluded_ats. Missing exclusion fields default to Ashby. Database, configuration and export schema numbers stay unchanged. Older programs can reject the new configuration field."
+        "statement": "Collection contract 5 preserves exact-job observation separately from ordinary collection. Database, configuration and export schema numbers remain separate. Configuration compatibility and the ATS exclusion field are defined by cast.state."
       },
       {
         "status": "unspecified",
@@ -162,6 +162,13 @@
       }
     ],
     "reliances": [
+      {
+        "status": "declared",
+        "statement": "Collection relies on Cast-owned state, complete configuration, source controls and conservative local allowance accounting.",
+        "target": "cast",
+        "kind": "authority",
+        "contract": "cast.state"
+      },
       {
         "status": "declared",
         "statement": "Discovery depends on TheirStack, Brave and Hacker News source APIs when configured. Their external billing, returned data and availability have no dedicated installed Chancery contract.",
@@ -176,5 +183,12 @@
       }
     ]
   },
-  "manual": "manuals/discovery-collect.md"
+  "manual": "manuals/discovery-collect.md",
+  "dependencies": [
+    {
+      "id": "cast.state",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
 }

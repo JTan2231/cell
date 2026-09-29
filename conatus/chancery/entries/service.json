@@ -1,0 +1,181 @@
+{
+  "id": "conatus.service",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Understand Conatus installation and scheduled activation",
+  "summary": "Read matched release selection, product maintenance, independent update and email schedules, failure halts, coordinated configuration and retained-release recovery.",
+  "use_when": [
+    "Release, provider, maintenance, schedule identity, activation, deployment or scheduling failure behavior must be understood."
+  ],
+  "do_not_use_when": [
+    "The request needs source capture, Annals interpretation or email submission semantics alone.",
+    "A selected executable or catalog entry is being treated as proof of readiness or domain success."
+  ],
+  "outcome": "The selected release, maintenance or scheduled activation boundary is understood independently of domain outcomes.",
+  "effects": [
+    "Installation selects a content-addressed executable and matching complete provider bundle; it initializes no state or schedule.",
+    "Definition generation writes a new immutable definition and private logs directory without registration or activation.",
+    "Maintenance holds durable admission. Coordinated deployment captures both binding intents, suspends them, configures coherent pinned state and restores captured intent after holds release."
+  ],
+  "authority": [
+    "Conatus owns installation selection, product maintenance, generated definitions and output. Clockwork owns registration, activation and incidents. Annals and Email own their domain readiness and outcomes."
+  ],
+  "success": [
+    "Integrity and selector observations establish the packaged release. Binding and history observations establish activation; Conatus receipts separately establish domain work."
+  ],
+  "failure_and_recovery": [
+    "Stop on conflicting selector, failed integrity, incoherent configuration or unresolved admission. Recover only an exact retained release and its own operation hold.",
+    "Clockwork scheduling incidents require explicit continuation approval. Deployment, definition switch and Conatus resume cannot clear an incident or retry failed domain work."
+  ],
+  "privacy": [
+    "Installer and schedule definitions use local current-user paths and no credential. Private sources, email occurrences, logs and context retain their existing product owners; no cleanup policy is supplied."
+  ],
+  "interfaces": [
+    {
+      "label": "Install exact program and documentation",
+      "invocation": "conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent"
+    },
+    {
+      "label": "Inspect selection",
+      "invocation": "conatus-install inspect"
+    },
+    {
+      "label": "Verify release",
+      "invocation": "conatus-install verify-release ABS_RELEASE"
+    },
+    {
+      "label": "Recover retained release",
+      "invocation": "conatus-install recover --release ABS_RELEASE --expected-current releases/HASH"
+    },
+    {
+      "label": "Prepare update schedule",
+      "invocation": "conatus-install schedule-definition --state-dir ABS_STATE --output ABS_NEW_FILE"
+    },
+    {
+      "label": "Prepare email schedule",
+      "invocation": "conatus-install schedule-definition --daily-email --state-dir ABS_STATE --output ABS_NEW_FILE"
+    },
+    {
+      "label": "Inspect maintenance",
+      "invocation": "conatus maintenance status"
+    },
+    {
+      "label": "Inspect configuration",
+      "invocation": "conatus --json config"
+    }
+  ],
+  "does_not_authorize": [
+    "Live activation without intended binding authority, personal email without explicit or standing authority, clearing failure incidents, another owner hold release, domain rollback, credential changes or cleanup."
+  ],
+  "manual": "manuals/service.md",
+  "dependencies": [
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators and deployment coordinators need release, maintenance and scheduled activation behavior."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Installation requires exact candidate binary and matching bundle, the expected current selection and current-user owned paths. Definition generation requires selected installed release, existing state and output parent and a new output file. Activation separately needs initialized product state, ready dependencies and intended schedule authority."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Installation selects exact binary, bundle and expected current; --home selects another home. Recovery selects one retained release. Definitions select absolute state and output with optional --daily-email. Maintenance uses an exact owner. Deployment settings select absolute paths, library and independent update/email enabled intent."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Packaging reports release selection and integrity independently of state. Definition receipt identifies key, release and path with registered:false and activated:false. Config exposes only persistent dependency and library selections; maintenance reports durable admission and drain."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Installed program and provider are one matched immutable release, with complete bundle bytes included in identity and integrity. A definition pins that release. Selection is not readiness; activation and exit-zero process are not retention, interpretation or email delivery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Default install root is ~/Library/Application Support/Conatus/install. Expected current is absent or releases/HASH. Update key conatus/update uses 300 seconds and run-at-load. Email key conatus/daily-email uses local 09:00, no run-at-load and 180-second activation limit. Both use schema-two halt-until-approved and overlap skip."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Inspect and verify describe the selected packaged release. Both bindings are independently captured and restored during deployment. Clockwork history describes process activations while Conatus domain receipts describe product work."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum activation delay, catch-up guarantee or domain completion time is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local installer owns Conatus release and provider selection. --home selects packaging root. Conatus local maintenance uses private state and owner-scoped durable holds; documentation presence grants no execution authority."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Direct installation initializes no state and changes no active schedule. Recovery selects an exact retained release without reverting domain state or Clockwork bindings. Definition generation does not register or activate."
+      },
+      {
+        "status": "declared",
+        "statement": "Both schema-two bindings halt on abend until explicitly approved in Clockwork. Product pause, Annals pause, incidents and email uncertainty remain independent. Deliberate scheduled admission during maintenance is a successful skip."
+      },
+      {
+        "status": "declared",
+        "statement": "Coordinated deployment holds admission, suspends both exact bindings and drains admitted commands and prior runner lock. It initializes absent state or rebinds final Annals while preserving library identities, cursor, records and instructions. Existing library selections cannot change. It restores captured pause and each enabled intent only after all holds release and preserves incidents."
+      },
+      {
+        "status": "declared",
+        "statement": "Optional settings state_dir, decisions_config and annals_state_dir are absolute; library and separate enabled/daily_email_enabled select intent. Fresh defaults use installed Annals state, decisions/config.toml and library conatus. An absent binding remains absent unless its enabled setting is supplied; omitted email intent preserves prior selection and intent. Recovery completes coherent configuration before its own hold release."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Installation, initialization, schedule registration and activation are separate effects. Both bindings skip overlap; email has a 180-second activation limit. Product release recovery does not revert databases, Annals or frozen email bytes."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general installation latency, history retention, throughput or storage capacity guarantee is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Provider schema 4 adds the product overview. Conatus state remains schema 1. Older releases can ignore want archive markers; retained email occurrences preserve historical bytes. Schema-one Clockwork bindings acquire failure halt policy only after explicit schema-two selection."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general cross-release support or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Clockwork registers exact immutable definitions, activates both bindings and owns scheduling incidents and notification.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  }
+}

@@ -1,31 +1,16 @@
 # Rust interface
 
-`annals::api` exports the corpus, work, retention, reconciliation, source
-activity, history, and inbox views used by the CLI. Database connections and
-worker state remain private.
+The owning feature contracts publish provider-owned Rust interfaces with their
+selection, effects, data, errors, and compatibility boundaries:
 
-## Read a library
+| Interface | Authoritative explanation |
+| --- | --- |
+| `annals::api`, `LibraryReader`, `CliClient`, `CliClient::for_named_library`, `Request`, and `Response` | [Libraries and clients](../chancery/annals/manuals/libraries.md#read-access-and-rust-clients) |
+| Read views and query/cursor behavior | [Corpus reading](../chancery/annals/manuals/corpus-explore.md#replay-and-rust-access) |
+| `Reconciliation` and `parse_reconciliation` | [Corpus changes](../chancery/annals/manuals/corpus-change.md) |
+| `annals-api` accepted-document types and client | [Document exchange](../chancery/annals/manuals/decision-account-exchange.md) |
+| `annals-api` usage views | [Annals Usage](../chancery/annals-usage/manuals/consumption-inspect.md) |
 
-`LibraryReader` uses Annals queries and cursor rules to return provider-owned
-views. It requires only read access to the library, its prepared SQLite sidecars,
-and the catalog for named selection. Query scratch storage stays in memory.
-
-## Invoke the CLI
-
-`CliClient` invokes an explicitly selected executable. A typed `Request`
-produces its matching `Response`. Requests reuse the CLI argument types and
-cover reads and mutations, including named libraries and stored instructions.
-
-`CliClient::for_named_library` selects a registered library name. Expected
-identity and state-root options use the same CLI checks. Input bytes require
-an explicit `-` input path or `instructions set --stdin`.
-
-Constructing a client has no effects. Each call has the effects of its selected
-[CLI operation](cli.md).
-
-## Exchange typed data
-
-Reconciliation callers use `Reconciliation` and `parse_reconciliation`.
-The separate `annals-api` crate owns accepted-account exchange and usage views.
-See [account exchange](../chancery/annals/manuals/decision-account-exchange.md)
-and [usage reporting](telemetry.md).
+Read installed features with `chancery show ID`. Use `chancery resolve ID` for
+required contracts and gaps. Use [command navigation](cli.md) to identify the
+operation represented by a typed client request.

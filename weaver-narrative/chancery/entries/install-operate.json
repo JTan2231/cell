@@ -1,7 +1,7 @@
 {
   "id": "weaver.install.operate",
   "contract_version": 2,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Weaver",
@@ -70,114 +70,29 @@
   ],
   "dependencies": [
     {
-      "id": "annals.decision-account.exchange",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "nucleus.execution.operate",
+      "id": "weaver.narrative.write",
       "min_contract": 3,
       "max_contract_exclusive": 4
     },
     {
-      "id": "bazaar.string.read",
+      "id": "weaver.lifecycle",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "ci-manager.queue.operate",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "does_not_authorize": [
     "Source mutation, remote disclosure, publication, email, state deletion, automatic retry, or effects outside the user-approved endpoint."
   ],
   "promise": {
-    "data_semantics": [
-      {
-        "status": "declared",
-        "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
-      }
-    ],
-    "identity_and_units": [
-      {
-        "status": "declared",
-        "statement": "A document ID is its unique Nucleus job ID. Local creation and observed terminal times are Unix seconds. Text bounds count UTF-8 bytes. Annals acceptance time describes storage, not decision occurrence."
-      }
-    ],
-    "completeness_and_freshness": [
-      {
-        "status": "declared",
-        "statement": "List selects at most 100 document rows, default 20, newest first with has_more. Show returns one exact row. Live source traversals are bounded by Annals pagination. Source selection and interpretation are agent-driven; no complete historical recall or reproducible source snapshot is asserted."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No provider latency, maximum source age, end-to-end completion time, or comprehensive research coverage is promised."
-      }
-    ],
-    "access": [
-      {
-        "status": "declared",
-        "statement": "Current-user filesystem permissions govern SQLite and the Nucleus socket. Annals is read through annals_api::Client. Nucleus uses its typed client. Agent workspace, local execution, and web access are disabled."
-      }
-    ],
-    "lifecycle_and_consistency": [
-      {
-        "status": "declared",
-        "statement": "The shared Cell transaction owns exact program/provider publication and recovery. Weaver gates new work, drains live commands and nonterminal Nucleus jobs, and configures schema 1 under its sole hold. Doctor uses ordinary admission when Weaver has no hold, even with a caller's deployment ID. When held, doctor requires that ID to match the sole hold. It retains the ID for Nucleus deployment readiness. Resume may settle prior work. Configuration changes preserve saved documents. Unknown drain remains incomplete; recovery preserves other holds."
-      },
-      {
-        "status": "declared",
-        "statement": "Callers resolve cell.prompts.weaver to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
-      }
-    ],
-    "operational_limits": [
-      {
-        "status": "declared",
-        "statement": "One foreground runner handles up to the requested positive number of concurrent job loops in write-many. Each document has one job, a 1200-second active attempt limit, and a 1800-second observation deadline from its Nucleus attempt start. Queue time consumes neither limit; resume preserves the job deadline. Dependency command latency remains unbounded. Annals pages contain at most 200 documents and 4 MiB of text. Markdown is at most 1 MiB. No latency or research-completeness guarantee."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No throughput, perpetual retention, source latency, or automatic retry service objective is declared."
-      }
-    ],
-    "compatibility_and_evolution": [
-      {
-        "status": "declared",
-        "statement": "Independent release, SQLite schema 1, and weaver/narrative toolsets: historical version 1 and new selection version plus 1. No legacy workflow or database import is provided. Historical execution registrations retain their meaning."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No future compatibility lifetime or deprecation interval is promised."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
-      }
-    ],
-    "reliances": [
-      {
-        "status": "declared",
-        "statement": "Annals supplies complete accepted Krisis text through its start, watermark, and page reading client.",
-        "target": "annals",
-        "kind": "data",
-        "contract": "annals.decision-account.exchange"
-      },
-      {
-        "status": "declared",
-        "statement": "Nucleus supplies constrained execution, managed authentication, and the durable requester mailbox.",
-        "target": "nucleus",
-        "kind": "control",
-        "contract": "nucleus.execution.operate"
-      },
-      {
-        "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
-        "target": "bazaar",
-        "kind": "data",
-        "contract": "bazaar.string.read"
-      }
-    ],
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current local user and authorized Cell agents or deployment coordinator."
+        "statement": "The current local user and authorized Cell agents follow this procedure within the agreed change or maintenance endpoint."
       }
     ],
     "preconditions": [
@@ -188,6 +103,10 @@
       {
         "status": "declared",
         "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.weaver selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      },
+      {
+        "status": "declared",
+        "statement": "New authoring requires initialized Bazaar state and complete cell.prompts.weaver selection. Import the reviewed migration seed before deployment and preserve its historical selection/text versions; deployment does not supply missing contents."
       }
     ],
     "inputs": [
@@ -199,9 +118,113 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Plain document commands print Markdown. JSON uses ok/data or ok/error. Metadata identifies documents and Nucleus jobs; readiness, maintenance, and installer results describe only their selected operation."
+        "statement": "The procedure yields exact installed release integrity, supported database/configuration, compatible source and Nucleus readiness, and release of only its own maintenance holds."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Installation success is local program/provider selection and compatible configured readiness. It does not mean a narrative exists, an email was sent by Weaver, or future model access is guaranteed."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Source commit and retained manager job identities select the delivery. Exact run IDs own maintenance holds. These are separate from authoring document/job identities."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Verification describes the exact selected candidate and retained delivery outcome. Readiness is observed separately at the corresponding check; a source change or catalog entry does not establish installed readiness."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No end-to-end delivery, source-read or authoring completion latency is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, backups, sources, and runtime records private."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The coordinator holds and drains Weaver, selects immutable program/provider bytes, initializes absent state or checks schema 1, verifies dependencies, then releases only its own hold. Recovery follows the retained coordinator transaction; unproved recovery keeps the named hold."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Readiness probes create no model jobs or synthetic narratives. The procedure preserves private state, owned holds, exact authoring recovery and source authority."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, retention horizon, future model availability, or automatic authoring retry objective is declared."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Preserve existing public command routes, schema 1, historical exact requests, immutable tool identities and matched program/provider selection. The owned features declare their detailed compatibility rules."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future compatibility lifetime or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The installed CI manager owns serial integration, validation, bounded repair, exact-source deployment and the deterministic outcome email.",
+        "target": "ci-manager",
+        "kind": "control",
+        "contract": "ci-manager.queue.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "The Cell coordinator owns manual deployment selection and interrupted transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
+        "target": "cell-deployment",
+        "kind": "control"
       }
     ]
   },
-  "manual": "manuals/install-operate.md"
+  "manual": "manuals/install-operate.md",
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "session_surfaces": [
+    "Weaver current-user CLI and private configuration",
+    "Cell source tree and installed CI manager",
+    "Cell deployment coordinator and product-owned installation evidence"
+  ],
+  "steps": [
+    "Select the authorized manager delivery or separate validated manual deployment route.",
+    "Check explicit Annals reading configuration, compatible providers, supported state and complete Bazaar prompt selection.",
+    "Prepare private first-installation settings and preview the coordinator plan.",
+    "Use the coordinator to hold, drain, select and configure matched program/provider bytes.",
+    "Verify the exact installed release, database, source and Nucleus readiness; register command inventory.",
+    "For attended backup, own a hold, settle exact work, prove drain, save consistent private state, verify and release only that hold.",
+    "Use retained coordinator transaction recovery after an interrupted deployment; preserve any unproved hold."
+  ],
+  "checkpoints": [
+    "First installation identifies an existing identity-bound Annals decisions config and only supported settings.",
+    "Complete drain and exact candidate identity precede installation or state copy.",
+    "Database, source and Nucleus checks create no model job or narrative.",
+    "The installed overview, focused feature pages and resolve closure describe the matched release.",
+    "The retained delivery outcome and release of only the run-owned holds prove the requested endpoint."
+  ],
+  "adaptation": [
+    "Reuse stored reading configuration on later deployments unless a deliberate setting changes it.",
+    "Use ordinary doctor admission while unheld; while held require the deployment ID to match Weaver's sole hold.",
+    "Settle retained assignments with exact resume; cancel only a named Nucleus job the authorized operation intends to abandon.",
+    "Before candidate publication retain the prior selection; after publication follow the recorded forward recovery with supported state."
+  ],
+  "stop_when": [
+    "State is unsupported or missing outside an authorized initialization.",
+    "Dependency inventory or readiness is unavailable, drain is unknown, or another hold prevents the required proof.",
+    "A selector is foreign, candidate bytes changed, or the plan exceeds the authorized scope.",
+    "Recovery cannot establish the exact coherent installation and its ownership."
+  ]
 }

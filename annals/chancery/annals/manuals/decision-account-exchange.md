@@ -41,6 +41,10 @@ annals --config /absolute/path/to/decisions/config.toml --json \
   inbox accept --producer krisis --key DOCUMENT_KEY DOCUMENT.md
 ```
 
+The only producer is `krisis`. Its key is trimmed, nonblank, single-line text
+of at most 512 bytes. Producer routing is not authentication against the local
+user.
+
 The file is one regular non-symlink, nonblank UTF-8 text source no larger than
 1 MiB. Annals needs accessible text. It does not require a filename extension,
 Markdown structure, headings, a content schema, source metadata, source lookup,
@@ -53,6 +57,11 @@ the job identity, queue order, acceptance time, and later delivery metadata.
 A first call reports `acceptance: "created"`; the same key and bytes report
 `"replayed"` with the original job and time. Different bytes conflict. Keep the
 Krisis outbox copy until its caller has durably recorded that exact receipt.
+
+The standard success envelope reports `contract_version`, `library_id`,
+`producer`, `key`, `source_sha256`, `job_id`, `accepted_at`, and `acceptance`.
+It contains no document body or private path. Concurrent identical calls
+converge on one acceptance; changed-byte calls have at most one winner.
 
 Acceptance transfers ownership to Annals. It creates no delivery row or model
 attempt and can succeed while dispatch is paused. The separately operated
@@ -76,6 +85,10 @@ annals --config /absolute/path/to/decisions/config.toml --json \
 annals --config /absolute/path/to/decisions/config.toml --json \
   decision-feed page --watermark NEW_WATERMARK --after OLD_CURSOR --limit 100
 ```
+
+A watermark reports contract and library identity and an opaque token. A page
+echoes `library`, `watermark`, `request_cursor`, and `next_cursor` with ascending
+events.
 
 Persist each returned event and cursor atomically in the consumer. After an
 uncertain consumer commit, request the same page again. Events are immutable
@@ -132,3 +145,20 @@ CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
+
+## Authority and exclusions
+
+Krisis owns decision identification, complete document construction, and its
+producer key. Annals owns acceptance, exact bytes, queue identity, event order,
+and accepted-content access. Later dispatch can disclose the private document
+and frozen library context through Nucleus under `annals.inbox`.
+
+This exchange provides no correction, retraction, deletion, review, confidence,
+disposition, supersession, semantic relevance, decision enactment, current-force
+state, or consumer acknowledgement. It supplies neither old Decisions lifecycle
+rows nor unaccepted documents. It authorizes no installation, historical import,
+remote sharing, storage cleanup, or direct database/spool editing.
+
+There is no acceptance, queue, processing, throughput, quality, storage,
+schedule, or wall-clock service objective promised here. Read `annals.libraries`
+for library identity and `annals.inbox` for later dispatch behavior.

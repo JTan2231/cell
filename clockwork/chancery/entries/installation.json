@@ -1,0 +1,204 @@
+{
+  "id": "clockwork.installation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Understand Clockwork installation and state compatibility",
+  "summary": "Read release integrity, atomic selectors, candidate-reader validation, coordinated broker refresh, retained state, explicit migration, rollback, and detach guarantees.",
+  "use_when": [
+    "Program release selection, installation integrity, retained-state compatibility or rollback limits must be understood.",
+    "An operator must distinguish direct selector-only installation from coordinated broker refresh and explicit schema migration."
+  ],
+  "do_not_use_when": [
+    "The request is the installation procedure; use clockwork.install.operate.",
+    "The caller intends destructive retained-state deletion or foreign selector takeover."
+  ],
+  "outcome": "An exact understanding of owned installation and persistent compatibility guarantees.",
+  "effects": [
+    "Deployment stages immutable binary, Rust installer, cell-install-v2 manifest, and Clockwork-owned Chancery bytes under private application support, invokes an explicitly supplied candidate Chancery reader on the exact staged provider, and atomically switches the current stable release selector only after that validation succeeds.",
+    "Direct installation may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `~/.local/bin/clockwork-install`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
+    "Doctor initializes only an empty unversioned private schema-two Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
+    "Uninstall detaches only owned command, installer, provider, current, and previous selectors after refusing remaining Clockwork plists; when needed it may create an empty private Clockwork state root solely to share the deployment lock path, but it creates no runtime database and retains releases, database, runtime locks, logs, history, and product artifacts.",
+    "Coordinated Cell deployment captures all Clockwork bindings, disables them under deployment maintenance, preserves product-owned selections and halts, then refreshes every previously enabled generated plist through the final selected broker only after all holds are released."
+  ],
+  "authority": [
+    "Clockwork's packaging owns its content-addressed releases, current and previous selectors, stable command and installer selectors, and only `providers/clockwork`.",
+    "Chancery owns provider-schema validation; the Clockwork Rust installer owns selecting the explicit candidate reader, presenting the exact staged bundle, and ordering successful validation before selector mutation.",
+    "The operator owns the choice to deploy, diagnose, roll back, or detach selectors and separately owns any destructive retained-state operation.",
+    "Product Rust installers own their definition and binding changes through the schedule contract; the coordinated adapter refreshes existing broker plists without changing product definitions or approving incidents."
+  ],
+  "success": [
+    "The candidate reports the exact same version as the provider release, every staged byte matches the canonical manifest and content identity, the explicit candidate Chancery reader accepts the exact staged provider before selector mutation and discovers every indexed entry through the installed registry before commit, and command and provider selectors pass through one current release.",
+    "Identical deployment is idempotent, update retains the prior valid release, and a failed pre-commit or installed smoke restores the exact prior selector view or detaches all public selectors when coherent restoration cannot be completed.",
+    "Doctor initializes only an empty unversioned Clockwork store, refuses a foreign or unsupported schema, and reports current state path, SQLite quick-check result, exact current executable, launchctl path, and the number of demonstrably stale activations marked lost, without claiming future timer delivery or product-domain success.",
+    "Uninstall refuses any remaining Clockwork plist and removes no retained release or runtime data."
+  ],
+  "failure_and_recovery": [
+    "A symbolic, foreign, traversal, fabricated, version-mismatched, or tampered candidate, release, or selector, or a staged provider rejected by the supplied candidate Chancery reader, is refused rather than adopted or overwritten.",
+    "If deployment fails before commit, inspect the evidence and preserved prior selectors; do not bypass ownership or content checks.",
+    "If an installed program regression requires rollback, preserve its evidence and use a trusted tested clockwork-install recover --release with the canonical owned previous-release directory and an explicit Chancery reader; program rollback does not roll back a product binding.",
+    "Before detach, disable every binding and prove quiescence; the uninstaller's plist refusal does not prove that no manual child is already running.",
+    "Coordinated recovery reuses the captured binding inventory and restores suspension before any configuration repair. It preserves disabled intent and durable halts; unknown binding or projection changes stop recovery."
+  ],
+  "privacy": [
+    "Release and provider bytes contain no definitions, product output, secrets, or activation history.",
+    "The retained private database and operational directories contain local paths, hashes, schedule metadata, process history, and possibly product-identifying information; packaging must neither copy nor print them."
+  ],
+  "interfaces": [
+    {
+      "label": "Deploy candidate",
+      "invocation": "<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
+    },
+    {
+      "label": "Recover a verified retained program release",
+      "invocation": "<TRUSTED_CLOCKWORK_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY --chancery ABSOLUTE_PATH"
+    },
+    {
+      "label": "Diagnose installed state",
+      "invocation": "/Users/joey/.local/bin/clockwork doctor"
+    },
+    {
+      "label": "Detach owned public selectors",
+      "invocation": "<TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]"
+    },
+    {
+      "label": "Deploy and refresh scheduled brokers",
+      "invocation": "./deploy.sh clockwork"
+    },
+    {
+      "label": "Explicit migration",
+      "invocation": "clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY"
+    }
+  ],
+  "does_not_authorize": [
+    "Publishing a release, overwriting a foreign path, deleting retained Clockwork or product state, or pruning a release referenced by a generated plist or running activation.",
+    "Creating, migrating, switching, disabling, executing, or deleting a product binding as a side effect of direct Clockwork program installation.",
+    "Treating doctor, launchctl state, or installed version evidence as proof of product-domain success."
+  ],
+  "dependencies": [
+    {
+      "id": "chancery.provider.publish",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The local operator may install, update, diagnose, roll back, or detach Clockwork's owned program and provider selectors while product schedules and retained runtime state remain separate."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Deployment has separate authority, one regular absolute Clockwork executable candidate, one separately supplied regular absolute executable candidate Chancery reader, a tested Rust installer, a version-matched complete provider bundle, and absent or valid Clockwork-owned selectors."
+      },
+      {
+        "status": "declared",
+        "statement": "Uninstall requires every product binding disabled and quiescent and refuses if any `org.clockwork.*` plist remains."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Deployment consumes one absolute Clockwork candidate binary, one absolute candidate Chancery reader, and the tested Clockwork Rust installer and absolute provider bundle; doctor consumes the selected local state root and recorded activation process identities; uninstall consumes only an optional absolute operator home."
+      },
+      {
+        "status": "declared",
+        "statement": "Explicit migration consumes a new absolute backup directory only after product schedules and Clockwork commands are quiescent and retained running rows/transitions are settled."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Deployment publishes one content-addressed release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Current and previous select validated immutable program releases; they are independent of stable product bindings and their selected immutable product definitions."
+      },
+      {
+        "status": "declared",
+        "statement": "An absent runtime database after program deployment is expected, while retained runtime state after selector detach is deliberate and is not an uninstall failure."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Installed release identity is a 64-hex SHA-256 content digest over the exact staged binary, Rust installer, public layout, and provider bytes; provider release equals binary semantic version."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A successful deployment validates the complete exact owned release, has the explicit candidate Chancery reader accept the exact staged provider before switching either public selector, and proves every indexed Clockwork entry is discoverable through the installed registry before commit; doctor reports current local state only at invocation and mutates only demonstrably stale `running` rows to `lost`."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future launchd delivery, product readiness, release retention duration, or program availability percentage is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The operation uses local filesystem and shell authority over Clockwork-owned current-user installation paths and refuses foreign or tampered paths."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Remote installation, root or system-wide installation, direct retained-state deletion, and takeover of another provider or command selector are unsupported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Identical deployment is idempotent, update retains a validated previous generation, candidate-reader rejection occurs before selector mutation, and later failure before commit restores command and provider selection together or detaches all public selectors if coherent restoration cannot be completed."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct program installation and rollback never mutate product definitions or bindings; doctor may initialize only an empty unversioned schema-two store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."
+      },
+      {
+        "status": "declared",
+        "statement": "Migration takes a schema gate, checkpoints SQLite, retains private database plus sidecars, then changes schema transactionally without rewriting definition identities or selecting schedules. Older binaries cannot open schema two. Cross-schema rollback needs matching backup, compatible program/product releases and prior plists, with newer incident evidence preserved."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private content-addressed program-release tree; it starts no daemon. Coordinated deployment separately refreshes existing enabled broker plists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Binary version and provider release must match exactly. Program release, definition manifest, database schema, product release, and binding identity have independent compatibility rules."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No automatic release pruning, retention horizon, cross-version state migration window, or deprecation period is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "This complete bundle uses provider schema four and requires a reader that validates/discovers that schema; Chancery 0.8 supplies the interfaces. SQLite schema two and old definition semantics are independent."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Deployment relies on the explicitly supplied candidate Chancery reader only for structural validation of the exact staged provider before selector mutation; Chancery does not determine Clockwork readiness or domain success.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.provider.publish"
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Direct program installation, program rollback and selector detach invoke no model, network service, Nucleus job or product runner; coordinated binding refresh can request run-at-load work under the product contract."
+      }
+    ]
+  },
+  "manual": "manuals/installation.md"
+}

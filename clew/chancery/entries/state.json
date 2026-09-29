@@ -1,0 +1,176 @@
+{
+  "id": "clew.state",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Inspect Clew private state and installation lifecycle",
+  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded legacy migration, and compatible backup and recovery.",
+  "manual": "manuals/state.md",
+  "use_when": [
+    "Clew state, integrity observations, installation selection, maintenance, migration or recovery guarantees must be understood."
+  ],
+  "do_not_use_when": [
+    "Recording an application report or submitting mail is the intended outcome; use the corresponding feature."
+  ],
+  "outcome": "An interpreted Clew state or installation observation and its supported lifecycle and recovery boundaries.",
+  "effects": [
+    "Init creates empty ledger schema two or checks existing compatible state. Inspection and verification read selected files or local integrity without reports.",
+    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate ledger state and preserve explicitly selected schedule intent."
+  ],
+  "authority": [
+    "Clew owns its installation, ledger schema, migration and email admission maintenance. The current user owns access and authorization; the coordinator owns shared deployment ordering.",
+    "Platter owns exact legacy opportunity mappings. Clockwork owns schedule selection and failure halts."
+  ],
+  "success": [
+    "Doctor establishes local schema-two ledger integrity at invocation. Release verification establishes selected file identity and integrity. Coordinated verification also reads the complete Cast snapshot."
+  ],
+  "failure_and_recovery": [
+    "Foreign selectors, changed bytes, stale expected selections, incompatible state, unsafe migration mappings and unresolved holds stop the operation. Preserve recovery evidence.",
+    "Program recovery preserves ledger and email state. Use matching programs and database versions, stop scheduling and commands for consistent backup, and reconcile uncertain writes and acceptance before replay."
+  ],
+  "privacy": [
+    "Keep ledger, frozen mail, maintenance state and backups private and outside source and release trees. State directories use mode 0700; database files use mode 0600."
+  ],
+  "does_not_authorize": [
+    "Installation, initialization or inspection does not authorize a report, employer contact, send, schedule enablement, incident approval, direct SQLite repair or deletion of history."
+  ],
+  "interfaces": [
+    {
+      "label": "Initialize ledger",
+      "invocation": "clew init"
+    },
+    {
+      "label": "Check ledger integrity",
+      "invocation": "clew doctor"
+    },
+    {
+      "label": "Inspect program selection",
+      "invocation": "clew-install inspect"
+    },
+    {
+      "label": "Verify candidate",
+      "invocation": "clew-install verify --binary /absolute/candidate/clew --bundle /absolute/clew/chancery"
+    },
+    {
+      "label": "Verify retained release",
+      "invocation": "clew-install verify-release /absolute/owned/release"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "platter.opportunity.explore",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.schedule.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user, authorized local operator and Cell deployment coordinator interpret and operate Clew private state and program selection."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Local state must be private and compatible. Direct installation requires a sealed candidate and matching bundle. Coordinated configuration requires drained run-owned email maintenance; schema-one migration requires the sole hold and exact Platter mappings."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Init and doctor select the default state or global --state-dir ABSOLUTE_PATH. Installer commands accept absolute candidate or retained release paths, optional --home and an exact --expected-current condition. Coordinated daily_email_enabled is an optional boolean."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Doctor returns local schema, integrity and retained entry count. Inspection and verification identify selected program files. Coordinated migration reports a new private backup and retains exact legacy aliases."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Initialization and installation add no application report. Migration preserves original ledger rows and write identity, including legacy argument aliases, and leaves frozen email bytes, keys and receipts unchanged."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Content hashes identify immutable cell-install-v2 releases. Package version, feature contract version, ledger schema two and email schema one are independent identities. Maintenance owners are deployment run IDs."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Doctor checks selected local ledger integrity and counts retained entries at invocation without probing Cast. File verification checks candidate or selected bytes. Coordinated verification additionally reads the complete retained Cast snapshot. Migration covers every legacy ledger reference; observations establish no future availability."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current user owns commands, selectors and private state. --state-dir selects an independent explicit private ledger; deployment configures only the default ledger."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends and restores captured or explicit intent while preserving halts. Migration excludes writers, creates a new private consistent schema-one backup and commits schema and aliases in one transaction. Old schema-one writers are rejected afterward."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "State has no automatic pruning, general automatic backup or deletion operation. Compatible schema-two reads and short writes can finish during email maintenance and program selection."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No installation completion time, general database capacity, read latency, schedule latency or future availability guarantee is supplied."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Only cell-install-v2 program releases, ledger schema two and email schema one are supported. Coordinated deployment alone migrates ledger schema one. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future cross-release compatibility window or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Coordinated verification reads the complete retained Cast snapshot through its supported public reader; doctor checks only local ledger state.",
+        "target": "cast",
+        "kind": "readiness",
+        "contract": "cast.discovery.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "A nonempty legacy ledger migration requires the exact legacy-reference-to-Cast-job mapping from the Platter public opportunity reader. Ordinary schema-two work does not require Platter.",
+        "target": "platter",
+        "kind": "data",
+        "contract": "platter.opportunity.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Clockwork owns binding intent, activation and failure halts preserved by coordinated email maintenance. Clew owns its exact runner and release definition.",
+        "target": "clockwork",
+        "kind": "control",
+        "contract": "clockwork.schedule.operate"
+      }
+    ]
+  }
+}

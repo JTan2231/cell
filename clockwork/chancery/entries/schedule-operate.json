@@ -377,6 +377,36 @@
       "id": "iatreion.status.inspect",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.definitions",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.bindings",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.activations",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.incidents",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.notifications",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ]
 }

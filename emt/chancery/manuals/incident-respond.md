@@ -1,8 +1,7 @@
 # EMT incident response
 
-EMT owns Clockwork incident tracking and personal email exchanges. Its two
-database tables are incidents and exchanges. Each exchange carries one Nucleus
-job ID. Nucleus owns execution, output and tool activity. EMT has no agent-run
+EMT owns Clockwork incident tracking and personal email exchanges. Its retained domain records are
+incidents and exchanges. Each exchange carries one Nucleus job ID. Nucleus owns execution, output and tool activity. EMT has no agent-run
 table, operation ledger, product-operation adapters or structured diagnosis.
 
 ## Authority
@@ -19,7 +18,7 @@ current state before acting. An older reply does not approve a newer halt.
 Products own recovery and domain success. Clockwork resume does not retry an
 item, enable a disabled binding or undo committed work.
 
-## Inspect and advance
+## Interfaces and record meaning
 
 ~~~sh
 emt --json status
@@ -37,10 +36,9 @@ correspondence and job references. Run show reads an exchange, including its
 pending submission buffer. These explicit reads can expose private content.
 Worker output uses counts and bounded waiting codes.
 
-Pause stops new incident and reply discovery and disables EMT preference for
-newly routed Clockwork notifications. Admitted exchanges continue. Resume
-validates configuration, configures Clockwork's EMT route and reopens admission.
-Neither operation enables a schedule or clears a Clockwork halt.
+Use `emt.service` for worker admission, pause, schedule, configuration,
+installation and maintenance behavior. Use `emt.installation.operate` for the
+procedures that prepare and activate those interfaces.
 
 A worker imports one page of 100 incidents and reads at most four 100-record
 receiving pages. Incident creation is idempotent. The feed cursor advances
@@ -157,26 +155,13 @@ and the inbox provider retain independent copies. EMT does not mirror raw
 logs or tool activity, copy credentials or erase provider records. Model
 prompts, explicit exchange reads and email disclose their selected content.
 
-## Shared quota notices
+## Quota and worker service
 
-The worker reads Nucleus `GET /v1/quota` without starting an agent. While quota
-blocks admission, unadmitted exchanges wait until recovery or their existing
-deadline. Expired quota deferrals and `quota_exhausted` attempts retain their
-outcome without generating an individual fallback failure email. Retained agent
-emails still use the ordinary delivery path. Unrelated incidents retain their
-normal handling. Existing pauses and failure halts are not cleared.
-
-Each new shared condition freezes one deterministic email in the private
-`quota-notifications/CONDITION_ID.json` record under EMT's state root. Email is
-invoked directly with key `emt/quota/CONDITION_ID`; no Nucleus job authors or sends
-this notice. The same frozen payload has at most two transport invocations,
-at least five minutes apart and within 23 hours of the first attempt. A receipt
-ends sending. An unresolved exhausted send remains uncertain for inspection.
-Keep this directory in backups; do not delete records to retry delivery.
-A missing or unavailable quota observation postpones new model work while frozen
-email delivery continues. An old daemon's quota-endpoint 404 permits rollout
-without a quota gate. Worker recovery and operator pause stop discovery of new
-quota notices but allow frozen notice delivery.
+Quota can defer new assignments without creating a Clockwork failure halt.
+Existing exchange deadlines still apply. `emt.quota-notices` owns the detailed
+quota admission and shared-notice contract, including notice delivery without a
+Nucleus job. `emt.service` owns worker scheduling, configuration, maintenance,
+readiness and retained installation state. These are required feature contracts.
 
 ## Command usage
 
@@ -185,29 +170,36 @@ journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
 
-## Bazaar prompt selection
+## Prompt selection
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.emt selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+New request preparation requires initialized private Bazaar state and a complete
+`cell.prompts.emt` selection. The default database is
+`~/.local/share/bazaar/bazaar.sqlite3`; an absolute `CELL_BAZAAR_DATABASE` override
+selects another database. Reads fail without creating state or using embedded
+fallback text. Missing or invalid selection stops preparation before admission.
 
-Read `cell.prompts.emt` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+The selection has content
+`{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`. Every component version
+is a positive integer. Component text and the complete selection are separately
+published immutable versions. A text append alone does not change the selected
+set. Selection version 1 and its referenced text versions preserve the migration
+baseline. Runtime reads never import seeds; deployment supplies no missing text.
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+EMT resolves exact component versions and freezes the resulting instructions in
+its saved request. Retrying that request retains its selection. Later edits do
+not rewrite saved work or add execution authority. EMT owns rendering and agent
+policy; Bazaar owns immutable text versions. See `emt.installation.operate` for
+prompt prerequisites and `emt.development.change` for an authorized prompt-edit
+procedure.
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+## Compatibility and limits
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.emt --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+EMT schema one, Clockwork routing-sidecar version one, the provider release and
+entry contract versions have separate compatibility rules. Replace old pinned
+Clockwork brokers before enabling EMT routing; they cannot honor EMT claims.
+Unsupported EMT schemas fail rather than being interpreted as current state.
+
+No inbox completeness, authenticated sender identity, model accuracy, timer
+latency, final-delivery deadline, future support lifetime or retention horizon
+is promised. EMT does not authorize unrequested recipients, unrelated changes,
+automatic failed-job replacement or clearing a newer Clockwork halt.

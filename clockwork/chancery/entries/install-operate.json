@@ -31,7 +31,7 @@
     "Product Rust installers own their definition and binding changes through the schedule contract; the coordinated adapter refreshes existing broker plists without changing product definitions or approving incidents."
   ],
   "success": [
-    "The candidate reports the exact same version as the provider release, every staged byte matches the canonical manifest and content identity, the explicit candidate Chancery reader accepts the exact staged provider before selector mutation and discovers all three entries through the installed registry before commit, and command and provider selectors pass through one current release.",
+    "The candidate reports the exact same version as the provider release, every staged byte matches the canonical manifest and content identity, the explicit candidate Chancery reader accepts the exact staged provider before selector mutation and discovers every indexed entry through the installed registry before commit, and command and provider selectors pass through one current release.",
     "Identical deployment is idempotent, update retains the prior valid release, and a failed pre-commit or installed smoke restores the exact prior selector view or detaches all public selectors when coherent restoration cannot be completed.",
     "Doctor initializes only an empty unversioned Clockwork store, refuses a foreign or unsupported schema, and reports current state path, SQLite quick-check result, exact current executable, launchctl path, and the number of demonstrably stale activations marked lost, without claiming future timer delivery or product-domain success.",
     "Uninstall refuses any remaining Clockwork plist and removes no retained release or runtime data."
@@ -84,6 +84,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "clockwork.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "interfaces": [

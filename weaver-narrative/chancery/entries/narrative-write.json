@@ -7,7 +7,8 @@
   "title": "Author a narrative from a free-form direction",
   "summary": "Read the accepted decision history in Annals, compose a narrative under the user direction, and retain private Markdown through one Nucleus authoring job.",
   "use_when": [
-    "Read the accepted decision history in Annals, compose a narrative under the user direction, and retain private Markdown through one Nucleus authoring job."
+    "A private narrative, revision, or group of independent narratives must be authored from a free-form direction.",
+    "Retained document text, an exact caller assignment, or authoring recovery must be read or understood."
   ],
   "do_not_use_when": [
     "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
@@ -58,7 +59,7 @@
     "Markdown saved in Weaver is domain success. A terminal job without a submitted document is an error. Later runtime failure preserves saved prose."
   ],
   "failure_and_recovery": [
-    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds.",
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Missing or unsupported state stops work.",
     "A caller can persist its ID before writing. Repeating matching input resumes or returns that document without a replacement attempt, even after response loss. Different input is refused. Dropping the CLI process does not cancel a Nucleus job; cancellation names the exact document/job ID.",
     "A batch continues after individual job errors. Its IDs are printed to standard error when retained. After interruption, inspect list and resume exact document IDs; repeating write-many creates new assignments. Batch concurrency limits live handling loops, not execution reservations for jobs whose handling has ended."
   ],
@@ -81,6 +82,11 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "weaver.lifecycle",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -91,6 +97,10 @@
       {
         "status": "declared",
         "statement": "A document is authored Markdown, including an editorial question when useful writing needs clarification. An invocation is execution bookkeeping. No provenance, citation, narrative truth, or persistent source-consumer model is implied."
+      },
+      {
+        "status": "declared",
+        "statement": "A document view contains id, nucleus_job_id, direction, created_at, markdown, finished_at and error. Missing Markdown means no document has been submitted; finished_at is the observed execution end and does not itself establish a saved document."
       }
     ],
     "identity_and_units": [
@@ -122,7 +132,7 @@
       },
       {
         "status": "declared",
-        "statement": "Callers resolve cell.prompts.weaver to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Weaver resolves cell.prompts.weaver to exact component versions before preparing new work and freezes the resulting instructions in the exact request. Later prompt edits do not rewrite saved work or reset its recovery identity. Resume uses current Annals reading configuration."
       }
     ],
     "operational_limits": [
@@ -146,7 +156,7 @@
       },
       {
         "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "Selection version 1 and its referenced text versions preserve the migration baseline. A changed tool description uses a new immutable Nucleus toolset identity; permissions, structural schemas, domain commits and recovery remain Weaver-owned."
       }
     ],
     "reliances": [

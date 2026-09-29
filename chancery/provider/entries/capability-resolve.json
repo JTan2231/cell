@@ -174,7 +174,7 @@
       },
       {
         "status": "declared",
-        "statement": "The command uses the existing Chancery JSON envelope schema 2; the new result is additive and exact-ID resolution does not restore the removed semantic request matcher."
+        "statement": "The command uses the existing Chancery JSON envelope schema 3; the new result is additive and exact-ID resolution does not restore the removed semantic request matcher."
       },
       {
         "status": "unspecified",

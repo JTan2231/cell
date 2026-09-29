@@ -1,0 +1,167 @@
+{
+  "id": "chancery.usage.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Register and recover the command-usage journal",
+  "summary": "Register an installed program inventory, inspect recorded observations, and safely back up or restore compatible private Chancery usage history.",
+  "use_when": [
+    "Programs have been installed or updated and their command inventories require explicit registration.",
+    "The private command-usage journal needs scoped inspection, backup, or compatible restoration."
+  ],
+  "do_not_use_when": [
+    "The caller needs token accounting, proof of product success, journal pruning, or migration of unsupported state."
+  ],
+  "outcome": "Intended command identities are retained, recorded observations are inspected, or compatible private history is restored and verified.",
+  "effects": [
+    "Registration can initialize only an empty supported journal and idempotently add identities.",
+    "Report dispatch can append its own metadata-only observation.",
+    "Authorized restoration selects compatible backed-up journal files after writers stop; the prior history is preserved."
+  ],
+  "authority": [
+    "Chancery owns the journal and interpretation. Programs own instrumentation and product success.",
+    "File permissions form the current-user trust boundary; supplied threads do not authenticate callers."
+  ],
+  "success": [
+    "Expected registered identities or restored history are confirmed through supported systems, command, and event reports.",
+    "Selected recorded counts are reported with gaps and database-local cursor scope preserved."
+  ],
+  "failure_and_recovery": [
+    "Stop on unsupported or foreign state, invalid identity, unproven writer quiescence, or incompatible backup.",
+    "Repeat only unchanged idempotent registration after diagnosing its cause; do not retry uncertain recording or product work to obtain a usage row."
+  ],
+  "privacy": [
+    "Keep the journal and backups private. Store no prompts, credentials, arguments, output, or domain outcomes in identities."
+  ],
+  "interfaces": [
+    {
+      "label": "Register installed program",
+      "invocation": "PROGRAM --register-usage"
+    },
+    {
+      "label": "Initialize and register Chancery",
+      "invocation": "chancery usage init"
+    },
+    {
+      "label": "Register explicit identities",
+      "invocation": "chancery usage register SYSTEM COMMAND_ID..."
+    },
+    {
+      "label": "Inspect selected observations",
+      "invocation": "chancery usage events --after 0 --limit 100"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "session_surfaces": [
+    "installed participating programs",
+    "current-user private journal and consistent backup tools"
+  ],
+  "does_not_authorize": [
+    "Executing product work, altering or pruning observations, bypassing triggers, or migrating unsupported state.",
+    "Retrying uncertain writes or treating absence as exhaustive usage proof."
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Select the intended private journal and preserve existing history.",
+    "Run each selected installed program registration mode or explicit registration interfaces.",
+    "Verify expected identities and selected recorded observations with supported reports.",
+    "Create a consistent private backup; stop all writers before restoring a compatible pair.",
+    "Verify restored history, re-establish database-local cursors, and resume writers."
+  ],
+  "checkpoints": [
+    "The journal is empty or supported owned state before initialization.",
+    "Registration and instrumentation are interpreted separately from program installation.",
+    "Every writer is stopped and the backup is consistent and compatible before restore."
+  ],
+  "adaptation": [
+    "Use the explicit absolute journal override for intended isolated state.",
+    "Register both Annals programs and refresh affected recorder integrations through their owning installation paths."
+  ],
+  "stop_when": [
+    "Journal state is foreign or unsupported, or a required identity is invalid.",
+    "Backup consistency, writer quiescence, schema compatibility, or private ownership cannot be established."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user operators may register participating installed inventories, inspect observations, or back up and restore the journal."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The intended private journal is identified. Registration accepts only empty or supported owned state; restoration requires a consistent compatible backup and stopped writers."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Installed program inventories or explicit stable system and command IDs; selected report filters and database-local cursors; a consistent private journal/schema backup for restore."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Retained identities, selected count or event reports, or verified compatible restored history. Registration errors remain separate from binary selection."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Registration is historical identity retention. Usage observes handler entry, not success. Zero means no selected recorded invocations and cannot prove non-use."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "System and command identities are opaque 1\u2013128 ASCII metadata. Observation IDs order one database history; times and range bounds are whole Unix seconds."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Reports select committed recorded observations at their read boundary, including zero-use registered commands. Disabled recording, failures, and uninstrumented boundaries remain uncovered. Restore changes cursor history."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The operation uses the current-user private regular journal and installed registration interfaces. CHANCERY_USAGE_DB selects an absolute override; empty uses default."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Registration preserves earlier identities and observations, may partially commit, and can be repeated unchanged. Restore preserves prior history and verifies a compatible pair with stopped writers. Program rollback does not erase newer rows."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "There is no daemon, retry queue, pruning, update/delete, or migration command. Explicit request-scoped recording is unaffected by environment disable flags; no duplicate suppression is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Journal schema one is separate from program release and contract version. Products never migrate unsupported state. Rebuild recorder consumers and update owned wrappers, hooks, and brokers when recorder rules change."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Journal administration uses local owned state; it invokes no Codex lookup or represented-product runtime work."
+      }
+    ]
+  },
+  "manual": "manuals/usage-operate.md"
+}

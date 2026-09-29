@@ -79,7 +79,7 @@
       },
       {
         "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "Migration selection version 1 and its immutable text versions remain retained. Prompt edits affect new selections; existing library instructions and source records retain their domain identities."
       }
     ],
     "operational_limits": [
@@ -123,7 +123,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Initialization starts at the current Annals watermark. Intake retains each complete document and original transport identities and forwards exact text unchanged. No account fields or source lookup are required. Library instructions govern connections and interpretation."
+        "statement": "This procedure selects separately authoritative Conatus processing, service, library-read and email contracts. Initialization, capture, queued handoff, retention, interpretation, activation and provider acceptance have separate evidence and authority."
       }
     ],
     "identity_and_units": [
@@ -161,7 +161,7 @@
       },
       {
         "status": "declared",
-        "statement": "Callers resolve cell.prompts.conatus to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Callers resolve cell.prompts.conatus before preparing new library instructions. Prompt edits affect new selections; existing library revisions and retained source work preserve their recovery and retention semantics."
       }
     ],
     "reliances": [
@@ -206,6 +206,20 @@
         "target": "bazaar",
         "kind": "data",
         "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "Required product features define processing and recovery semantics.",
+        "target": "conatus",
+        "kind": "authority",
+        "contract": "conatus.processing"
+      },
+      {
+        "status": "declared",
+        "statement": "Required product service feature defines release, maintenance and schedule semantics.",
+        "target": "conatus",
+        "kind": "authority",
+        "contract": "conatus.service"
       }
     ]
   },
@@ -240,6 +254,26 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "conatus.processing",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "conatus.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "conatus.library.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "conatus.digest.email",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ]
 }

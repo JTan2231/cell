@@ -1,94 +1,160 @@
 # Install and verify Bazaar
 
-Bazaar is an on-demand CLI and in-process Rust library backed by SQLite.
-It installs no daemon, schedule, or model requester.
+Use this procedure to install or recover Bazaar programs, initialize empty
+private state, or inspect installation and integrity. Read
+`chancery resolve bazaar.install.operate` for this procedure with the required
+`bazaar.installation` feature contract. That feature owns detailed package,
+state, access, compatibility, and recovery guarantees.
+
+Bazaar installs no daemon, schedule, or model requester. The procedure creates
+no string versions and performs no caller migration. Installation changes owned
+program and provider selectors. Initialization can create empty private state.
+Read-only checks change neither selection nor stored versions.
+
+## Select the operation and prerequisites
+
+1. Select program installation, empty-state initialization, a read-only check,
+   or exact retained-release recovery. Obtain authorization for the selected
+   changes. Keep content updates and data restoration separate.
+2. Select the database. Ordinary CLI commands default to
+   `~/.local/share/bazaar/bazaar.sqlite3`; global `--database ABSOLUTE_PATH`
+   selects another private database. Deployment configures only the default.
+3. For a database operation, check that any existing immediate parent and database
+   are regular and private. Group and other permissions and symlinks at those
+   two paths are refused. Initialization can create absent paths and requires
+   empty or compatible state. Database checks require initialized schema-one
+   state; program-only checks do not. Stop for foreign or unsupported state.
+   Do not recreate it to conceal a failed check.
+4. Select an authorized matching sealed program and provider candidate for
+   installation, or an exact owned retained release for program recovery.
+   Stop for foreign selectors, changed release bytes, or stale expected selection.
+
+The current user owns Bazaar programs and state. The Cell coordinator owns
+coordinated deployment ordering; direct installation works independently. No
+dedicated installed contract covers the coordinator, so resolution exposes that
+conditional reliance gap. Installation and inspection grant no authority
+to append content, migrate callers, delete history, send externally, or run an
+agent. Protect all content and backups outside source and release files.
 
 ## Install programs
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For a
-separate authorized manual deployment, select a validated candidate on local
-main, then preview and run the coordinator:
+Use ordinary CI delivery when a committed change is ready:
+
+```sh
+cell-ci submit COMMIT
+```
+
+Verify the retained manager outcome. The manager integrates, validates, attempts
+bounded repairs, deploys, and emails the outcome. For a separately authorized
+manual deployment, select a validated candidate on local main, then preview and
+run the coordinator from the Cell root:
 
 ```sh
 ./deploy.sh plan bazaar
 ./deploy.sh bazaar
 ```
 
-Bazaar accepts no deployment settings or runtime service dependencies.
-Coordinated configure initializes an empty default database or checks its existing
-schema. Verify checks program identity and database integrity. It creates no
-string versions and performs no caller migration.
+Inspect the plan before deployment. Bazaar accepts no deployment settings or
+runtime service dependencies. Coordinated configure initializes an empty default
+database or checks its existing schema. Verify must confirm program identity and
+database integrity. Stop on an unsuccessful configure or verify result and
+preserve unresolved installation evidence.
 
-The immutable release contains `bazaar`, `bazaar-install`, its recovery
-installer, and the matching provider. Releases live under
-`~/Library/Application Support/Bazaar/install/releases/HASH`. The shared
-`cell-install-v2` transaction selects public commands under `~/.local/bin`
-and the Bazaar provider under Chancery. Foreign selectors, changed release
-bytes, and stale expected selections stop publication.
-
-Direct installation uses a sealed candidate:
+For direct installation, select the sealed candidate:
 
 ```sh
 bazaar-install install --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
-bazaar init
-bazaar doctor
-bazaar --register-usage
-```
-
-The installer accepts `--home ABSOLUTE_PATH` and
-`--expected-current absent|releases/HASH`. Direct installation selects programs
-only; initialize state separately. Usage registration adds command identities
-to Chancery and creates no stored strings.
-
-## Initialize and inspect
-
-```sh
-bazaar init
-bazaar doctor
 bazaar-install inspect
 bazaar-install verify --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
+```
+
+Use `--home ABSOLUTE_PATH` and `--expected-current absent|releases/HASH` when
+an explicit installation home or guarded selection is required. Direct
+installation selects programs only. Initialize state separately when creation
+is intended; do not treat successful program selection as database readiness.
+
+## Initialize and verify state
+
+1. Initialize only the intended empty or compatible database:
+
+   ```sh
+   bazaar init
+   ```
+
+   Initialization creates missing directories with mode 0700 and the database
+   with mode 0600. It preserves compatible versions and can finish interrupted
+   empty initialization. Stop if the database is foreign or unsupported.
+2. Check its identity and integrity:
+
+   ```sh
+   bazaar doctor
+   ```
+
+   Doctor is read-only and returns no stored content. A successful check confirms
+   the selected schema-one database and SQLite integrity at that observation.
+   It does not establish content meaning or future availability.
+3. Register the installed command inventory separately:
+
+   ```sh
+   bazaar --register-usage
+   ```
+
+   Registration adds command identities in Chancery and creates no strings.
+4. If the Chancery reader is installed, confirm the matching installed overview
+   and procedure:
+
+   ```sh
+   chancery product bazaar
+   chancery show bazaar.install.operate
+   chancery resolve bazaar.install.operate
+   ```
+
+   Chancery reads documentation; it establishes no database or program readiness.
+   Bazaar installation and core state operations remain useful without that
+   executable. Program/provider verification uses the sealed release checks.
+
+Use the global `--database` option for initialization and doctor on another
+absolute private database. Init and doctor return schema-one JSON. Operational
+errors return `ok:false` with `error.detail` and exit 1. Invalid command syntax
+uses a stderr diagnostic and exit 2. Treat either failure as an unsuccessful step.
+
+## Inspect and recover programs
+
+Inspect selected installation or verify an exact owned release without selecting
+another program:
+
+```sh
+bazaar-install inspect
 bazaar-install verify-release /absolute/owned/release
 ```
 
-The default database is `~/.local/share/bazaar/bazaar.sqlite3`. Global
-`--database ABSOLUTE_PATH` selects another database for ordinary commands.
-Deployment configures only the default database. Initialization creates missing
-directories with mode 0700 and the database with mode 0600. The immediate parent
-and database must be regular and private. Group and other permissions and
-symlinks at those two paths are refused. Readers can use read-only permissions.
-
-Init creates the schema in empty state and can finish an interrupted empty
-initialization. It preserves compatible versions. Nonempty foreign databases
-and unsupported identities fail without alteration. Doctor opens state read-only
-and checks database identity and SQLite integrity. These operations return
-schema-one JSON with no stored content.
-
-The single application table contains `id`, `version`, and `content`.
-The compound primary key identifies each immutable version. SQLite stores an
-application ID and schema version separately. No timestamp, configuration schema,
-selected-version pointer, or content digest is stored.
-
-## Recovery and privacy
-
-Recover an exact retained program release:
+Recover only the intended compatible retained program release:
 
 ```sh
 bazaar-install recover --release /absolute/owned/release
+bazaar-install inspect
+bazaar-install verify-release /absolute/owned/release
 ```
 
-Recovery preserves the separate database. It never restores or rewrites string
-versions. Compatible commands can finish across program selection. Only
-schema-one state and version-two installation packages are supported.
-Unsupported state remains an error; no migration is supplied.
+Confirm selected program/provider identity after recovery. If initialized state
+exists, run `bazaar doctor` on the selected database to confirm its integrity.
+Program-only recovery can preserve an absent database. Recovery preserves the
+separate database and never rewrites string versions.
+Only schema-one state and version-two installation packages are supported.
+Stop if the selected program cannot read current state. Preserve unresolved
+installation evidence rather than deleting it or changing stored history.
 
-An uncertain content append may have committed. Inspect history before repeating
-it. For a filesystem backup, stop writers, let current operations finish, and
-retain the database and any SQLite sidecars together in private storage. Restore
-only a compatible complete backup under exclusive access. Restoring older
-history can reuse later version numbers, so reconcile caller references before
-resuming. There is no automatic backup, pruning, deletion, or restore command.
+## Preserve private state during separate data recovery
 
-Keep content and backups outside source and release files. Installation,
-initialization, and inspection authorize no content update, agent execution,
-or caller operation. Preserve unresolved installation evidence after failure.
+When a separately authorized filesystem backup is required, stop writers, let
+current operations finish, and retain the database and any SQLite sidecars
+together in private storage. When data restoration is separately authorized,
+restore only a compatible complete backup under exclusive access. Run doctor,
+reconcile caller references, then resume writers. Restoring older history can
+reuse later version numbers. Bazaar supplies no automatic backup, pruning,
+deletion, or restore command.
+
+An uncertain append may have committed. Inspect history and relevant content
+through `bazaar.string.read` before deciding whether another append is intended.
+`bazaar.string.update` owns that recovery behavior. Program recovery does not
+resolve an uncertain content receipt or authorize another append.

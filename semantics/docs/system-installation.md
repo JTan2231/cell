@@ -1,363 +1,47 @@
 # macOS user installation
 
-Semantics installs one content-addressed release for the current user. It also
-installs the `semantics` and `semantics-install` command selectors, one Chancery
-provider selector, and an immutable Clockwork definition bound as
-`semantics/worker`. Uninstall retains the SQLite database, releases, and product
-logs without content bodies.
+The [service feature](../chancery/manuals/service.md) owns installation,
+readiness, ownership, state, scheduler, and recovery guarantees.
+The [operation manual](../chancery/manuals/project-operate.md) owns procedures.
+Read `chancery show semantics.service` for the installed feature and
+`chancery resolve semantics.project.operate` for complete operational reading.
 
 ## Prerequisites
 
-- Installed Annals with one provisioned decisions library and
-  `annals.decision-account.exchange` contract 2. Its explicit config is
-  `~/Library/Application Support/Annals/decisions/config.toml` by default.
-- A healthy Nucleus service satisfying `nucleus.execution.operate` contract 3
-  and all capabilities checked by Semantics doctor.
-- An installed Clockwork command satisfying `clockwork.schedule.operate`
-  contract 3 for the same macOS user.
-- Chancery for discovery and provider publication. Semantics runtime does not
-  call it.
-
-Document processing requires no Conversations lookup. Historical jobs retain
-their original routing and recovery contracts, including Conversations
-`conversations.history.explore` contract 4 for exact thread-summary cwd lookup.
-See [legacy intake and reconciliation](data-model.md#intake-and-reconciliation).
+Read [service prerequisites](../chancery/manuals/service.md#paths-and-configuration)
+and [inspection checkpoints](../chancery/manuals/project-operate.md#inspect-before-effects).
 
 ## Install a candidate
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For an
-explicitly authorized manual installation or recovery, build and install
-artifacts from a validated source candidate:
-
-```sh
-cargo build --release --locked --package semantics
-/absolute/path/to/target/release/semantics-install install \
-  --binary /absolute/path/to/target/release/semantics \
-  --bundle /absolute/path/to/cell/semantics/chancery \
-  --clockwork "$HOME/.local/bin/clockwork"
-```
-
-Deployment refuses foreign selectors, selected Clockwork definitions, or service
-files. Before running the candidate version command, it checks every existing
-database, WAL, shared-memory, and rollback-journal file. Each must be a regular
-file owned by the current user, with mode `0600`, no symbolic link, and exactly
-one hard link. An existing deployment-maintenance receipt must meet the same
-requirements and have its matching gate.
-
-The deployer checks candidate and provider versions and verifies reusable
-releases against a canonical content manifest. It verifies that the selected
-`semantics/worker` definition names the current release's exact runner and
-schedule. This check records the selection at that time; Clockwork does not
-perform a compare-and-swap. The Semantics update lock serializes deployment and
-uninstall. Direct concurrent changes to the binding are unsupported and can
-require recovery with maintenance held.
-
-The deployer registers the inactive Clockwork definition for the exact release.
-It disables the prior binding, stops any owned legacy LaunchAgent, and removes
-the public CLI during cutover. It then verifies SQLite is idle and backs up the
-database and sidecars.
-The content identity covers the unrendered Clockwork template and runner. Only
-after that release directory and identity exist does the deployer render its
-absolute release path and interpreter/runner hashes, avoiding a circular
-release hash; neither `current` nor the public CLI is execution identity.
-The deployer also holds the cross-process worker lock used by `intake run`.
-This excludes manual reconciliation even when SQLite is temporarily closed.
-It then runs the exact candidate's `--json doctor` in a scrubbed environment.
-The old private release selector remains selected, and all public entries remain suspended.
-Doctor captures one Annals watermark, walks bounded pages from every distinct
-installed cursor until an unchanged empty page, and reads every page twice at
-that fixed watermark. It rejects changed replay, identity duplication,
-nonadvancement, cycles, or more than 1,000 pages from one cursor. It also checks
-schema 3, the Annals document feed, and both preserved and document Nucleus/toolset
-contracts. Doctor refuses the worker switch if an active or paused project
-lacks the selected Annals feed identity or cursor. Pending activation is
-accepted only if there are no active or paused projects. The deployer atomically
-publishes release, CLI, and provider selectors and switches
-`semantics/worker` to the candidate definition digest. Any failure restores the
-prior database and selectors plus the exact prior Clockwork selection and
-enabled state, or the prior owned legacy LaunchAgent during first handoff, but
-never both. A previously absent or disabled-null binding becomes a disabled
-tombstone that may retain the candidate digest because Clockwork has no
-clear-selection operation; a previously disabled selected definition is
-restored exactly without transient activation. Semantics retains the exact
-product release referenced by each registered immutable definition; pruning
-either is a separate explicit lifecycle operation. If scheduler/database
-quiescence or complete rollback cannot be proven, the deployer fails closed
-while it still holds the worker flock: it retains the release-independent
-maintenance gate, attempts to disable Clockwork and the legacy label, removes
-public selectors, and retains the private database, prior schedule record, and
-selector record for recovery. When Clockwork cannot clear a newly selected
-candidate back to a prior null selection, the exact private `current` release
-selector and authenticated hold are retained as ownership evidence. The retained gate, rather than a
-claim that both scheduler cleanups succeeded, prevents domain admission.
-
-Deploy and uninstall share one update lock, so scheduler, selector, and
-database transitions cannot race each other.
-
-The Rust `semantics-install` binary owns the transaction. `cell-install` stages
-an exact `cell-install-v2` manifest covering the payload, installer, static
-frontend and worker, unrendered schedule template, and provider inventory.
-The installer accepts retained Semantics format-one and format-two releases
-through an exact read-only legacy verifier; those releases retain their original
-bytes. Public selectors are suspended before migration and remain suspended
-through failed-publication compensation until Semantics restores the database.
-The static runtime shell artifacts remain because the installed Clockwork
-contract pins the interpreted worker and its `/bin/sh` hash.
+Follow [install or update](../chancery/manuals/project-operate.md#install-or-update).
+Read [release ownership and transaction](../chancery/manuals/service.md#release-ownership-and-transaction).
 
 ## Coordinated deployment maintenance
 
-`semantics-install adapter OPERATION` is Semantics' product boundary for the Cell
-deployment coordinator. It uses the Rust installer, migration,
-scrubbed doctor, selector ownership checks, and rollback procedure. The
-coordinator establishes and drains all affected product holds before applying
-selected candidates. The adapter preserves project pauses, existing cursor
-and activation state, and captured schedule enabled booleans.
-
-The adapter requires the installed public CLI to support `maintenance status`
-before effects. A candidate cannot fence an older installed command that does
-not participate in admission. Such an installation stops coordinated
-inspection and needs its one-time compatibility release through the existing
-documented deployer and quiescence procedure. Ordinary supported new-state
-installation continues through that deployer.
-
-The CLI's private durable gate is the sibling
-`<database>.cell-maintenance`, separate from the installer's maintenance
-marker and receipt. Maintenance status never opens or initializes the
-database. Every other public command is fenced before SQLite access because
-even reads may migrate state. Controlled installation uses
-`CELL_DEPLOYMENT_RUN_ID` only under the same sole hold with exclusive drained
-activity; no hold means ordinary admission. Doctor may prove Nucleus readiness
-under the exact same Nucleus hold without permitting ordinary reconciliation.
-
-Ordinary coordinated updates omit `--final-decisions-watermark` and preserve
-all existing activation and scan cursors. The explicit one-time legacy
-activation below remains a separate documented operation; the adapter never
-manufactures or chooses its watermark. It keeps product ownership and
-commit boundaries intact rather than promising an aggregate database rollback.
-
-Group release removes only this run's hold after verification. Adapter recovery
-first invokes the exact retained product transaction. Pre-commit recovery
-restores the captured state; committed recovery finishes the candidate with
-its schedule disabled. An unproved installation retains admission. Clearing the outer hold cannot authorize clearing
-another owner's marker or a project pause.
+Follow [hold and drain](../chancery/manuals/project-operate.md#hold-and-drain-coordinated-deployment).
+Read [coordinated deployment guarantees](../chancery/manuals/service.md#coordinated-deployment-and-uninstall).
 
 ## Paths
 
-```text
-~/.local/bin/semantics
-~/.local/bin/semantics-install
-~/Library/Application Support/Semantics/semantics.db
-~/Library/Application Support/Semantics/install/{current,previous,releases/}
-~/Library/Application Support/Semantics/{.clockwork-maintenance,.deployment-maintenance.json}
-~/Library/Application Support/Annals/decisions/config.toml
-~/Library/Application Support/Chancery/providers/semantics
-~/Library/Logs/Semantics/worker.{stdout,stderr}.log
-```
-
-The Clockwork definition has a 60-second interval, no run-at-load, overlap
-`skip`, no timeout, exact hashes for `/bin/sh` and the release-local runner,
-and a scrubbed key-free environment. The runner resolves the Semantics payload
-only as a sibling in that same immutable release; it never executes through
-`current` or `~/.local/bin/semantics`. The worker is one-shot and
-cross-process serialized. Its product-owned logs may
-contain counters, opaque IDs, and bounded product-owned operational failures
-only—not raw dependency diagnostics, decision text, conversation or project
-content, anchors, paths, prompts, credentials, or tool payloads.
-Clockwork opens those paths but does not ingest their bodies.
-Successor account reconciliation ignores inherited `TMPDIR`, resolves the
-canonical Darwin per-user temporary root with a scrubbed system query, and
-uses only an empty mode-`0700` per-job directory whose ownership and control-tree
-ancestry are proved before Nucleus admission. Unsafe reuse, symlinks, or an
-`AGENTS.md`/`.git` ancestor fail closed; cleanup uses the exact path already
-proved for that invocation.
-The private, current-user-owned, mode-`0600`, non-hard-linked
-`.clockwork-maintenance` marker in Semantics application support is checked by
-every release-pinned runner and by the public command frontend. The installer
-invokes its verified payload directly for doctor while public work remains
-fenced through publication and durable commit. Deployment accepts an existing marker only with
-that exact shape and never truncates it. A matching private
-`.deployment-maintenance.json` receipt authenticates a Semantics-owned hold by
-the exact `semantics/worker` key, content-addressed release ID, and Clockwork
-definition digest. `--keep-maintenance` retains that pair after commit; a later
-successful invocation of the same release without the option releases it
-idempotently. An unreceipted pre-existing marker is external and is never
-claimed or removed. Deployment also verifies existing
-worker log files are current-user-owned regular non-hard-linked files and
-restricts their mode to `0600` without truncating their contents before
-Clockwork registration. It holds the marker across the binding and database
-transition; uninstall or an unprovable rollback leaves it in place so a
-residual activation cannot perform domain work.
-The interval is a scheduling request, not a wake-up deadline. Semantics makes
-no launchd availability or worker-latency promise and still provides no
-wall-clock bound from an accepted account to a semantic revision.
+Read [paths and configuration](../chancery/manuals/service.md#paths-and-configuration).
 
 ## Verify
 
-```sh
-~/.local/bin/semantics --json doctor
-~/.local/bin/semantics project list
-~/.local/bin/clockwork --json binding show semantics/worker
-~/.local/bin/clockwork --json history semantics/worker --limit 20
-/Users/joey/.local/bin/chancery show semantics.repository.explore
-```
-
-For a new folder, add the exact root marker, register it, optionally seed its
-existing vocabulary, and run the worker once before relying on the periodic
-service:
-
-```sh
-semantics project register project-id /absolute/project/root
-semantics repository seed-markdown project-id /absolute/project/root/seed.md
-semantics repository show project-id
-semantics --json intake run
-```
-
-Registration captures the current watermark from the dedicated Annals
-decisions feed. When upgrading a retained schema-one database, stop legacy
-lifecycle append, capture its final opaque watermark, drain every active or
-paused project cursor to that exact value, and finish every pending or
-processing legacy row. Every retained legacy Nucleus correlation must be
-positively terminal with its exact request, or positively absent when it was
-never recorded as admitted. Hold the external Krisis and Annals lifecycle
-gates, then pass the captured value to the deployer:
-
-```sh
-/absolute/path/to/target/release/semantics-install install \
-  --binary /absolute/path/to/target/release/semantics \
-  --bundle /absolute/path/to/cell/semantics/chancery \
-  --clockwork "$HOME/.local/bin/clockwork" \
-  --final-decisions-watermark "$FINAL_DECISIONS_WATERMARK" \
-  --keep-maintenance
-```
-
-Supplying `--final-decisions-watermark` (which requires
-`--keep-maintenance`) explicitly asserts that legacy append
-is stopped and those external gates remain held. There is no default or
-automatic migrated-database activation. After disabling the worker, suspending
-the public CLI, taking the worker lock, proving SQLite closed, and privately
-backing up the database plus sidecars, the candidate fetches exactly one Annals
-library/watermark and atomically installs it for every non-retired project only
-if all asserted legacy conditions still hold. Historical Decisions rows and
-terminal, awaiting-review, failed, and unassigned history are unchanged. The
-candidate then completes fixed-page replay before any release/provider selector
-or worker definition is switched. Omit the watermark on later schema-two
-updates; an already activated database retains its exact identity and cursors.
-After Krisis is enabled last and cross-product readiness is green, release the
-exact authenticated hold with a successful idempotent invocation of the
-installed release, omitting both cutover options:
-
-```sh
-"$HOME/Library/Application Support/Semantics/install/current/package/install" install \
-  --bundle "$HOME/Library/Application Support/Semantics/install/current/share/chancery/semantics" \
-  --binary "$HOME/Library/Application Support/Semantics/install/current/libexec/semantics" \
-  --clockwork "$HOME/.local/bin/clockwork"
-```
-
-The project-local seed file is required only during the atomic seed. Once HEAD
-is verified, it may be removed under the project's normal file-change
-authority. Semantics retains the committed effects, relative source label, and
-digest and does not depend on the live file for replay.
+Follow [installation verification](../chancery/manuals/project-operate.md#install-or-update)
+and [register and seed](../chancery/manuals/project-operate.md#register-and-seed-a-folder).
+For legacy state, follow [one-time activation](../chancery/manuals/project-operate.md#activate-a-migrated-database-once).
 
 ## Recovery and uninstall
 
-An interrupted or unproved transaction is retained privately as
-`install/.transaction.*/transaction.json` with the database and sidecars, exact
-selector receipts, prior scheduler state and authenticated hold evidence.
-The original selection is recorded before effects, and the complete saved
-database inventory and hashes are verified before rollback replaces any live
-database file. A durable committed phase is written before the owned gate is
-released; recovery of that phase always resumes the candidate forward.
-Successful backups are retained in `backups/deployments/`; `last-update.json`
-records the installation receipt. Recovery never treats a program rollback
-as authorization to discard committed domain state.
-
-Use the current candidate installer with the exact retained transaction:
-
-```sh
-/absolute/path/to/semantics-install recover \
-  --transaction "/absolute/path/to/Semantics/install/.transaction.EXACT" \
-  --clockwork "$HOME/.local/bin/clockwork"
-```
-
-A product lock left by an interrupted Rust installer is reclaimed only when
-its exact private owner record identifies a process proved absent. Foreign or
-unrecognized locks remain for attended inspection.
-
-A prior null Clockwork selection cannot be restored after candidate selection.
-In that case, explicitly choose `recover --forward` with the same transaction.
-It verifies the authenticated candidate hold, exact retained release and
-Clockwork definition, runs scrubbed doctor while gated, restores the candidate
-selectors and binding, then releases that owned hold. It does not choose or
-repeat a legacy activation watermark. Recovery refuses foreign artifacts and
-retains maintenance on uncertainty.
-
-
-Inspect doctor, both collections in `semantics intake status`, the Clockwork binding and process
-history, and the body-free stderr log. Clockwork exit state does not replace
-the Semantics worker report or durable intake state. Pause a project before
-semantic maintenance. Use `intake retry`
-only after investigating the failed event; it refuses unsafe Nucleus replay.
-
-```sh
-/absolute/path/to/target/release/semantics-install uninstall \
-  --clockwork "$HOME/.local/bin/clockwork"
-```
-
-Uninstall disables only the owned `semantics/worker` binding, removes any
-owned legacy LaunchAgent and public CLI/provider selectors, and intentionally
-retains the database, releases, definitions, activation history, and logs. Deleting
-retained state is a separate destructive operation and is not authorized by
-the uninstaller.
-
-The deployment adapter verifies the installed dependency configuration with
-doctor. Verification does not create projects, revisions, or Nucleus jobs.
+Follow [recovery or uninstall](../chancery/manuals/project-operate.md#recover-installation-or-uninstall).
+Read [rollback and recovery guarantees](../chancery/manuals/service.md#rollback-and-recovery).
 
 ## Scheduled failure policy
 
-Semantics configures Clockwork definition schema 2 for `semantics/worker` with
-`[failure] on_abend = "halt-until-approved"`. A worker reports only failures
-encountered by its current invocation. `intake run` prints its report and returns
-nonzero when `error_event_id` is present. Retained failed intake is not rescanned
-as a new incident. Normal mailbox waiting, an overlapping worker, a paused
-project, maintenance, or no eligible intake does not itself constitute an abend.
-A returned dependency or reconciliation error is an abend even when its job
-remains in progress awaiting definitive recovery evidence.
-
-A terminal failed or cancelled Nucleus job after a semantic commit preserves
-that commit and reports its exact job ID to Clockwork. The report contains a
-bounded code and opaque identity, never document text or raw runtime diagnostics.
-The runner forwards Clockwork's correlated activation context through its
-otherwise scrubbed environment. It does not poll historical completed jobs.
-
-Clockwork owns the durable halt, future admission, and one retained notification
-through `HOME/.local/bin/email`. Inspect `clockwork incident list
-semantics/worker` and `clockwork incident show INCIDENT_ID`. Only explicit
-approval followed by `clockwork binding resume semantics/worker INCIDENT_ID`
-releases that halt. Definition switches, deployment, project resume, and intake
-retry preserve it. The last two operations remain Semantics-owned domain controls.
-Scheduling continuation creates no retry and cannot authorize a new request
-while a prior Nucleus job remains uncertain. Schema-one definitions acquire the
-new policy only when a schema-two definition is explicitly selected.
+Read [serial scheduling and failure](../chancery/manuals/service.md#serial-scheduling-and-failure)
+and follow [intake and incident recovery](../chancery/manuals/project-operate.md#inspect-and-recover-intake).
 
 ## Coordinated configuration and activation
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
-
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
-
-Deployment settings accept only `enabled`. `enabled` must be a boolean.
-For example, `{"semantics":{"enabled":false}}` keeps the candidate schedule
-disabled after group activation. An omitted value preserves
-captured intent; a new schedule defaults to enabled. Recovery to the prior
-configuration preserves captured intent and ignores this override. Incident
-halts and operator pauses remain in force.
+Read [configuration and activation guarantees](../chancery/manuals/service.md#coordinated-deployment-and-uninstall).
+Follow [coordinated deployment](../chancery/manuals/project-operate.md#hold-and-drain-coordinated-deployment).

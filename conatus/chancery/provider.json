@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "conatus",
     "name": "Conatus",
@@ -43,6 +43,9 @@
     "entries/want-lifecycle.json",
     "entries/library-explore.json",
     "entries/update-operate.json",
-    "entries/digest-email.json"
-  ]
+    "entries/digest-email.json",
+    "entries/processing.json",
+    "entries/service.json"
+  ],
+  "overview": "overview.md"
 }

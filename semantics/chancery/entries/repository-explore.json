@@ -18,14 +18,14 @@
   ],
   "outcome": "A JSON repository snapshot, search result, immutable revision log, or revision-range diff for one exact project and optional historical revision.",
   "effects": [
-    "Repository show, search, log, and diff are local read-only operations.",
+    "Repository show, search, log, and diff do not append project or semantic changes. Opening retained state can perform a supported versioned migration and therefore honors maintenance admission.",
     "Snapshots are rebuilt from immutable typed effects; no mutable concept projection is consulted.",
     "This capability does not call Annals, Decisions, Conversations, Nucleus, Chancery, or a network service."
   ],
   "authority": [
     "Semantics SQLite is authoritative for maintained project terminology, stable concept identity, grounding history, and semantic revision order.",
     "The participating project's source, tests, and product documentation remain authoritative for runtime behavior and implementation facts.",
-    "Annals decision-account, legacy Decision, and seed groundings identify sources recorded in semantic revisions."
+    "Annals document/account, legacy Decision, and hashed seed grounds identify exact sources retained in semantic revisions; optional new document grounds name their selected library/event/document."
   ],
   "success": [
     "The command selects one registered project and returns the requested HEAD or existing revision.",
@@ -43,11 +43,26 @@
     "Repository output contains no transcript, diff, command, tool result, prompt, credential, or raw project file content."
   ],
   "interfaces": [
-    {"label": "Show HEAD", "invocation": "/Users/joey/.local/bin/semantics repository show PROJECT"},
-    {"label": "Search", "invocation": "/Users/joey/.local/bin/semantics repository search PROJECT QUERY"},
-    {"label": "Revision log", "invocation": "/Users/joey/.local/bin/semantics repository log PROJECT"},
-    {"label": "Diff", "invocation": "/Users/joey/.local/bin/semantics repository diff PROJECT FROM TO"},
-    {"label": "Rust repository reader", "invocation": "semantics::api::Client::{repository,search,log,diff}"}
+    {
+      "label": "Show HEAD",
+      "invocation": "/Users/joey/.local/bin/semantics repository show PROJECT"
+    },
+    {
+      "label": "Search",
+      "invocation": "/Users/joey/.local/bin/semantics repository search PROJECT QUERY"
+    },
+    {
+      "label": "Revision log",
+      "invocation": "/Users/joey/.local/bin/semantics repository log PROJECT"
+    },
+    {
+      "label": "Diff",
+      "invocation": "/Users/joey/.local/bin/semantics repository diff PROJECT FROM TO"
+    },
+    {
+      "label": "Rust repository reader",
+      "invocation": "semantics::api::Client::{repository,search,log,diff}"
+    }
   ],
   "does_not_authorize": [
     "Registering or changing a project, seeding or committing a revision, assigning or retrying intake, or invoking the worker.",
@@ -56,45 +71,100 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "A local contributor or tool may read a registered project's maintained terminology and immutable semantic history before analysis, review, documentation, or implementation."}
+      {
+        "status": "declared",
+        "statement": "A local contributor or tool may read a registered project's maintained terminology and immutable semantic history before analysis, review, documentation, or implementation."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The caller selects an exact registered project and, for historical reads, an existing revision or valid revision range."}
+      {
+        "status": "declared",
+        "statement": "The caller selects an exact registered project and, for historical reads, an existing revision or valid revision range."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Inputs are a stable project ID plus an optional search query, historical revision, or from/to revision range."}
+      {
+        "status": "declared",
+        "statement": "Inputs are a stable project ID plus an optional search query, historical revision, or from/to revision range."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Project lists return ID, canonical path, status, and HEAD. Repository show and search use schema 2. They return project ID, selected revision, and selected concepts with ID, full label and meaning, active state, replacement, and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals, and revision bookkeeping. Log and diff return complete immutable revision records."}
+      {
+        "status": "declared",
+        "statement": "Project lists return ID, canonical path, status, and HEAD. Repository show and search use schema 2. They return project ID, selected revision, and selected concepts with ID, full label and meaning, active state, replacement, and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals, and revision bookkeeping. Log and diff return complete immutable revision records."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."},
-      {"status": "declared", "statement": "Repository meanings describe maintained terminology; groundings record the sources of semantic revisions."}
+      {
+        "status": "declared",
+        "statement": "Concept identity is stable across wording and path changes; active or retired state, distinctions, groundings, and withdrawals are replayed from immutable typed effects rather than a mutable projection."
+      },
+      {
+        "status": "declared",
+        "statement": "Repository meanings describe maintained terminology; groundings record the sources of semantic revisions."
+      },
+      {
+        "status": "declared",
+        "statement": "Typed effects define, revise, differentiate, retire, reopen, ground, or unground concepts. Active labels are unique after trimming, whitespace collapse, and Unicode lowercase conversion; complete effect validation precedes atomic commit."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Project ID identifies one registered semantic repository, concept ID identifies one stable concept, and positive revision number identifies one contiguous committed effect set."},
-      {"status": "not_applicable", "statement": "The repository surface defines no quantitative usage or pricing unit."}
+      {
+        "status": "declared",
+        "statement": "Project ID identifies one registered semantic repository, concept ID identifies one stable concept, and positive revision number identifies one contiguous committed effect set."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "The repository surface defines no quantitative usage or pricing unit."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "A snapshot replays every committed revision through the selected head; a historical snapshot stops exactly at its selected revision and preserves retirement and withdrawal history."},
-      {"status": "declared", "statement": "Repository reads select stored semantic revisions and their provenance."}
+      {
+        "status": "declared",
+        "statement": "A snapshot replays every committed revision through the selected head; a historical snapshot stops exactly at its selected revision and preserves retirement and withdrawal history."
+      },
+      {
+        "status": "declared",
+        "statement": "Repository reads select stored semantic revisions and their provenance."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "The supported read boundary is the local Semantics repository CLI; direct SQLite access and disclosure outside the local project boundary are unsupported."}
+      {
+        "status": "declared",
+        "statement": "The supported read boundary is the local Semantics repository CLI; direct SQLite access and disclosure outside the local project boundary are unsupported."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Reads are side-effect free and deterministic over contiguous immutable revisions; any replay validation failure stops instead of returning a partial normal result."}
+      {
+        "status": "declared",
+        "statement": "Repository reads append no domain changes and replay contiguous immutable revisions deterministically. Opening state can perform a supported versioned migration; replay validation failure stops instead of returning a partial normal result."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "Each invocation selects one registered project and bounded command arguments; it invokes no worker, model, upstream system, or network."},
-      {"status": "unspecified", "statement": "No repository-size, result-count, or wall-clock read service-level objective is promised here beyond command-specific bounds."}
+      {
+        "status": "declared",
+        "statement": "Each invocation selects one registered project and bounded command arguments; it invokes no worker, model, upstream system, or network."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No repository-size, result-count, or wall-clock read service-level objective is promised here beyond command-specific bounds."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Capability contract version 2 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."},
-      {"status": "unspecified", "statement": "No future contract deprecation or repository migration window is promised by this read capability."}
+      {
+        "status": "declared",
+        "statement": "Capability contract version 2 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future contract deprecation or repository migration window is promised by this read capability."
+      }
     ],
     "reliances": [
-      {"status": "not_applicable", "statement": "Repository reads invoke no Annals, Decisions, Conversations, Nucleus, Chancery runtime, model, or network; retained groundings are local provenance rather than live dependencies."}
+      {
+        "status": "not_applicable",
+        "statement": "Repository reads invoke no Annals, Decisions, Conversations, Nucleus, Chancery runtime, model, or network; retained groundings are local provenance rather than live dependencies."
+      }
     ]
   },
   "manual": "manuals/repository-explore.md"

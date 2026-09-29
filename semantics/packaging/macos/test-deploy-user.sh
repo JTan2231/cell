@@ -248,6 +248,7 @@ cp -R "$temporary/package" "$legacy_package"
 legacy_bundle="$legacy_package/share/chancery/semantics"
 /usr/bin/plutil -replace schema_version -integer 2 "$legacy_bundle/provider.json"
 /usr/bin/plutil -remove promise_scope "$legacy_bundle/provider.json"
+/usr/bin/plutil -remove overview "$legacy_bundle/provider.json"
 /usr/bin/plutil -replace provider.release -string 0.1.0 "$legacy_bundle/provider.json"
 for legacy_entry in "$legacy_bundle"/entries/*.json; do
     /usr/bin/plutil -remove promise "$legacy_entry"
@@ -472,7 +473,7 @@ legacy_selected_definition=$(sed -n '2p' \
     "$legacy_selected_release" ]
 [ "$(plutil -extract definition_digest raw \
     "$legacy_state/.deployment-maintenance.json")" = "$legacy_selected_definition" ]
-grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*3' "$legacy_provider"
+grep -Eq '"schema_version"[[:space:]]*:[[:space:]]*4' "$legacy_provider"
 [ "$(plutil -extract versions.semantics raw "$legacy_state/install/current/manifest.json")" = "$SEMANTICS_TEST_VERSION" ]
 grep -Fx 'version=0.1.0' "$legacy_state/install/previous/manifest.txt" >/dev/null
 HOME="$legacy_home" "$package/deploy-user.sh" --binary "$candidate" --clockwork "$clockwork" \

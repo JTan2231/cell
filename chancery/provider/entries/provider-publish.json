@@ -51,7 +51,31 @@
     }
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "chancery.bundle.validate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "chancery.directory.discover",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "chancery.capability.resolve",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
   ],
   "session_surfaces": [
     "product source tree",
@@ -69,7 +93,7 @@
     "Use current product contracts to author provider scope, optional schema-4 overview, distinct feature and operation entries, and self-contained operating essentials. Keep full feature explanations in their capability manuals and preserve request boundaries, normalized claims, effects, authority, success, recovery, privacy, interfaces, dependencies, and substantive reliances.",
     "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
     "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
-    "Exercise product CI and deployment rollback, then deploy the product release.",
+    "Exercise product CI and deployment rollback, deploy the owning release, and separately register each updated participating program inventory.",
     "Run Chancery doctor and confirm that product, provider-filtered list, show, and exact-ID resolve expose the installed overview and contracts with their full meaning, scope, basis, gaps, and status."
   ],
   "checkpoints": [

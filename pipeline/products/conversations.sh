@@ -22,4 +22,4 @@ RELEASE_UNITS='conversations|Conversations|package|conversations/crates/conversa
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='conversations|target/release/conversations|conversations
 conversations|target/release/conversations-install|conversations-install'
-PROVIDERS='conversations|conversations|conversations/chancery|2'
+PROVIDERS='conversations|conversations|conversations/chancery|4'

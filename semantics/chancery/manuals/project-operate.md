@@ -1,28 +1,53 @@
 # Operate Semantics projects and service
 
-## Readiness
+Use this procedure to install, verify, register, seed, move, pause, retire,
+diagnose, recover, or uninstall Semantics. Semantics owns project state and
+semantic commits. Annals owns source bytes and feed identity; Nucleus owns
+execution; Clockwork owns activation and incident halts.
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
+Read `chancery resolve semantics.project.operate` for this procedure and its
+required contracts. Use `chancery show ID` for one subject:
 
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
+| Feature | Detailed contract |
+| --- | --- |
+| Terminology, effects, output, and replay | `semantics.repository.explore` |
+| Participation, activation, lifecycle, and bootstrap seed | `semantics.projects` |
+| Intake, instructions, restricted jobs, commits, and retry | `semantics.reconciliation` |
+| Readiness, holds, installation guarantees, and recovery | `semantics.service` |
 
-Before installation or maintenance, verify Annals decision-account exchange
-contract 2 and Nucleus execution contract 3, and Clockwork schedule contract 3. Chancery documents these
-contracts. The Semantics worker does not call Chancery.
+Read `nucleus manual` before shared maintenance. A contract or successful
+readiness observation does not authorize installation, a new model job, upstream
+mutation, or data removal by itself.
+
+## Inspect before effects
+
+1. Select the exact installation, private database, and Annals decisions config.
+2. Inspect project state, retained intake, selected schedule, and runtime history.
+3. Verify Annals exchange 2, Nucleus execution 3, Clockwork schedule 3, and the
+   complete Bazaar prompt selection for the intended work.
+4. Preserve existing project pauses, schedule intent, incident halts, and holds.
+5. Stop if ownership, dependency compatibility, admitted jobs, or recovery state
+   cannot be proved. Do not clear a correlation, cursor, marker, or foreign hold.
+
+```sh
+semantics project list
+semantics intake status
+semantics --json doctor
+clockwork --json binding show semantics/worker
+clockwork --json history semantics/worker --limit 20
+```
+
+Doctor must report `ok:true` and green database, participation-marker, Annals-feed,
+and Nucleus-reconciliation checks. This verifies selected prerequisites rather
+than a future semantic result. Inspect Conversations only for historical jobs
+whose retained recovery requires its contract.
+
+## Install or update
 
 Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
 validates, attempts bounded repairs, deploys, and emails the outcome. For an
-explicitly authorized manual installation or recovery, build and install
-artifacts from a validated source candidate:
+explicitly authorized manual installation or recovery, select matching artifacts
+from a validated source candidate:
 
 ```sh
 cargo build --release --locked --package semantics
@@ -32,69 +57,32 @@ cargo build --release --locked --package semantics
   --clockwork /absolute/path/to/clockwork
 ```
 
-The Rust `semantics-install` binary owns the transaction that stops services,
-backs up the database and sidecars, runs candidate doctor, and selects the
-content-addressed release. That transaction also controls public CLI and
-provider selectors and the `semantics/worker` Clockwork binding.
-
-The installer hashes the unrendered template into the release. It renders
-absolute paths after the release identity exists and verifies the selected
-definition against the current release's exact runner and schedule. This check
-records the selection at that time; Clockwork does not perform a compare-and-swap.
-Semantics serializes its lifecycle tools. Direct concurrent changes to the
-binding are unsupported and can require recovery with maintenance held.
-
-The installer registers the inactive candidate definition, disables the prior
-binding, and stops any owned legacy LaunchAgent. It refuses foreign or changed
-artifacts. Deployment and uninstall share an update lock. Deployment also holds
-the worker's exact cross-process flock to exclude manual reconciliation between
-SQLite checks. It runs candidate doctor in a scrubbed environment.
-
-Rollback restores the exact prior Clockwork selection
-and enabled state, or the prior owned legacy LaunchAgent, never both. A
-previously absent or disabled-null binding becomes a disabled tombstone that
-may retain the candidate digest because Clockwork has no clear-selection
-operation; a previously disabled selected definition is restored without
-transient activation. If
-rollback cannot prove scheduler/database quiescence, the deployer retains the
-release-independent maintenance gate before releasing that flock, attempts
-both scheduler cleanups, and removes public selectors. When a newly selected
-candidate cannot be cleared back to a prior null selection, its exact private
-`current` release selector and authenticated hold are retained as ownership
-evidence. Semantics retains exact release bytes for
-registered definitions. Use `semantics-install recover --transaction ABSOLUTE_TRANSACTION --clockwork ABSOLUTE_CLOCKWORK` with the retained private database, prior schedule and selector receipts. A candidate retained after a prior null selection requires explicit `recover --forward`; it verifies the authenticated exact candidate, runs scrubbed doctor and restores its binding before releasing its hold. A durably committed transaction always resumes forward. Recovery verifies the complete saved database inventory before replacing live files and never chooses a legacy watermark.
-
-The release-independent maintenance marker must be a current-user-owned,
-mode-`0600`, non-hard-linked regular file. Both the pinned worker runner and
-the public command frontend honor it, fencing public work through publication
-and durable commit. An existing marker is validated and
-never truncated. `--keep-maintenance` retains a Semantics-owned marker plus
-private receipt bound to the exact key, release ID, and definition digest; a
-later successful invocation of the same release without that option releases
-only the matching hold. An unreceipted pre-existing marker is preserved and
-never claimed. Before definition registration, the deployer likewise
-validates any existing worker stdout/stderr file as a current-user-owned,
-non-hard-linked regular file and restricts its mode to `0600` without changing
-its contents.
-
-Verify:
+1. Quiesce affected requesters and let admitted intake and Nucleus jobs settle.
+2. Capture selected definition, enabled state, project pauses, and existing holds.
+3. Use the Rust installer. It registers an inactive exact-release definition,
+   suspends public work, holds the worker lock, proves SQLite closed, and privately
+   backs up database plus sidecars before candidate doctor can migrate state.
+4. Stop on foreign artifacts, unsupported admission, changed ownership evidence,
+   failing doctor, or an unproved rollback. Preserve its retained transaction.
+5. Verify the selected installation before restoring only captured admission.
 
 ```sh
-/Users/joey/.local/bin/semantics --json doctor
-/Users/joey/.local/bin/clockwork --json binding show semantics/worker
-/Users/joey/.local/bin/clockwork --json history semantics/worker --limit 20
-/Users/joey/.local/bin/chancery show semantics.repository.explore
+semantics --register-usage
+semantics --json doctor
+clockwork --json binding show semantics/worker
+clockwork --json history semantics/worker --limit 20
+chancery product semantics
+chancery show semantics.repository.explore
+chancery resolve semantics.project.operate
 ```
 
-Doctor must report `ok:true` and green `database`,
-`participation_markers`, `annals_decision_feed`, and
-`nucleus_reconciliation` checks. The database schema is 3. This proves
-dependency readiness, not that a future semantic event will succeed. The
-Annals check fails whenever an active or paused project lacks the selected
-decisions-library identity or its activation and scan cursors; only a database
-with no such projects may remain activation-pending.
+Require the expected command/provider release, exact definition and runner,
+intended enabled state, and green doctor. Chancery reads documentation only.
+Verification creates no project, semantic revision, or synthetic model job.
+The full release, rollback, marker, and retained-state rules are in
+`semantics.service`.
 
-## Run-owned deployment admission
+## Hold and drain coordinated deployment
 
 ```text
 semantics --database DATABASE --json maintenance status
@@ -102,72 +90,32 @@ semantics --database DATABASE --json maintenance hold RUN_ID
 semantics --database DATABASE --json maintenance release RUN_ID
 ```
 
-The private sibling `<database>.cell-maintenance` is separate from the
-installer's marker and receipt. These commands do not open, initialize, or
-migrate SQLite; status leaves an absent gate absent. They return
-`protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
-describes participating live commands, so durable intake and dependency jobs
-still require separate product-owned quiescence evidence.
+1. Acquire the deployment run's own hold and inspect its ownership.
+2. Drain live commands and separately prove durable intake and Nucleus jobs settled.
+3. Let the product adapter configure and verify with scheduling disabled.
+4. Release only this run's hold after group verification.
+5. Activate only captured enabled intent after all affected holds are released.
 
-A hold fences every other public CLI and typed client command before SQLite
-access, including reads and doctor because opening state may migrate it.
-Existing commands may settle and holds survive process exit. Hold and release
-are idempotent; release removes only its named owner and preserves project
-pause, activation, and cursors. IDs contain 1–128 ASCII letters, digits,
-hyphens, underscores, or periods and cannot begin with a period.
+A hold fences reads and doctor before SQLite access. Only controlled installer
+commands may use `CELL_DEPLOYMENT_RUN_ID` under the same sole drained hold.
+Waiting does not cancel or retry work. An unavailable existing Nucleus runtime
+does not prove an empty job inventory. The candidate cannot fence unsupported
+old commands: use the documented compatibility release and quiescence procedure
+before coordinated deployment. Preserve other markers, pauses, and incident halts.
 
-Controlled installer commands set `CELL_DEPLOYMENT_RUN_ID` only for the same
-sole hold with exclusive drained activity. With no hold, they use ordinary
-admission. Only doctor can prove deliberately held Nucleus readiness for that
-same run: runtime drain, authentication, harness, required Semantics
-capabilities, and protocol remain checked. Ordinary reconciliation still
-requires normal Nucleus admission.
-
-The compiled Cell adapter invokes the Rust installer while preserving project
-pause, activation and scan cursors, and captured schedule enabled booleans.
-Ordinary updates omit the legacy watermark operation below. It requires
-maintenance support from currently installed public binaries before effects;
-unsupported old binaries need a compatibility release through the documented
-deployer and quiescence procedure. A candidate gate cannot fence old commands.
-Recovery invokes the retained transaction for this exact owner. It restores
-pre-commit state or completes a committed candidate with scheduling disabled.
-A candidate whose prior null schedule cannot be restored is proved forward
-through its authenticated receipt. Unknown ownership, changed evidence, or
-unproved readiness keeps the outer hold.
-
-## Activate a migrated database
-
-Schema 2 preserves every legacy Decisions cursor, envelope, assignment,
-status, revision, effect, correlation, and mailbox receipt without creating an
-Annals cursor. Before the one-time feed cutover, stop legacy lifecycle append,
-advance every project through its final legacy watermark, resolve active or
-ambiguous legacy Nucleus jobs, engage maintenance, disable the worker and
-public command, prove the database closed, and privately back up the database
-plus sidecars. With the dedicated Annals library healthy and Krisis still
-gated, run the deployer with the captured final Decisions watermark and
-`--keep-maintenance`; it invokes the candidate's hidden
-`project activate-annals` command. It binds
-the exact library and one current watermark to every existing non-retired
-project. Historical Decisions rows are not imported. Verify doctor and fixed
-feed replay before enabling the schedule, then enable Krisis last. Finish with
-a successful same-release deployer invocation without either cutover option to
-release the authenticated Semantics hold.
-
-Before the first new account, a failed cutover restores the exact database,
-sidecars, selectors, and worker state. After any new account or account-derived
-revision commits, recovery is forward under maintenance; never run an old
-binary or discard new state.
+Settings accept only boolean `enabled`; omission preserves captured intent and
+new schedules default to enabled. `{"semantics":{"enabled":false}}` keeps
+scheduling disabled. Recovery restores prior intent and ignores that override.
 
 ## Register and seed a folder
 
-Add exactly one line to the folder's regular root `AGENTS.md`:
-
-```text
-Semantics-Project: project-id
-```
-
-Also explain locally that the Semantics repository is maintained terminology
-authority and that source/tests remain behavior authority. Then:
+1. Add exactly one `Semantics-Project: project-id` line to the regular root
+   `AGENTS.md`. Explain that Semantics owns terminology and history while project
+   source, tests, and product documentation own runtime behavior.
+2. Register the exact canonical folder. Registration excludes earlier documents
+   by capturing the current Annals watermark.
+3. Seed existing vocabulary only while HEAD is revision 0.
+4. Verify project identity, root, and repository HEAD.
 
 ```sh
 semantics project register project-id /absolute/project/root
@@ -175,185 +123,157 @@ semantics repository seed-markdown project-id /absolute/project/root/seed.md
 semantics repository show project-id
 ```
 
-Registration captures the current watermark from the exact configured Annals
-decisions library; earlier accounts are outside automatic intake. Seeding is allowed only at revision 0,
-must use a source inside the canonical root, and commits one atomic revision
-with a project-relative source label and digest. The seed file is required only
-for that command. After verifying repository HEAD, it may be removed under the
-project's normal file-change authority; replay uses committed effects and does
-not reopen the source.
+For a single definition, use `semantics repository seed PROJECT --label LABEL
+--meaning MEANING [--grounding STATEMENT]`. Seed files must be inside the canonical
+root. After verifying HEAD, the source may be removed under normal project
+file-change authority. Replay uses committed effects and never reopens it.
+If authorized to begin reconciliation now, run `semantics --json intake run`
+and inspect its report and durable intake before relying on periodic activation.
 
-## Routine operation
+## Move, pause, resume, or retire
 
-Clockwork requests the private one-shot worker every 60 seconds with no
-run-at-load, overlap skipped, no timeout, and exact release-local interpreter
-and runner hashes. It serially
-resumes, scans, routes, and processes at most one reconciliation. Inspect:
-
-```sh
-semantics project list
-semantics intake status
-semantics --json intake run
-```
-
-Each accepted document after a project's activation cursor becomes intake for
-that project. Semantics supplies the complete text and project repository to
-its reconciliation agent. No source metadata, conversation lookup, document
-layout, or mechanical relevance rule is required. The instructions in
-the Bazaar `semantics.document.instructions` document govern relevance and interpretation. The agent
-can submit an empty effect list; this completes intake as `ignored` without
-adding a repository revision. Each document can require one call per project,
-while the worker remains serial and handles at most one reconciliation per run.
-
-New intake IDs are local per-project identities. Embedded Annals event and
-document IDs remain unchanged. Grounds, when supplied, name the original
-library/event/document. Historical account and Decisions intake retain their
-old projections, states, grounding kinds, and job decoders. Use `intake assign
-EVENT PROJECT` only to resolve historical unassigned intake after checking the
-project; assignment history is audited.
-
-Pause before maintenance:
+Pause before semantic maintenance. Prepare the exact marker at a new root before
+moving:
 
 ```sh
 semantics project pause PROJECT
 semantics project move PROJECT /new/canonical/root
 semantics project resume PROJECT
+semantics project show PROJECT
 ```
 
-The new root must carry the exact marker. A move preserves stable identity and
-both Annals and legacy cursor histories. Pausing prevents pending and late in-flight proposals from
-committing. Retirement is permanent, is allowed only while paused, and does not
-require the old folder to exist. It marks pending or paused intake with zero
-attempts and no retained Nucleus request as `ignored` with reason
-`project_retired`. Retirement and these changes commit together, preserving
-source bytes, repository history, and cursors. Attempted, processing, failed,
-correlated, or awaiting-review intake blocks retirement and leaves all state
-unchanged.
+Verify stable identity, new canonical root, preserved HEAD/cursors, and intended
+status. Pause rejects late commits and resume revalidates the marker. Neither
+operation releases a deployment hold or Clockwork incident halt.
 
-For failed intake, inspect the error and Nucleus job first. `intake retry`
-refuses a nonterminal prior job or an admitted job whose terminal state cannot
-be proven. Never clear the stored correlation or manufacture a cursor.
+Use `semantics project retire PROJECT` only for intended permanent retirement
+from paused state. It closes only unstarted pending/paused intake with zero
+attempts and no retained request. Attempted, processing, failed, correlated, or
+awaiting-review intake blocks the transition. A refusal leaves all state unchanged.
+The former folder may be absent. Verify retired status and retained history.
 
-## Privacy and logs
+## Inspect and recover intake
 
-The worker sends Nucleus the full accepted document and selected repository
-snapshot. The document may contain private conversation text. Semantics stores
-it for durable replay. New intake requires no origin anchor or resolved cwd.
-Nucleus runs in a neutral temporary cwd with workspace `none`, no shell, and no
-web. Logs may contain counters, opaque IDs, and bounded
-product-owned failures. They must not contain raw dependency diagnostics,
-account statements, context, action, result, conversation or project content,
-anchors, paths, prompts, credentials, diffs, commands, or tool payloads.
-Clockwork retains definition, binding, schedule, process, and bounded incident metadata and
-does not ingest those product-owned log bodies.
-
-## Uninstall
+1. Read both collections from `semantics intake status`, including the exact
+   source, state, error, retained requester/job, and any applied revision.
+2. Inspect the exact Nucleus job before deciding whether another attempt is safe.
+3. Use `semantics intake assign EVENT PROJECT` only for historical unassigned
+   intake after verifying target identity and marker.
+4. Use `semantics intake retry EVENT` only for failed intake whose prior admitted
+   job is positively terminal. Stop on an active or uncertain job.
+5. Inspect the next authorized worker report and retained intake/repository result.
 
 ```sh
-/absolute/path/to/target/release/semantics-install uninstall \
+semantics intake status --status failed
+nucleus jobs status JOB_ID
+semantics intake retry EVENT_ID
+```
+
+A no-effect result is interpreted completion as `ignored` without a revision.
+A runtime failure after a commit preserves that commit. Do not rerun work solely
+because output or transport is missing. Detailed intake and receipt rules are in
+`semantics.reconciliation`.
+
+For a scheduling halt, inspect `clockwork incident list semantics/worker` and
+`clockwork incident show INCIDENT_ID`. Resolve the product failure first. Only
+explicit approval followed by `clockwork binding resume semantics/worker
+INCIDENT_ID` releases that halt; it creates no domain retry. Do not clear it
+through deployment, project resume, or a definition switch.
+
+## Update selected instruction text
+
+1. Import the reviewed migration seed before deploying callers; runtime reads
+   do not initialize prompt state.
+2. Append the component with `bazaar update PROMPT_ID --file /absolute/prompt.txt`.
+3. Read the returned positive version and publish a complete selection with
+   `bazaar update cell.prompts.semantics --file /absolute/selection.json`.
+4. Retain selection version 1 and all referenced component versions.
+
+Use `bazaar --database /absolute/private/bazaar.sqlite3` when the caller uses
+`CELL_BAZAAR_DATABASE`. A text append alone does not select it. To roll back,
+append the prior complete selection content. Keep text out of logs. Saved
+requests and retries retain their frozen instructions.
+
+## Activate a migrated database once
+
+1. Stop legacy lifecycle append and capture its final opaque Decisions watermark.
+2. Advance every non-retired project's legacy scan cursor to that exact value.
+   Finish pending/processing legacy work. Prove each retained job terminal with
+   its exact request, or positively absent if never recorded as admitted.
+3. Hold external Krisis and Annals lifecycle gates. Disable the worker and public
+   command, prove SQLite closed, and privately back up database plus sidecars.
+4. With the dedicated Annals library healthy and Krisis still gated, invoke the
+   validated installer with the captured watermark and retained maintenance:
+
+```sh
+/absolute/path/to/semantics-install install \
+  --binary /absolute/path/to/semantics \
+  --bundle /absolute/path/to/cell/semantics/chancery \
+  --clockwork /absolute/path/to/clockwork \
+  --final-decisions-watermark OPAQUE_CURSOR \
+  --keep-maintenance
+```
+
+The flags assert stopped legacy append and held external gates. The candidate
+checks those legacy conditions and binds one Annals library/current watermark to
+all non-retired projects atomically. It imports no historical Decisions rows.
+There is no default activation. Ordinary later updates omit the watermark.
+
+5. Verify doctor, fixed feed replay, selected provider, and exact worker binding
+   before enabling scheduling. Enable Krisis last after cross-product readiness.
+6. Release only the authenticated Semantics hold with a successful invocation of
+   that same installed release, omitting both cutover options:
+
+```sh
+"$HOME/Library/Application Support/Semantics/install/current/package/install" install \
+  --bundle "$HOME/Library/Application Support/Semantics/install/current/share/chancery/semantics" \
+  --binary "$HOME/Library/Application Support/Semantics/install/current/libexec/semantics" \
+  --clockwork "$HOME/.local/bin/clockwork"
+```
+
+Before the first new account, failure can restore the exact pre-cutover bytes,
+selectors, and scheduler. After any new account or account-derived revision
+commits, recover forward under maintenance; never run an old binary or discard
+new state. Stop on an unknown legacy cursor/job or changed ownership evidence.
+
+## Recover installation or uninstall
+
+Inspect the exact retained `install/.transaction.*/transaction.json`, saved
+inventory, selector receipts, prior schedule, and authenticated hold. Use the
+current candidate installer for that transaction:
+
+```sh
+/absolute/path/to/semantics-install recover \
+  --transaction /absolute/path/to/Semantics/install/.transaction.EXACT \
   --clockwork /absolute/path/to/clockwork
 ```
 
-This disables the owned Clockwork binding, removes any owned legacy LaunchAgent
-and CLI/provider selectors, and retains the database, releases, immutable
-definitions, activation history, and product logs. Removing retained state requires a
-separate explicit destructive decision.
+A committed transaction resumes forward. A prior null selection requires
+explicit `recover --forward` for the same retained transaction. It proves exact
+candidate ownership and readiness while gated. It never chooses a legacy
+watermark. Unknown ownership, incomplete backup, foreign locks/artifacts, or
+changed evidence keeps maintenance. Do not remove the gate to force progress.
+Verify doctor, exact selectors/binding, and captured intent before releasing
+outer holds. Follow `semantics.service` for complete rollback guarantees.
 
-Rust callers may use `semantics::api::Client` for the public project, seeding,
-intake, and diagnostic CLI operations with provider-owned return types. The
-client does not invoke hidden cutover or worker operations. Each explicit
-method retains the corresponding command's authorization and effect boundary.
+For intended removal of installed commands and scheduling:
 
-The deployment adapter verifies the installed dependency configuration with
-doctor. Verification does not create projects, revisions, or Nucleus jobs.
+```sh
+/absolute/path/to/semantics-install uninstall \
+  --clockwork /absolute/path/to/clockwork
+```
 
-## Output selection
+Verify the owned binding is disabled and owned public CLI/provider selectors
+are removed. Uninstall retains database, releases, definitions, activation
+history, and logs. Retained-state deletion needs a separate destructive decision.
 
-Project list returns ID, canonical current path, status, and HEAD. Project show
-and operational receipts return complete selected records. Ordinary repository
-show and search return compact terminology views. `show --provenance` returns
-the full replay. Project, intake, and maintenance operations retain their
-documented authority and recovery rules.
+## Privacy and command usage
 
-## Document compatibility
+Keep private documents, repository meanings, paths, requests, and backups inside
+the local boundary. Inspect only necessary evidence. Routine logs contain
+counters, opaque IDs, and bounded product failures rather than source bodies,
+raw dependency diagnostics, paths, prompts, credentials, or tool values.
 
-Annals exchange 2 returns complete text, filename, digest, acceptance time, and
-transport identities. Pages contain at most 200 events and 4 MiB of document
-bytes. A short nonempty page is not an end marker; continue until empty.
-Semantics schema 3 preserves prior intake and cursor state, makes origin fields
-optional, and supports per-project intake and no-change completion. Existing
-admitted jobs keep their immutable request and schema identities. New jobs use
-`semantics/semantic-document-reconciliation/1` with document-specific input and
-result schemas. No library contents or semantic history are reinterpreted by
-migration.
-
-## Scheduled failure policy
-
-Semantics configures Clockwork definition schema 2 for `semantics/worker` with
-`[failure] on_abend = "halt-until-approved"`. A worker reports only failures
-encountered by its current invocation. `intake run` prints its report and returns
-nonzero when `error_event_id` is present. Retained failed intake is not rescanned
-as a new incident. Normal mailbox waiting, an overlapping worker, a paused
-project, maintenance, or no eligible intake does not itself constitute an abend.
-A returned dependency or reconciliation error is an abend even when its job
-remains in progress awaiting definitive recovery evidence.
-
-A terminal failed or cancelled Nucleus job after a semantic commit preserves
-that commit and reports its exact job ID to Clockwork. The report contains a
-bounded code and opaque identity, never document text or raw runtime diagnostics.
-The runner forwards Clockwork's correlated activation context through its
-otherwise scrubbed environment. It does not poll historical completed jobs.
-
-Clockwork owns the durable halt, future admission, and one retained notification
-through `HOME/.local/bin/email`. Inspect `clockwork incident list
-semantics/worker` and `clockwork incident show INCIDENT_ID`. Only explicit
-approval followed by `clockwork binding resume semantics/worker INCIDENT_ID`
-releases that halt. Definition switches, deployment, project resume, and intake
-retry preserve it. The last two operations remain Semantics-owned domain controls.
-Scheduling continuation creates no retry and cannot authorize a new request
-while a prior Nucleus job remains uncertain. Schema-one definitions acquire the
-new policy only when a schema-two definition is explicitly selected.
-
-Deployment settings accept only `enabled`. `enabled` must be a boolean.
-For example, `{"semantics":{"enabled":false}}` keeps the candidate schedule
-disabled after group activation. An omitted value preserves
-captured intent; a new schedule defaults to enabled. Recovery to the prior
-configuration preserves captured intent and ignores this override. Incident
-halts and operator pauses remain in force.
-
-## Command usage
-
-After each installation or update, run `semantics --register-usage`.
-This registers command inventory without product work.
-
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
-
-## Bazaar prompt selection
-
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.semantics selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.semantics` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.semantics --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+CLI usage recording requires nonempty `CODEX_THREAD_ID`. It records identity,
+time, and thread ID, not arguments, output, or outcomes. Internal calls are
+excluded. Recording errors preserve command results.

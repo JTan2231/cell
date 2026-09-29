@@ -9,8 +9,8 @@ defines both technical and conversational terms:
 ```
 
 Read the repository before you analyze or change Annals code, tests,
-documentation, or interfaces. Code, tests, and component documentation remain
-authoritative for actual behavior. Semantics repository output is contributor
+documentation, or interfaces. Product-owned feature contracts explain supported
+behavior; code and tests verify the implementation. Semantics repository output is contributor
 guidance and must never be added to the constrained liaison's prompt or runtime
 context.
 
@@ -33,12 +33,19 @@ cross-system integration, read:
 
 ## Development workflow
 
-1. Identify the owning Annals contract: CLI, architecture, data model, search,
-   telemetry, installation, Semantics terminology, or preserved historical
-   experiment.
+1. Read `chancery product annals` and select the owning feature contract.
+   Read `chancery show ID` for that feature and `chancery resolve ID` for its
+   required contracts. Annals Usage owns reporting; Semantics owns contributor
+   terminology; experiment walkthroughs remain historical.
 2. Make the smallest change without collapsing work, delivery, examination,
    reconciliation, commit, and revision lifecycles.
-3. Update the owning documentation when public or operational meaning changes.
+3. Update the owning feature and normalized claims when supported meaning
+   changes. Keep prerequisites, effects, stop conditions, and verification in
+   operation manuals. Keep the overview, README, and older topic references as
+   entry points. Validate both source bundles with `chancery validate PATH`
+   and review ordinary `show`, `show --full`, and `resolve` before publication.
+   Required dependencies assemble contracts; related links provide navigation.
+   Include both bundles and their schema-4 overviews in the sealed release.
 4. Commit the changes and submit them through the installed CI manager:
 
    ```sh

@@ -1,179 +1,30 @@
 # CLI
 
-The installed command is `~/.local/bin/semantics`. Output is JSON; `--json`
-selects compact JSON. Errors sent with `--json` have
-`{"ok":false,"error":{"code":"...","message":"..."}}` on stderr.
-
-The default database is
-`~/Library/Application Support/Semantics/semantics.db`. Use
-`--database ABSOLUTE_PATH` or `SEMANTICS_DATABASE` for an isolated database.
-Semantics invokes Annals with an explicit decisions-library config. The
-installed default is
-`~/Library/Application Support/Annals/decisions/config.toml`; set
-`SEMANTICS_ANNALS_CONFIG` only to an absolute alternate path and
-`SEMANTICS_ANNALS` only to an alternate executable.
+Each feature contract owns its supported CLI and typed-client interface.
+Read `chancery product semantics` for the installed inventory and
+`chancery show ID` for the complete selected page. Use
+`chancery resolve semantics.project.operate` for procedures and required features.
 
 ## Deployment maintenance
 
-```text
-semantics --database DATABASE --json maintenance status
-semantics --database DATABASE --json maintenance hold RUN_ID
-semantics --database DATABASE --json maintenance release RUN_ID
-```
-
-Each database has a private durable sibling gate,
-`<canonical-database>.cell-maintenance`. Gate identity follows the canonical
-database path, including a symbolic-link alias. For a new database, it follows
-the canonical existing ancestor. Semantics rejects hard-linked databases
-before admission.
-
-Maintenance commands do not open, initialize, or migrate SQLite. Status does
-not create an absent gate and returns
-`protocol_version: 1`, `contract_version: 1`, `holds`, and `drained`. Drain
-describes live command admission. Before deployment, the product must also
-verify that durable intake and dependency jobs have stopped.
-
-Any hold prevents every other public CLI command, including typed clients,
-repository reads, project operations, and doctor, before database access;
-opening Semantics state can migrate it. Existing admitted commands may settle.
-Repeated holds are idempotent and survive process exit. Release removes only
-the named owner and never changes project pause, activation, or cursor state.
-Run IDs contain 1–128 ASCII letters, digits, hyphens, underscores, or periods
-and cannot start with a period. Invalid owners or unprovable admission fail
-with `deployment_maintenance`.
-
-An installer may use `CELL_DEPLOYMENT_RUN_ID=RUN_ID` for a controlled command
-only under its sole matching hold with exclusive access after activity drains.
-Another owner's hold remains authoritative. With no hold, the command follows
-ordinary admission. Only doctor uses this ID to request proof of deliberately
-held Nucleus readiness. The typed Nucleus proof requires the same sole owner,
-runtime drain, authentication, and harness readiness; Semantics still checks
-required capabilities and protocol. Ordinary reconciliation continues to
-require normal Nucleus admission.
+Read [command admission](../chancery/manuals/service.md#run-owned-command-maintenance)
+and [deployment steps](../chancery/manuals/project-operate.md#hold-and-drain-coordinated-deployment).
 
 ## Projects
 
-```text
-semantics project register ID ROOT
-semantics project list
-semantics project show ID
-semantics project move ID NEW_ROOT
-semantics project pause ID
-semantics project resume ID
-semantics project retire ID
-```
-
-Project lists return stable ID, canonical current path, status, and HEAD.
-
-IDs start with a lowercase letter and contain only lowercase ASCII letters,
-digits, and `-`. Register and move canonicalize a directory and require the
-exact root marker `Semantics-Project: ID` in a regular `AGENTS.md`. Registration
-captures the current accepted-document watermark from the exact configured
-Annals decisions library. Move preserves the stable project identity and both
-the Annals and legacy Decisions cursor histories.
-
-Pause prevents new semantic commits and changes assigned pending intake to
-paused. Resume revalidates the marker. Retirement is permanent, is allowed
-only from paused, and does not require the old folder to exist. It marks pending
-or paused intake with zero attempts and no retained Nucleus request as `ignored`
-with reason `project_retired`. This occurs in the same transaction as retirement
-and preserves intake contents, repository history, and cursors. Attempted,
-processing, failed, correlated, or awaiting-review intake still blocks retirement;
-a refusal leaves the project and all intake unchanged.
-
-For a retained schema-one database, activation is requested only through the
-deployer's explicit `--final-decisions-watermark OPAQUE_CURSOR` option after
-legacy append is stopped and external cutover gates are held. The internal
-candidate command requires that exact value, proves all non-retired legacy
-scan cursors match it, rejects pending/processing legacy work and active or
-ambiguous legacy Nucleus jobs, captures one Annals watermark, and commits all
-new cursors atomically. It has no default activation mode. Already activated
-schema-two and later updates omit the option and retain their identity and cursors.
-The deployer requires `--keep-maintenance` with the one-time watermark so the
-local commit ends in an authenticated Semantics-owned hold; a later successful
-invocation of the same release without either option releases only that hold.
-Never manufacture or parse either cursor kind. Hidden Annals registration
-overrides exist only for isolated tests.
+Read [project interfaces and records](../chancery/manuals/projects.md)
+and [registration and seeding steps](../chancery/manuals/project-operate.md#register-and-seed-a-folder).
 
 ## Repository
 
-```text
-semantics repository show PROJECT [--revision N] [--provenance]
-semantics repository search PROJECT QUERY [--revision N]
-semantics repository log PROJECT [--from N] [--to N]
-semantics repository diff PROJECT FROM TO
-semantics repository seed PROJECT --label LABEL --meaning MEANING [--grounding STATEMENT]
-semantics repository seed-markdown PROJECT PATH
-```
-
-`show` replays HEAD unless a revision is selected. `search` matches
-case-insensitive label or meaning text. `log` and `diff` return immutable
-revision records rather than a mutable projection.
-
-Ordinary `show` and `search` use output schema 2. They return project identity,
-revision, and concepts with ID, label, full meaning, active state, replacement,
-and full distinctions. `show --provenance` returns the full replay representation.
-Rust callers use `RepositoryView` for ordinary reads and
-`Client::repository_provenance` for full replay. These output selections do not
-change the persistent schema or replay behavior.
-
-Seed commands are bootstrap-only and refuse a project that already has a
-revision. `seed-markdown` accepts a project-local definition-list source,
-records its project-relative source label and SHA-256 digest, and commits one
-atomic revision. The source is needed only for that command: after verifying
-repository HEAD, it may be removed under the project's normal file-change
-authority. Replay uses the committed effects and never reopens the seed file.
+Read [repository interfaces, output, and replay](../chancery/manuals/repository-explore.md).
 
 ## Intake
 
-```text
-semantics intake status [--status STATUS]
-semantics intake assign EVENT_ID PROJECT
-semantics intake retry EVENT_ID
-```
-
-Statuses are `unassigned`, `pending`, `awaiting_review`, `paused`,
-`processing`, `applied`, `ignored`, and `failed`. Assignment is an audited
-manual routing correction and revalidates the target marker. Retry applies to
-failed intake and refuses an active or ambiguous prior Nucleus job.
-
-`intake status` returns separate `annals_decision_accounts` and
-`legacy_decisions` collections. The name `annals_decision_accounts` remains for
-compatibility. New documents never use `awaiting_review`; legacy rows retain
-all old states and decoding. New account rows expose a fixed `routing_outcome`
-and project assignment. They do not expose the transient resolved cwd or raw
-dependency diagnostics.
-
-New document intake uses a separate local ID per project. The embedded event
-retains Annals' original identity and full text. A document result with no
-effects ends as `ignored`, with no `applied_revision` or repository revision.
-The configured reconciliation instructions determine relevance. No source
-lookup is required.
-
-`semantics --json intake run` is the private one-shot worker interface selected
-by the installed Clockwork `semantics/worker` definition. It is intentionally
-hidden from normal help. Clockwork owns activation and process history only;
-this report and durable Semantics state own the domain result.
+Read [intake interfaces and results](../chancery/manuals/reconciliation.md)
+and [recovery steps](../chancery/manuals/project-operate.md#inspect-and-recover-intake).
 
 ## Readiness
 
-```text
-semantics doctor
-semantics --json doctor
-```
-
-Doctor checks SQLite schema 3, every non-retired project's exact marker, the
-explicit Annals decisions config and exchange-2 feed/library identity, and
-Nucleus health, capabilities, historical schemas, and the document toolset.
-Conversation lookup is not a document-processing prerequisite.
-
-Doctor captures one fixed Annals watermark. From each distinct installed scan
-cursor, it reads and identically replays each bounded page until an unchanged
-empty page. It rejects page cycles, nonadvancement, duplicate identities,
-changed replay, and more than 1,000 pages from one cursor.
-
-Every active or paused project must have the selected Annals identity and
-activation/scan cursors. An empty database may report
-`activation pending; no active or paused projects`. It has no consumer cursor
-to skip. Its first project registration captures the then-current watermark.
-Doctor exits nonzero if any check fails.
+Read [readiness observations](../chancery/manuals/service.md#readiness-observations)
+and [verification steps](../chancery/manuals/project-operate.md#inspect-before-effects).

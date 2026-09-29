@@ -21,8 +21,14 @@ Semantics-Project: clockwork
   work, locks, retries, idempotency, secrets, logs, and domain success.
 - Store no product output body or secret. Keep definitions, paths, identifiers,
   and activation metadata private to the current user.
-- Update the CLI, architecture, data model, installation guide, packaging, and
-  Chancery contracts together when shared behavior changes.
+- Keep each full behavior explanation in its owning feature contract under
+  `chancery/manuals`. Keep procedure order, prerequisites, consequential effects,
+  stop conditions, and verification in operating manuals. Required dependencies
+  bring the feature explanations into complete resolution.
+- Update the product overview, owning feature contracts, affected procedures,
+  packaging, and documentation entry points together when shared behavior
+  changes. CLI, architecture, data-model, and installation guides provide
+  navigation; they do not maintain competing explanations.
 - `release.sh` commits, tags, and pushes, and the macOS deployer changes
   installed selectors and launchd state. Do not invoke either without separate
   authority.

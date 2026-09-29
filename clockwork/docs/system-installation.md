@@ -1,186 +1,19 @@
-# macOS user installation
+# Clockwork installation and recovery
 
-Clockwork installs one short-lived CLI/broker and one product-owned Chancery
-provider. Direct program installation does not initialize its database, register a
-product definition, create a binding, install a product LaunchAgent, or run a
-product job.
-
-Coordinated `./deploy.sh clockwork` also captures the complete Clockwork binding
-inventory before maintenance. It disables those bindings while retaining their
-selections and failure halts. Product adapters prepare their new definitions
-under their own holds. After all holds are released, Clockwork restores each
-previously enabled binding through the selected broker. This rewrites every
-enabled generated plist with the current immutable Clockwork executable.
-Previously disabled bindings stay disabled. This phase precedes EMT activation.
-An interrupted deployment retains its original inventory and re-establishes
-suspension before recovery; it does not infer intent from temporary disablement.
-
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For an
-explicitly authorized manual installation or recovery, install artifacts from
-a validated source candidate:
+Use [installation operation](../chancery/manuals/install-operate.md) for
+prerequisites, deployment, diagnosis, coordinated broker refresh, rollback,
+selector detach, and explicit schema migration. Read the installed procedure
+and required contracts with:
 
 ```sh
-<TESTED_CLOCKWORK_INSTALL> install \
-  --binary <TESTED_CLOCKWORK_BINARY> \
-  --bundle /Users/joey/rust/cell/clockwork/chancery \
-  --chancery /absolute/path/to/chancery
+chancery resolve clockwork.install.operate
 ```
 
-Deployment stages the binary, Rust installer, and complete provider bundle in
-one content-addressed release. It atomically selects that release for the
-stable command and provider paths. Before either selector changes, the
-supplied candidate Chancery reader must validate the provider copy in that
-staged release. Before commit, the same reader must find all three Clockwork
-entries through the installed provider registry and selected provider path.
+[Installation guarantees](../chancery/manuals/installation.md) own release
+integrity, selectors, retained state, compatibility, and recovery limits.
+[Schedule operation](../chancery/manuals/schedule-operate.md) owns product
+binding changes and explicit incident approval. [Notification behavior](../chancery/manuals/notifications.md)
+owns alert and EMT ownership recovery.
 
-Coordinated deployment accepts Chancery 0.6 through 0.8 for these provider-schema-three
-validation and discovery interfaces. Chancery's separate usage journal does not
-change those interfaces.
-
-Direct installation retains the prior valid selector for rollback. It neither calls
-`clockwork binding switch` nor scans another product for jobs. Missing
-current-user `.local/bin` and Chancery parent directories may be created;
-existing shared parents are validated without changing their modes.
-
-New releases use the shared Rust `cell-install-v2` manifest in `manifest.json`.
-The exact inventory includes `clockwork-install` at `bin/clockwork-install` and
-`package/install`, the product binary, and `share/chancery/clockwork`.
-`~/.local/bin/clockwork-install` follows the selected release. The Rust installer
-also verifies the supported legacy format when admitting an existing install or
-recovering a retained release.
-
-## Installed paths
-
-```text
-~/.local/bin/clockwork
-~/Library/Application Support/Clockwork/clockwork.db
-~/Library/Application Support/Clockwork/locks/
-~/Library/Application Support/Clockwork/install/{current,previous,releases/}
-~/Library/Application Support/Chancery/providers/clockwork
-~/Library/LaunchAgents/org.clockwork.*.plist
-~/Library/Logs/Clockwork/
-```
-
-The database, locks, logs, product LaunchAgents, and product release artifacts
-are retained independently of the installed public selector. They are never
-packaged into a Clockwork release.
-
-## Verification
-
-After deployment, diagnose explicitly:
-
-```sh
-/Users/joey/.local/bin/clockwork --version
-/Users/joey/.local/bin/clockwork doctor
-/Users/joey/.local/bin/chancery show clockwork.schedule.operate
-/Users/joey/.local/bin/chancery doctor
-```
-
-Doctor initializes only an empty unversioned schema-two Clockwork store, refuses
-foreign or unsupported schemas, and may mark retained
-`running` activations `lost` after proving their recorded processes absent. It
-does not execute a product job. Runtime exit evidence does not establish
-product-domain success.
-
-## Rollback
-
-A deployment failure before commit restores the exact prior current and
-previous selectors plus public command and provider views. If coherent
-restoration cannot be completed, it detaches all owned public selectors and
-reports that fail-closed state while retaining releases. After a committed
-deployment, resolve `install/previous` to its canonical owned release directory.
-Use a trusted tested Rust installer to verify and select that retained release:
-
-```sh
-<TRUSTED_CLOCKWORK_INSTALL> recover \
-  --release <VERIFIED_PREVIOUS_RELEASE_DIRECTORY> \
-  --chancery /absolute/path/to/chancery
-```
-
-Do not execute an unverified installer from the retained release.
-Program rollback changes the stable Clockwork binary and provider selector.
-It does not change a binding or its generated plist. Each plist pins an exact
-installed Clockwork binary in a content-addressed release. Do not prune a release
-while a plist or running activation refers to it.
-
-## Uninstall selector
-
-The Rust installer's `uninstall` operation removes only Clockwork's owned command,
-installer, provider, current, and previous selectors after refusing any remaining
-`org.clockwork.*` LaunchAgent plist:
-
-```sh
-<TRUSTED_CLOCKWORK_INSTALL> uninstall
-```
-
-Before running it, disable every binding and verify quiescence. The
-uninstaller serializes with deployment through `/usr/bin/shlock` on the
-private product installation lock; that primitive performs atomic PID
-ownership and safe stale owner recovery rather than path-renaming a previously
-inspected lock.
-
-When the Clockwork state root is absent, uninstall may create that empty
-private root so the same lock path can serialize against a first deployment;
-it creates no runtime database. It does not boot out or delete a product
-schedule, kill a running activation, delete content-addressed releases, remove
-the database, prune history, or delete product logs.
-
-Retained state and releases require a separate, explicit destructive
-operation. Removing selectors is not proof that no already-running child
-remains.
-
-## launchd limits
-
-Clockwork supports current-user LaunchAgents only. The user must have a GUI
-login domain. Timer delivery and catch-up behavior remain subject to launchd,
-login/logout, sleep/wake, clock and time-zone changes, filesystem access and
-TCC, and operating-system resource pressure. No readiness check proves the
-next delivery time.
-
-## Schema-two rollout and rollback
-
-Clockwork 0.5 requires SQLite schema two. Before cutover, hold all product
-schedules, finish or recover active rows with the old binary, and resolve
-pending binding transitions. Retain prior product bindings and Clockwork
-release paths. Program installation changes selectors only.
-
-Run the new exact binary with `migrate --backup /absolute/new-backup-directory`.
-The explicit command refuses active rows, retains a private checkpointed
-database-plus-sidecar backup, and changes only schema. Then register and select
-each supported product's new schema-two definition under maintenance. Preserve
-disabled selections and import any failure-owned product halt with
-`binding halt KEY --code CODE --occurrence ID` before removing its old gate.
-Keep user pauses and product recovery evidence. Do not call `binding resume`
-as part of installation.
-
-Schema-one definitions retain their digest and legacy behavior.
-`binding show KEY` exposes `failure_policy_active: false` until a schema-two
-definition is selected. Every generated plist also pins an exact Clockwork
-binary; refresh supported bindings before releasing maintenance.
-
-Rollback across schema two requires the matching schema-one backup, sidecars,
-Clockwork/product releases, prior definitions and generated plists, plus full
-quiescence. Retain the failed store and newer incident evidence. A pre-halt
-backup must not erase a later halt or authorize resumed work.
-
-## EMT handoff compatibility
-
-Install compatible Iatreion before notification checks are enabled. Clockwork
-uses `$HOME/.local/bin/iatreion` for bounded read-only service reports and
-defaults to the stable checkout `$HOME/rust/cell`. Configure another checkout
-with `clockwork notification policy --cell-root ABSOLUTE_CELL_ROOT`.
-The default alert policy requires five failed checks at least 60 seconds apart.
-This policy applies to both basic alerts and EMT diagnosis.
-
-Before configuring notification emt, refresh all active generated broker
-plists to this handoff-capable Clockwork release. Stable CLI replacement alone
-does not change those pinned brokers. No schema-two database migration is
-needed for the additive incident feed and version-one routing sidecar.
-
-Include `notification-routing.json` and `notification-checks.json` in state
-backups and recovery. Older
-brokers ignore that file. Do not roll back to them while notification claims
-remain: a claimed EMT message may already have been accepted. Preserve the
-database, routing metadata and EMT correspondence together. Disabling new
-EMT routing does not erase prior claims or authorize another initial send.
+This page is an entry point. Installed documentation does not establish live
+readiness or authorize deployment, schedule continuation, or destructive work.

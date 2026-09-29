@@ -28,6 +28,15 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
+Read the installed overview with `chancery product clockwork`, one feature with
+`chancery show ID`, and a procedure with required contracts using
+`chancery resolve ID`.
+
+- [Product overview and feature inventory](chancery/overview.md)
+- [Schedule procedures](chancery/manuals/schedule-operate.md)
+- [Installation and recovery procedures](chancery/manuals/install-operate.md)
+- [Development procedures](chancery/manuals/develop-change.md)
+
 - [Commands and definition format](docs/cli.md)
 - [Installation and recovery](docs/system-installation.md)
 - [Architecture and Rust interface](docs/architecture.md)

@@ -64,14 +64,25 @@
     },
     {
       "label": "Rust document exchange",
-      "invocation": "annals_api::Client::{accept,watermark,read_page}"
+      "invocation": "annals_api::Client::{accept,start,watermark,read_page}"
     },
     {
       "label": "Start reading existing accepted documents",
       "invocation": "annals --config <DECISIONS_CONFIG> decision-feed start"
     }
   ],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "id": "annals.libraries",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.inbox",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
   "does_not_authorize": [
     "Release, installation, provisioning, migration, activation, historical import, publication, remote sharing, direct SQLite or spool editing, deletion, pruning, or storage cleanup.",
     "Using the primary library, changing the configured target per account, or treating local producer routing as authentication against the local user.",
@@ -153,7 +164,10 @@
       }
     ],
     "access": [
-      {"status": "declared", "statement": "Feed reads require only read access to the selected config, catalog, library, prepared SQLite sidecars, and accepted envelopes. Document reads take a shared lock through the existing read-only spool control file. Setup and migration create required coordination files; feed reads never create or repair them."},
+      {
+        "status": "declared",
+        "statement": "Feed reads require only read access to the selected config, catalog, library, prepared SQLite sidecars, and accepted envelopes. Document reads take a shared lock through the existing read-only spool control file. Setup and migration create required coordination files; feed reads never create or repair them."
+      },
       {
         "status": "declared",
         "statement": "Named scope is an identity-checked wrapper over the same account/feed command. Operator-path calls still require explicit --config and reject --library. A name or librarian instruction change cannot bypass immutable decisions admission."

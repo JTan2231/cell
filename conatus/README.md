@@ -28,7 +28,10 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
-- [Commands and recovery](docs/cli.md)
-- [Records and interpretation](docs/design.md)
-- [Installation and activation](docs/installation.md)
-- [Operating contracts](chancery/provider.json)
+- [Product overview and feature inventory](chancery/overview.md)
+- [Initialization, processing, recovery and installation procedures](chancery/manuals/update-operate.md)
+- [Published provider bundle](chancery/provider.json)
+
+Read `chancery product conatus` for the installed overview, `chancery show ID`
+for one feature or procedure, and `chancery resolve ID` for required contracts
+and compatibility gaps.

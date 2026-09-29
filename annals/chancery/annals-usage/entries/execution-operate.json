@@ -33,6 +33,7 @@
   "failure_and_recovery": [
     "An authentication-busy result returns without waiting. Let the current canonical account, refresh, or login operation finish. Do not replace credentials.",
     "If login is needed, quiesce requesters, perform attended device authentication, and verify account and strict Nucleus health before resuming dispatch.",
+    "If deliveries failed before the authentication outage was detected, keep the pause and use the bounded retry procedure in annals.inbox.operate. Failed account preflight leaves queued jobs unattempted.",
     "A missing allowance denominator or per-delivery share is an upstream limit, not a value to estimate."
   ],
   "privacy": [
@@ -46,6 +47,7 @@
   ],
   "dependencies": [
     {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 3},
+    {"id": "annals.inbox.operate", "min_contract": 5, "max_contract_exclusive": 6},
     {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
   ],
   "does_not_authorize": [
@@ -63,11 +65,12 @@
       {"status": "declared", "statement": "Attended login requires authentication recovery authority, quiesced requesters, and later account, strict-health, and deliberate Annals requester verification before any paused dispatch resumes."}
     ],
     "inputs": [
-      {"status": "declared", "statement": "The CLI accepts the selected Annals Usage configuration and one of budget, doctor, or explicit login --device-auth."},
+      {"status": "declared", "statement": "The CLI accepts one of budget [--json] [--config PATH], doctor [--config PATH], or explicit login --device-auth. Other login forms are rejected."},
+      {"status": "declared", "statement": "Report, budget, and doctor configuration selection uses explicit --config, ANNALS_USAGE_CONFIG, usage.toml beside nonempty ANNALS_CONFIG, then the macOS Annals state path under HOME. Relative values resolve from the configuration directory and unknown keys are rejected. Fields are nucleus, optional nucleus_socket, library, and spool; there is no database key. The executable is used only for delegated login; report, budget, and doctor use the socket."},
       {"status": "unsupported", "statement": "No arbitrary account, per-delivery denominator, credential path, offline snapshot, UI scrape, or generic Nucleus service action is accepted."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "Budget returns observation time, account-global scope, plan, available allowance windows, used percentages, reset times, credit fields, and contextual activity."},
+      {"status": "declared", "statement": "Budget returns observation time, account-global scope, plan, available allowance windows, used percentages, reset times, credit fields, and contextual activity. JSON contains the complete live allowance result and, when available, activity result; annals_usage::api exposes the same budget types through the selected reporting executable."},
       {"status": "declared", "statement": "Doctor reports configuration, Annals library and spool access, Nucleus and Codex versions, strict readiness, and authenticated account telemetry boundaries."},
       {"status": "declared", "statement": "Login reports the attended Nucleus-owned authentication result; later account and health checks establish readiness separately."}
     ],

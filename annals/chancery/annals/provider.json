@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "annals",
     "name": "Annals",
@@ -8,14 +8,14 @@
   "promise_scope": {
     "authoritative_for": [
       "Annals owns its named-library catalog, authoritative retained works and source deliveries, stored library instruction revisions, producer-accepted decision documents and their bounded feed, the revisioned corpus of concepts, parent edges and evidence, examinations, reconciliations, commits, inbox jobs and retries, and installed library/spool state.",
-      "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library\u2019s stored instructions; the default frame uses broader/narrower scope."
+      "Each selected library and canonical reducer are authoritative for its stored records and structural domain transitions. A consuming application defines the interpretation of concepts and edges through that library’s stored instructions; the default frame uses broader/narrower scope."
     ],
     "not_authoritative_for": [
       "Nucleus owns shared model execution, authentication, job and attempt state, and raw protocol output. Clockwork owns scheduled activation definitions, bindings, execution history, scheduling failure gates and notifications; Annals owns its failure-policy configuration. Annals owns inbox outcomes. Annals Usage owns its separately versioned consumption projection."
     ],
     "inventory": {
       "covers": [
-        "All supported public Annals CLI outcomes, inbox and library administration, installation and recovery operations, and development operations in this release."
+        "All supported public Annals CLI outcomes and documented provider-owned Rust interfaces, inbox and library administration, installation and recovery procedures, and development operations in this release."
       ],
       "completeness": "complete",
       "excludes": [
@@ -48,6 +48,11 @@
     "entries/inbox-operate.json",
     "entries/library-operate.json",
     "entries/install-operate.json",
-    "entries/develop-change.json"
-  ]
+    "entries/develop-change.json",
+    "entries/libraries.json",
+    "entries/corpus-change.json",
+    "entries/inbox.json",
+    "entries/installation.json"
+  ],
+  "overview": "overview.md"
 }

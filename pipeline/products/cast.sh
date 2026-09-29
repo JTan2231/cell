@@ -21,4 +21,4 @@ RELEASE_UNITS='cast|Cast|package|cast/Cargo.toml|cast-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='cast|target/release/cast|cast
 cast|target/release/cast-install|cast-install'
-PROVIDERS='cast|cast|cast/chancery|3'
+PROVIDERS='cast|cast|cast/chancery|5'

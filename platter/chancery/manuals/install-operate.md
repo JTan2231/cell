@@ -1,163 +1,141 @@
 # Install and maintain Platter
 
-Platter's Rust installer packages the `platter` command, `platter-install`
-recovery executable and matching Chancery provider as one immutable release.
-Use the Cell deployment coordinator to change the installation. Direct
-`platter-install install` and `recover` are refused because replacing this
-requester must preserve admission, pending Nucleus work and domain state.
+Use this operation to inspect or change the matched Platter program/provider
+release, verify readiness, maintain admission, or migrate supported state.
+Platter owns domain state and compatibility. Cell coordinates selected releases;
+Nucleus owns execution. Installation starts no preparation or email.
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. A separate
-release build prepares artifacts without installing them or running domain work:
+Read `nucleus manual` before coordinated maintenance. Read
+`chancery resolve platter.install.operate` for this procedure and its required
+feature contracts. `platter.maintenance` owns installation, hold/drain,
+migration, backup, schedule-definition, and recovery guarantees.
+`platter.materials` owns templates and configuration; `platter.preparation`
+owns readiness and prompt captures; `platter.editions` owns delivery authority.
+
+## Plan and prepare a candidate
+
+1. Identify the exact intended change and its supported state compatibility.
+2. Inspect the canonical state root, current installation, required dependency
+   releases, and maintenance owners.
+3. Select the supported Cell delivery route and applicable installation authority.
+4. Preserve private state and backups outside the source repository.
+
+Use the CI manager for ordinary committed delivery:
+
+```sh
+cell-ci submit COMMIT
+```
+
+The manager integrates, validates, attempts bounded repairs, deploys, and emails
+the outcome. A separate release build prepares artifacts without installing or
+running domain work:
 
 ```sh
 python3 deployment/build.py --source-root /absolute/cell \
   --product platter --output /absolute/cell-build
 ```
 
-When installation is authorized and the changes are committed on local main:
+For separately authorized installation from committed local `main`:
 
 ```sh
 ./deploy.sh plan platter
 ./deploy.sh platter
 ```
 
-`plan` is read-only. A deployment selects its exact local `main` commit; it
-ignores uncommitted changes and does not publish a release, commit, tag or
-push. When selected together, Cast, Annals, Email, Nucleus and Weaver install before
-Platter. Maintenance includes Nucleus and its registered requesters. Unselected
-products must have compatible installed maintenance interfaces and are not
-upgraded to satisfy a missing prerequisite.
+`plan` is read-only. Deployment selects the exact local main commit and ignores
+uncommitted edits. Direct `platter-install install` and `recover` are refused;
+use the coordinator and its retained recovery procedure. When selected together,
+Cast, Annals, Email, Nucleus, and Weaver install before Platter. Maintenance
+includes affected Nucleus requesters. Unselected products need compatible
+installed interfaces and are not implicitly upgraded.
 
-Cast must support collection contract 5 for `job collect`: exact-job retention
-with disabled-source access and preserved ordinary collection policy. Email must
-support `--payload-stdin` before Platter can send database artifacts. Tectonic,
-Python 3 with pypdf, supported source data and compatible
-authenticated Nucleus remain separate prerequisites.
+Require Cast collection contract 5, Email's byte-payload interface, fixed Annals
+Vita reads, compatible Weaver caller identity, authenticated Nucleus, renderer
+tools, and a complete Bazaar prompt selection. Read `platter.maintenance` and
+`platter.preparation` for exact readiness limits. A successful build or catalog
+entry does not prove live readiness or authorize dependency upgrades.
 
-## Owned storage
+## Inspect installation and readiness
 
-Immutable installation files and prior releases remain beneath
-`~/Library/Application Support/Platter/install/releases/HASH`. The
-`cell-install-v2` manifest records exact executable and provider versions,
-file modes, digests and public entry mappings. `package/install` retains the
-installer. The owned `current` selector publishes the matching
-`~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
-`providers/platter` selector together. Manifests contain no private domain
-content. Cell cleanup follows separate rules for unreferenced release history.
-Altered releases, foreign selectors or changed candidate identities stop
-publication. Product and catalog writer locks protect atomic selection and
-file compensation.
+```sh
+platter-install inspect
+platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
+platter-install verify-release /absolute/owned/release
+platter --json doctor
+platter --json doctor --state-only
+```
 
-All durable runtime content and maintenance holds live in schema-seven
-`packets.sqlite3` at the canonical root. Fresh state uses
-`~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
-in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
-match the canonical root; independent custom live libraries are unsupported.
-The database has private mode 0600 inside a private directory. SQLite recovery
-journals remain beside it. Disposable renderer files and caches are confined
-to that directory and removed after rendering; this is not memory-only LaTeX.
+`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
+installed release with the candidate and executing installer. `verify-release`
+checks integrity without changing selectors. Full doctor checks retained state,
+configured PDF and documented command/runtime prerequisites. It collects no
+jobs, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
+Executable identity alone does not prove initialized Cast or Vita libraries.
+State-only verification needs no renderer or external service readiness.
 
-Configuration, original template, captured inputs, compact execution records,
-accepted artifacts, PDFs, frozen editions, explicit job eligibility, send
-receipts and hold owners are covered by a consistent SQLite backup. Platter
-retains no second tool-call ledger. Nucleus's evidence and credentials remain
-separate and are not part of a Platter backup.
+Stop for foreign selectors, changed candidate or release bytes, ambiguous state
+roots, unsupported schemas, invalid configuration, failed readiness, or unknown
+ownership. Do not bypass these conditions with another state directory.
 
-Disposable Ashby board files live in `ashby-cache/BOARD.json` under the same
-runtime root, outside SQLite. Preparation and preview share each download for
-less than 14 days and refresh it when the selected posting is absent. Invalid
-or expired caches are also refreshed on demand. A failed refresh preserves the
-old file but fails retrieval. Cache files are private, can be removed to force
-the next download, and are not required to restore packet history. They have
-no byte cap and are not included in database backups. The selected posting and
-its original download time remain captured in each preparation run.
+## Hold, drain, migrate, and verify
 
-## Maintenance and schema migration
+Use one retained owner identity throughout the authorized maintenance run:
 
 ```sh
 platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
-platter --json doctor
 platter --json doctor --state-only
+platter --json doctor
 platter --json maintenance release OWNER
 ```
 
-Owner holds are durable database rows and do not expire. A process holds an
-advisory activity lock on the state directory for its entire mutating
-command. Holds prevent admission while allowing existing work to finish.
-Installation admission requires the sole matching owner and drained local
-activity. The predecessor maintenance gate and runner lock are also observed
-while present, so a coordinated transition accounts for old binaries already
-running. Empty predecessor gate files are retired on a drained final release.
+1. Hold affected requester admission before holding Nucleus.
+2. Observe actual local and exact matching Nucleus/Weaver work drain.
+3. Require the sole matching owner and activity locks before migration or cutover.
+4. Run migration with its selected absolute private backup path.
+5. Verify retained local state before deployment rebinds dependency paths.
+6. Verify full held readiness after configuration and exact candidate publication.
+7. Release only this operation's hold and restore captured activation intent.
+   Release Nucleus last.
 
-Maintenance reads job-summary pages for `platter` and `job-packets`. When packet
-executions retain Weaver assignments, it also reads `weaver` summaries and
-matches only those exact retained job IDs. It does not read full job output for
-each historical assignment. Unrelated Weaver jobs remain outside its authority.
-Each maintenance observation is bounded to 60 seconds; an incomplete or failed
-observation cannot establish drain.
+Holds are durable and do not expire. Foreign holds and incomplete or failed
+observations prevent drain and cutover. The 60-second observation bound does not
+prove success when it expires. Drain includes only recorded Platter and matching
+Weaver jobs; unrelated Weaver work stays outside Platter's cancellation authority.
 
-Drain cancels orphaned matching work only once local admissions and the
-predecessor runner have settled. It creates no replacement jobs or synthetic
-domain records. Unresolved jobs and other hold owners prevent cutover.
-Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
+Drain can cancel orphaned matching jobs only after local admissions and the
+predecessor runner settle. Its scope is `platter` and `job-packets`, plus only
+the exact Weaver job IDs retained in Platter runs. It creates no replacement
+model attempt or synthetic domain record. Preserve holds if any matching job,
+local activity, or other owner remains unresolved.
 
-For selected Platter, the coordinator can use its sealed candidate for
-maintenance before publication when a read-only check proves schema-seven state.
-This permits a corrected observer to replace a slow installed observer without
-changing the public selection first. The installer still proves ownership of
-the current installation before this choice. Foreign selectors, changed
-candidate bytes, and unsupported state stop the operation.
+The coordinator can use a sealed selected candidate for maintenance only after
+current installation ownership and schema-seven state are proved read-only.
+Supported predecessor state and affected-only installations use the installed
+command. This choice does not migrate state or start domain work.
 
-Candidate maintenance uses the existing protocol, durable owners, activity locks,
-and drain rules. It does not migrate state, prepare packets, or send mail. The
-same choice applies during recovery and release before publication. Supported
-predecessor schemas and existing affected-only Platter use the installed command.
-Actual installed-program identity and readiness remain required after publication.
+Schema-one import commits before backup and hashed file cleanup. Failure before
+commit leaves predecessor state; failure afterward retains new state, originals,
+and recovery information. Resume cleanup only with agreeing backup and source
+hashes. Schemas two through six migrate retained selections and advance to seven.
+Every migration preserves captured inputs, requests, artifacts, and delivery
+identities and retains a complete current-schema recovery backup.
 
-Migration is an explicit one-way schema-one to schema-seven import. It preserves
-packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
-bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
-Legacy reserved/sent jobs become ineligible; their preparation runs remain
-ready. Test occurrences become edition rows without a type discriminator and
-do not determine job eligibility. Any remaining owned runtime files are
-retained as imported artifacts. Duplicate tool history is not imported.
+A current-schema backup is not an old-binary rollback image. Older binaries
+cannot operate schema seven. Recovery needs a compatible candidate or an
+explicitly selected complete predecessor database/files backup and matching
+binary. File compensation does not undo migration. Do not copy an open main
+SQLite database without its journal or reset records to force success.
 
-The import commits transactionally before filesystem cleanup. It then writes
-a complete schema-seven backup and records a hashed cleanup manifest. A missing,
-conflicting or changed source file stops import; backup or cleanup failure
-retains originals and recovery information. Reinvocation resumes cleanup only
-when the chosen backup and remaining source hashes still agree. Only manifest
-files are removed. A backup created here is a schema-seven recovery image, not an
-old-binary rollback image. No production migration is implied by a source edit.
+## Complete an interrupted migration
 
-Old binaries cannot operate schema seven. Do not restore an old binary against
-the migrated database. Recovery after this boundary requires a compatible
-candidate or an explicitly selected complete predecessor database/files backup
-with its matching binary. Installation file compensation does not undo schema
-migration. Preserve holds after unresolved recovery.
-
-Schema-two through schema-six migration adds ordered `edition_packets` records
-from the existing attachment-to-run references and advances the database version.
-It preserves exact selections, captured inputs, requests and artifact bytes. Existing runs
-keep their legacy workflow. The version guard prevents an older binary from
-interpreting a daily brief as a complete tailored packet or deriving packet
-selection from the shared attachment. Each
-migration retains a complete current-schema recovery backup. It does not create
-an old-binary rollback image or start model work. Select a new backup path
-when a retained backup uses a predecessor schema.
-
-Migration verifies retained local state. It does not check dependency readiness
-before deployment updates the retained executable paths. The coordinator runs
-full readiness verification after configuration.
-
-To complete an interrupted migration with a corrected compatible Platter
-executable, retain the exact deployment owner, backup and private completion
-receipt path. Stop concurrent coordinator recovery through its deployment lock.
-Run the corrected command under the existing sole owner hold:
+1. Retain the exact deployment owner, chosen backup, corrected compatible
+   executable, and private completion-receipt path.
+2. Stop concurrent coordinator recovery through its deployment lock.
+3. Require the existing sole hold, drained work, and activity locks.
+4. Complete migration and local verification with the recorded evidence:
 
 ```sh
 CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
@@ -165,172 +143,81 @@ CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
   --completion-receipt /absolute/private/deployment/platter-migration.json
 ```
 
-The command requires drained work and the existing activity locks. It completes
-the migration and local state verification before it writes the coordinator's
-completion receipt. The receipt binds the exact backup path and digest. A repeat
-verifies that evidence and local state; changed evidence stops recovery. An
-existing backup remains unchanged. The command does not rebind dependencies,
-release holds or establish full deployment readiness. Resume coordinator recovery
-after the command succeeds. Omit `--completion-receipt` for ordinary migration.
+5. Resume coordinator recovery only after success.
 
-## Readiness and recovery
+The receipt binds the exact backup path and digest. Repetition verifies that
+basis without changing an existing backup. Changed evidence stops recovery.
+This command does not rebind dependencies, release holds, or establish full
+readiness. Omit `--completion-receipt` for ordinary migration. Keep unresolved
+recovery held; do not perform a direct installer rollback or domain reset.
 
-`doctor` validates a configured resume override and checks retained state,
-Cast/Annals/Email/Weaver executable identities, Cast's exact
-job-URL command, Email's byte-payload interface, renderer availability and
-strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
-`PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
-`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read Vita
-works, render a PDF, submit a model job or send mail. Cast/Annals executable
-identity is not proof that their libraries are initialized. `--state-only`
-requires neither rendering nor external service readiness.
+## Configure future work and preserve activation intent
 
-Read-only installation interfaces remain:
+Deployment initializes a missing template only from an explicit `resume`
+absolute path. It cannot replace an initialized template. Optional
+`projects_template` imports a new template through the Projects-only checks.
+Deployment updates final Cast, Email, and Weaver executable references and
+preserves the flat optional `resume_override`. Read `platter --json config`
+without loading dependency data or preparing packets. Set or clear a daily PDF
+with the configuration procedure in `platter.packet.prepare`.
 
-```sh
-platter-install inspect
-platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
-platter-install verify-release /absolute/owned/release
-```
+Career reads remain fixed to `~/.local/bin/annals` and the library named `vita`.
+Retired `crm_executable` fields are ignored and omitted when configuration is
+saved. No Vita source setting is stored. Deployment supplies no missing prompt
+contents. Before a caller uses separate project editorial policy, publish its
+complete Bazaar components and selection as required by `platter.maintenance`.
 
-`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
-installed release with the candidate and executing installer. `verify-release`
-checks retained release integrity without changing selectors. The sealed version-one
-`platter-install adapter OP` remains the coordinator boundary for inspect,
-hold, drain, apply, verify, release and recover. Apply requires exact run-owned
-maintenance. Candidate and source material are verified; affected-only products
-are not upgraded. Interrupted or unsafe recovery retains its owner hold.
+Cell captures and disables an existing `platter/daily` binding under maintenance.
+It selects an exact updated definition disabled and preserves timer, arguments,
+environment, working directory, output paths, incidents, and enabled intent.
+An absent binding stays absent unless explicit activation settings are supplied.
+Optional `enabled` selects intended activation. Final activation follows all
+hold releases and never clears a failure halt or reconciles a send.
 
-Deployment initializes a missing resume only from an explicit setup path and
-creates or enables a missing binding only from explicit activation settings. It
-prepares no packets and sends no email. Domain artifacts
-and accepted editions have no automatic pruning. Candidate workspaces and
-installation release history remain under Cell's separate retention rules.
-
-## Separately managed daily activation
-
-With user authorization for recurring daily emails, Clockwork can activate the
-verified release's `bin/platter` with the literal argument `run-daily`. Use the
-installed `clockwork.schedule.operate` contract for definition registration,
-binding changes and recovery. The `platter/daily` binding uses a daily local
-calendar trigger at 18:00, run-at-load false, and skip-on-overlap. The Platter
-configuration time zone determines the edition date; Clockwork's trigger
-follows the machine zone. Cell deployment updates an existing binding and preserves its activation intent.
-
-`platter schedule-definition` prints the product-owned schema-two TOML from
-the verified selected executable and configuration. It declares the default
-`halt-until-approved` policy and uses Platter's configured Email wrapper for
-incident notifications. It captures absolute renderer overrides when supplied,
-uses the canonical state root as the working directory, and selects distinct
-`daily.stdout.log` and `daily.stderr.log` files there. It creates no files,
-registers no definition, and changes no binding. To prepare a private manifest:
+For separately authorized daily activation, prepare a private definition:
 
 ```sh
 umask 077
 platter schedule-definition > /absolute/private/platter-daily.toml
 ```
 
-Review and register that definition through Clockwork, preserving any intended
-existing timer, environment and output-path configuration. Clockwork retains
-the failure halt independently of definition selection and enabled state.
+Review it and use `clockwork.schedule.operate` for registration, binding changes,
+and recovery. Printing starts no schedule and changes no binding. The ordinary
+definition is daily 18:00 machine local time, run-at-load false, skip-on-overlap,
+and `halt-until-approved`; Platter's configured zone selects edition dates.
+Inspect the actual installed binding and process outcomes:
 
-Cell deployment captures the prior digest and enabled state, disables the
-binding under maintenance, and selects an updated exact definition disabled.
-It preserves timer, environment, working directory and private output paths.
-Activation restores the intended state after all holds release. Recovery
-retains the prior evidence and selects only a coherent installed release.
+```sh
+clockwork binding show platter/daily
+clockwork history platter/daily --limit 20
+clockwork incident list platter/daily
+```
 
-Inspect `clockwork binding show platter/daily` and its selected definition for
-the actual schedule. `clockwork history platter/daily --limit 20` reports
-process outcomes; Platter's retained edition and receipt establish submission
-acceptance. `clockwork binding disable platter/daily` stops future activations
-and retains the definition and history. Uncertain sends stay held under the
-preparation contract; changing a binding does not authorize another send.
-Inspect `clockwork incident list platter/daily` after a failure. Once the cause
-is resolved, `clockwork binding resume platter/daily INCIDENT_ID` explicitly
-permits future scheduling. It creates no preparation attempt and does not
-reconcile an uncertain edition. No deployment step clears this incident.
+Platter's retained edition and receipt establish submission acceptance.
+Clockwork history establishes process outcomes. Disable the binding to stop
+future activations while retaining history. After repair, explicitly resume the
+exact incident through Clockwork. Binding changes and deployment preserve halts;
+resume permits future scheduling without retrying preparation or uncertain mail.
 
-## Deployment setup and retained schedule intent
+## Complete verification
 
-Cell deployment captures and disables `platter/daily`. During configuration it
-migrates supported state, initializes a missing template from the supplied
-`resume` absolute path, and updates Cast, Email and Weaver executable references
-to the final installed releases. The `resume` setting cannot replace an initialized template. The optional
-`projects_template` absolute path imports a private template through the same
-projects-only checks as `platter import-projects-template`. Import retains the
-old artifact and changes only the default template for future runs. `platter --json config` reads retained settings
-without loading dependency data or preparing packets. Set or clear the flat
-`resume_override` path with `platter config --resume-override ABSOLUTE_PDF` or
-`platter config --clear-resume-override`. Deployment preserves this setting.
-The preparation contract defines validation, daily scope and frozen-file behavior. Career reads use the fixed
-`~/.local/bin/annals` command and its named `vita` library. Annals must support
-named libraries and work list/show. Stored `crm_executable` fields are ignored
-and omitted when configuration is saved. No Vita source setting is stored.
+Verify exact program/provider selection, supported state, full held readiness,
+run-owned hold release, and captured activation intent. Retain the deployment's
+migration backup; interrupted runs reuse only the validated existing backup.
+Register command inventory after installation or update:
 
-The optional `enabled` setting selects intended activation. An absent binding
-stays absent when no activation setting is supplied. Existing definitions keep
-their schedule, arguments, renderer environment and output paths and select
-the new exact Platter program disabled. Final activation restores intent after
-all holds release. It never clears a Clockwork halt or reconciles a send.
+```sh
+platter --register-usage
+```
 
-Each deployment retains its own migration backup. A new backup is selected
-only after any prior import cleanup completes and its retained backup digest
-remains valid. Repeating an interrupted run reuses its validated backup.
+This starts no product work. Treat state, configuration, logs, and backups as
+private. Platter backups contain its library; Nucleus evidence and credentials
+require separate backup and recovery. Domain artifacts have no automatic pruning.
+No installation-latency or arbitrary incompatible rollback guarantee is supplied.
 
 ## Command usage
-
-After each installation or update, run `platter --register-usage`.
-This registers command inventory without product work.
 
 CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
 or outcomes. Internal product calls are excluded. Recording errors do not
 change command results.
-
-## Weaver integration
-
-Require Weaver authoring contract 2 and its caller-supplied request identity.
-Platter pins the selected installed Weaver executable. Doctor checks that
-`weaver write --help` exposes `--id` and, for initialized Platter state, checks
-Weaver's read-only doctor. This creates no model job. Weaver must be deployed
-before the new Platter release. The shared deployment dependency declaration
-orders the selected releases and maintenance. No unrelated Weaver jobs belong
-to Platter's cancellation or recovery authority.
-
-## Bazaar prompt selection
-
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.platter` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.platter --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
-
-## Separate project editorial policy
-
-Before installing a caller that uses the separate project policy, publish
-`platter.projects.editorial`, `platter.projects.cell.direction`,
-`platter.projects.wrought.direction`, and `platter.projects.shorten.direction`.
-Append a complete `cell.prompts.platter` selection that includes these IDs and
-all existing entries. Keep selection version 1 and its components unchanged.
-Jackson continues to use `platter.resume.editorial`. New captures require the
-project entries; historical runs use their retained directions.

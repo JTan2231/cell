@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "clew",
     "name": "Clew",
@@ -42,7 +42,9 @@
   },
   "entries": [
     "entries/application-track.json",
+    "entries/state.json",
     "entries/install-operate.json",
     "entries/digest-email.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

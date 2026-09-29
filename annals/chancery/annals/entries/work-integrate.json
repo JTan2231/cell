@@ -41,12 +41,30 @@
     "Annals and Nucleus state belong inside the same private retention boundary for this operation."
   ],
   "interfaces": [
-    {"label": "Interpret in a named library", "invocation": "/Users/joey/.local/bin/annals library <NAME> integrate --work <LABEL>"},
-    {"label": "Integrate file without applying", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL>"},
-    {"label": "Integrate retained work", "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL>"},
-    {"label": "Integrate and apply", "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL> --apply"},
-    {"label": "Force fresh examination", "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL> --reexamine"},
-    {"label": "Inspect reconciliation", "invocation": "/Users/joey/.local/bin/annals change show --work <LABEL>"}
+    {
+      "label": "Interpret in a named library",
+      "invocation": "/Users/joey/.local/bin/annals library <NAME> integrate --work <LABEL>"
+    },
+    {
+      "label": "Integrate file without applying",
+      "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL>"
+    },
+    {
+      "label": "Integrate retained work",
+      "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL>"
+    },
+    {
+      "label": "Integrate and apply",
+      "invocation": "/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL> --apply"
+    },
+    {
+      "label": "Force fresh examination",
+      "invocation": "/Users/joey/.local/bin/annals integrate --work <LABEL> --reexamine"
+    },
+    {
+      "label": "Inspect reconciliation",
+      "invocation": "/Users/joey/.local/bin/annals change show --work <LABEL>"
+    }
   ],
   "dependencies": [
     {
@@ -58,6 +76,16 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.libraries",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.corpus.change",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -66,61 +94,190 @@
   ],
   "promise": {
     "consumers": [
-      {"status": "declared", "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."},
-      {"status": "unsupported", "statement": "This capability is not a summarization, application-workflow, generic semantic-search, or silent corpus-application surface."}
+      {
+        "status": "declared",
+        "statement": "A local user or agent may request an evidence-grounded examination of one immutable work against one frozen Annals corpus revision."
+      },
+      {
+        "status": "unsupported",
+        "statement": "This capability is not a summarization, application-workflow, generic semantic-search, or silent corpus-application surface."
+      }
     ],
     "preconditions": [
-      {"status": "declared", "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."},
-      {"status": "declared", "statement": "Immediate material application requires explicit --apply authority; later application additionally requires current HEAD to equal the reconciliation base revision."},
-      {"status": "declared", "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."}
+      {
+        "status": "declared",
+        "statement": "A configured Annals library whose immutable role is general contains or can retain the selected nonblank UTF-8 work, and the configured Nucleus execution path is compatible, authenticated, and accepting work."
+      },
+      {
+        "status": "declared",
+        "statement": "Immediate material application requires explicit --apply authority; later application additionally requires current HEAD to equal the reconciliation base revision."
+      },
+      {
+        "status": "declared",
+        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      }
     ],
     "inputs": [
-      {"status": "declared", "statement": "Input selects one UTF-8 file plus work label or one already retained work label, with optional immediate application or forced reexamination."},
-      {"status": "unsupported", "statement": "The caller cannot supply arbitrary corpus writes, bypass draft validation, force a stale reconciliation, or make final model prose the domain result."}
+      {
+        "status": "declared",
+        "statement": "Input selects one UTF-8 file plus work label or one already retained work label, with optional immediate application or forced reexamination."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The caller cannot supply arbitrary corpus writes, bypass draft validation, force a stale reconciliation, or make final model prose the domain result."
+      },
+      {
+        "status": "declared",
+        "statement": "Quality resolves from command line, selected config, then high; its low/medium/high presets select gpt-5.6-luna medium, gpt-5.6-terra medium, and gpt-5.6-sol max. A model override changes model only. A configured Nucleus socket can replace the standard current-user socket."
+      }
     ],
     "outputs": [
-      {"status": "declared", "statement": "Applied and recorded/no-change results return work, base/result revision, status, summary, operation count, and recorded time where applicable. Pending proposals retain full review content. change show returns the complete selected reconciliation or accepted change. change list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Domain results survive later runtime failure."}
+      {
+        "status": "declared",
+        "statement": "Applied and recorded/no-change results return work, base/result revision, status, summary, operation count, and recorded time where applicable. Pending proposals retain full review content. change show returns the complete selected reconciliation or accepted change. change list returns a schema-two items/has_more page with a default limit of 20. Increase positive --limit to read more. Domain results survive later runtime failure."
+      }
     ],
     "data_semantics": [
-      {"status": "declared", "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."},
-      {"status": "declared", "statement": "An examination captures HEAD and the instruction selection in one admission transaction. The exact stored instruction document is supplied as Nucleus developerInstructions; the run records its revision and exact prompt/tool context hash."},
-      {"status": "declared", "statement": "A reconciliation records an interpretation of one retained work at one base corpus revision through semantic operations and exact source quotations."},
-      {"status": "declared", "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."}
+      {
+        "status": "declared",
+        "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."
+      },
+      {
+        "status": "declared",
+        "statement": "An examination captures HEAD and the instruction selection in one admission transaction. The exact stored instruction document is supplied as Nucleus developerInstructions; the run records its revision and exact prompt/tool context hash."
+      },
+      {
+        "status": "declared",
+        "statement": "A reconciliation records an interpretation of one retained work at one base corpus revision through semantic operations and exact source quotations."
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus completion and liaison prose are execution evidence only; Annals records decide whether the domain reconciliation or application succeeded."
+      },
+      {
+        "status": "declared",
+        "statement": "A liaison draft is a versioned staging record, not corpus state or a pending reconciliation. Stable draft-local operation slots preserve independently valid intent; omitted slots remain, removal is explicit, and whole-request validation finalizes exactly one reconciliation."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals retains normalized requests and hashed exact tool artifacts for audit. Domain behavior reconstructs normalized intent at the frozen base and does not decode audit artifacts."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals records the Bazaar selection in its examination prompt version and context digest; historical registrations keep their original selected text, while newly selected descriptions receive selection-derived immutable identities."
+      }
     ],
     "identity_and_units": [
-      {"status": "declared", "statement": "Examination reuse requires the same work identity, base revision, instruction revision, exact effective prompt/tool context, model, and reasoning effort. Reconciliation and commit identities remain distinct."},
-      {"status": "declared", "statement": "Existing concepts use public cN identifiers and corpus revisions are monotonic integer states; work labels select retained works."},
-      {"status": "not_applicable", "statement": "This capability does not report token, allowance, price, or billing units."}
+      {
+        "status": "declared",
+        "statement": "Examination reuse requires the same work identity, base revision, instruction revision, exact effective prompt/tool context, model, and reasoning effort. Reconciliation and commit identities remain distinct."
+      },
+      {
+        "status": "declared",
+        "statement": "Existing concepts use public cN identifiers and corpus revisions are monotonic integer states; work labels select retained works."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "This capability does not report token, allowance, price, or billing units."
+      }
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Each examination uses the complete selected immutable work and one frozen base corpus state; a selected reusable result matches the complete documented context."},
-      {"status": "declared", "statement": "Application verifies current HEAD against the frozen base at apply time, so a pending result becomes stale rather than being silently rebased."},
-      {"status": "unspecified", "statement": "No model-completion latency or queue-time service level is promised."}
+      {
+        "status": "declared",
+        "statement": "Each examination uses the complete selected immutable work and one frozen base corpus state; a selected reusable result matches the complete documented context."
+      },
+      {
+        "status": "declared",
+        "statement": "Application verifies current HEAD against the frozen base at apply time, so a pending result becomes stale rather than being silently rebased."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No model-completion latency or queue-time service level is promised."
+      }
     ],
     "access": [
-      {"status": "declared", "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."},
-      {"status": "declared", "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."},
-      {"status": "unsupported", "statement": "The liaison receives only Annals-scoped tools and cannot publish the work, directly edit SQLite, or acquire general host access through this contract."}
+      {
+        "status": "declared",
+        "statement": "A registered name scopes ordinary commands as annals library NAME COMMAND. The catalog resolves and verifies stable library identity and managed paths; unknown names fail without creation. Operator config/path selection remains supported."
+      },
+      {
+        "status": "declared",
+        "statement": "The supported surface is the local Annals CLI using its selected private library and configured local Nucleus requester boundary."
+      },
+      {
+        "status": "unsupported",
+        "statement": "The liaison receives only Annals-scoped tools and cannot publish the work, directly edit SQLite, or acquire general host access through this contract."
+      }
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Successful reuse and active examination uniqueness require the same work, base, instruction revision, exact effective prompt/tool context, model, and reasoning effort. A → B → A selections append revisions and do not revive earlier reuse."},
-      {"status": "declared", "statement": "Material application checks both HEAD and instruction currentness in the committing transaction. Instruction changes start no reinterpretation and do not erase already committed or recorded domain results."},
-      {"status": "declared", "statement": "Annals freezes HEAD before the closed Nucleus job, validates draft operations together, and durably records one valid reconciliation or reuses an exact-context successful examination."},
-      {"status": "declared", "statement": "Material output remains pending by default; authorized application atomically creates a commit and advances HEAD, while stale application fails without a force path."},
-      {"status": "declared", "statement": "If Annals commits the domain result before a later Nucleus failure, recovery preserves the Annals result and does not create an automatic new attempt."},
-      {"status": "declared", "statement": "Callers resolve cell.prompts.annals to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."}
+      {
+        "status": "declared",
+        "statement": "Successful reuse and active examination uniqueness require the same work, base, instruction revision, exact effective prompt/tool context, model, and reasoning effort. A → B → A selections append revisions and do not revive earlier reuse."
+      },
+      {
+        "status": "declared",
+        "statement": "Material application checks both HEAD and instruction currentness in the committing transaction. Instruction changes start no reinterpretation and do not erase already committed or recorded domain results."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals freezes HEAD before the closed Nucleus job, validates draft operations together, and durably records one valid reconciliation or reuses an exact-context successful examination."
+      },
+      {
+        "status": "declared",
+        "statement": "Material output remains pending by default; authorized application atomically creates a commit and advances HEAD, while stale application fails without a force path."
+      },
+      {
+        "status": "declared",
+        "statement": "If Annals commits the domain result before a later Nucleus failure, recovery preserves the Annals result and does not create an automatic new attempt."
+      },
+      {
+        "status": "declared",
+        "statement": "Callers resolve cell.prompts.annals to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+      },
+      {
+        "status": "declared",
+        "statement": "Annals registers immutable selection-derived toolsets and input schemas, services durable requester calls, repeats only byte-identical ambiguous Nucleus submissions, and caches exact tool results before transmission to avoid duplicate backend effects."
+      },
+      {
+        "status": "declared",
+        "statement": "A run has at most one open draft. Automatic finalization seals normalized intent; explicit discard or run-end abandonment retains audit without a reconciliation or corpus change."
+      }
     ],
     "operational_limits": [
-      {"status": "declared", "statement": "One invocation examines one work at one base revision through the constrained Annals liaison contract."},
-      {"status": "declared", "statement": "Application is opt-in for material changes, and a pending result can apply only at its unchanged base HEAD and instruction selection."},
-      {"status": "unspecified", "statement": "No maximum work size, execution duration, queue latency, or Codex allowance consumption is promised here."}
+      {
+        "status": "declared",
+        "statement": "One invocation examines one work at one base revision through the constrained Annals liaison contract."
+      },
+      {
+        "status": "declared",
+        "statement": "Application is opt-in for material changes, and a pending result can apply only at its unchanged base HEAD and instruction selection."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No maximum work size, model-completion latency, queue latency, throughput, or Codex allowance consumption is promised. The documented liaison execution and scoped read bounds do not establish a completion service level."
+      }
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Schema 6 preserves null instruction provenance for legacy runs and requests. New runs use immutable liaison toolset version 2 and input schema IDs ending in .input.v2; result schema v1 and historical decoding remain supported."},
-      {"status": "declared", "statement": "Capability contract version 3 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."},
-      {"status": "declared", "statement": "Examination reuse requires the exact documented context; changed context requires a new reading or explicit reexamination."},
-      {"status": "unspecified", "statement": "No cross-release pending-reconciliation support window or deprecation period is promised."},
-      {"status": "declared", "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."}
+      {
+        "status": "declared",
+        "statement": "Legacy instruction provenance remains null. Current immutable liaison toolset versions encode the exact Bazaar selection version plus two, and input schema IDs vary with selection because field descriptions are editable. Historical toolset two and .input.v2 identities retain the original selection-one text; result schema v1 and historical decoding remain supported. Structural schema changes require the requester compatibility procedure."
+      },
+      {
+        "status": "declared",
+        "statement": "Capability contract version 4 is distinct from provider release, library schema, prompt version, model identity, and Nucleus public protocol."
+      },
+      {
+        "status": "declared",
+        "statement": "Examination reuse requires the exact documented context; changed context requires a new reading or explicit reexamination."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No cross-release pending-reconciliation support window or deprecation period is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+      }
     ],
     "reliances": [
       {
@@ -136,6 +293,13 @@
         "target": "bazaar",
         "kind": "data",
         "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "Annals libraries own identity, kind, instruction revision, and exact selection. Corpus-change contract owns strict request validation and atomic application; reading their installed documentation grants no execution authority.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.corpus.change"
       }
     ]
   },

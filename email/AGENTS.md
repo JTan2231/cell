@@ -12,5 +12,10 @@ Semantics-Project: email
   than guessing.
 - Email always sends from `Codex <codex@joeytan.dev>` to
   `j.tan2231@gmail.com`; do not add configurable recipients.
+- Keep full supported feature explanations in this product's Chancery bundle.
+  Keep operation manuals focused on prerequisites, effects, ordered steps,
+  stop conditions, and verification. Update the owning feature and affected
+  procedures together. Keep repository documentation as entry points, and use
+  Chancery identities for installed reading.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. Follow the root CI instructions.

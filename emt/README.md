@@ -8,5 +8,6 @@ emt incident list
 emt incident show INCIDENT_ID
 ~~~
 
-See [the service contract](chancery/manuals/incident-respond.md) and
-[installation and operation](chancery/manuals/installation-operate.md).
+Read [the product overview](chancery/overview.md) for feature contracts and
+[installation and operation](chancery/manuals/installation-operate.md) for
+procedures. Use `chancery product emt` to read the installed overview.

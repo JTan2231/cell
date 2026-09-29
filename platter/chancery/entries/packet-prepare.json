@@ -1,7 +1,7 @@
 {
   "id": "platter.packet.prepare",
   "contract_version": 14,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
@@ -108,18 +108,10 @@
     }
   ],
   "effects": [
-    "Initialization imports the original template and configuration into the canonical SQLite library.",
-    "Tailored preparation captures posting, career data, template and exact project directions. It requests Cell and Wrought Markdown from Weaver, retains the returned documents, then runs one constrained Platter brief/Jackson draft. Final content and rendered bytes commit together.",
-    "Ordinary preview retrieves the posting again under the source cache policy. It freezes subject, body and ordered artifact references, and sets selected jobs ineligible in the same transaction.",
-    "Retained-material preview creates the same edition records without changing eligibility or calling Cast, Annals, employer sources, Nucleus or the renderer.",
-    "Send pipes body and attachment bytes to Email. It records uncertainty before transport and acceptance afterward. Eligibility changes separately through the CLI. Export creates a new caller-selected file.",
-    "run-daily captures one configured local date and holds mutation admission across preparation, ordinary preview and send. An existing edition goes directly to send; no ready packets creates no edition or email.",
-    "run-ad-hoc asks Cast to resolve or collect one URL, explicitly enables that normal Platter job, then uses the existing preparation, freshness, ordinary eligibility-spending edition freeze and send operations. It creates no separate packet, edition or workflow type.",
-    "Ashby retrieval writes and reuses private ashby-cache/BOARD.json files under the canonical runtime root. Each file contains the complete response and its download time; it is disposable and outside SQLite.",
-    "A posting retrieval failure retains or updates the job as ineligible. Initial retrieval failures create no preparation run. Freshness failures retain prepared runs as deferred and preserve accepted artifacts.",
-    "Regenerate captures a new ordinary run with current inputs and writing instructions. It leaves earlier runs and editions intact and does not enable the job or send mail. Availability, compensation, posting retrieval and pursuit checks still apply; retrieval failure or decline can set eligibility false.",
-    "Explicit full-template import validates Jackson and fixed project regions, retains a new immutable template and selects it for future runs. It preserves prior templates, captured runs, instructions, configuration and deliveries; it performs no rendering, model work or sending.",
-    "The optional flat resume_override path changes future daily preparation to the brief stage only. Each new daily invocation validates one PDF snapshot before preparation or eligibility changes. Ordinary preview freezes one shared PDF plus separate ordered packet selections; all selected jobs become ineligible. Configuration setters validate before saving and send nothing."
+    "Initialization/import/configuration selects private future material without preparing or sending. Explicit export creates a new private file.",
+    "Preparation captures source material and can consume Nucleus/Weaver allowance. Normal repetition continues saved work; an explicitly authorized fresh restart or regeneration creates its supported new capture.",
+    "Ordinary preview checks freshness, freezes exact material, and spends selected job eligibility. Retained-material preview freezes the same representation without changing eligibility or calling preparation dependencies.",
+    "An applicable authorized send records sending before Email and acceptance afterward. Daily/URL-selected run commands may prepare and freeze before that send under one mutation lock. Definition printing starts no schedule."
   ],
   "authority": [
     "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
@@ -127,32 +119,38 @@
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
   "success": [
-    "Tailored preparation succeeds when the combined draft submission passes content and rendering checks and its brief, resume content, LaTeX and one-page PDF are retained together. A declined draft requires no resume or rendering.",
-    "Preview freezes exact message and ordered immutable artifacts without sending.",
-    "A recognized Accepted ID proves submission acceptance, not final inbox delivery. Job eligibility is an explicit field, never inferred from edition history.",
-    "run-daily returns the retained accepted edition, or a no-edition result when no packets are ready. Its output selects edition date, delivery status and packet count; it does not print message or attachment contents.",
-    "run-ad-hoc returns the same compact accepted-edition result for one packet, or reports that no ready packet was produced without creating or sending an edition.",
-    "With resume_override, an accepted pursuit brief is ready for daily override selection. A daily edition requires that brief and a validated shared PDF. It retains one attachment for one through three selected packets. Ad hoc and single-job preparation remain tailored."
+    "Verify the retained packet readiness or expected decline/deferral outcome defined by platter.preparation.",
+    "Verify preview's exact frozen selection and message without sending.",
+    "Verify retained recognized Email acceptance or the no-edition outcome; provider acceptance does not prove inbox receipt or an application."
   ],
   "failure_and_recovery": [
-    "A consistent schema-seven backup includes retained templates, Weaver directions, IDs, documents and packet history. Schemas one through six require maintained migration. Weaver source reads and Nucleus records remain provider-owned.",
-    "Exact pending Nucleus requests are retained. Successful submissions resolve to immutable run content; Platter stores no separate tool-receipt ledger.",
-    "Accepted content survives later execution failure. Uncertain sends remain held and accepted editions are not resent. There is no automatic new model attempt, direct Codex fallback or ambiguous-send reconciliation.",
-    "run-daily uses an existing edition before preparing any new work. Frozen editions send exact retained bytes; sent editions return their result; uncertain editions fail without resending. It has no backfill or replacement-send loop. Posting retrieval failures are skipped before freeze; other preparation/export failures preserve retained progress and stop before send.",
-    "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained.",
-    "Renderer executable or execution failure requests cancellation of the exact model job and stops preparation, including the daily run. It is not model content feedback. Repair the environment before an explicit fresh preparation; content and layout rejection still allows revision in the current job.",
-    "prepare-daily and run-daily mark jobs ineligible when posting retrieval fails, including HTTP errors, timeouts and unsupported or incomplete text, then continue with other candidates. If final freshness excludes the entire ready pool, run-daily prepares other candidates before previewing again. Declined opportunities and an exhausted pool remain expected outcomes. Other preparation failures stop the run. Single-job preparation reports retrieval failure without selecting another job. The eligibility command explicitly enables an excluded job again. Clockwork halts remain intact until explicit continuation.",
-    "run-ad-hoc reuses an existing frozen or accepted occurrence before Cast or preparation work. Exact retries send frozen bytes or return retained acceptance. An uncertain occurrence remains held. Reusing its ID for another URL or a multi-packet retained-material edition is refused.",
-    "Draft jobs reuse their exact retained requests and accepted results without rendering accepted content again. Historical stages retain their original continuation path. A failed job without an accepted result stops preparation. --fresh checks every retained stage job and creates an entirely new preparation when authorized.",
-    "Regeneration request IDs bind to one captured Cast job and run. Reuse resumes retained preparation or returns its outcome; another job cannot reuse the ID. Terminal stage failures remain failures. A new request ID permits another attempt only after other model jobs for the opportunity are terminal or absent. Failures before capture retain no run or request binding.",
-    "Weaver quota deferral retains assignments without a new attempt. Terminal failure remains an error even when prose is saved. Exact recorded Weaver IDs participate in deadlines and maintenance. One captured shortening round is permitted for project layout rejection; renderer infrastructure failure stops immediately.",
-    "An invalid daily override stops new daily work without fallback. Existing editions use retained bytes without reading the file. Replacing the file or clearing the setting affects future editions. Switching workflows creates a new capture only after prior model jobs settle; retained requests and artifacts stay unchanged."
+    "Stop for unsupported state, failed prerequisites, foreign holds, incomplete source reads, invalid template/PDF, or preparation failure. Preserve accepted artifacts and exact requests.",
+    "Normal repetition resumes retained work. A terminal failure receives no automatic replacement or direct Codex fallback. --fresh and regeneration require their feature-defined terminal-job and capture preconditions.",
+    "Posting retrieval failure marks a job ineligible; daily work can try another candidate. Other preparation/export errors stop before sending.",
+    "Exact frozen/accepted/uncertain occurrences use platter.editions: do not create replacement payloads or send keys to bypass held uncertainty.",
+    "Repair the exact renderer/source/runtime failure before an authorized new attempt. Use platter.install.operate for maintained schema backup/migration; do not edit SQLite.",
+    "Clockwork continuation permits only future scheduling and preserves Platter preparation/delivery recovery."
   ],
   "privacy": [
     "Private state includes career history, preferences, contact details, source text and tailored resumes. Keep it outside the repository and exclude it from commits.",
     "Nucleus and the model receive career and posting inputs for Platter, and selected Annals decisions for Weaver. Platter retains Weaver Markdown, not its source reads. Authorized sends disclose only their frozen message and attachments through Email."
   ],
   "dependencies": [
+    {
+      "id": "platter.materials",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "platter.preparation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "platter.editions",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
@@ -192,6 +190,11 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "bazaar.string.update",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -203,207 +206,79 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and an explicitly authorized local caller can operate the Platter CLI."
+        "statement": "The current user or an explicitly authorized local caller uses supported Platter CLI preparation, selection, export, and send procedures."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Preparation requires initialized schema-seven state, readable Cast and Annals interfaces with the vita library, full supported posting text, and authenticated Nucleus readiness. Tailored work also requires the fixed resume template, Weaver and rendering tools. Daily override work requires the configured readable valid unencrypted PDF and Python with pypdf, and uses the brief stage only. Sending requires authorization and Email with --payload-stdin."
+        "statement": "Use canonical schema-seven state and the required source/runtime/template or daily-PDF prerequisites declared by platter.materials and platter.preparation. Retained-only selection needs completed material and makes no source/model/rendering calls. Each send needs applicable authority and Email --payload-stdin."
       },
       {
         "status": "declared",
-        "statement": "Retained-material preview needs completed artifacts only. It makes no source, model or rendering calls."
-      },
-      {
-        "status": "declared",
-        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.platter selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+        "statement": "New prompt preparation needs initialized private Bazaar state and a complete cell.prompts.platter selection; runtime neither creates state nor uses fallback text."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Fresh canonical state is ~/.local/share/platter; a sole ~/.local/share/job-packets predecessor stays in place. Both roots are ambiguous and refused; --state-dir must match the canonical root. Template and brief-override files are import inputs. The optional resume_override absolute PDF path is a continuing dependency for new daily editions; frozen editions retain their own bytes."
-      },
-      {
-        "status": "declared",
-        "statement": "Preparation selects a Cast job, eligible daily pool, or one exact public URL through run-ad-hoc. Optional --stop-after-seconds applies to prepare, prepare-daily, regenerate and run-ad-hoc. Default count is three; stored 09:00 fields create no schedule. The two run commands capture the current date once in the configured time zone before new preparation."
-      },
-      {
-        "status": "declared",
-        "statement": "--ad-hoc RUN_ID selects another retained-material edition identity, not a test type. It accepts up to three --packet selections, optional imported --brief-overrides and an invocation-local absolute --email-executable on send. RUN_ID is 1 through 80 ASCII letters, digits, underscores or hyphens."
-      },
-      {
-        "status": "declared",
-        "statement": "run-ad-hoc accepts one public JOB_URL and a required --id occurrence of 1 through 80 ASCII letters, digits, underscores or hyphens. It uses the same ad-hoc occurrence namespace as retained-material selection. The ID binds one URL and one packet."
-      },
-      {
-        "status": "declared",
-        "statement": "Each tailored run freezes directions for Cell and Wrought, each requesting at most three short resume bullets, and one optional shortening direction. New captures append a separate project editorial policy to all three directions. Jackson retains its own resume editorial policy; historical captures retain their original directions. The immutable template fixes project headers, technologies, descriptions, links, dates and order. Only marked Cell/Wrought bullets and Jackson may change."
-      },
-      {
-        "status": "declared",
-        "statement": "Regenerate selects a previously prepared Cast job and a required request ID of 1 through 80 ASCII letters, digits, underscores or hyphens. It supports --stop-after-seconds and does not require daily eligibility."
+        "statement": "Select a Cast job, daily pool, exact public URL, or retained complete packets. Supply exact regeneration/occurrence identities and applicable explicit template, PDF, brief-override, export, and deadline inputs. Required features own their formats and meaning."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "SQLite retains jobs with eligible fields, preparation runs with captured inputs and compact execution correlation, immutable brief/resume/source/PDF artifacts, exact editions, ordered artifact references, receipts, configuration and maintenance holds. Artifacts reference their producing run; imported templates have no run."
-      },
-      {
-        "status": "declared",
-        "statement": "CLI attachment references are artifact IDs. Export explicitly writes a new private file at the chosen destination. Rendering uses disposable files and redirected caches beneath the runtime root, removed after use; it is not memory-only rendering."
-      },
-      {
-        "status": "declared",
-        "statement": "run-daily and run-ad-hoc return a compact edition date, status and selected packet count, or a no-edition result. They write no message or PDF bytes to stdout. Status and doctor identify scheduling as external without checking the Clockwork binding."
-      },
-      {
-        "status": "declared",
-        "statement": "Ashby board caches are private ashby-cache/BOARD.json files under the runtime root, containing response and retrieved_at. Successful downloads with a valid jobs array replace the file atomically. Captured packets retain their own selected posting bytes and the original board download time."
-      },
-      {
-        "status": "declared",
-        "statement": "New resume payloads require one or two unique Cell/Wrought entries with description, optional dates, one through eight bullets and private source notes. Text fields have at most 1000 characters and no controls. The renderer supplies https://github.com/jtan2231/cell and https://wrought.experimental.joeytan.dev and omits source notes."
-      },
-      {
-        "status": "declared",
-        "statement": "Regenerate prints the selected request's packet ID and status, plus retained brief and final PDF artifact IDs when available; it prints no content bytes."
-      },
-      {
-        "status": "declared",
-        "statement": "A shared daily resume is retained as an immutable resume-override PDF artifact with its original filename and no producing run. The edition has one attachment and identifies the shared resume in its body. Frozen bytes are covered by the Platter backup; the source path remains necessary for future new editions."
+        "statement": "Preparation reports retained run status and artifact identities; preview freezes an edition; an applicable authorized send reports retained acceptance or unresolved uncertainty. Exports write new private files. Run output is compact and omits body/PDF bytes. Detailed record meaning belongs to required features."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "New tailored runs use weaver_projects_v1. Sequential Weaver calls precede the Platter draft. Retained project Markdown becomes plain bullets without editorial rewriting. At most one shortening round precedes the draft. The draft tool submits only brief and Jackson; Platter adds project_bullets and atomically retains brief, assembled content, LaTeX and PDF. Historical generations retain their prior workflows."
-      },
-      {
-        "status": "declared",
-        "statement": "New briefs contain at most 90 words across sections. Why it works gives one or two direct, confident, evidence-grounded sentences of at most 45 words. Role states stack, responsibilities and process expectations in one or two short lines of at most 30 words. Optional Culture states working norms in one or two short lines of at most 25 words. Role and Culture make no comparison with the user's experience. Displayed briefs omit caveats, downsides and hedging; pursuit criteria remain private. Career references identify the captured entries used by each stage. The model authors Jackson only. The fixed template owns all project presentation; Weaver supplies at most three bullets per project."
-      },
-      {
-        "status": "declared",
-        "statement": "Eligibility determines ordinary job selection. Explicit regeneration permits another preparation without enabling the job. Ordinary preview sets selected jobs ineligible. Posting retrieval failures also set jobs ineligible; daily work continues with other candidates. Explicit eligibility changes can enable excluded jobs again. run-ad-hoc explicitly enables its selected normal job, then its ordinary one-packet freeze sets that job ineligible. Retained-material preview and send leave eligibility unchanged. Eligibility changes preserve delivery records. All editions share one representation and ordinary subject format. Imported frozen subjects remain unchanged."
-      },
-      {
-        "status": "declared",
-        "statement": "Daily override runs use daily_brief_v1 without resume or project authoring. The flat optional resume_override path applies to prepare-daily, run-daily and ordinary preview. Single-job and ad hoc operations remain tailored. Ready brief-only packets are excluded from tailored selection. edition_packets stores frozen ordered run selections separately from edition_attachments; one shared PDF does not reduce the selected job count."
+        "statement": "Use platter.preparation for eligibility, current/historical workflows, and readiness. Use platter.materials for captured and accepted bytes, templates, settings, and export. Use platter.editions for independent selected packet/attachment identity and submission acceptance."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Canonical supported ATS identities or normalized URLs identify opportunities. A run ID identifies one preparation; artifacts reference that run. Three packets is a ceiling, not a quota. Perfect repost deduplication is not promised."
-      },
-      {
-        "status": "declared",
-        "statement": "Ordinary edition identity is its day; --ad-hoc and run-ad-hoc retain a caller-supplied occurrence ID in the same namespace. Frozen date, selection, message, ordered attachment names/bytes and idempotency key are immutable. A deliberately changed payload requires a new identity."
-      },
-      {
-        "status": "declared",
-        "statement": "Regeneration IDs use a separate namespace from edition occurrences. The optional regeneration_id captured input binds one request to its ordinary run and captured Cast job. A new ID requests another preparation."
+        "statement": "Retain the exact selected job, run, regeneration request, edition occurrence, and send key. Apply the compatible identity/units rules in required features; another deliberately changed capture or frozen payload needs its appropriate new identity."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "All stages use the same stored posting and captured Vita career data. Culture appears only when the posting or captured material supports it. Otherwise it is omitted without extra research or an uncertainty note. Preparation reads up to 1000 works from the fixed Annals vita library and rejects an empty or incomplete list. Each entry contains a work label as its ID, the first heading as its title (or the label when absent), and the complete work text. Works added after the list are available to a later preparation. Preparation requires full posting text beyond Cast's excerpt. A new preview retrieves the posting under the source cache policy and excludes changed or unavailable inputs from eligibility while retaining their prepared artifacts. Reopening a frozen edition returns stored contents."
-      },
-      {
-        "status": "declared",
-        "statement": "Posting fetches use the documented ATS and JobPosting JSON-LD adapters. Forms and authenticated pages are outside these fetch interfaces."
-      },
-      {
-        "status": "declared",
-        "statement": "Ad hoc preview reads existing accepted artifacts, consuming no Cast API budget and making no source-fetch, discovery-export, profile, model or rendering calls."
-      },
-      {
-        "status": "declared",
-        "statement": "A new run-ad-hoc occurrence uses Cast's exact job-URL operation, normal Cast export and the same posting, Vita, model, rendering and pre-freeze freshness reads as daily work. An existing occurrence bypasses those reads and follows its retained send state."
-      },
-      {
-        "status": "declared",
-        "statement": "Preparation, including --fresh and regenerate, and preview reuse an Ashby board downloaded less than 14 days ago if it contains the selected posting. Missing, invalid, expired or future-dated caches and a posting absent from the cache trigger one download. Cached timestamps remain the original download time. Changes and closures can remain undetected until the next download. A failed refresh leaves the old file intact but fails retrieval; expired data is not a fallback. Remove a board cache file to force its next download."
-      },
-      {
-        "status": "declared",
-        "statement": "Weaver selects current accepted Annals decisions through its own reader. Platter retains exact returned Markdown and request identities. Neither complete historical coverage nor factual certification is promised. Earlier packet artifacts remain unchanged."
+        "statement": "Before new work, apply required source capture, complete Vita reads, posting-cache freshness, and exact retained-occurrence rules. Existing frozen editions use retained bytes; retained-material selection refreshes no source. Required features own coverage and timestamps."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "New Platter jobs have captured career reads and draft submission tools, with workspace, local execution and web disabled. Weaver owns source access. Historical Platter jobs keep their captured access policy."
+        "statement": "Use canonical current-user Platter interfaces under normal mutation admission. Preparation permissions and Weaver source authority are defined by platter.preparation; sending uses Email's existing credential and fixed recipient."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Successful stage outputs are immutable by producing run and kind. Repeated successful calls return the same content; conflicts are refused. Platter stores exact Nucleus requests before submission. Nucleus owns execution history."
-      },
-      {
-        "status": "declared",
-        "statement": "Ordinary edition creation and eligibility changes commit together. Frozen message/attachments remain immutable. Sending state commits before Email runs, recognized acceptance commits afterward, and uncertain attempts remain held. Neither test types nor derived sent flags govern eligibility."
-      },
-      {
-        "status": "declared",
-        "statement": "One CLI admission lock spans run-daily preparation, preview and send. An existing edition bypasses preparation and follows the retained send rules. Empty days create no edition or email and may be tried by a later invocation. The captured date stays fixed across midnight; missed dates are not backfilled."
-      },
-      {
-        "status": "declared",
-        "statement": "The same CLI admission lock spans run-ad-hoc URL selection, preparation, freshness, freeze and send. An existing occurrence bypasses URL collection and preparation, retains its original date across retries, and follows the same frozen, accepted and uncertain send rules. No separate durable workflow state is created."
-      },
-      {
-        "status": "declared",
-        "statement": "An explicitly authorized prepare JOB_ID --fresh requires an eligible incomplete latest run without an accepted resume and terminal or absent prior model jobs. It captures source inputs again and creates new run and model-job IDs without copying prior outputs, requests, transcripts or error feedback. Older runs remain retained."
-      },
-      {
-        "status": "declared",
-        "statement": "For a new URL selection, Cast permits targeted observation from disabled or automatically excluded sources, retains only the selected job, and preserves source enrollment and board-scan progress. Platter continues with that normal job through export and preparation."
-      },
-      {
-        "status": "declared",
-        "statement": "Mutation admission serializes regeneration lookup, source capture and execution. The request ID commits atomically with the new run's immutable inputs. Reuse resumes or returns that run without recapture; a different job is refused. Terminal stage failures require an explicit new request ID. No prior packet or delivery payload is rewritten."
-      },
-      {
-        "status": "declared",
-        "statement": "Callers resolve cell.prompts.platter to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Retain exact captured requests and occurrence identity. Repetition continues saved work; terminal failures get no automatic replacement. Ordinary preview freezes and spends eligibility atomically, sending intent precedes transport, and uncertain/accepted occurrences follow platter.editions without a new send key."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "No candidate or token budget caps daily preparation. Model gpt-5.6-sol with max effort runs one draft job. Individual execution, network and rendering safety timeouts remain. Full posting adapters and one-page original-template rendering impose explicit input limits; runtime allowance and provider limits still apply. Weaver calls are sequential; each project has one through three bullets of at most 1000 characters. Short form is requested editorially and the one-page check remains mandatory."
+        "statement": "Apply required feature limits and supported deadlines. Daily preparation has no candidate/token budget; editions permit at most three packets and URL-selected occurrences one. No installation or stored time field activates recurring work."
       },
       {
         "status": "unspecified",
         "statement": "No preparation-latency, completion-time, delivery-time or throughput guarantee exists. Activation is a separately authorized Clockwork operation; stored 09:00 fields do not control it."
-      },
-      {
-        "status": "declared",
-        "statement": "PDF inspection keeps the same Python user-package lookup as doctor and disables bytecode writes. Tectonic uses a temporary home. Renderer executable or execution failures stop daily preparation and request exact-job cancellation; content and layout errors remain model revision feedback."
-      },
-      {
-        "status": "declared",
-        "statement": "Ashby board downloads and cache files have no byte cap. The HTTP timeout remains 30 seconds. Other posting responses retain the 4,000,000-byte cap; each selected posting retains the 1,000,000-byte input limit."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Preparation contract 14 supports tailored weaver_projects_v1 runs and daily_brief_v1 runs with a shared resume_override PDF. Installation contract 11 migrates schemas one through six to schema seven with independent ordered edition packet selections. Historical inputs, requests, artifact bytes and deliveries remain unchanged."
+        "statement": "Keep the existing operation ID/version, supported commands, and exact historical input/output/delivery meaning. Required features define current and historical generation, template, state, and prompt compatibility."
       },
       {
         "status": "unspecified",
         "statement": "No arbitrary incompatible rollback, model support interval or deprecation window is promised. Full-template and projects-only imports select templates for future captures; historical captures retain their exact template references."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
@@ -490,5 +365,36 @@
       }
     ]
   },
-  "manual": "manuals/packet-prepare.md"
+  "manual": "manuals/packet-prepare.md",
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "session_surfaces": [
+    "installed current-user Platter CLI",
+    "private Platter state and explicit input/output files"
+  ],
+  "steps": [
+    "Inspect canonical state and dependency readiness; select preparation, preview, or a separately authorized send.",
+    "Initialize or explicitly select supported private templates/PDF configuration when requested.",
+    "Prepare or continue the selected exact job/request, or perform an authorized fresh restart/regeneration only after its preconditions.",
+    "Freeze the intended ordinary or retained-material selection and inspect the retained result.",
+    "Send only the applicable authorized occurrence and verify retained acceptance or held uncertainty.",
+    "Use supported source/prompt/activation operations separately, preserving exact historical work and external halts."
+  ],
+  "checkpoints": [
+    "Canonical schema-seven state and required source/runtime/material prerequisites are established.",
+    "Any send has applicable direct or standing authority; preview alone supplies none.",
+    "Preparation is accepted by Platter rather than inferred from Nucleus completion.",
+    "The exact frozen selection/body/attachment identity and send outcome are retained."
+  ],
+  "adaptation": [
+    "Use tailored single-job/regeneration/URL-selected work or supported daily PDF brief work as intended; do not continue a packet through the wrong workflow.",
+    "Use retained-material selection when no source/model/rendering work is intended.",
+    "Preserve the original request or occurrence on interruption; an explicit genuinely new capture or payload uses its supported new identity."
+  ],
+  "stop_when": [
+    "State, prerequisite, template/PDF, source completeness, maintenance ownership, or required authorization cannot be established.",
+    "A terminal model failure needs another attempt outside already authorized fresh/regeneration scope.",
+    "A send is uncertain, an occurrence conflicts with its saved input, or source/renderer/runtime failure remains unresolved.",
+    "A requested change would require source-library writes, employer contact, application submission, or clearing unrelated holds/halts."
+  ]
 }

@@ -38,25 +38,25 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
-| Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/README.md) |
-| Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/bazaar/README.md) |
+| Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/chancery/overview.md) |
+| Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/bazaar/chancery/overview.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
-| Clew | User-reported application history and daily application snapshots | [Clew](/Users/joey/rust/cell/clew/README.md) |
+| Clew | User-reported application history and daily application snapshots | [Clew](/Users/joey/rust/cell/clew/chancery/overview.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
-| Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/README.md) |
-| Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/README.md) |
-| EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/README.md) |
+| Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/chancery/overview.md) |
+| Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/chancery/overview.md) |
+| EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/chancery/overview.md) |
 | Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
 | Paperboy | Reports from conversations or accepted Krisis decisions | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
 | Weaver | Narratives authored from free-form directions and Annals reading | [Weaver](/Users/joey/rust/cell/weaver-narrative/README.md) |
-| Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/README.md) |
+| Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/chancery/overview.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/decisions/README.md) |
 | Semantics | Registered project terminology and its revision history | [Semantics](/Users/joey/rust/cell/semantics/README.md) |
 | Iatreion | Bounded read-only operational reports across declared Cell units | [Iatreion](/Users/joey/rust/cell/iatreion/README.md) |
 | Usher | Declared Cell membership | [Usher](/Users/joey/rust/cell/usher/README.md) |
-| Clockwork | Scheduled process activation and runtime history | [Clockwork](/Users/joey/rust/cell/clockwork/README.md) |
+| Clockwork | Scheduled process activation and runtime history | [Clockwork](/Users/joey/rust/cell/clockwork/chancery/overview.md) |
 | Nucleus | Constrained agent execution, authentication, and job history | [Nucleus](/Users/joey/rust/cell/nucleus/README.md) |
-| Chancery Usage | Registered systems/commands and append-only observed command invocations | [Usage journal](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) |
+| Chancery | Installed product contracts, promise resolution, and recorded command usage | [Chancery](/Users/joey/rust/cell/chancery/provider/overview.md) |
 | Annals Usage | Live Annals-attributed consumption and account allowance | [Usage reporting](/Users/joey/rust/cell/annals/docs/telemetry.md) |
 
 ## Topology and authority
@@ -290,7 +290,7 @@ Paperboy embed Conversations, including its normalization and executable
 defaults. Weaver embeds Annals, Nucleus, Iatreion, and Chancery usage interfaces.
 Deployment companion declarations select these installed consumers for rebuild.
 Keep explicit executable pins and library identities aligned during deployment.
-See [Conversations installation](/Users/joey/rust/cell/conversations/docs/system-installation.md)
+See [Conversations installation](/Users/joey/rust/cell/conversations/chancery/manuals/installation-operate.md)
 and each consumer's installation contract for the exact selection rules.
 
 ## Shared CI, release, and deployment coordination
@@ -725,13 +725,16 @@ Keep each full explanation with its owning product. This manual owns shared
 topology, authority, compatibility, coordination, and recovery order. Product
 references own record meaning and exact operations.
 
-Nucleus publishes detailed behavior as feature contracts in its Chancery
-provider bundle. Read `chancery product nucleus` for the overview and inventory,
-`chancery show ID` for one feature or procedure, and `chancery resolve ID` for the
-complete required contract reading. Operation manuals keep prerequisites,
+Nucleus, Annals, Annals Usage, Bazaar, Cast, Chancery, Clew, Clockwork, Conatus,
+Conversations, Email, EMT, Platter, Semantics, Usher, and Weaver publish detailed
+behavior as feature contracts in their product-owned Chancery provider bundles.
+Read `chancery product PROVIDER_ID`
+for the overview and inventory, `chancery show ID` for one feature or procedure,
+and `chancery resolve ID` for the complete required contract reading.
+Operation manuals keep prerequisites,
 action-critical effects, stop conditions, and verification in place. Required
 dependencies declare compatible contracts; related references provide navigation.
-Other products keep their current documentation organization.
+The remaining products keep their current documentation organization.
 
 Use short active sentences and descriptive headings. State which records or
 operation a count, timestamp, or failure describes. Remove duplicate explanations,

@@ -4,7 +4,10 @@ Usher reads a product's declared identity, owned root, Semantics participation,
 and Chancery presence to report its Cell membership. It is a Rust CLI with no
 database, daemon, network or model calls, service invocation, or retained state.
 
-From a Cell checkout:
+The installed CLI accepts `usher report ROOT [--product ID_OR_ALIAS]`,
+`usher check ROOT [--product ID_OR_ALIAS]`, and the global `--json` option.
+The checkout defaults to the current directory. From a Cell checkout with
+a built binary:
 
 ```sh
 target/release/usher report .
@@ -12,11 +15,10 @@ target/release/usher check .
 target/release/usher --json report . --product krisis
 ```
 
-Submit committed changes with `./ci.sh submit COMMIT` from the Cell root. The
-installed manager integrates, validates, attempts bounded repairs, deploys,
-and emails the outcome. Its internal validator runs a candidate Usher
-membership check for every candidate, including when selecting other product
-gates. The compiler runs inside the existing CI broker's heavy lane.
+The CI manager's internal validator runs a candidate Usher membership check
+for every candidate, including when selecting other product gates. Use
+`usher.develop.change` for development and validation obligations. Read
+`usher.installation` for the separate installer's guarantees.
 
 ## What is checked
 
@@ -96,13 +98,13 @@ checkout stable during reads; they are not an atomic filesystem snapshot. Root
 CI additionally rejects results if its source candidate changes during the run.
 Fix the source declaration and rerun. Usher has no reset or repair command.
 
-## Output selection
+## Compatibility
 
-`check` uses schema 2. It returns counts and each incomplete identity, Semantics,
-or Chancery finding, and omits successful evidence. `report` returns the full
-product report in schema 1. An incomplete check exits 1. Fatal command or
-inventory errors exit 2. Both outputs describe repository declarations; they do
-not test runtime readiness or registration.
+Recognition contract three, report schema one, check schema two, Iatreion
+status declaration schema one, pipeline schema one, and supported provider
+schemas one through four are separate. Incompatible recognition or output
+meaning requires an explicit versioned change. No broader compatibility
+window or deprecation period is promised.
 
 ## Command usage
 

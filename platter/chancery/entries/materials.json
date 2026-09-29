@@ -1,0 +1,156 @@
+{
+  "id": "platter.materials",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Read and select Platter materials and templates",
+  "summary": "Understand retained packet artifacts, fixed template boundaries, imports, daily PDF configuration, and explicit private exports.",
+  "use_when": [
+    "A reader needs artifact or template meaning, fixed versus editable content, immutable selection, daily PDF settings, or export behavior."
+  ],
+  "do_not_use_when": [
+    "The goal is authoring, sending, source-library mutation, or direct SQLite integration."
+  ],
+  "outcome": "Retained materials and future template/PDF selection are understood through Platter-owned identities and interfaces.",
+  "interfaces": [
+    {
+      "label": "Initialize template",
+      "invocation": "platter init --resume /absolute/private/original-resume.tex"
+    },
+    {
+      "label": "Read local state",
+      "invocation": "platter status"
+    },
+    {
+      "label": "Import full template",
+      "invocation": "platter import-template /absolute/private/resume.tex"
+    },
+    {
+      "label": "Import Projects-only template",
+      "invocation": "platter import-projects-template /absolute/private/resume.tex"
+    },
+    {
+      "label": "Read settings",
+      "invocation": "platter --json config"
+    },
+    {
+      "label": "Set daily PDF",
+      "invocation": "platter config --resume-override /absolute/private/resume.pdf"
+    },
+    {
+      "label": "Clear daily PDF",
+      "invocation": "platter config --clear-resume-override"
+    },
+    {
+      "label": "Export immutable bytes",
+      "invocation": "platter export ARTIFACT_ID /absolute/private/output.pdf"
+    }
+  ],
+  "effects": [
+    "Initialization retains immutable template bytes. Imports atomically select a new immutable template for future captures. Prior runs and editions keep their exact references.",
+    "Configuration validates and sets or clears the daily PDF path under normal mutation admission. Export writes a new private destination and refuses overwrite. These interfaces prepare no packets and send nothing."
+  ],
+  "authority": [
+    "Platter owns captured inputs, accepted artifacts, selected templates, settings, and export effects. Annals, Weaver, and Nucleus retain their separate source/execution authority."
+  ],
+  "success": [
+    "A supported immutable artifact or validated future selection is retained; export writes the selected retained bytes to a new destination."
+  ],
+  "failure_and_recovery": [
+    "Invalid templates, overlapping regions, invalid or unreadable configured PDFs, unsupported state, and foreign holds stop the operation. Existing artifacts and frozen editions remain intact.",
+    "Use supported maintained backup and migration. Do not query or edit private SQLite as an integration route."
+  ],
+  "privacy": [
+    "Template, career, posting, resume, brief, and edition bytes remain private. Nucleus/model, employer HTTP, and authorized Email disclosures follow their separate feature contracts."
+  ],
+  "does_not_authorize": [
+    "Model work, an email, recurring activation, or alteration of a captured run or frozen edition."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user and local agents use Platter CLI interfaces to select future templates or daily PDF settings, inspect local state, and export retained artifacts."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Use the canonical schema-seven library at ~/.local/share/platter or its sole existing ~/.local/share/job-packets predecessor. Two roots are ambiguous and refused; --state-dir must equal the canonical root. Imports require initialized state and supported separate Jackson/Projects regions and both project marker pairs."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Initialization and imports accept an absolute private LaTeX source path. PDF configuration accepts an absolute readable valid unencrypted PDF with at least one page. Export accepts an artifact ID and a new explicit destination."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Artifacts retain immutable bytes, producing-run reference when applicable, kind, filename, media type, and integrity hash. Configuration and selected template references remain in the canonical library; an export is a separate private file."
+      },
+      {
+        "status": "declared",
+        "statement": "Retained historical complete-project payloads preserve one or two unique Cell/Wrought entries with description, optional dates, one through eight bullets and private source notes; retained text fields have at most 1000 characters and no controls. Historical rendering supplies fixed project links and omits source notes. Current authoring writes only the fields described by platter.preparation."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A packet is a run and its artifacts. Imported templates and shared daily PDFs have no producing run. Artifact IDs are identities, not file paths; exported copies never become dependencies."
+      },
+      {
+        "status": "declared",
+        "statement": "Current tailored templates keep fixed presentation outside Jackson bullets and the two marked project bullet lists. Projects-only imports change only the existing Projects section. Daily override configuration affects future daily work; frozen bytes remain unchanged."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Run IDs identify preparations; artifact IDs identify retained bytes and kinds. The original template path records provenance rather than a continuing byte source. A daily override path selects an external future-work source; frozen PDF bytes have their own artifact identity."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "The schema-seven SQLite library contains retained inputs, templates, artifacts, editions, settings, and holds. A consistent backup contains its complete retained history, including frozen daily PDF bytes. Current configuration does not refresh sources or establish current posting availability."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Use current-user CLI interfaces. Private sources and exports remain outside the repository. No independent live library may bypass canonical mutation admission."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Template selection is atomic and preserves earlier artifacts and captured references. Accepted outputs are immutable by run and kind; repeated identical submission resolves to retained content and conflicting content is refused. Configuration changes affect future work."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Generated template and imported region constraints apply to new tailored work. PDF override validation does not compile LaTeX or impose the tailored one-page/content checks. Export never overwrites a destination. There is no artifact deletion API or automatic domain pruning."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Persistent schema seven preserves retained legacy workflow and artifact meanings. Ordinary work refuses schemas one through six until supported maintenance migrates them. Full and Projects-only template imports do not rewrite historical captures."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Validating the configured daily PDF relies on local Python with pypdf; no dedicated installed renderer contract covers that external tooling.",
+        "target": "resume-renderer",
+        "kind": "external"
+      }
+    ]
+  },
+  "manual": "manuals/materials.md"
+}

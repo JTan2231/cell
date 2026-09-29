@@ -68,6 +68,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "conatus.service",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "promise": {
@@ -162,6 +167,13 @@
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Conatus service contract owns the independent daily-email definition, maintenance and retained scheduling incidents.",
+        "target": "conatus",
+        "kind": "authority",
+        "contract": "conatus.service"
       }
     ]
   }

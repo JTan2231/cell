@@ -133,6 +133,21 @@
   },
   "dependencies": [
     {
+      "id": "clew.state",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clew.application.track",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "clew.digest.email",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
       "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3

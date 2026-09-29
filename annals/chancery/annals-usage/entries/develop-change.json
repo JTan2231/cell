@@ -16,7 +16,7 @@
   ],
   "outcome": "A tested versioned projection change that continues to derive live results from Annals and Nucleus authorities and states every accounting limit explicitly.",
   "effects": [
-    "Modifies the separately versioned `annals-usage` package, tests, configuration, or telemetry documentation.",
+    "Modifies the separately versioned `annals-usage` package, tests, configuration, or owning Annals Usage feature contracts.",
     "May require coordinated Annals attribution or Nucleus output-contract changes when an upstream atomic record changes.",
     "CI submission authorizes manager integration, validation, bounded repair, joint Annals deployment, and the outcome email. Publication remains separately authorized."
   ],
@@ -40,7 +40,9 @@
     "Do not add Semantics repository output to an Annals liaison prompt."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3}
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "annals-usage.consumption.inspect", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "annals-usage.execution.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "session_surfaces": [
     "local_filesystem",
@@ -49,9 +51,9 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read `semantics.repository.explore`, query `semantics repository show annals`, read the telemetry contract, and identify whether Annals Usage actually owns the requested meaning.",
+    "Read `semantics.repository.explore`, query `semantics repository show annals`, read the owning Annals Usage feature contracts, and identify whether Annals Usage actually owns the requested meaning.",
     "Run `nucleus manual` before changing shared output, account, authentication, compatibility, or deployment behavior.",
-    "Implement the smallest projection change and update telemetry documentation and exact coverage tests.",
+    "Implement the smallest projection change and update owning Annals Usage feature contracts and exact coverage tests.",
     "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Login and deployment outside that job require separate authority."
   ],
   "checkpoints": [
@@ -80,15 +82,15 @@
       {"status": "unsupported", "statement": "This operation does not run reports or account commands, create a reporting database, change Annals or Nucleus authority from the companion side, publish a release, or deploy outside the submitted manager job."}
     ],
     "preconditions": [
-      {"status": "declared", "statement": "The contributor has read the installed Semantics exploration contract, complete current annals repository, telemetry contract, and current owning Annals Usage boundary."},
+      {"status": "declared", "statement": "The contributor has read the installed Semantics exploration contract, complete current annals repository, owning Annals Usage feature contracts, and current owning Annals Usage boundary."},
       {"status": "declared", "statement": "Changes to shared output, account, authentication, compatibility, deployment, or requester integration require the installed Nucleus manual and coordinated owner contract before implementation."}
     ],
     "inputs": [
-      {"status": "declared", "statement": "Input is one scoped Annals Usage change request plus current canonical terminology, telemetry documentation, source, tests, and any affected upstream owner contract."},
+      {"status": "declared", "statement": "Input is one scoped Annals Usage change request plus current canonical terminology, owning Annals Usage feature contracts, source, tests, and any affected upstream owner contract."},
       {"status": "unsupported", "statement": "A UI scrape, credential copy, retained aggregate, unqualified estimate, or requester-side redefinition of Annals or Nucleus state is not a valid implementation input."}
     ],
     "outputs": [
-      {"status": "declared", "statement": "The result is the smallest coherent separately versioned projection, test, configuration, and telemetry-documentation change with explicit accounting limits and a verified retained CI manager job outcome."},
+      {"status": "declared", "statement": "The result is the smallest coherent separately versioned projection, test, configuration, and feature-contract change with explicit accounting limits and a verified retained CI manager job outcome."},
       {"status": "unsupported", "statement": "Passing validation alone does not prove deployment or account readiness. The retained manager job identifies deployment and notification outcomes; publication and live account mutations remain separate operations."}
     ],
     "data_semantics": [
@@ -101,7 +103,7 @@
       {"status": "declared", "statement": "Token categories retain their documented units and subset relationships; external rate-card units remain separate from invoices and account allowance."}
     ],
     "completeness_and_freshness": [
-      {"status": "declared", "statement": "Every affected coverage case, attribution gap, rate-card limit, account scope, and upstream decoding boundary is updated explicitly in tests and telemetry documentation."},
+      {"status": "declared", "statement": "Every affected coverage case, attribution gap, rate-card limit, account scope, and upstream decoding boundary is updated explicitly in tests and owning Annals Usage feature contracts."},
       {"status": "declared", "statement": "Completion requires passing manager-selected validation with coverage for affected reporting, diagnostics, login delegation, and requester output interpretation and verification of the retained manager job outcome."},
       {"status": "unspecified", "statement": "No development duration or guarantee about unrelated projections is promised."}
     ],
@@ -110,7 +112,7 @@
       {"status": "unsupported", "statement": "Development authority does not grant credential access, release publication, deployment outside that job, unrelated external disclosure, direct upstream database mutation, or direct Semantics-state editing."}
     ],
     "lifecycle_and_consistency": [
-      {"status": "declared", "statement": "Identify the owning product meaning, update the smallest projection and exact coverage tests, version changed interpretation, and update telemetry documentation. Commit the change, submit it through the CI manager, and verify the retained validation, deployment, and notification outcomes."},
+      {"status": "declared", "statement": "Identify the owning product meaning, update the smallest projection and exact coverage tests, version changed interpretation, and update owning Annals Usage feature contracts. Commit the change, submit it through the CI manager, and verify the retained validation, deployment, and notification outcomes."},
       {"status": "declared", "statement": "Atomic Annals and Nucleus records remain the recalculation authorities, and an unreadable upstream fails a live projection rather than causing a stale retained fallback."},
       {"status": "declared", "statement": "CI submission includes the joint Annals deployment and outcome email. Publication and deployment outside that job remain separately authorized lifecycles."}
     ],
@@ -126,7 +128,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Annals Usage development relies on the registered Semantics repository for current Annals terminology while retaining telemetry documentation and project sources as behavior authority.",
+        "statement": "Annals Usage development relies on the registered Semantics repository for current Annals terminology. Annals Usage feature contracts own the reporting explanation; project sources and tests establish actual behavior.",
         "target": "semantics",
         "kind": "authority",
         "contract": "semantics.repository.explore"

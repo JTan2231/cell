@@ -1,123 +1,243 @@
-# Integrate a source with the Annals corpus
+# Interpret a source
 
-Integration asks Annals' constrained AI reader to examine one immutable work
-against one frozen corpus and library instruction revision. It records an interpretation as semantic
-operations that associate ideas with exact source quotations in the corpus.
+Use this feature to examine one immutable work against one frozen corpus and
+library instruction revision. Annals records the interpretation as semantic
+operations with exact source quotations. Library instructions define what the
+librarian organizes; Annals enforces source preservation and structural rules.
+Read [libraries](libraries.md) for selection and instructions and
+[corpus changes](corpus-change.md) for reconciliation input and application.
 
-## Start an examination
+## Interfaces and effects
 
-Integrate a file or an existing work:
-
-```sh
-/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL>
-/Users/joey/.local/bin/annals integrate --work <LABEL>
+```text
+annals integrate INPUT [--name LABEL] [--quality QUALITY] [--model MODEL]
+  [--apply] [--reexamine]
+annals integrate --work LABEL [--quality QUALITY] [--model MODEL]
+  [--apply] [--reexamine]
+annals change show --work LABEL
+annals change validate --work LABEL
 ```
 
-Both forms deliberately examine the selected work even when its bytes were
-retained earlier. `annals library NAME integrate ...` selects a registered
-library. Annals freezes HEAD and the selected instructions in one admission
-transaction, submits one closed Nucleus job, and
-expects its liaison to record one reconciliation through Annals' validated
-tools. The liaison has only the scoped work/corpus interfaces supplied by
-Annals. Its final prose is diagnostic and is not parsed as the result. Direct
-integration requires a `general` library; a decisions library is dispatched
-only from producer-accepted inbox jobs or their explicit retry children.
+The first form retains or recognizes source bytes and examines the selected
+work. The second examines a retained work. Both deliberately integrate it even
+when its bytes were retained earlier. A registered name scopes the command as
+`annals library NAME integrate ...`; config/path selection remains supported.
+Direct integration requires a `general` library. A `decisions` library permits
+examination only from its producer-accepted inbox jobs or explicit retry children.
 
-Annals may reuse the newest successful examination for the exact same work,
-base revision, instruction revision, exact effective prompt/tool context, model,
-and reasoning effort. Returning to earlier instruction bytes creates a new
-revision and does not revive earlier reuse. Force a fresh
-reading only when that is intended:
+A compatible authenticated Nucleus connection and initialized prompt selection
+are prerequisites. Integration can consume Codex allowance. Reading and
+validation do not authorize application. Without `--apply`, a material result
+remains pending. Authorized `--apply` commits the validated transition
+atomically. A mechanically equal projection is recorded with no corpus change,
+no commit, and no revision advance.
 
-```sh
-/Users/joey/.local/bin/annals integrate --work <LABEL> --reexamine
-```
+## Frozen context and exact reuse
 
-## Pending versus applied
+Annals captures HEAD and the selected instructions, checks reuse, and creates
+the examination record in one admission transaction. The record freezes the
+instruction revision and a hash of the exact effective instructions, pointer
+prompt, tool definitions, and result schema. The exact stored library text is
+supplied as Nucleus `developerInstructions`. A running examination loads that
+recorded revision, including after a new selection becomes current.
 
-By default, integration does not apply a projected corpus change:
+Successful reuse and active examination uniqueness require the same work,
+base revision, instruction revision, exact effective prompt/tool context,
+model, and reasoning effort. Annals can select the newest successful
+reconciliation matching that context. `--reexamine` bypasses reuse. Changed
+context requires a fresh examination. A → B → A instruction selections append
+revisions and do not revive reuse from the first A.
 
-```sh
-/Users/joey/.local/bin/annals integrate --work <LABEL>
-/Users/joey/.local/bin/annals change show --work <LABEL>
-/Users/joey/.local/bin/annals change validate --work <LABEL>
-```
+A material proposal can apply only while current HEAD and instructions match
+its frozen basis. Annals checks both in the committing transaction. Later
+instruction selection starts no reinterpretation and rewrites no committed
+history. Recorded and applied results remain authoritative after later
+instruction changes or Nucleus failures. Pre-instruction-provenance records
+retain null provenance rather than an invented basis.
 
-When immediate application is explicitly authorized, `--apply` atomically
-commits the projected corpus transition:
+## Model and requester configuration
 
-```sh
-/Users/joey/.local/bin/annals integrate <UTF8_INPUT> --name <LABEL> --apply
-```
+`--quality` resolves from the command line, then `[liaison].quality`, then
+`high`. The presets select both model and reasoning effort:
 
-Without it, a material result remains pending. A projected state mechanically
-equal to the base is recorded with no corpus change; it creates no commit and
-does not advance the revision. A pending reconciliation can apply only while
-HEAD and the selected instruction revision still equal its frozen basis.
-Both are checked in the committing transaction.
+| Quality | Model | Reasoning effort |
+| --- | --- | --- |
+| `low` | `gpt-5.6-luna` | `medium` |
+| `medium` | `gpt-5.6-terra` | `medium` |
+| `high` | `gpt-5.6-sol` | `max` |
 
-## Success, failure, and authority
+`--model` resolves from the command line, then `[liaison].model`, then the
+preset. It changes only the model; quality still chooses reasoning effort.
+`[liaison].nucleus_socket` can select a nonstandard local Unix socket. The
+default is Nucleus's current-user socket.
 
-Annals domain state is authoritative: success means a valid reconciliation was
-recorded, and application success means Annals committed the resulting state.
-Nucleus job completion alone is insufficient. Conversely, a later Nucleus
-runtime failure does not erase a reconciliation Annals already recorded.
+Annals submits one closed Nucleus job with its frozen prompt, instructions,
+model, reasoning effort, and exact nine-tool contract. Nucleus owns process
+isolation, authentication, job and attempt state, and raw protocol output.
+Annals does not read or set `CODEX_HOME` and has no direct Codex fallback.
+Nucleus's own feature contracts define its scheduler and authentication rules;
+a Nucleus terminal outcome does not decide an Annals domain result.
 
-Draft validation can return named operations for revision while retaining
-independently valid operations. A liaison may discard an irreparable draft;
-abandoned and discarded drafts remain audit records but create no
-reconciliation.
+Annals gives current toolset registrations a version derived from the exact
+Bazaar selection version plus 2, above its historical registration range.
+Input schema IDs are also versioned with the selection because their field
+descriptions can change. Historical toolset version 2 and `.input.v2` identities
+retain their original text from selection 1. Structural schema changes still
+require a code change and the requester compatibility procedure. The result
+schema remains `annals.liaison-tool-result.v1`, with historical decoding retained.
+The Nucleus job identity is deterministic for the examination. Ambiguous
+submission repeats byte-identical request content. Annals caches each tool
+result before mailbox transmission, so ambiguous transport retry does not
+execute its backend operation twice.
 
-The exact selected library instructions are supplied as Nucleus
-`developerInstructions`. They define interpretation; the shared Annals prompt
-and tools enforce structural and evidence rules. A running examination reads
-its recorded instruction revision, even after selection changes. Instruction
-updates affect future examinations without rewriting committed results.
+## Scoped reading and draft tools
 
-The complete work, library instructions, and frozen corpus context can enter the immutable Nucleus
-request and raw protocol state. Protect both the Annals library and Nucleus
-state as sensitive. Use Annals Usage, not this capability, to inspect the
-resulting model consumption.
+The liaison is a constrained model role. Its pointer prompt identifies the
+work label and frozen base revision and omits complete source text and
+repository instructions. Tools supply source and corpus context as needed.
+There are no shell, web, planning, user-input, or multi-agent tools.
 
-## Output selection
+| Tool | Purpose |
+| --- | --- |
+| `work_overview` | Read bounded source structure and headings. |
+| `work_read` | Read bounded regions through natural source anchors. |
+| `work_search` | Search the selected source through bounded queries. |
+| `corpus_search` | Search the frozen corpus through bounded queries. |
+| `corpus_inspect` | Read bounded corpus concepts, relations, evidence, or local graph context. |
+| `submit_reconciliation` | Start a complete reconciliation draft. |
+| `revise_reconciliation` | Replace or remove named operations, append operations, or revise metadata. |
+| `reconciliation_status` | Recall the compact draft roster or exact staged operations. |
+| `discard_reconciliation` | Discard the open draft so a new submission can start. |
 
-Applied and recorded/no-change mutation results return work, base/result
-revision, status, summary, operation count, and recorded time where applicable.
-Pending proposals retain full review content. `change show` returns the complete
-selected reconciliation or accepted change. `change list` returns a schema-two
-`items`/`has_more` page with a default limit of 20. Increase positive `--limit`
-to read more. Domain results survive later runtime failure.
+Source reads use natural heading, quotation, continuation, or document-edge
+anchors, not byte offsets. A heading or quotation anchor must resolve uniquely.
+Evidence-selector fan-out is a separate reconciliation rule and does not apply
+to source reading. The liaison preserves source material regardless of
+estimated novelty or salience and chooses concept granularity relative to the
+work, corpus, and stored instructions.
 
-## Command usage
+Every tool request crosses strict JSON ingress. Annals validates recognized
+shape and bounds and stores normalized intent. Raw arguments and results are
+hashed audit artifacts; Annals never decodes those artifacts to resolve,
+apply, search, diff, revert, or normalize the corpus.
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+## Draft lifecycle
 
-## Bazaar prompt selection
+A run has at most one open draft. Initial submission creates a normalized
+request and stable operation slots. A malformed slot has no action and a repair
+hint; malformed raw JSON is not domain state. Annals assesses individual
+operations, then resolves the active set as a whole.
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+A `needs_changes` result preserves independently valid operations. Stable
+positive operation IDs such as `op-3` identify draft-local slots. Revision
+replaces named slots, explicitly marks removed slots dropped, appends new
+slots, or changes metadata. Unmentioned slots remain unchanged. Replacing
+another operation never renumbers a slot. An operation ID is distinct from a
+concept ID or request-local concept handle.
 
-Read `cell.prompts.annals` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+When every active operation works together, submission or revision finalizes
+the draft automatically and records exactly one reconciliation using the same
+normalized request. Terminal request and draft rows are sealed. Explicit
+discard lets the liaison start again. A run ending without a reconciliation
+abandons its open draft. Discarded and abandoned drafts remain audit records;
+they create no reconciliation or corpus change.
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+A draft is neither a pending reconciliation nor a projected corpus state.
+The [corpus-change feature](corpus-change.md) owns the strict request grammar,
+selectors, seven operations, projected-state validation, and pending/application
+semantics.
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+## Domain results, diagnostics, and inspection
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.annals --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+Success means Annals recorded one valid reconciliation or selected an exact
+reusable reconciliation. Application success means Annals committed the
+resulting state. Final model prose is diagnostic and is never parsed as the
+reconciliation. Nucleus completion without the required Annals record is
+insufficient. A later runtime failure does not erase a recorded domain result
+or authorize a new attempt automatically.
+
+Each examination audit record includes work, base, model, reasoning effort,
+prompt version, instruction revision, and context hash. Its domain state is
+`running`, `submitted`, `no_submission`, or `failed`; it is not a corpus
+revision. Tool calls retain their ordered name, success, time, exact arguments
+and result, and content hashes. Final diagnostic response and execution
+diagnostics do not form a second durable reporting stream.
+
+`change show --work LABEL` returns the complete selected reconciliation.
+`change validate` re-resolves it without writing. Applied and recorded/no-change
+receipts return work, base/result revision, status, summary, operation count,
+and recorded time where applicable. Pending proposals keep full review
+content. `change list` defaults to 20 and uses schema-two `items`/`has_more`;
+increase positive `--limit` for more. Annals Usage owns consumption reporting.
+
+## Prompt selection through Bazaar
+
+Prompt preparation requires initialized private Bazaar state and a complete
+`cell.prompts.annals` selection. The default database is
+`~/.local/share/bazaar/bazaar.sqlite3`; an absolute `CELL_BAZAAR_DATABASE`
+override is supported. Reads fail without creating state or using embedded
+fallback text. Missing or invalid selections stop new request preparation
+before model admission. Deployment supplies no missing prompt contents.
+
+Read `cell.prompts.annals` through Bazaar's supported `get` interface. Its
+content is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every
+component pinned to a positive version. Publish component text first, then the
+complete selection. Appending component text alone does not change the
+selected set.
+
+Import the reviewed migration seed before deployment. Preserve selection
+version 1 and every referenced text version for historical compatibility.
+Runtime reads never import it. Annals resolves the exact components before
+new work and records the selection in the examination prompt version and
+context digest, freezing resolved content with its request or domain snapshot. Retried retained
+requests keep that selection; new examinations follow their documented current
+instruction admission. Later text edits do not rewrite saved work.
+
+Models, permissions, schemas, tool execution, commits, and recovery remain
+Annals-owned. Library instructions are immutable domain captures selected
+through library operations. Bazaar supplies text and version identity; stored
+text grants no additional authority.
+
+For an authorized edit, append component text with
+`bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the returned version,
+and append the complete selection with
+`bazaar update cell.prompts.annals --file /absolute/selection.json`. Use
+`bazaar --database /absolute/private/bazaar.sqlite3` when the caller uses
+`CELL_BAZAAR_DATABASE`. Roll back by appending the prior selection content.
+Keep private text out of logs and retain historical versions.
+
+## Limits and private state
+
+| Operation or retained value | Limit | Default |
+| --- | --- | --- |
+| Liaison execution bound | 60 minutes | — |
+| App-server transcript | 64 MiB | — |
+| Retained model-error tail | 64 KiB | — |
+| `work_read` regions per call | 1–20 | — |
+| Characters per work region | 12,000 | 4,000 |
+| Work overview heading characters | 16,000; truncation reported | — |
+| Work or corpus search queries per call | 1–20 nonempty queries | — |
+| Work-search matches per query | 1–10 | 5 |
+| Work-search excerpt characters | 1,000 | — |
+| Corpus-search matches per query | 1–50; separate cursor per query | 10 |
+| `corpus_inspect` requests per call | 1–20 | — |
+| Parent, child, evidence, or root page | 1–100 items | 25 |
+| Relation preview in concept inspection | At most 20 items | 5 |
+| Local graph | Depth 0–5; at most 500 concepts; frontier reported | — |
+| Model-facing evidence excerpt | 2,000 characters; truncation reported | — |
+
+These bounds do not promise model completion, queue time, throughput, maximum
+source size, or allowance consumption. A bounded answer does not bound corpus
+replay cost. Selected state is held in memory and historical reads replay
+canonical effects.
+
+Complete source text, library instructions, frozen corpus context, tool values,
+and diagnostics can enter immutable Nucleus requests and retained operational
+state. Protect Annals and Nucleus state as sensitive. Read access does not
+authorize source publication or disclosure. Feature version, release, library
+schema, prompt/tool identities, model identity, and Nucleus protocol evolve
+separately; no general pending-reconciliation support window is promised.
+
+CLI usage recording requires nonempty `CODEX_THREAD_ID`. Chancery records
+command identity, time, and thread ID, not arguments, output, or outcomes.
+Internal calls are excluded. Recording errors preserve command results.

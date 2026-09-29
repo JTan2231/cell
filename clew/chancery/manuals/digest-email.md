@@ -94,7 +94,7 @@ The definition pins the installed release and uses `clew/daily-email`, local
 09:00, no run-at-load, skipped overlap, a 180-second limit and
 `halt-until-approved`. Generation writes a new private definition and prepares
 private log paths; it does not register or enable the binding. See the
-[installation contract](install-operate.md) for coordinated setup.
+`clew.install.operate` procedure for coordinated setup.
 
 Login, sleep and launchd affect actual activation. No start-delay, catch-up,
 message-size, provider-availability or inbox-delivery guarantee is supplied.

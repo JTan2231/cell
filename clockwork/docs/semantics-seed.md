@@ -1,9 +1,10 @@
 # Clockwork semantic seed
 
-This project-local definition list describes Clockwork behavior. It
-is input prepared for a later explicit `semantics repository seed-markdown`
-operation; its presence does not mean the `clockwork` Semantics project has
-been registered or seeded.
+This project-local list is terminology seed data for a later explicit
+`semantics repository seed-markdown` operation. Its presence does not mean the
+`clockwork` Semantics project is registered or seeded. The published
+[feature contracts](../chancery/overview.md) own supported behavior; this seed
+does not maintain a second operating contract.
 
 **Scheduled activation**
 : One admitted invocation of one immutable Clockwork definition, resulting in at most one directly supervised child process and one runtime-history record. It is not a product-domain unit of success.

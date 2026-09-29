@@ -1,127 +1,161 @@
 # Install and operate Weaver
 
-Use the Cell deployment coordinator to install or update Weaver. The command,
-installer, provider, and private application directory are named Weaver. Its
-Cell source is `weaver-narrative`; Semantics project `weaver-narrative` is
-separate from the permanently retired predecessor `weaver` registration.
+Use this procedure to install, configure, inspect, back up, or recover Weaver.
+Read `chancery resolve weaver.install.operate` for the required feature and
+manager contracts. `weaver.lifecycle` owns configuration, state, readiness,
+maintenance, and release guarantees. `weaver.narrative.write` owns authoring,
+prompt selection, and exact assignment recovery.
 
-## Install
+Weaver reads an existing identity-bound Annals decisions library. It does not
+provision that library. Read the installed `nucleus manual` before coordinated
+maintenance. Keep settings, database, configuration, and backups private.
+Installation and readiness checks create no narrative or model job. Manual
+installation publishes local program bytes; it does not publish Git changes,
+publish a narrative, send email, or authorize an authoring retry.
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For a
-separate authorized manual deployment, select a validated candidate on local
-`main`. The coordinator selects that commit; it does not publish Git changes
-or author a document.
+## Install or update
 
-```sh
-./deploy.sh plan weaver
-./deploy.sh weaver --settings /absolute/weaver-settings.json
-```
+1. Select the authorized delivery route. For ordinary CI delivery, commit the
+   intended change and submit `cell-ci submit COMMIT`, or `./ci.sh submit COMMIT`
+   from the Cell root. The manager integrates, validates, attempts bounded
+   repairs, deploys, and sends its deterministic outcome email. Verify its
+   retained job outcome. For a separate authorized manual deployment, select
+   a validated candidate on local `main`; the coordinator selects that commit.
+2. Check the source prerequisites. Select an existing Annals decisions config,
+   compatible Annals and Nucleus releases, and initialized Bazaar state with a
+   complete `cell.prompts.weaver` selection. Import the reviewed migration seed
+   before deploying these callers. Preserve selection version 1 and every
+   referenced text version. Runtime reads and deployment do not supply missing
+   prompt contents. The authoring feature owns the selection semantics.
+3. Prepare the first installation's private settings file. `annals_config` is
+   the only Weaver setting and must be an absolute path. Later deployments
+   reuse its stored path unless settings select another path. The maintained
+   installation selects the current user's `~/.local/bin/annals`.
 
-The first installation requires a private settings file with this shape:
+   ```json
+   {"weaver":{"annals_config":"/absolute/Annals/decisions/config.toml"}}
+   ```
 
-```json
-{"weaver":{"annals_config":"/absolute/Annals/decisions/config.toml"}}
-```
+4. Preview the selected products and dependencies from the Cell root. Stop if
+   the plan requires a choice or effect outside the authorized endpoint.
 
-`annals_config` is the only setting. It must select an existing identity-bound
-Annals decisions library. Weaver does not provision that library. Later
-deployments reuse the stored path unless settings select another path.
-The installed reader is the current user's `~/.local/bin/annals`.
-Compatible Annals and Nucleus releases are installation dependencies.
+   ```sh
+   ./deploy.sh plan weaver
+   ```
 
-Inspection reads the source configuration and Annals start cursor without
-changing either library. The coordinator holds and drains Weaver, selects the
-immutable program/provider release, initializes absent Weaver state or checks
-schema 1, and verifies the database, Annals reads, and Nucleus readiness.
-It releases only its own hold. No model job or document is created by readiness
-verification. Weaver defines no Clockwork binding or service.
+5. Invoke the coordinator when deployment is authorized. Use the settings file
+   for first installation or an intended reader change; later deployments can
+   reuse existing configuration.
 
-## Inspect and configure
+   ```sh
+   ./deploy.sh weaver --settings /absolute/weaver-settings.json
+   ```
 
-```sh
-weaver doctor
-weaver config
-weaver init --annals-config /absolute/decisions/config.toml
-weaver init --annals-config /absolute/decisions/config.toml --annals-binary /absolute/annals
-weaver maintenance status
-weaver maintenance hold RUN_ID
-weaver maintenance drain
-weaver maintenance release RUN_ID
-weaver-install inspect
-weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID
-```
+   The coordinator holds and drains Weaver, selects the immutable program and
+   provider, initializes absent state or checks schema 1, and verifies database,
+   source reads, and Nucleus readiness. It releases only its own hold. Stop on
+   unsupported state, unavailable job inventory, unproved drain, altered bytes,
+   foreign selectors, or readiness failure. Do not invoke direct installer
+   `install` or `recover`; those routes are refused.
 
-Init creates schema 1 only in an absent or empty database and atomically saves
-reading configuration. Existing documents remain unchanged. Unsupported state
-is refused. Reconfiguration takes the same runner lock as writing.
-Doctor reads database integrity and source readiness and checks the required
-Nucleus capabilities. It creates no domain records or model jobs.
+6. Verify the exact installed release and readiness. If Weaver is held, use the
+   deployment run's `CELL_DEPLOYMENT_RUN_ID` only when it matches the sole hold.
+   An unheld doctor uses ordinary admission even when that variable is supplied.
 
-Doctor uses ordinary admission when Weaver has no maintenance hold, even if a
-caller supplies `CELL_DEPLOYMENT_RUN_ID`. When Weaver is held, doctor requires
-that ID to match its sole hold. It keeps the ID for Nucleus deployment readiness.
+   ```sh
+   weaver --version
+   weaver doctor
+   weaver-install inspect
+   weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID
+   chancery product weaver
+   chancery show weaver.narrative.write
+   chancery show weaver.lifecycle
+   chancery resolve weaver.install.operate
+   ```
 
-Maintenance returns `maintenance.protocol_version=1`, `holds`, `drained`, and
-`nonterminal_jobs`. Drain requires no admitted Weaver process and no nonterminal
-Weaver Nucleus job. An unavailable job inventory remains unknown and cannot
-prove drain. A hold blocks new writes, batches, and revisions; resume can settle an
-existing exact assignment. Hold and release preserve other owners' holds.
+7. Register the installed command inventory with `weaver --register-usage`.
+   Confirm that the coordinator released its own holds. Preserve other owners'
+   holds. Treat a readiness or documentation gap as its reported outcome;
+   catalog presence alone does not establish runtime success.
 
-The installer uses the shared Cell content-addressed file transaction and
-maintained adapter. Public binary and Chancery selectors follow the selected
-release. It refuses foreign selectors, altered candidates, and unsupported
-legacy installation formats. Direct installer `install` and `recover` are
-refused; use the coordinator. Read-only inspection and verification remain
-available. Uninstall detaches owned selectors and retains private state.
+## Inspect or reconfigure
 
-## Recovery and limits
+1. Inspect the configured reader and current evidence. The incomplete status
+   snapshot declares `weaver/author` as on demand; use doctor and maintenance
+   for live readiness and settlement.
 
-An interrupted deployment uses the coordinator's retained transaction recovery.
-After candidate publication, Weaver can finish forward with the recorded
-reading configuration and supported database. Before publication, the prior
-installation remains selected. Unproved recovery retains the named hold.
-Do not delete a hold or edit SQLite to make deployment proceed.
+   ```sh
+   weaver config
+   weaver doctor
+   weaver status-snapshot --json
+   weaver maintenance status
+   ```
 
-Schema 1 has no predecessor migration. The retired Weaver's workflow records
-are not imported or replaced. Keep `weaver.sqlite` and `config.json` private;
-use a consistent SQLite backup or copy the database while Weaver is drained.
-Keep Nucleus records and credentials under Nucleus's separate backup rules.
-Installation publishes program bytes locally. It does not publish narratives,
-send email, retry failed jobs, or guarantee future model availability.
+2. Select an existing identity-bound Annals decisions config when changing
+   reading configuration. Initialize or reconfigure through the supported
+   command. The operation takes the runner lock, preserves existing documents,
+   and refuses unsupported state.
 
-`status-snapshot --json` declares `weaver/author` as on demand. Its incomplete
-snapshot does not claim live readiness. Use doctor and maintenance for that
-evidence. No latency, retention horizon, or release cadence is promised.
+   ```sh
+   weaver init --annals-config /absolute/decisions/config.toml
+   weaver init --annals-config /absolute/decisions/config.toml --annals-binary /absolute/annals
+   ```
 
-After deployment, verify `weaver --version`, `weaver doctor`, the exact installed
-release, and `chancery show weaver.narrative.write`. Run
-`weaver --register-usage` to register its command inventory. These checks do not
-create a narrative.
+3. Read `weaver config` and run `weaver doctor` again. Verify the intended reader
+   and source readiness without authoring a test narrative. Stop on unknown or
+   incompatible evidence; do not edit SQLite or initialize replacement state.
 
-## Bazaar prompt selection
+## Back up or recover
 
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.weaver selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
+1. Acquire an explicit maintenance owner for backup or attended maintenance.
+   Preserve any pre-existing holds.
 
-Read `cell.prompts.weaver` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
+   ```sh
+   weaver maintenance hold RUN_ID
+   weaver maintenance status
+   weaver maintenance drain
+   ```
 
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
+2. Settle admitted work before copying state. Resume each exact document/job ID
+   under `weaver.narrative.write` when needed. Cancel only an exact Nucleus job
+   that the authorized operation intends to abandon. Drain must prove that no
+   Weaver process or nonterminal Weaver Nucleus job remains. Unavailable
+   inventory stays unknown and stops the procedure.
 
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
+   ```sh
+   weaver resume DOCUMENT_ID
+   nucleus jobs cancel DOCUMENT_ID
+   ```
 
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.weaver --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+   After an intended cancellation, resume the same ID to collect its outcome.
+   Resume reuses the saved request and job; it does not create another attempt.
+   Inspect `weaver show DOCUMENT_ID` if runtime failure follows saved Markdown.
+3. Save a consistent SQLite backup of `weaver.sqlite` and the private
+   `config.json`, or copy the database while Weaver is drained. Both are under
+   `~/Library/Application Support/Weaver`. Back up Nucleus records and
+   credentials separately under its own rules. Schema 1 has no predecessor
+   migration and does not import retired Weaver workflow records.
+4. Recover an interrupted deployment through the coordinator's retained
+   transaction. Follow its original ownership and exact candidate. The next
+   ordinary deployment command uses an unresolved transaction for recovery;
+   there is no separate public deployment resume route. Before publication the
+   prior installation stays selected; after publication Weaver can finish
+   forward with recorded reading configuration and supported state. Keep the
+   named hold if recovery cannot be proved. Do not delete holds or change
+   database rows to bypass the failure.
+5. Verify release integrity, source configuration, readiness, and complete drain
+   before releasing the hold acquired for attended maintenance.
+
+   ```sh
+   weaver maintenance release RUN_ID
+   ```
+
+   Release only that owner. Uninstall retains private state; clearing it needs
+   a separate decision. No backup command, general restore automation, recovery
+   latency, retention horizon, release cadence, or future model availability is
+   promised by this procedure.
+
+CLI usage recording needs a nonempty `CODEX_THREAD_ID`. It records command
+identity, time, and thread ID without arguments, output, or outcomes. Recording
+errors preserve command results. No procedure here authorizes narrative
+publication, source mutation, credential changes, or state deletion.

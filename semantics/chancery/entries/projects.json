@@ -1,0 +1,177 @@
+{
+  "id": "semantics.projects",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Maintain project participation and identity",
+  "summary": "Register, inspect, move, pause, resume, retire, or seed a project while preserving stable identity, repository history, and activation cursors.",
+  "use_when": [
+    "A folder should participate under an exact Semantics identity or its lifecycle should change.",
+    "Bootstrap vocabulary, activation coverage, move continuity, or retirement conditions must be understood."
+  ],
+  "do_not_use_when": [
+    "Only maintained terminology should be read; use semantics.repository.explore.",
+    "Service installation, deployment, or intake retry is the subject; use the corresponding feature and project operation."
+  ],
+  "outcome": "A selected durable project record or one atomic bootstrap revision with preserved identity and documented lifecycle boundaries.",
+  "interfaces": [
+    {
+      "label": "Project registry",
+      "invocation": "semantics project register ID ROOT; semantics project list; semantics project show ID"
+    },
+    {
+      "label": "Project lifecycle",
+      "invocation": "semantics project move ID NEW_ROOT; semantics project pause ID; semantics project resume ID; semantics project retire ID"
+    },
+    {
+      "label": "Bootstrap seed",
+      "invocation": "semantics repository seed PROJECT --label LABEL --meaning MEANING [--grounding STATEMENT]"
+    },
+    {
+      "label": "Markdown seed",
+      "invocation": "semantics repository seed-markdown PROJECT PATH"
+    },
+    {
+      "label": "Rust client",
+      "invocation": "semantics::api::Client"
+    }
+  ],
+  "effects": [
+    "Registration stores the canonical folder and captures its current Annals watermark, excluding earlier documents.",
+    "Move appends path history; pause fences late commits; resume revalidates the marker.",
+    "Permanent retirement closes only eligible unstarted intake atomically. Seed commits only at revision 0."
+  ],
+  "authority": [
+    "Semantics owns stable project identity, path history, lifecycle, activation and scan cursors, and seed validation.",
+    "The project owns its participation marker and runtime behavior. Annals owns upstream library/feed identity and cursor meaning."
+  ],
+  "success": [
+    "The selected project identity and canonical root match the exact marker, and the durable receipt reflects the intended lifecycle.",
+    "Seed returns one validated revision; moves preserve repository and both cursor histories."
+  ],
+  "failure_and_recovery": [
+    "Invalid markers, roots, identities, lifecycle transitions, or seed validation refuse the transition.",
+    "Retirement refuses attempted, processing, failed, correlated, or awaiting-review intake without changing project or intake.",
+    "Unavailable watermark blocks registration; inspect exact project, HEAD, and retained work instead of inventing cursors or clearing correlations."
+  ],
+  "privacy": [
+    "Project paths, source labels and digests, meanings, and retained intake remain private local state."
+  ],
+  "does_not_authorize": [
+    "Model jobs, upstream mutation, direct SQLite access, disclosure, or retained-state deletion."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local contributors and typed CLI clients may inspect or maintain participating project folders through supported Semantics operations."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Registration and move require a canonical directory and exact marker in regular root AGENTS.md; seeding requires revision 0; retirement requires paused state and no blocking retained work."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Inputs are a stable lowercase project ID, selected canonical root, intended lifecycle action, or one seed definition/project-local Markdown source."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Project list returns ID, canonical current path, lifecycle status, and HEAD. Project show and operation receipts return the complete selected record; seeding returns the committed bootstrap result."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Registration activates at the current opaque Annals watermark, move preserves identity and separate cursor histories, pause rejects late commits, and retirement is permanent and retains history."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Stable project IDs survive path changes; concept IDs and revisions remain project-local; Annals and legacy cursor bytes are distinct and opaque."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "No pricing or quantitative consumption unit is defined."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Project list covers registered project summaries; selected show/receipt describes the selected stored record. Registration coverage starts after its captured watermark rather than at the beginning of the feed."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No activation latency or registry capacity objective is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Local-user CLI and typed client operations use Semantics private state; registration reads one configured Annals decisions feed and seeding reads a project-local source."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Registry changes and seed commits are durable. Retirement and eligible intake closure are atomic, and refusal leaves all state unchanged. Path history is appended and separate cursor histories are preserved."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Bootstrap seeding is allowed only at revision 0. Retirement cannot clear attempted, processing, failed, correlated, or awaiting-review work."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No registry capacity or wall-clock operation objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Stable identity, historical path/cursor records, and revision replay remain preserved; provider release, persistent schema, and contracts have independent versions."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No retention horizon or future migration/deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Registration captures the current watermark and exact identity of the configured Annals decisions library.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Seed validation and repository identity use the supported local semantic effect/replay contract.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.repository.explore"
+      }
+    ]
+  },
+  "manual": "manuals/projects.md",
+  "dependencies": [
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ]
+}

@@ -20,4 +20,4 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='clew|Clew|package|clew/Cargo.toml|clew-|1'
 RELEASE_BINARY_CHECKS='clew|target/release/clew|clew
 clew|target/release/clew-install|clew-install'
-PROVIDERS='clew|clew|clew/chancery|3'
+PROVIDERS='clew|clew|clew/chancery|4'

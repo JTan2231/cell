@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "platter",
     "name": "Platter",
@@ -38,8 +38,13 @@
     ]
   },
   "entries": [
+    "entries/materials.json",
+    "entries/preparation.json",
+    "entries/editions.json",
+    "entries/opportunity-explore.json",
+    "entries/maintenance.json",
     "entries/packet-prepare.json",
-    "entries/install-operate.json",
-    "entries/opportunity-explore.json"
-  ]
+    "entries/install-operate.json"
+  ],
+  "overview": "overview.md"
 }

@@ -7,7 +7,7 @@
   "title": "Install and operate EMT",
   "summary": "Install matched EMT program and provider bytes, configure paused state, and operate its worker and owned maintenance without silently approving a failure halt.",
   "use_when": [
-    "The requested outcome matches this EMT operation and its standing or explicit authority."
+    "The current user must install matched EMT bytes, configure or activate its worker, inspect readiness, take a drained backup, or recover a coordinated update."
   ],
   "do_not_use_when": [
     "The user needs another recipient, sender authentication, continuous repair, or a replacement for product-owned recovery."
@@ -48,37 +48,32 @@
     "Coordinated setup resolves missing receiving settings through Email before maintenance, initializes state if absent, records a durable migration receipt, prepares a disabled exact definition, and activates after every hold is released. It preserves original absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent."
   ],
   "authority": [
-    "EMT owns correspondence and its transport progress. Nucleus owns execution; products own results."
+    "EMT owns its configuration, admission, state, maintenance holds and installation. Clockwork owns scheduling and exact failure-halt continuation; Nucleus owns jobs; Email owns transport and credentials."
   ],
   "success": [
-    "Interpret the exact operation receipt. A send succeeds at provider acceptance; an intervention needs product evidence."
+    "Verify matching program/provider, valid configuration and schema, known maintenance counts and preserved or explicitly requested schedule, pause and exact halt intent. Interpret Email acceptance and product success separately."
   ],
   "failure_and_recovery": [
-    "Keep exact pending request and mail identities. Preserve unknown outcomes. Do not create another agent attempt automatically. Use the complete manual for cancellation, deadlines, maintenance and notification recovery."
+    "Stop on missing authority or dependencies, unknown drain, failed backup verification, unestablished hold ownership or initialized direct selector recovery. Use maintained coordinator recovery with the original receipt, backup and captured intent; preserve uncertain exchanges and mail identities."
   ],
   "privacy": [
     "Correspondence and pointers remain private and retained. Nucleus and email providers keep separate copies. Logs and ordinary status omit bodies."
   ],
   "dependencies": [
     {
-      "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "id": "emt.incident.respond",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
-      "id": "email.message.send",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
-    },
-    {
-      "id": "email.message.receive",
+      "id": "emt.service",
       "min_contract": 1,
       "max_contract_exclusive": 2
     },
     {
-      "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "id": "emt.quota-notices",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     },
     {
       "id": "email.account.operate",
@@ -98,127 +93,117 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and authorized local EMT worker or operator."
+        "statement": "The current user and authorized EMT installation, activation or maintenance operator."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Compatible installed Clockwork feed and notification handoff, Email send/receive, and Nucleus local-execution capabilities; configured receiving account and explicit operation authority."
+        "statement": "The chosen installation or operational effect is authorized, dependencies and receiving domain are established, initialized maintenance configuration is valid, and any changed configuration is paused and drained."
       },
       {
         "status": "declared",
-        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.emt selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+        "statement": "New preparation requires initialized Bazaar state and a complete cell.prompts.emt selection; seed import and historical version preservation precede deployment, which supplies no missing content."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Incident identity and metadata, installed contract and source pointers, current received email and preceding correspondence. Configuration selects absolute provider paths, Cell and agent directories and an accepted model."
+        "statement": "Matched absolute program/provider paths, selected current configuration, explicit schedule and pause intent, exact maintenance owner, and a separate absolute private backup destination."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Incident and exchange reads expose retained correspondence and Nucleus IDs. Status and worker output expose counts and waiting codes. Email text is agent-authored except deterministic failure notices."
+        "statement": "Program/provider selection, configuration, doctor and schedule observations, known drain status, migration backup/receipt evidence and preserved or explicitly selected activation intent."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "An exchange is correspondence, not an operation ledger. Nucleus job completion is runtime evidence. Product state determines intervention success; Email receipts prove provider acceptance only."
+        "statement": "Installation, initialization, configuration, admission and scheduling are separate effects. Counts describe retained records. Unknown outstanding counts cannot satisfy drain; installation or resume does not approve an exact Clockwork halt."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Clockwork IDs identify incidents, provider IDs deduplicate received mail, RFC Message-IDs thread replies, and UUID exchange/job IDs correlate Nucleus. Deadlines use Unix seconds; content limits use bytes."
+        "statement": "emt/worker selects the exact Clockwork binding; OWNER identifies the operation hold; INCIDENT_ID selects exact halt continuation; backup digests and the migration receipt preserve recovery identity."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Bounded pages advance only after capture; cursors do not acknowledge provider mail."
+        "statement": "Verification reads selected local installation, configuration, doctor, schedule and maintenance observations at their boundaries; receiving permission and final delivery remain not_probed by doctor."
       },
       {
         "status": "unspecified",
-        "statement": "No inbox completeness, authenticated sender identity, model accuracy, timer latency or final-delivery deadline is promised."
+        "statement": "No timer latency, model accuracy, final-delivery deadline, future support lifetime or retention horizon is promised."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "Agents require Nucleus invocation policy version two and workspace-unrestricted for local execution with unrestricted current-user filesystem, process, local socket, and network access. Codex sandbox restrictions and approval prompts are disabled. Default cwd is the user home. They discover public operations through Chancery; EMT has no operation adapter layer. Diagnosis-only behavior is an instruction. Sender verification is deferred."
+        "statement": "Procedures operate current-user private state. Activation requires account-read, investigation and mail authority, with unrestricted current-user agent execution and deferred sender verification. Explicit reads and backups can expose correspondence."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Persist exact request before submission; retain job ID and digest after admission. Freeze outgoing mail before claiming initial delivery. One basic sender or EMT claim owns the initial alert. No automatic replacement agent job. Uncertain external actions require inspection through Nucleus and the owning product."
+        "statement": "Prepare dependencies and refresh compatible Clockwork brokers before routing. Coordinated initialized updates capture intent, hold/drain, preserve migration evidence, install matched bytes, select a disabled exact definition and restore captured intent only after verification."
       },
       {
         "status": "declared",
-        "statement": "Callers resolve cell.prompts.emt to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Fresh valid deployment activates after verification unless explicit paused/enabled settings override. An existing absent binding stays absent unless activation is explicitly requested. Recovery reuses original backup and captured intent; direct initialized selector recovery is unsupported."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One agent; 100 incidents and four receiving pages per pass; 300/900-second assignments; 64 KiB email bodies; two transport invocations at least five minutes apart within 23 hours. Worker interval 15 seconds and activation timeout 300 seconds."
+        "statement": "Only schema-one migration is supported. Configuration changes require paused drained work; backups do not overwrite unmatched destinations or restore provider histories. Required features retain worker, assignment and transport bounds."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "EMT schema one and Clockwork routing sidecar version one are separate from release versions. Old pinned Clockwork brokers must be replaced before routing is enabled."
+        "statement": "The procedure retains its stable operation identity and version while required feature contracts provide detailed compatible behavior. Matched program, installer and bundle travel with the release."
       },
       {
         "status": "unspecified",
         "statement": "No future support lifetime or retention horizon is promised."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clockwork owns incidents, notification ownership and worker scheduling.",
-        "target": "clockwork",
-        "kind": "control",
-        "contract": "clockwork.schedule.operate"
+        "statement": "Incident authority, deadlines, exact identities and recovery are owned by the EMT incident feature.",
+        "target": "emt-incidents",
+        "kind": "authority",
+        "contract": "emt.incident.respond"
       },
       {
         "status": "declared",
-        "statement": "Nucleus owns agent invocation and durable activity.",
-        "target": "nucleus",
+        "statement": "EMT service state, readiness, maintenance, matched installation and recovery are owned by the service feature.",
+        "target": "emt-service",
         "kind": "control",
-        "contract": "nucleus.execution.operate"
+        "contract": "emt.service"
       },
       {
         "status": "declared",
-        "statement": "Email submits fixed-recipient messages.",
+        "statement": "Quota deferral and frozen notice delivery preserve their independent recovery rules.",
+        "target": "emt-quota-notices",
+        "kind": "control",
+        "contract": "emt.quota-notices"
+      },
+      {
+        "status": "declared",
+        "statement": "Receiving domain discovery uses the supported Email account-settings interface.",
         "target": "email",
-        "kind": "control",
-        "contract": "email.message.send"
+        "kind": "readiness",
+        "contract": "email.account.operate"
       },
       {
         "status": "declared",
-        "statement": "Email supplies received-account observations.",
-        "target": "email",
-        "kind": "data",
-        "contract": "email.message.receive"
-      },
-      {
-        "status": "declared",
-        "statement": "Agents select the affected product contracts through Chancery; those products own recovery and success.",
-        "target": "affected-product",
-        "kind": "authority"
-      },
-      {
-        "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "statement": "Prompt readiness depends on exact published Bazaar text versions; EMT owns the complete selection content.",
         "target": "bazaar",
         "kind": "data",
         "contract": "bazaar.string.read"
@@ -233,11 +218,12 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read the EMT installation and incident-response contracts.",
-    "Install matched program and provider bytes. Initialize and configure paused state through EMT commands.",
-    "For initialized updates, use Cell deployment to suspend the worker, drain, back up, install, configure, verify and restore worker intent.",
-    "Coordinated activation runs after broker refresh and all hold releases. It configures EMT routing and restores saved or requested worker and pause intent.",
-    "Coordinated deployment preserves existing configuration, pauses and incident halts. A fresh valid installation uses product default activation after verification."
+    "Establish authority, dependencies, prompt selection, receiving domain and stable paths before maintenance or activation.",
+    "Install matched bytes before initialization, or use maintained coordinated deployment for initialized updates.",
+    "Initialize paused state, configure drained work, inspect doctor, then resume and enable only authorized intent.",
+    "Inspect separate pause, schedule, holds and exact halt evidence; approve exact failure-halt continuation separately.",
+    "Hold with an exact owner, drain known work, back up private state and preserve original migration evidence before release.",
+    "Verify matched publication and preserved or explicitly requested operator intent; retain unresolved holds on recovery failure."
   ],
   "checkpoints": [
     "The selected EMT binary and provider versions match.",

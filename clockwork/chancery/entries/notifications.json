@@ -1,0 +1,202 @@
+{
+  "id": "clockwork.notifications",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Check and deliver retained pause alerts",
+  "summary": "Interpret consecutive service checks, basic Email transport, uncertain-send recovery, EMT reply routes, grace timing, and durable initial-notification claims.",
+  "use_when": [
+    "A retained halt alert should be inspected, checked, attempted or recovered under existing send authority.",
+    "Shared check policy or optional initial-notification routing to EMT must be understood or configured."
+  ],
+  "do_not_use_when": [
+    "The request is schedule continuation, product work retry, unrelated email, diagnosis authoring or correspondence.",
+    "The caller intends erasing claims or bypassing check eligibility."
+  ],
+  "outcome": "Eligible retained basic alert evidence or durable EMT initial-notification ownership, separate from product admission.",
+  "effects": [
+    "Due checks read bounded Iatreion reports and update private policy/progress without product work or mail.",
+    "Show can materialize saved incident routing metadata. Send can disclose the fixed halt payload through Email; explicit retry approves duplicate risk.",
+    "Configuration and claims retain metadata only; Clockwork runs no diagnosis agent and never clears the halt."
+  ],
+  "authority": [
+    "Clockwork owns progress, eligibility, basic payload, routes and claims. Iatreion/probes own facts, Email owns credentials/transport, EMT owns diagnosis and delegated acceptance/recovery."
+  ],
+  "success": [
+    "Send evidence distinguishes attempted invocations and provider acceptance; a claim is durable and idempotent for the same retained EMT delivery UUID."
+  ],
+  "failure_and_recovery": [
+    "Inspect uncertain provider acceptance before explicit duplicate-risk retry. Preserve database/checks/routes/EMT evidence together; do not erase claims or use older pinned brokers that ignore ownership."
+  ],
+  "privacy": [
+    "Email discloses halt metadata and commands to Resend/Gmail. Clockwork retains no secret, product output, provider body, diagnosis or correspondence."
+  ],
+  "interfaces": [
+    {
+      "label": "Attempt one due pause notification",
+      "invocation": "/Users/joey/.local/bin/clockwork notification send"
+    },
+    {
+      "label": "Configure shared alert checks",
+      "invocation": "clockwork notification policy --failure-threshold N --interval-seconds SECONDS --cell-root ABS"
+    },
+    {
+      "label": "Advance due alert checks without sending or product work",
+      "invocation": "clockwork notification check"
+    },
+    {
+      "label": "Approve duplicate risk for an uncertain notification",
+      "invocation": "/Users/joey/.local/bin/clockwork notification retry INCIDENT_ID"
+    },
+    {
+      "label": "Configure EMT notification preference",
+      "invocation": "clockwork notification emt --receiving-domain DOMAIN"
+    },
+    {
+      "label": "Disable new EMT routing",
+      "invocation": "clockwork notification emt --disable"
+    },
+    {
+      "label": "Read initial notification ownership",
+      "invocation": "clockwork notification show INCIDENT_ID"
+    },
+    {
+      "label": "Claim initial notification for retained EMT mail",
+      "invocation": "clockwork notification claim INCIDENT_ID --delivery-id UUID"
+    }
+  ],
+  "does_not_authorize": [
+    "Unrelated mail, incident resume, automatic product retry, erasing ownership to force another message, or claiming an unretained EMT email."
+  ],
+  "dependencies": [
+    {
+      "id": "clockwork.incidents",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "iatreion.status.inspect",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators and retained incident consumers may inspect/advance checks, attempt authorized basic mail or preserve EMT ownership."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Shared checks require HOME/.local/bin/iatreion and stable Cell checkout; basic mail requires the frozen Email wrapper and standing authority for this personal halt alert. Claim requires eligible routed unattempted pending notification and already retained EMT email. Active pinned brokers must understand current checks and ownership."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Policy selects consecutive-failure threshold, minimum interval and absolute Cell root. Default is five checks at least 60 seconds apart, HOME/rust/cell. EMT preference selects receiving domain; claim selects incident and delivery UUID; retry selects an incident and approves duplication risk."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Show returns basic subject/body, saved Reply-To, optional delivery UUID and health_check threshold/count/last_checked_at/condition/eligible_at, including sub-threshold progress. Incident status pending/accepted/uncertain and attempt counts describe Clockwork transport only; send reports attempted invocations."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Checks use current service conditions, never historical domain outcomes. Unknown counts as failed but remains unknown. Healthy, explicitly inactive/operator pause or resumed incident suppresses unalerted episodes; existing sends and claims retain recovery rules. One eligible episode produces no repeated alerts. Provider acceptance is not inbox delivery."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Incident UUID plus explicit retry generation and fixed rendering version identifies Email idempotency. EMT delivery uses UUID. Attempt/check times use whole Unix seconds. Basic grace is 120 seconds after eligibility; EMT diagnosis deadline is five minutes after eligibility."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Checks advance only when due on broker/EMT visits or explicit check. Show exposes saved progress and can snapshot an eligible reply route. No independent timer exists."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No alert latency, service-check freshness objective or final-delivery guarantee is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local notification interfaces use a private shared lock. Email loads its own credentials. Metadata-only sidecars stay private; optional route ownership is not authority to resume or retry product work."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "A halt transaction retains pending mail. Shared lock serializes checks, basic-send admission and claims. Fixed payload/key uses 120-second invocation bound and at least five-minute retry spacing. After 23 hours from first invocation or a backwards clock jump before it, automatic attempts stop uncertain. Explicit retry starts a new generation."
+      },
+      {
+        "status": "declared",
+        "statement": "Basic send waits 120 seconds from eligibility for an unclaimed routed incident. Same delivery claim is idempotent; a different owner or started basic send refuses. Claims never expire. EMT owns delegated recovery; emt/worker uses basic path. Configuration preserves saved routes/claims/attempted headers."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Each broker visit attempts at most one eligible due alert before admission and one after outcome. Read-only check/policy never run product work or send. Show can write route metadata. Routing/check sidecars accompany unchanged schema-two store."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No daemon, independent notification timer, agent diagnosis, correspondence retention, unrelated send authority or final-delivery guarantee exists."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Schema-two store, version-one routing, check metadata, feature/provider release, Email contract and pinned broker remain independent. Refresh active brokers before new eligibility/handoff reliance. Backups preserve both sidecars plus database and EMT exchange state."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No automatic pruning, universal retention or deprecation interval is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Email provides fixed-recipient credential loading, bounded provider submission and 24-hour idempotency semantics.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Iatreion supplies bounded read-only operational facts and unknown coverage; Clockwork retains eligibility only.",
+        "target": "iatreion",
+        "kind": "data",
+        "contract": "iatreion.status.inspect"
+      },
+      {
+        "status": "declared",
+        "statement": "Automatic progress relies on later broker visits or the existing EMT worker; launchd/session delivery has no dedicated installed contract.",
+        "target": "launchd",
+        "kind": "control"
+      },
+      {
+        "status": "declared",
+        "statement": "Optional EMT claims delegate exact initial delivery and uncertainty recovery to EMT; this generic notification feature does not operate its worker.",
+        "target": "emt",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/notifications.md"
+}

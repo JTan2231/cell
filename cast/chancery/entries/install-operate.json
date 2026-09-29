@@ -1,7 +1,7 @@
 {
   "id": "cast.install.operate",
   "contract_version": 3,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or configure Cast discovery",
@@ -48,6 +48,10 @@
     {
       "label": "Reconcile retained employer ownership",
       "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
+    },
+    {
+      "label": "Recover a verified retained program",
+      "invocation": "cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY"
     }
   ],
   "effects": [
@@ -84,101 +88,158 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user may install Cast, initialize selected state, inspect configuration/readiness, explicitly change collection policy and invoke the supported ownership repair."
+        "statement": "The current user may follow this procedure for Cast program installation or recovery, state initialization, configuration, diagnosis, source controls and supported ownership repair."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Installation requires a tested executable candidate matching provider release, user-owned paths and available macOS shell tools. State operations require the appropriate valid selected directory and configuration."
+        "statement": "Select the intended home/state, use a validated matching candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair or state recovery. Make a private consistent SQLite backup, including live sidecars when relevant, before state recovery."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "The Rust installer install command accepts --binary and --bundle at absolute paths, plus optional --home and --expected-current. Its recover command accepts --release at a canonical owned release directory. The CLI accepts --state-dir and explicit init, configuration, diagnostic or state reconcile-ownership commands. Ordinary website source controls accept an optional company ID; supported ATS sources reject that override and use their canonical tenant owner."
-      },
-      {
-        "status": "declared",
-        "statement": "Deployment accepts optional state_dir and config_file absolute paths. A supplied config file is applied through Cast config set; omitted configuration is preserved."
-      },
-      {
-        "status": "declared",
-        "statement": "automatic_excluded_ats accepts distinct ashby, greenhouse or lever names. It defaults to [\"ashby\"] when absent; an explicit empty array removes ATS exclusions. The complete config set input preserves separately supplied budgets and queries."
+        "statement": "Inputs are exact candidate/bundle or canonical retained-release paths, selected home/state, a complete intended schema-one config file, source URL/ID and optional ordinary-website company identity."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Deployment exposes matching Cast command and provider selectors. State commands return configuration, readiness, budget information or ownership-repair counts without exposing keys."
+        "statement": "Supported reads verify command identity, configuration, local diagnosis, source ownership/enrollment and ownership-repair counts after the intended operation."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Deployment checks program integrity. Provider authentication and collection have separate outcomes. Cast maintains conservative local budget counters; providers manage billing."
-      },
-      {
-        "status": "declared",
-        "statement": "automatic_excluded_ats defaults to [\"ashby\"], including omitted fields in existing configuration. Ordinary collection skips excluded boards and does not insert or update postings whose job or application URL identifies an excluded ATS. Existing jobs remain readable; source URLs may remain retained. Force and job refresh obey this policy."
+        "statement": "Artifact selection, local readiness and current external provider success are separate outcomes. State and install feature contracts own their full meanings."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release identity hashes program, frontend, Rust installer and provider bytes. Provider release and database/config/export schemas remain separate; request-budget units are defined by Cast configuration."
+        "statement": "Verify exact release selection, selected state directory, source/job identity and repair counts. cast.state owns budget units and cast.discovery.explore owns retained revisions."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Configuration and diagnostic reads reflect selected local state. External credentials and provider allowances require their own actual provider interactions."
+        "statement": "Checks describe selected local artifacts and state at invocation. Repair counts describe the committed selected transaction, not external collection coverage."
       },
       {
         "status": "unsupported",
-        "statement": "No current provider balance or successful network-collection guarantee follows from installation or local diagnosis."
+        "statement": "Installation and local diagnosis do not establish current provider balance, authentication or successful collection."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "Installed command is ~/.local/bin/cast; immutable releases are beneath ~/Library/Application Support/Cast/install. Discovery state defaults to ~/.local/share/cast and may be selected explicitly. The wrapper reads THEIRSTACK_API_KEY and BRAVE_SEARCH_API_KEY from ~/.zshrc."
+        "statement": "Use supported tested installer and current-user CLI interfaces. Keep program paths user-owned and state/exports/diagnostics private. Chancery reading is optional installed documentation and performs no product work."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Deployment uses product and catalog locks. It switches current atomically and restores the matching program and provider after a failed switch. Initialization, collection and ownership reconciliation are separate operations. Reconciliation holds one mutation lock and uses one transaction. Repeated repair leaves material records unchanged, but each invocation advances the snapshot revision."
-      },
-      {
-        "status": "declared",
-        "statement": "The Cell configure phase initializes missing Cast state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
+        "statement": "Follow the owning feature's locked installation, state and reconciliation boundaries. Verify matching selectors after installation or recovery and preserve consumed budgets and prior state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation creates no daemon, LaunchAgent, scheduler binding, model job or remote-provider request. No live-state migration is performed by the Rust installer."
+        "statement": "This procedure starts no collection unless separately requested and creates no schedule, model job or downstream application result. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
       },
       {
-        "status": "unspecified",
-        "statement": "No future migration or deployment-latency service level is promised."
+        "status": "declared",
+        "statement": "Stop on foreign or unverified selectors, incompatible program/state, displaced active ownership or unsupported recovery."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation contract 3 defines ordinary ATS exclusion and explicit-job access to disabled sources. Configuration schema stays at 1; older programs that reject unknown fields cannot read configuration written with automatic_excluded_ats. Program recovery does not restore configuration."
+        "statement": "The existing operation ID and contract version remain compatible. Required feature contracts provide complete explanations; program recovery does not restore state and older programs can reject automatic_excluded_ats."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Installed credential loading relies on the user-owned ~/.zshrc executed by zsh; Chancery documents but does not execute or validate that shell configuration.",
-        "target": "user-shell-configuration",
-        "kind": "readiness"
+        "statement": "Program selection and recovery follow Cast-owned release verification and selector rules.",
+        "target": "cast",
+        "kind": "control",
+        "contract": "cast.installation"
+      },
+      {
+        "status": "declared",
+        "statement": "State setup and changes follow Cast-owned configuration, source-control, budget and repair rules.",
+        "target": "cast",
+        "kind": "authority",
+        "contract": "cast.state"
+      },
+      {
+        "status": "declared",
+        "statement": "Verification uses Cast's retained record and export meanings.",
+        "target": "cast",
+        "kind": "data",
+        "contract": "cast.discovery.explore"
+      },
+      {
+        "status": "declared",
+        "statement": "Any separately requested collection follows ordinary and exact-job admission policy.",
+        "target": "cast",
+        "kind": "control",
+        "contract": "cast.discovery.collect"
       }
     ]
   },
-  "manual": "manuals/install-operate.md"
+  "manual": "manuals/install-operate.md",
+  "dependencies": [
+    {
+      "id": "cast.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "cast.state",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "cast.discovery.collect",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    }
+  ],
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Select the intended operator home and state directory, inspect current configuration and choose the authorized local operation.",
+    "Install a validated matching binary and bundle through a trusted tested candidate, then verify command identity and register usage.",
+    "Initialize missing state, inspect readiness and complete configuration, and explicitly apply only the intended complete replacement.",
+    "Add or disable an exact source and verify ownership and enabled state without treating enrollment as collection success.",
+    "Stop collection before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
+    "Recover only a verified canonical retained release; verify selected-state compatibility before collection and preserve a private consistent backup before state recovery."
+  ],
+  "checkpoints": [
+    "The tested candidate and provider release match and all selectors belong to Cast.",
+    "Configuration and source effects are explicit and consumed budgets remain retained.",
+    "Local readiness is separate from provider authentication, allowance and collection success.",
+    "Ownership repair preserves stable IDs, usage, run history, coverage and cursors.",
+    "Program recovery leaves state unchanged and the selected program accepts its configuration."
+  ],
+  "adaptation": [
+    "Use the selected installed release and state configuration; do not infer live readiness from catalog presence.",
+    "Read product/show/resolve after installation when Chancery is available; Cast remains useful without a reader."
+  ],
+  "stop_when": [
+    "A selector is foreign, candidate/provider versions differ, a retained release is unverified or an active writer would be displaced.",
+    "Proposed recovery requires unsupported row edits, destructive reset or an incompatible program/state pair without a compatible backup and recovery decision."
+  ]
 }

@@ -9,7 +9,8 @@
   "use_when": [
     "A request may map to an installed local capability or adaptive operation.",
     "The exact supported outcome, effects, authority, recovery, privacy, or invocation must be understood without inspecting source code.",
-    "The caller wants an installed product overview or its complete feature and operation inventory."
+    "The caller wants an installed product overview or its complete feature and operation inventory.",
+    "The selected installed registry's structure or cross-provider documentation compatibility must be diagnosed."
   ],
   "do_not_use_when": [
     "The correct capability is already known and its current contract has already been read in this session.",
@@ -18,7 +19,8 @@
   "outcome": "The caller receives a product overview and inventory, a complete or filtered catalog, or one complete installed contract. Discovery executes no represented action.",
   "effects": [
     "Reads explicitly indexed JSON and Markdown from installed provider bundles.",
-    "Writes no provider state and performs no readiness probe."
+    "Writes no provider state and performs no readiness probe.",
+    "CLI dispatch separately attempts a metadata-only command-usage append; recording errors preserve the catalog result."
   ],
   "authority": [
     "Provider bundles are authoritative for documented support and semantics.",
@@ -29,7 +31,8 @@
     "List reports every structurally valid installed entry, including deprecated or dependency-unavailable entries, with visible registry issues.",
     "Show returns the complete version-matched contract and manual for an installed entry.",
     "Product returns the owning provider identity, release, scope when published, overview or explicit not_published status, and its complete entry inventory. Provider-filtered list selects that exact owner. Both retain registry issues.",
-    "No documented invocation is executed as a side effect of discovery."
+    "No documented invocation is executed as a side effect of discovery.",
+    "Doctor returns complete selected-registry validity, provider and entry counts, and structural or documentation-compatibility issues without probing represented products."
   ],
   "failure_and_recovery": [
     "A malformed provider is excluded and reported without hiding structurally valid providers.",
@@ -57,6 +60,10 @@
     {
       "label": "List one product's installed contracts",
       "invocation": "/Users/joey/.local/bin/chancery list --provider <PROVIDER_ID>"
+    },
+    {
+      "label": "Diagnose installed registry",
+      "invocation": "/Users/joey/.local/bin/chancery doctor"
     }
   ],
   "dependencies": [],
@@ -76,7 +83,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "List accepts optional exact provider ID, mode, and kind filters; product accepts one exact provider ID; show accepts one exact stable entry ID."
+        "statement": "List accepts optional exact provider ID, mode, and kind filters; product accepts one exact provider ID; show accepts one exact stable entry ID. Doctor accepts the selected registry with no product-specific health inputs."
       },
       {
         "status": "unsupported",
@@ -86,7 +93,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "List returns IDs, titles, and summaries grouped by mode, with shared status defaults and entry exceptions. Product returns provider identity, schema, promise scope when published, indexed overview or explicit not_published status, and all owned entry cards. Both preserve registry issues. Show returns identity, provider release, dependency and readiness status, issues, and the complete manual once. --full adds structured authoring fields and normalized claims. JSON output schema 3 uses the same content selection."
+        "statement": "List returns IDs, titles, and summaries grouped by mode, with shared status defaults and entry exceptions. Product returns provider identity, schema, promise scope when published, indexed overview or explicit not_published status, and all owned entry cards. Both preserve registry issues. Show returns identity, provider release, dependency and readiness status, issues, and the complete manual once. --full adds structured authoring fields and normalized claims. JSON output schema 3 uses the same content selection. Doctor returns valid, registry, providers, counts, and issues; an invalid report retains its data with ok false and exit 1. Rust callers use the provider-owned chancery::api::Client and output types."
       }
     ],
     "data_semantics": [
@@ -138,7 +145,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Configured bounds limit provider count, entries per provider, manifest and entry size, manual and overview size, and individual field size."
+        "statement": "Bounds are 1,024 provider selectors, 4,096 indexed entries per provider, 1,048,576 bytes per manifest or entry, 4,194,304 bytes per manual or overview, and 65,536 UTF-8 bytes per text field. The bundle feature owns the full validation rules."
       },
       {
         "status": "unspecified",

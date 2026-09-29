@@ -29,6 +29,12 @@ repairs, deploys, and emails the outcome.
 
 ## Further documentation
 
+- [Product overview and feature inventory](chancery/overview.md)
 - [Recognition rules, output, and limits](chancery/manuals/recognition-inspect.md)
+- [Installation guarantees](chancery/manuals/installation.md)
 - [Installation and recovery](chancery/manuals/install-operate.md)
 - [Development](chancery/manuals/develop-change.md)
+
+Read the installed overview with `chancery product usher`, one feature or
+procedure with `chancery show ID`, and its required contracts with
+`chancery resolve ID`.

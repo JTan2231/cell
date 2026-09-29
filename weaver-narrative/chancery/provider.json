@@ -1,5 +1,5 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "provider": {
     "id": "weaver",
     "name": "Weaver",
@@ -37,7 +37,9 @@
   },
   "entries": [
     "entries/narrative-write.json",
+    "entries/lifecycle.json",
     "entries/install-operate.json",
     "entries/develop-change.json"
-  ]
+  ],
+  "overview": "overview.md"
 }

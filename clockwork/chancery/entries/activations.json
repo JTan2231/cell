@@ -1,0 +1,186 @@
+{
+  "id": "clockwork.activations",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Run and inspect direct activations",
+  "summary": "Run one selected product process and interpret overlap, supervision, timeout, loss proof, history, doctor effects, and read-only status evidence.",
+  "use_when": [
+    "One selected definition should run manually under product authority.",
+    "Process outcome, overlap, history, diagnosis effects, or recorded status evidence must be interpreted."
+  ],
+  "do_not_use_when": [
+    "A process exit should establish domain success or automatically retry work.",
+    "The caller needs caller-controlled process context, captured output bodies or an agent runner."
+  ],
+  "outcome": "One direct runtime outcome or current retained Clockwork evidence, separate from domain success.",
+  "effects": [
+    "Run can start one product child through a recorded blocked process-group gate, supervise it and append runtime history.",
+    "Doctor can prepare private paths, initialize only empty unversioned state and recover demonstrably absent running rows to lost. Status snapshot is read-only over an existing supported store.",
+    "Broker visits advance due checks and can attempt eligible pause alerts before/after product admission."
+  ],
+  "authority": [
+    "Clockwork owns runtime admission, direct supervision and history; the product owns work, outputs, idempotency, retries, recovery and success."
+  ],
+  "success": [
+    "One child or skipped admission is recorded; ok:true for a durable child terminal observation is runtime evidence even with nonzero exit."
+  ],
+  "failure_and_recovery": [
+    "Preserve running state when termination or persistence cannot be proved. Lost recovery requires broker and child absence, not age.",
+    "Inspect product evidence before any separately authorized new occurrence; Clockwork never retries."
+  ],
+  "privacy": [
+    "History contains identifiers, paths, times and process metadata but no product output body or secret. Product output files and their retention belong to the product."
+  ],
+  "interfaces": [
+    {
+      "label": "Run",
+      "invocation": "clockwork [--json] run KEY"
+    },
+    {
+      "label": "History",
+      "invocation": "clockwork [--json] history [KEY] [--limit N] [--details]"
+    },
+    {
+      "label": "Doctor",
+      "invocation": "clockwork [--json] doctor"
+    },
+    {
+      "label": "Read-only snapshot",
+      "invocation": "clockwork status-snapshot --json"
+    }
+  ],
+  "does_not_authorize": [
+    "Automatic product retry, product success claims, unsupported runtime context, secrets, output capture, incident approval or destructive state work."
+  ],
+  "dependencies": [
+    {
+      "id": "clockwork.definitions",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.bindings",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.incidents",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "clockwork.notifications",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A local operator or product may invoke an authorized selected key once or read direct-process evidence."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Activation requires an enabled, unhalted selected binding, no pending transition, per-key admission and unchanged admitted artifacts. The product separately decides a new occurrence is safe."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Runtime accepts only stable key. History selects optional key, positive limit and details; doctor uses recorded process identities; status-snapshot selects existing supported state."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Runtime executable, argv, environment, cwd, timeout or policy overrides and private-entry arbitrary command use are unsupported."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Run/reads use ok/data JSON; compact coded failures on --json stderr exit one. Durable exited/signaled/timed_out returns ok:true and broker exit zero irrespective of child exit. Manual overlap is activation_busy, exit one, with skipped_overlap history. History uses output version two with items/has_more, default 20, positive limit and details for definition/process identities."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "One activation pins one immutable definition and at most one direct child; no retry submodel or domain-success assertion exists. States are running, start_failed, exited, signaled, timed_out, skipped_overlap and lost. Status snapshots contain recorded binding/halt/runtime metadata, not observed launchd or product condition."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Activation identity names one admission occasion. Manual/launchd identifies trigger; times use whole Unix seconds, process identities are local PIDs and optional timeouts use whole seconds."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "History selects newest retained activations at invocation. Doctor can first reconcile demonstrably absent processes. Status snapshot reads only an existing supported database without reconciliation."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No completion latency, throughput, storage-capacity bound, history retention period or future timer delivery is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Supported current-user CLI and clockwork::api typed client operate private state and product-selected private output files."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct SQLite integration, remote/root execution, private entry use as a public command runner and output capture are unsupported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "A shared transition gate and exclusive activation lock precede admission. The broker records a blocked process-group PID before releasing product execution. Parent EOF before release executes no product; later loss leaves durable child identity preventing duplicate admission. The gate validates its PID, artifacts and status marker before exec. Timeout and termination act on the group. Cleanup/persistence uncertainty retains conservative running evidence."
+      },
+      {
+        "status": "declared",
+        "statement": "Output destinations are canonical private distinct files, opened for append or created mode 0600 with different device/inode identities; bodies are never ingested. Product commits remain outside Clockwork transactions."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One child, skip overlap, optional timeout, and one local interval/calendar schedule are supported. Busy launchd visits record skipped_overlap and return success."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No daemon, agent, HTTP API, workflow, retry/backoff, distributed lock, secret store, log rotation, transitive attestation or domain scheduler is provided."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Output-version-two pages, definition schemas, store schema, feature contract, provider release and exact product definitions are separate compatibility axes. Incompatible retained meaning needs successor schema, migration and historical decoding."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general deprecation or cross-release support window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "The registering product owns its exact release/runner, work and domain recovery; generic activation selects its concrete contract through the definition.",
+        "target": "product",
+        "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "Scheduled invocation relies on launchd/session behavior without a dedicated installed Chancery contract.",
+        "target": "launchd",
+        "kind": "control"
+      }
+    ]
+  },
+  "manual": "manuals/activations.md"
+}

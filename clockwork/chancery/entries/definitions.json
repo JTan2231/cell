@@ -1,0 +1,155 @@
+{
+  "id": "clockwork.definitions",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Register and read immutable activation definitions",
+  "summary": "Read or register exact schedules, top-level launch images, literal process context, output paths, immutable identity, and artifact-verification limits.",
+  "use_when": [
+    "A product runner must be represented as one strict immutable schedule and launch context before selection.",
+    "The meaning of definition fields, artifact identity, accepted paths, or verification limits is needed."
+  ],
+  "do_not_use_when": [
+    "A selected binding should be changed or run; use the binding or activation feature.",
+    "The caller needs arbitrary commands, mutable selectors, secrets, workflows, or transitive executable attestation."
+  ],
+  "outcome": "One fully validated immutable definition or its retained exact metadata.",
+  "effects": [
+    "Registration validates direct artifacts and stores private immutable metadata; it can initialize an empty unversioned local schema-two store.",
+    "List and show read retained definitions. Registration neither runs a child nor changes a selected binding."
+  ],
+  "authority": [
+    "Clockwork owns definition identity and local direct-image admission. The product owns its complete release, domain work, and success."
+  ],
+  "success": [
+    "Exact normalized content returns the same digest; changed content receives a distinct immutable identity."
+  ],
+  "failure_and_recovery": [
+    "Unsafe paths, hashes, permissions, unknown fields, or policy reject registration. Correct the product candidate without bypassing checks."
+  ],
+  "privacy": [
+    "Paths, arguments, schedules, digests, and exact non-secret environment remain private metadata; credentials and product output bodies are prohibited."
+  ],
+  "interfaces": [
+    {
+      "label": "Register",
+      "invocation": "clockwork [--json] definition register FILE"
+    },
+    {
+      "label": "List",
+      "invocation": "clockwork [--json] definition list [--limit N]"
+    },
+    {
+      "label": "Show",
+      "invocation": "clockwork [--json] definition show DEFINITION_DIGEST"
+    }
+  ],
+  "does_not_authorize": [
+    "Operating a binding, running a product, deploying a release, putting credentials in metadata, or treating artifact checks as domain success."
+  ],
+  "dependencies": [
+    {
+      "id": "clockwork.incidents",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "A current-user operator or product deployer may register or inspect an exact immutable non-agent runner definition."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "The current-user-owned regular non-symbolic UTF-8 TOML file is at most 1 MiB and not group/world writable; all admitted paths, artifacts, permissions and hashes satisfy the complete feature manual."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Supported manifest schemas one and two supply stable owner/name key, exact caller-published release ID and canonical release root, direct or interpreted pinned launch images, literal arguments, scrubbed non-secret environment, canonical cwd, private distinct outputs, interval or daily local-calendar trigger, current-user-background authority, skip overlap, optional timeout, and schema-two failure configuration."
+      },
+      {
+        "status": "unsupported",
+        "statement": "PATH lookup, shell strings, mutable selectors, interpolation, inherited environment, implicit shebang choice, literal -c, secrets, and caller runtime argv are unsupported."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Registration returns the SHA-256 digest of canonical JSON for the fully concrete normalized manifest. List returns output-version-two items/has_more with default 20 and positive --limit; show returns full retained metadata."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "A definition is an immutable complete launch snapshot; its executable is only the directly verified top-level launch image. Clockwork pins the product-published release identity without recomputing the whole release tree."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Keys contain two at-most-63-byte lowercase components mapped to org.clockwork.owner.name. Release/artifact/definition identities are 64-lowercase-hex digests. Intervals and optional timeouts use 1 through 31,536,000 whole seconds; local-calendar uses hour 0 through 23 and minute 0 through 59."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Registration validates the complete manifest and direct images before storing a row. Reads select retained definitions at invocation. Activations separately reverify images before execution."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No retention horizon or future artifact validity is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the current-user local CLI and provider-owned clockwork::api types/codecs/client; structural decoding does not perform registration checks."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct SQLite integration, same-user authentication by key, root/system execution, or transitive attestation is unsupported."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Identical normalized registration is idempotent; changed meaning creates a new definition and requires explicit binding selection. Existing definitions and history are not rewritten."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "The manifest is at most 1 MiB and describes one interval or local daily trigger and one launch image profile. Direct programs have recognized Mach-O/fat magic but no complete loader preflight; script and interpreter are separately hashed."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Clockwork does not attest libraries, later configuration, subprocesses, network peers, same-user tampering after verification, or product meaning."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Manifest schemas one and two, SQLite schema two, provider release, product release identity and definition digest are independent. Schema-one definitions retain digest and legacy behavior after storage migration."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No deprecation interval, retention duration or cross-release migration window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Artifact publication and concrete runner semantics belong to the registering product; the selected product contract is not enumerated by this generic feature.",
+        "target": "product",
+        "kind": "data"
+      }
+    ]
+  },
+  "manual": "manuals/definitions.md"
+}

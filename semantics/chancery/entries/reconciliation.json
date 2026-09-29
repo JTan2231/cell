@@ -1,0 +1,211 @@
+{
+  "id": "semantics.reconciliation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Reconcile accepted documents into project terminology",
+  "summary": "Retain per-project Annals document intake, obtain a restricted Nucleus proposal, and commit validated effects or an explicit no-change result with durable recovery.",
+  "use_when": [
+    "Accepted-document coverage, relevance, semantic commits, no-change outcomes, or intake recovery must be understood.",
+    "Historical assignment or failed intake should be inspected or retried through supported controls."
+  ],
+  "do_not_use_when": [
+    "Only repository terminology or project lifecycle should be read.",
+    "A Clockwork scheduling halt or installation rollback should be operated without first inspecting the product result."
+  ],
+  "outcome": "A durable per-project intake outcome backed by exact source identity, validated append-only effects or no-change evidence, and an exact tool receipt.",
+  "interfaces": [
+    {
+      "label": "Intake inspection",
+      "invocation": "semantics intake status [--status STATUS]"
+    },
+    {
+      "label": "Historical routing correction",
+      "invocation": "semantics intake assign EVENT_ID PROJECT"
+    },
+    {
+      "label": "Explicit failed-intake retry",
+      "invocation": "semantics intake retry EVENT_ID"
+    },
+    {
+      "label": "Private selected worker",
+      "invocation": "semantics --json intake run"
+    },
+    {
+      "label": "Rust public client",
+      "invocation": "semantics::api::Client"
+    }
+  ],
+  "effects": [
+    "The scanner retains complete document bytes and per-project source identities atomically with scan cursor advance.",
+    "A worker processes at most one reconciliation, submits a restricted Nucleus job, and may commit effects or record no change.",
+    "Assignment is audited; retry creates a new attempt only after positively terminal prior-job evidence."
+  ],
+  "authority": [
+    "Semantics owns per-project intake, routing policy, cursor durability, effect validation, receipts, domain success, and retries.",
+    "Annals owns accepted bytes and feed identities/order. Nucleus owns execution and mailbox transport; the agent interprets relevance under frozen instructions."
+  ],
+  "success": [
+    "Validated effects and the exact receipt commit atomically before acknowledgement.",
+    "An empty effect list records examined HEAD, ends as ignored, and creates no semantic revision."
+  ],
+  "failure_and_recovery": [
+    "Changed identities or fixed-page replay, nonadvancement, and cycles fail closed.",
+    "Ambiguous transport reuses the same retained requester/job and exact request. Conflicting tool redelivery fails.",
+    "Retry refuses an active or unprovable admitted prior job. Preserve committed revisions after runtime failure."
+  ],
+  "privacy": [
+    "Complete source documents and selected repository snapshots are private retained state and are supplied to Nucleus without workspace, shell, or web access.",
+    "Logs exclude source/project bodies, raw dependency diagnostics, paths, prompts, credentials, diffs, commands, and tool values."
+  ],
+  "does_not_authorize": [
+    "Direct SQLite mutation, manufactured cursors, cleared correlations, a direct-Codex fallback, upstream mutations, or disclosure."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators and public typed clients inspect intake or apply authorized routing/retry controls; the selected private worker performs reconciliation."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Work requires exact configured Annals library and project cursors, valid participation, compatible Nucleus execution, complete selected Bazaar instructions, normal admission, and serial worker ownership."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Input is complete accepted document text with immutable library/event/document identity, filename, digest, acceptance time, project, opaque cursor, selected repository HEAD, and frozen request/instructions."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Intake status exposes separate annals_decision_accounts and legacy_decisions collections, fixed routing outcome, assignment, state, attempts, request correlation, and domain outcome. New empty-effect completion records no_change_revision and no applied_revision."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "New local intake IDs are per project; embedded Annals IDs remain original. Agents decide relevance without an origin/cwd filter. Historical sources, grounds, assignments, states, requests, and decoders retain their meanings."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Library/event/document identifies the exact upstream source; project-local intake identifies one reconciliation; requester/job and call digest bind immutable transport/recovery. Cursors are opaque."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "No independent model pricing or consumption unit is defined."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Coverage starts after each project activation watermark. Every retained document and cursor advance commit together. Fixed pages contain at most 200 events and 4 MiB of document bytes; only empty is end-of-prefix."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No source-acceptance-to-semantic-revision wall-clock bound is promised."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Supported operations use local-user state and published read-only upstream interfaces. Nucleus receives neutral cwd, workspace none, no shell/web, and one immutable managed tool."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Worker execution is cross-process serial; paused projects reject late commits. Effect validation precedes atomic revision/receipt commit and mailbox acknowledgement. Identical redelivery is idempotent and conflicts fail."
+      },
+      {
+        "status": "declared",
+        "statement": "One requester/job survives ambiguous transport; explicit retry requires positively terminal prior-job evidence and preserves frozen instruction selection."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Each worker invocation processes at most one reconciliation. New document jobs use semantics/semantic-document-reconciliation/1 and permit no-change results."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No throughput, storage capacity, retention, or source-to-commit latency objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Schema 3 preserves historical sources, states, correlation/receipt bytes, cursors, revisions and old tool/ground identities. New document contracts have distinct immutable identities and migration reinterprets no history."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No general future support or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Reconciliation reads complete documents and opaque cursors from one exact Annals decisions library.",
+        "target": "annals",
+        "kind": "data",
+        "contract": "annals.decision-account.exchange"
+      },
+      {
+        "status": "declared",
+        "statement": "Nucleus executes a restricted proposal and durable tool exchange; Semantics retains domain validation and commit authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.execution.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Bazaar supplies pinned immutable text; Semantics owns selection, rendering, permissions, and execution.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "Project lifecycle and repository replay determine valid intake and semantic effects.",
+        "target": "semantics",
+        "kind": "authority",
+        "contract": "semantics.projects"
+      }
+    ]
+  },
+  "manual": "manuals/reconciliation.md",
+  "dependencies": [
+    {
+      "id": "semantics.repository.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "semantics.projects",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.decision-account.exchange",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "nucleus.execution.operate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
+}

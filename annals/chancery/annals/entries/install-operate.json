@@ -1,15 +1,16 @@
 {
   "id": "annals.install.operate",
   "contract_version": 8,
-  "kind": "capability",
+  "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Annals",
-  "summary": "Install, update, verify, hold, or recover the user-owned Annals deployment and physically separate decisions library, including run-owned CLI admission and guarded Clockwork handoff.",
+  "summary": "Install, update, verify, hold, or recover the user-owned Annals deployment and physically separate decisions library, including run-owned CLI admission and guarded Clockwork handoff. The manual also preserves packaged Linux setup and maintenance.",
   "use_when": [
     "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, Clockwork binding, library, or spool must be installed, updated, or recovered.",
     "An explicitly authorized fresh-state replacement must preserve uncompleted backlog and rollback as one generation.",
-    "The dedicated Annals decisions library and independent `annals/decisions-inbox` binding must be provisioned, updated, maintenance-held, or recovered."
+    "The dedicated Annals decisions library and independent `annals/decisions-inbox` binding must be provisioned, updated, maintenance-held, or recovered.",
+    "The documented packaged Linux systemd installation or maintenance route must be performed."
   ],
   "do_not_use_when": [
     "The task is ordinary use or administration of an already installed library or inbox.",
@@ -97,9 +98,28 @@
     {
       "label": "Usage doctor",
       "invocation": "/Users/joey/.local/bin/annals-usage doctor"
+    },
+    {
+      "label": "Cell deployment adapter",
+      "invocation": "annals-install adapter"
     }
   ],
   "dependencies": [
+    {
+      "id": "annals.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "annals.work.integrate",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "annals-usage.execution.operate",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
     {
       "id": "nucleus.execution.operate",
       "min_contract": 3,
@@ -134,6 +154,10 @@
       {
         "status": "unsupported",
         "statement": "This operation is not source development, Git publication, routine library administration, implicit fresh-state replacement, or storage cleanup."
+      },
+      {
+        "status": "declared",
+        "statement": "An authorized Linux administrator may install the packaged systemd units with an annals service account and separately owned Nucleus service; this is distinct from the macOS transactional installer."
       }
     ],
     "preconditions": [
@@ -252,6 +276,10 @@
       {
         "status": "unsupported",
         "statement": "The operation does not own or replace Nucleus, publish Git state, delete recovery material, or grant direct library and spool editing."
+      },
+      {
+        "status": "declared",
+        "statement": "The packaged Linux route uses explicit /etc/annals configs, /var/lib/annals and /var/spool/annals, service-account ownership, and systemd control; it does not select a macOS content-addressed release or Clockwork binding."
       }
     ],
     "lifecycle_and_consistency": [
@@ -321,7 +349,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema 6 migrates supported versions 3 through 5, seeds default instruction revision 1, preserves existing version-5 admission kinds and retained history, and leaves legacy examination instruction provenance unknown. Older binaries require their matching pre-migration database on rollback."
+        "statement": "Supported library migrations and legacy instruction provenance are defined by annals.libraries. Older binaries require their matching pre-migration database on rollback."
       },
       {
         "status": "declared",
@@ -369,8 +397,42 @@
         "target": "bazaar",
         "kind": "data",
         "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "The packaged Linux route relies on systemd service/timer activation and Linux service-account/filesystem administration without a dedicated installed contract.",
+        "target": "systemd",
+        "kind": "external"
       }
     ]
   },
-  "manual": "manuals/install-operate.md"
+  "manual": "manuals/install-operate.md",
+  "session_surfaces": [
+    "local_filesystem",
+    "local_shell"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Select exact installation, authority, validated program/provider artifacts, dependency paths, prompt selection, capacity, and recovery material.",
+    "Prove owned schedule/selector state; hold affected admission and drain participating commands and durable dependency work.",
+    "Use the product-owned install, provision-decisions, maintenance, or retained recover route; use the separate documented Linux or attended migration procedure when selected.",
+    "Verify exact release, library/spool identity, dependency readiness, schedule selection, documentation and retained outcome; release only this operation’s holds and preserve pauses, disabled intent and incidents."
+  ],
+  "checkpoints": [
+    "Each selected program, provider, database/spool and scheduler identity matches the intended candidate or recovered generation.",
+    "Destructive replacement has explicit authority, retained old state and verified backlog import.",
+    "Unknown ownership, incomplete drain or unproved restoration leaves maintenance and recovery evidence intact.",
+    "Installed verification starts no model/domain work; runtime readiness and domain success remain separate."
+  ],
+  "adaptation": [
+    "Choose macOS primary deployment, dedicated decisions provisioning, retained journal recovery, attended legacy migration, or Linux systemd setup by the actual installation boundary.",
+    "Adjust only documented absolute paths, explicit alternate home, lock wait or boolean enabled setting; preserve recovery identities and prior schedule intent."
+  ],
+  "stop_when": [
+    "Authority for destructive replacement, cleanup or reserve reduction is absent.",
+    "Ownership, exact source/release identity, compatibility, capacity, dependency readiness, drain or restored state is unproved.",
+    "The selected journal or held run owner is missing, mismatched or incomplete.",
+    "Concurrent same-key scheduler changes, foreign selectors/plists or private-file integrity checks fail."
+  ]
 }

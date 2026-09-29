@@ -100,7 +100,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "A version-matched immutable release with coherent Usher recognition, installer and provider selectors, or a read-only inspection or verification result."
+        "statement": "The procedure reports completion only after exact-candidate verification and coherent command/provider selection; inspection or recovery returns its selected evidence or failure."
       }
     ],
     "data_semantics": [
@@ -112,7 +112,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Product and provider versions, manifest format cell-install-v1, content-addressed release identity, adapter protocol version, capability contract version, and recognition JSON schemas are independent."
+        "statement": "The procedure selects exact candidate artifacts, an intended local home, and an observed or explicit prior release selection. It uses usher.installation contract one for release identity and format guarantees."
       }
     ],
     "completeness_and_freshness": [
@@ -130,7 +130,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product lock precedes catalog writer lock. An observed or explicit expected current selection prevents stale cutover. One atomic current selector selects both commands and documentation; failed publication restores the captured prior selectors when that basis is provable."
+        "statement": "Establish authority and exact candidate identity, inspect the prior basis, invoke the product installer or retained recovery executable, and verify the result. Stop on foreign, stale, altered, or unprovable evidence; preserve the captured recovery basis."
       }
     ],
     "operational_limits": [
@@ -142,7 +142,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation contract two uses the Rust installer CLI and cell-install-v1 JSON manifest with retained exact package/install recovery executable. Rust recovery supports legacy manifest.txt releases and detaches their unsupported public installer selector; the retained Rust executable remains available to reselect its release. The version-one coordinator adapter JSON protocol and recognition semantics remain unchanged."
+        "statement": "usher.install.operate retains its stable ID and contract two. Its required usher.installation contract one owns supported release formats, selector behavior, and legacy recovery guarantees."
       }
     ],
     "reliances": [
@@ -151,5 +151,12 @@
         "statement": "Installation uses the product-owned Rust executable and linked shared cell-install library. It does not require a Chancery executable, invoke represented systems, or delegate product authority to the deployment coordinator."
       }
     ]
-  }
+  },
+  "dependencies": [
+    {
+      "id": "usher.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ]
 }

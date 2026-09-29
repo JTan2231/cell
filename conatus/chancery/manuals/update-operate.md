@@ -1,260 +1,313 @@
 # Initialize and operate Conatus
 
-Conatus owns want and decision intake, its feed cursor, frozen outgoing
-documents, handoff receipts, and the interpretation document. Annals owns the
-dedicated library, immutable works, evidence, graph, model integration, and
-domain recovery. Conatus uses Annals as its model requester; it has no separate
-Nucleus toolset or authentication authority.
+Use this procedure for initialization, update, instruction selection, recovery,
+installation, schedules and maintenance. Read `conatus.processing` for complete
+intake and interpretation behavior, `conatus.service` for release and scheduler
+behavior, `conatus.library.explore` for observation meaning, and
+`conatus.digest.email` for disclosure and uncertain-send recovery.
+`chancery resolve conatus.update.operate` includes the required contracts.
 
-All product commands return JSON success data or error text. `--json` is
-optional; global `--state-dir ABS_PATH` selects Conatus state. The default is
-`CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`.
+Conatus owns local intake, cursor, outgoing documents, handoff receipts, gates
+and selected instructions. Annals owns retained sources, graph, evidence,
+interpretation and domain recovery. Clockwork owns activation and incidents.
+Do not edit another product's database or spool.
 
-## Initialize and process
+## Select state and prerequisites
+
+Use global `--state-dir ABS_STATE` for private Conatus state. The default is
+`CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Product commands
+return JSON success data or an error; `--json` is optional. Keep private source
+text, full documents, evidence and model context out of routine logs.
+
+1. Select the exact supported Annals executable, writable general-library state,
+   explicit existing decisions-library config and named general library.
+2. Verify initialized private Bazaar state and a complete `cell.prompts.conatus`
+   selection. An absolute `CELL_BAZAAR_DATABASE` can select another database.
+   Runtime reads and deployment do not import missing text.
+3. Verify the pinned library identities before update or recovery. For model
+   work, establish Annals' configured authenticated Nucleus path.
+4. Stop on absent selection, mismatched identity, unreadable state or uncertain
+   domain outcome. Do not redirect libraries or reset the baseline to recover.
+
+Installation, initialization and activation require separate authority. Update,
+retry and re-examination can use account allowance and apply valid material
+changes through Annals. These procedures do not authorize publication,
+credential changes, historical import, user-data cleanup or unrelated lifecycle
+actions.
+
+## Initialize or rebind Annals
+
+1. Run initialization with the intended state and explicit selections:
+
+   ```sh
+   conatus --state-dir ABS_STATE init --annals ABS_ANNALS --decisions-config ABS_CONFIG --library conatus
+   ```
+
+   Add `--annals-state-dir ABS_PATH` when a different Annals catalog is selected.
+   First initialization creates or selects the library, selects exact instructions,
+   pins both library identities and starts at the current accepted-feed watermark.
+   It starts no model, imports no earlier decisions and enables no schedule.
+2. Run `conatus --state-dir ABS_STATE --json config` and
+   `conatus --state-dir ABS_STATE status`. Verify both library selections and
+   the saved baseline before processing.
+3. Repeat `init` only with the same library, decisions config and Annals state
+   root to rebind the Annals executable. Verify `initialized:false` and the
+   `rebound` result. Confirm preserved cursor, records, instructions and pause.
+4. Update any selected immutable schedule separately after a Conatus program
+   change. Direct installation and executable rebinding do not retarget it.
+
+## Update and inspect the result
+
+1. Read `conatus status` to establish pause, intake and handoff state.
+2. Run `conatus update`. It consumes new accepted documents, queues frozen
+   sources and dispatches the dedicated Annals inbox. Use Conatus as that inbox's
+   only scheduled driver.
+3. Read `conatus status` and the selected `want show ID` or `decision show ID`.
+   Verify the intended intake, queue, work and interpretation receipts separately.
+   The cursor proves intake coverage; it does not prove interpretation.
+4. Stop after a feed, enqueue or inbox failure. The partial update report is
+   retained and no successor stage starts. Resolve the failure before continuing.
+   Do not treat a duplicate work, no new revision or process exit as proof of
+   examination. A committed domain result can survive later runtime failure.
+
+Run `conatus pause` to gate subsequent updates. An active update finishes, and
+explicit retry or re-examination remains available. Run `conatus resume` only
+when ordinary processing should resume. Neither command pauses the Annals inbox,
+disables Clockwork or cancels admitted work.
+
+## Recover failed processing
+
+1. Inspect `conatus status` and the selected record. Preserve captured sources,
+   cursor and receipts. Distinguish failed handoff from failed interpretation.
+2. Run ordinary `conatus update` after dependency recovery for pending intake
+   and queued work. A failed Annals attempt requires explicit bounded retry.
+3. Pause the selected Annals inbox with its configured executable and catalog:
+
+   ```sh
+   annals library NAME inbox pause
+   annals library NAME inbox status
+   ```
+
+   Verify no active processing job. Conatus' local pause is a separate gate.
+4. Select the inclusive interval of failed Annals job IDs in failed
+   delivery-completion order and run:
+
+   ```sh
+   conatus retry --from ANNALS_JOB_ID --through ANNALS_JOB_ID
+   ```
+
+   Inspect the retry receipt. Follow a halted event through the selected Annals
+   `inbox retry status` and `inbox retry continue` interfaces. Stop if eligibility,
+   result or continuation authority remains uncertain.
+5. Resume the selected Annals inbox after verified recovery when ordinary
+   dispatch should continue. Restore only the operator controls intended before
+   the operation.
+
+Use `conatus reexamine INTAKE_ID` only for one source already retained in Annals
+when a fresh interpretation and valid application are intended. Inspect its
+Annals domain receipt. Do not re-enqueue retained bytes to request examination,
+create an open-ended retry or infer failure from runtime status alone.
+
+## Replace library instructions
+
+1. Read `conatus instructions show` and preserve the selected document for
+   recovery.
+2. Supply the intended exact nonblank UTF-8 document:
+
+   ```sh
+   conatus instructions set --file instructions.md
+   ```
+
+   This selects a new Annals instruction revision. It starts no model and
+   rewrites no history.
+3. Read `conatus instructions show` to verify the selected bytes. Re-examine
+   exact retained inputs separately only when explicitly intended.
+
+## Edit the initial Bazaar selection
+
+1. Read `cell.prompts.conatus` through Bazaar's supported `get` interface and
+   preserve its complete selection. Use an explicit
+   `bazaar --database /absolute/private/bazaar.sqlite3` prefix when Conatus uses
+   `CELL_BAZAAR_DATABASE`.
+2. Append intended component text:
+
+   ```sh
+   bazaar update PROMPT_ID --file /absolute/prompt.txt
+   ```
+
+   Record the returned immutable version. Keep private text out of logs.
+3. Publish a complete selection that pins every component to its positive
+   integer version:
+
+   ```sh
+   bazaar update cell.prompts.conatus --file /absolute/selection.json
+   ```
+
+   Its content is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`.
+   A text append alone does not change selection. Preserve migration selection
+   version 1 and all referenced text versions.
+4. Read the selected exact versions before new initialization. Existing library
+   revisions and retained work stay unchanged. To roll back new selection,
+   append the prior complete selection content; retain historical versions.
+
+## Install or recover a release
+
+1. Read `conatus-install inspect` and preserve the current release and both
+   binding selections. Establish maintenance and drain when admitted work cannot
+   tolerate replacement. Use shared coordinated deployment for coupled products.
+2. Select a previously validated candidate program and its matching complete
+   provider bundle. Preserve the exact candidate bytes for selected-release
+   verification after installation.
+3. Install with the expected current selection:
+
+   ```sh
+   conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
+   ```
+
+   Use the observed `releases/HASH` instead of `absent` for upgrade. Packaging
+   commands accept `--home ABS_HOME`. Installation selects programs and published
+   documentation only; it initializes no runtime state or schedule.
+4. Run `conatus-install inspect`, then verify the selected release against the
+   candidate and its retained integrity manifest:
+
+   ```sh
+   conatus-install verify --binary ABS_BINARY --bundle ABS_BUNDLE
+   conatus-install verify-release ABS_RELEASE
+   ```
+
+   Stop on selector conflict or failed integrity verification. Run
+   `conatus --register-usage` after successful installation or update.
+5. Verify product config, status and dependency readiness separately before
+   restoring admission or activation.
+
+Recover only to an exact retained release:
 
 ```sh
-/Users/joey/.local/bin/conatus --state-dir STATE init --annals ANNALS_BIN --decisions-config DECISIONS_CONFIG --library conatus
-/Users/joey/.local/bin/conatus update
-/Users/joey/.local/bin/conatus status
-```
-
-Initialization optionally accepts `--annals-state-dir PATH`. It creates or
-selects a named general library, selects the bundled exact instruction document,
-pins its persistent identity and the explicitly configured decisions-library
-identity, and stores the current accepted-account watermark as its baseline.
-The initial document is `conatus.library.instructions` in Bazaar. Conatus reads it through the `cell.prompts.conatus` selection when initializing its Annals library. Existing Annals instruction revisions remain unchanged.
-It starts no model and enables no schedule. There is no historical-import
-operation or implicit decisions-library selection.
-
-To replace the pinned Annals executable, repeat `init` with the same library,
-decisions config, and Annals state root. Conatus verifies both pinned library
-identities before saving the new executable path. The cursor, records,
-instructions, and pause state remain unchanged. The result reports
-`initialized: false` and whether the executable was `rebound`. Cell deployment updates its selected Clockwork definition during configuration.
-
-An update consumes all new accepted events through its chosen watermark. Each
-event and cursor advancement commit in the same local transaction. The feed
-provides complete accepted document text, source filename, digest, acceptance
-time, and transport identities. Conatus forwards the exact text and lets the
-configured library agent interpret it.
-
-New sources are enqueued before retention. Annals retains them and integrates
-them with automatic application of valid material changes. A fresh duplicate
-whose bytes already identify a retained work does not request an examination.
-Conatus serializes its own update paths; use this runner as the only scheduled
-driver of its Annals inbox.
-
-Captured, queued, retained, and interpreted identify separate successful
-operations. Intake counts select local wants or decisions; pending/queued counts
-describe handoffs. The stored feed cursor marks intake coverage, not successful
-interpretation. Intake times use UTC Unix seconds; source occurrence precision
-and Annals revision times remain separate. Generic enqueue has no producer-key
-idempotency or cross-library transaction. An uncertain handoff can create a
-duplicate delivery; work byte identity alone does not prove interpretation.
-
-## Recover or change the interpretation
-
-```sh
-/Users/joey/.local/bin/conatus pause
-/Users/joey/.local/bin/conatus resume
-/Users/joey/.local/bin/conatus retry --from ANNALS_JOB_ID --through ANNALS_JOB_ID
-/Users/joey/.local/bin/conatus reexamine INTAKE_ID
-/Users/joey/.local/bin/conatus instructions show
-/Users/joey/.local/bin/conatus instructions set --file instructions.md
-```
-
-Pause gates subsequent update calls; an active update finishes, and explicit
-retry or re-examination remains available. Resume releases that gate. Neither
-changes a Clockwork binding or cancels an admitted Annals job. Local input
-survives handoff failure. Normal update resumes pending intake and queued work
-when dependencies are available. Failed Annals attempts require an explicit
-bounded retry. Retry boundaries are failed Annals job IDs in inclusive failed
-delivery-completion order, not Conatus IDs. Re-examination selects one retained
-input for fresh model interpretation and valid material application.
-
-Retry start requires the Annals inbox paused with no active processing job.
-Conatus' local pause does not set the Annals pause. Use the configured Annals
-executable and catalog selection with `annals library NAME inbox pause` before
-starting the interval. Resume that Annals inbox after recovery when ordinary
-dispatch should continue. Re-examination does not implicitly retain an input
-that has not reached the Annals library.
-
-Annals owns retry-event eligibility and progress. If an event halts, inspect its
-receipt and use its supported retry status/continue interface for that event;
-do not create an open-ended retry or re-enqueue retained bytes to request a new
-examination. Use the selected named-library Annals commands for deeper domain
-recovery. Do not edit its database, job files, or spool directly.
-
-Instruction replacement selects exact nonblank UTF-8 bytes. It starts no model,
-does not rewrite sources, and does not reinterpret history. Annals freezes
-corpus and instruction revisions at examination admission and rejects stale
-material application. A committed or recorded result survives a later runtime
-failure. Inspect domain receipts before treating an execution failure as a
-failed interpretation. Conatus does not run transitive reduction automatically.
-
-The instructions permit service-to-want associations grounded in captured
-sources. They do not permit invented wants or qualifications. Such associations
-do not establish progress, enactment, completion or current force.
-
-## Install and separately activate
-
-```sh
-conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
-conatus-install inspect
-conatus-install verify --binary ABS_BINARY --bundle ABS_BUNDLE
-conatus-install verify-release ABS_RELEASE
 conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
 ```
 
-The default install root is `~/Library/Application Support/Conatus/install`.
-Packaging commands accept `--home ABS_HOME`. Install stages the release and its
-matching Chancery bundle and selects the candidate. Upgrade uses the observed
-`releases/HASH` instead of `absent`. Recovery selects an exact retained release;
-it does not revert domain databases or Clockwork bindings. Installation starts
-no model, initializes no runtime state, and changes no active schedule.
+Verify release integrity, selected program and provider, then product state and
+bindings. Recovery does not revert the database, Annals library or Clockwork
+selection. Older releases can ignore want archive state; stop if that would
+violate the required active-want filtering.
 
-Prepare a new immutable definition from the selected installed release after
-the Conatus state directory exists:
+## Prepare and activate one exact schedule
 
-```sh
-conatus-install schedule-definition --state-dir ABS_STATE --output ABS_DEFINITION
-clockwork definition register ABS_DEFINITION
-clockwork binding switch conatus/update DEFINITION_DIGEST
-clockwork binding show conatus/update
-clockwork history conatus/update --limit 20
-clockwork binding disable conatus/update
-```
+1. Establish a selected verified release, initialized state and ready dependencies.
+   Preserve each prior binding digest, enabled intent and existing incident.
+   For daily email, establish Email readiness and authority for its exact personal
+   digest content. Preview with `conatus email preview` before activation.
+2. Generate a new definition under an existing output parent:
 
-Definition generation requires a new output file under an existing parent. It
-writes that file and creates the private state log directory, but neither
-registers nor activates the runner. The definition pins the current installed
-release, runs `update` every 300 seconds with run-at-load enabled and overlap
-skip, and writes product output under `STATE/logs/`. It contains no credential.
-Clockwork registration returns the digest; binding selection activates it.
+   ```sh
+   conatus-install schedule-definition --state-dir ABS_STATE --output ABS_NEW_FILE
+   ```
 
-Before switching, establish the product's ready initialized state and retain
-the prior binding/release selection for recovery. Direct program installation does not retarget an existing immutable definition.
-Cell deployment performs this retargeting during configuration. Do not keep old and new inbox schedules active together.
+   Add `--daily-email` for `conatus/daily-email`. The update key is
+   `conatus/update`, every 300 seconds with run-at-load. Email is local 09:00,
+   no run-at-load and a 180-second limit. Both skip overlap and select
+   `halt-until-approved`. Generation writes the definition and private log
+   directory; it does not register or activate it.
+3. Register the definition and retain its digest:
 
-These operations require available local Annals interfaces; integration also
-requires Annals' configured authenticated Nucleus execution path. Clockwork
-supplies activation rather than domain success. Installation, registration and
-an exit-zero process result do not prove retention or interpretation. No
-maximum activation delay, queue-drain deadline, interpretation time, storage
-capacity, or cross-release compatibility window is promised.
+   ```sh
+   clockwork definition register ABS_NEW_FILE
+   ```
 
-Conatus state, Annals spools and works, and Nucleus context can retain complete
-private wording, full documents and evidence. Model integration may consume the
-configured account allowance. No publication, cleanup of user data, direct
-database mutation, unrelated lifecycle action, or credential operation is
-authorized by these commands.
+4. Switch only the intended binding after authority and readiness are established:
 
-Decision intake uses Annals exchange contract 2. It saves the original event,
-complete document, source filename, digest, acceptance time, and transport
-identities with its cursor, then forwards exactly that text to the Conatus
-library. No account fields or source lookup are required. Library instructions
-govern connections and interpretation. Feed pages may stop at 4 MiB of document
-bytes before reaching the requested count; update continues until an empty page.
+   ```sh
+   clockwork binding switch KEY DEFINITION_DIGEST
+   clockwork binding show KEY
+   clockwork history KEY --limit 20
+   ```
 
-## Scheduled failure policy
+   Selection enables scheduling. Update can request run-at-load. Do not run old
+   and new inbox drivers together. Inspect Conatus receipts for domain success;
+   Clockwork history proves activation and process outcome.
+5. Disable activation with `clockwork binding disable KEY` when intended.
+   Product pause does not disable either binding.
 
-Conatus generates Clockwork definition schema 2 for `conatus/update`, with
-`[failure] on_abend = "halt-until-approved"`. On the first feed or handoff error,
-the update retains completed results and returns nonzero. It starts no further
-stage. Annals dispatch uses `inbox run --stop-on-failure`, so the first failed
-source also stops its batch.
+## Recover a scheduled failure
 
-Clockwork owns the durable scheduling halt and one retained email notification
-through `HOME/.local/bin/email`. Inspect `clockwork incident list conatus/update`
-and `clockwork incident show INCIDENT_ID`. After explicit approval, use
-`clockwork binding resume conatus/update INCIDENT_ID` to allow future scheduling.
-A new definition, deployment, `conatus resume`, or Annals recovery cannot clear
-that incident. Schema-one bindings acquire this behavior only after an explicit
-schema-two definition switch; definition generation does not activate it.
+1. Read `clockwork incident list KEY` and `clockwork incident show INCIDENT_ID`.
+   Inspect the retained Conatus update report or email occurrence.
+2. Resolve the cause and inspect domain receipts. For uncertain email acceptance,
+   follow `conatus.digest.email` before any explicit retry. Scheduling continuation
+   does not authorize another submission or another model attempt.
+3. Obtain explicit approval for continuation and run:
 
-Conatus' operator pause, Annals' operator pause and bounded retry-event halts,
-source identities, handoff receipts, and explicit domain retry remain with their
-products. Empty work and Annals low-storage dispatch readiness are successful
-outcomes. A failed enqueue, including insufficient copy capacity, is an abend.
-Continuation permits pending handoffs under their existing identity rules; it
-does not give a failed Annals attempt another try.
+   ```sh
+   clockwork binding resume KEY INCIDENT_ID
+   ```
+
+4. Verify the incident and binding state and subsequent product outcome. Resume
+   affects only that scheduling incident. Deployment, definition switches,
+   Conatus resume and Annals recovery do not clear it.
+
+## Operate owned maintenance
+
+Use this route for an attended product operation. The coordinated deployment
+route below acquires its own holds; do not pre-acquire a foreign hold for it.
+
+1. Read `conatus --json config`, `conatus maintenance status` and both Clockwork
+   binding selections. Preserve product pause, each present binding digest,
+   enabled intent and existing incident. An absent binding remains absent.
+2. Hold admission under the operation's exact owner and drain admitted commands:
+
+   ```sh
+   conatus maintenance hold OWNER
+   conatus maintenance drain
+   ```
+
+   Holds survive interruption. Drain includes the prior runner lock. Stop on
+   unresolved admission or a hold owned by another operation.
+3. Perform the intended attended operation. Verify selected release integrity,
+   product configuration and the relevant dependency or domain receipts.
+   After interruption, complete coherent recovery while preserving the hold.
+4. Release only `OWNER` with `conatus maintenance release OWNER`. Restore only
+   the captured operator controls. Preserve disabled or absent schedules and
+   existing failure incidents.
 
 ## Coordinated deployment setup
 
-Cell deployment captures Conatus configuration, product pause and the exact
-`conatus/update` selection. It holds durable admission, temporarily pauses
-updates and disables the selected binding. Drain waits for admitted commands
-and the prior runner lock. Installation selects programs first; configuration
-then initializes absent state or rebinds the final Annals executable through
-`init`. Existing library identities, cursor, records and instructions remain.
+Use the coordinator for coupled program changes. It captures product controls
+and acquires its own maintenance holds. Do not place a manual hold before asking
+it to execute; another operation's hold blocks admission.
 
-Deployment settings accept `state_dir`, `decisions_config`, `annals_state_dir`,
-`library` and `enabled`. Paths must be absolute. Existing library selections
-cannot change during deployment. Fresh defaults use the Conatus state root,
-the installed Annals state root and its `decisions/config.toml`, and library
-`conatus`. Supply other selections explicitly. An absent schedule remains
-absent unless `enabled` is supplied. Existing bindings retain their timer,
-arguments, environment and output paths while selecting the new exact program
-disabled. Activation restores enabled intent and the captured product pause
-only after all holds release. No deployment clears a Clockwork incident.
+1. Read `nucleus manual` for the shared Cell deployment procedure. Inspect
+   `conatus --json config`, `conatus maintenance status` and both binding
+   selections. Preserve configuration, product pause and present binding intent.
+   Resolve any interrupted owning operation before starting another deployment.
+2. Supply absolute `state_dir`, `decisions_config`, `annals_state_dir` and the
+   intended `library` when defaults are unsuitable. Fresh defaults use Conatus
+   state, installed Annals state and `decisions/config.toml`, and library
+   `conatus`. Existing library selections cannot change during deployment.
+3. Supply update `enabled` and `daily_email_enabled` separately only when a
+   change is intended. Omission preserves prior intent. An absent binding remains
+   absent unless its enabled setting is supplied.
+4. Plan and execute from the Cell root, using the shared procedure for supplied
+   settings and retained operation identity:
 
-`conatus --json config` reads only persistent dependency and library selections.
-`conatus maintenance status|drain`, `hold OWNER` and `release OWNER` expose its
-owner-scoped admission gate. Holds survive interruption. Recovery completes
-configuration for a coherent selected release before releasing its own hold.
+   ```sh
+   ./deploy.sh plan conatus
+   ./deploy.sh conatus
+   ```
 
-Want archival uses the existing schema-one settings table. Existing wants
-default to active without a migration. Older releases ignore archive markers
-and can include archived wants in lists and new emails. Use a lifecycle-aware
-release when archive filtering is required.
+   Review the plan before execution. The coordinator holds admission, suspends
+   selected bindings, drains admitted commands, selects programs, and initializes
+   absent state or rebinds the final Annals executable. Existing library IDs,
+   cursor, records and instructions are preserved.
+5. Inspect the retained operation evidence. Verify coherent selected release and
+   configuration. Verify each present or explicitly requested binding selected
+   the exact new definition. An omitted absent binding needs no new definition.
+   Activation restores captured pause and independent enabled intent only after
+   all holds release. Existing incidents remain halted.
+6. Follow coordinator recovery after interruption. Complete coherent configuration
+   before its own hold release. Stop on foreign holds, incoherent configuration,
+   unresolved admission or uncertain domain results; do not release another
+   operation's hold to bypass refusal.
 
-## Command usage
-
-After each installation or update, run `conatus --register-usage`.
-This registers command inventory without product work.
-
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
-
-## Daily-email binding
-
-Conatus also owns `conatus/daily-email`. Add `--daily-email` to
-`conatus-install schedule-definition` to prepare its separate daily local 09:00
-definition. It starts no model. Deployment captures and suspends both bindings,
-retargets selected definitions, and restores each saved enabled intent after
-maintenance. The optional boolean `daily_email_enabled` selects email intent
-separately from update `enabled`. An omitted value preserves prior email intent;
-an absent binding remains absent. Neither operation clears Clockwork incidents.
-
-Email must be installed. The renderer copies all active wants and at most two
-stored quotations from directly associated decisions. Preview starts no send.
-See [daily email](digest-email.md) for disclosure and uncertain-send recovery.
-
-## Bazaar prompt selection
-
-Library initialization requires initialized private Bazaar state and a complete cell.prompts.conatus selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.conatus` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.conatus --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+No installation, registration, catalog publication or successful activation
+alone proves retention, interpretation or inbox delivery. There is no promised
+activation delay, queue-drain deadline, storage capacity or completion time.
