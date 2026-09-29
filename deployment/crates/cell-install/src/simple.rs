@@ -384,12 +384,26 @@ fn prove(plan: &ReleasePlan, release: &ReleaseInfo) -> Result<()> {
     Ok(())
 }
 
-fn install(spec: &Spec, release_version: &str, args: &Input) -> Result<ReleaseInfo> {
+fn scratch(directory: Option<&Path>) -> std::io::Result<tempfile::TempDir> {
+    match directory {
+        Some(directory) => tempfile::Builder::new()
+            .prefix("cell-install-")
+            .tempdir_in(directory),
+        None => tempfile::tempdir(),
+    }
+}
+
+fn install(
+    spec: &Spec,
+    release_version: &str,
+    args: &Input,
+    scratch_directory: Option<&Path>,
+) -> Result<ReleaseInfo> {
     let layout = spec.layout();
     let legacy = |root: &Path| spec.legacy(root);
     let before = tx::inspect_installation(&layout, &args.home, &legacy)?;
     expected(&before, args.expected.as_deref())?;
-    let scratch = tempfile::tempdir()?;
+    let scratch = scratch(scratch_directory)?;
     let plan = plan(spec, release_version, args, scratch.path())?;
     let prepared = tx::prepare_release(&layout, &args.home, &plan)?;
     if spec.product == "clockwork" || spec.product == "chancery" {
@@ -504,7 +518,7 @@ fn adapter_run(
     }
     if operation == Operation::Inspect {
         let lifecycle = lifecycle(&context, operation)?;
-        let scratch = tempfile::tempdir()?;
+        let scratch = scratch(Some(&context.request.run_dir))?;
         plan(spec, release_version, &args, scratch.path())?;
         let snapshot = current(spec, &context.home)?;
         let runtime = if spec.maintained {
@@ -538,7 +552,7 @@ fn adapter_run(
                 .as_ref()
                 .and_then(|value| value.get("any_apply_started"))
                 == Some(&Value::Bool(true));
-            let scratch = tempfile::tempdir()?;
+            let scratch = scratch(Some(&context.request.run_dir))?;
             let plan = plan(spec, release_version, &args, scratch.path())?;
             let prepared = tx::prepare_release(&spec.layout(), &context.home, &plan)?;
             if spec.maintained && forward {
@@ -608,12 +622,17 @@ fn adapter_run(
                 || "absent".to_owned(),
                 |release| format!("releases/{}", release.release_id),
             ));
-            json!(install(spec, release_version, &args)?)
+            json!(install(
+                spec,
+                release_version,
+                &args,
+                Some(&context.request.run_dir),
+            )?)
         }
         Operation::Verify | Operation::Recover => {
             let is_prior = observed == prior;
             if !is_prior || operation == Operation::Verify && context.selected() {
-                let scratch = tempfile::tempdir()?;
+                let scratch = scratch(Some(&context.request.run_dir))?;
                 let plan = plan(spec, release_version, &args, scratch.path())?;
                 prove(
                     &plan,
@@ -738,7 +757,7 @@ fn execute(
     }
     let args = input(remaining)?;
     let data = match operation.as_str() {
-        "install" => json!(install(spec, release_version, &args)?),
+        "install" => json!(install(spec, release_version, &args, None)?),
         "inspect" => json!(current(spec, &args.home)?),
         "verify" => {
             let snapshot = current(spec, &args.home)?;
