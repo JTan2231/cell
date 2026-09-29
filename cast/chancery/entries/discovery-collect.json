@@ -45,7 +45,7 @@
   "effects": [
     "Reads configured or explicitly selected sources over HTTP, may consume TheirStack credits or Brave search allowance, and writes extracted company/job records plus run, source, cursor and budget state. A supplied URL that already matches one retained job returns that job without another collection run.",
     "Does not retain whole provider responses or invoke another Cell product.",
-    "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
+    "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Greenhouse posting URLs use the single-job endpoint with a matching returned posting ID and no fallback to a board download. Other ATS adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
   ],
   "authority": [
     "Cast owns source admission, extracted retained observations, identity correlation and conservative local accounting.",
@@ -138,7 +138,7 @@
       },
       {
         "status": "declared",
-        "statement": "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
+        "statement": "job collect first resolves an exact retained native ATS identity or normalized URL. Otherwise it retrieves only the selected posting despite source disablement or ordinary ATS exclusion. It preserves existing source enrollment and creates new sources disabled. Greenhouse posting URLs use the single-job endpoint with a matching returned posting ID and no fallback to a board download. Other ATS adapters may download boards or pages, but only the selected posting is retained; no discovered sources or neighboring jobs are admitted. Board-only, absent and ambiguous selections fail."
       }
     ],
     "operational_limits": [

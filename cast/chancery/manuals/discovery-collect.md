@@ -30,8 +30,10 @@ retain excluded board URLs. An enabled source remains subject to this policy.
 posting URL. It returns an existing URL or native ATS identity without another
 collection run. Otherwise it retrieves the selected posting even when its source
 is disabled or its ATS is excluded from ordinary collection. It preserves an
-existing source's enabled setting; a new source starts disabled. An adapter may
-download a board or its pages, but only the selected posting enters Cast.
+existing source's enabled setting; a new source starts disabled. For a Greenhouse
+posting URL, it calls the single-job endpoint and verifies the returned posting
+ID. A failed request does not fall back to a board download. Other ATS adapters
+may download a board or its pages, but only the selected posting enters Cast.
 Unrelated postings and discovered careers links are not admitted by this operation.
 A board URL without a posting identity is refused. The schema-one result
 contains `schema_version` and `job`.
