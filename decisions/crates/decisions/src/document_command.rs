@@ -365,6 +365,13 @@ fn toolset() -> ToolsetRef {
 }
 
 fn build_request(snapshot: &Snapshot) -> AppResult<JobRequestV1> {
+    build_request_with_cwd(snapshot, classifier_cwd)
+}
+
+fn build_request_with_cwd(
+    snapshot: &Snapshot,
+    working_directory: impl FnOnce(&str) -> AppResult<PathBuf>,
+) -> AppResult<JobRequestV1> {
     let prompts = cell_prompts::Prompts::load("krisis")?;
     let prompt = snapshot.prompt().context(
         "document_prompt_invalid",
@@ -374,7 +381,7 @@ fn build_request(snapshot: &Snapshot) -> AppResult<JobRequestV1> {
     let mut invocation = AgentInvocationV1::new(
         "codex",
         ModelId::new("gpt-5.6-terra"),
-        AbsolutePath::new(classifier_cwd(&id)?),
+        AbsolutePath::new(working_directory(&id)?),
         WorkspaceAccess::None,
         BuiltinToolsV1 {
             local_execution: false,

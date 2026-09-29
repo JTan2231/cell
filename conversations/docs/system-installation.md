@@ -28,12 +28,13 @@ Codex processes. The deployer creates:
   the current release's provider bundle.
 
 The default macOS reader is
-`/Applications/ChatGPT.app/Contents/Resources/codex`. The app owns that executable
-and its updates. Conversations does not install or update Codex. `--codex` takes
-precedence over `CONVERSATIONS_CODEX`; both override the default. If the app is
-installed elsewhere, supply its executable explicitly. A missing or unusable
-selected executable fails without falling back to `PATH`. Run `conversations
-doctor` to check the selected path, version, and App Server handshake.
+`/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`. The app owns
+that executable and its updates. Conversations does not install or update
+Codex. `--codex` takes precedence over `CONVERSATIONS_CODEX`; both override the
+default. If the app is installed elsewhere, supply its executable explicitly.
+A missing or unusable selected executable fails without falling back to
+`PATH`. Run `conversations doctor` to check the selected path, version, and App
+Server handshake.
 
 Krisis and Paperboy embed the Conversations library. Rebuild and deploy each
 consumer to apply library changes; replacing the Conversations CLI alone does

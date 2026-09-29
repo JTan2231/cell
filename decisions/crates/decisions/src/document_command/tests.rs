@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)] // Fixture setup and expected successful operations must fail the test immediately.
 
 use std::fs;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -10,7 +11,8 @@ use nucleus_core::{JobRequestV1, SchemaId, ToolCallV1, WorkspaceAccess};
 use serde_json::json;
 use serde_json::value::to_raw_value;
 
-use super::{INPUT_SCHEMA, Run, TOOL_NAME, build_request, execute, toolset};
+use super::{INPUT_SCHEMA, Run, TOOL_NAME, build_request_with_cwd, execute, toolset};
+use crate::classifier::classifier_cwd_in;
 use nucleus_core::{AttemptId, ToolCallId};
 use serde_json::Value;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -21,9 +23,11 @@ mod support;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn fixture() -> Run {
+fn fixture(temporary_root: &Path) -> Run {
+    fs::set_permissions(temporary_root, fs::Permissions::from_mode(0o700)).unwrap();
     let snapshot = Snapshot::capture(support::conversation(), "target").unwrap();
-    let request = build_request(&snapshot).unwrap();
+    let request =
+        build_request_with_cwd(&snapshot, |id| classifier_cwd_in(temporary_root, id)).unwrap();
     Run {
         version: 1,
         snapshot,
@@ -49,7 +53,7 @@ fn call(run: &Run, arguments: &Value) -> ToolCallV1 {
 #[test]
 fn receipt_replay_and_render_recovery_use_frozen_source_and_result() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let mut run = fixture();
+    let mut run = fixture(directory.path());
     let call = call(
         &run,
         &json!({"is_decision": true, "summary": "No tests, builds, or formatters were run."}),
@@ -89,7 +93,7 @@ fn receipt_replay_and_render_recovery_use_frozen_source_and_result() -> TestResu
 #[test]
 fn malformed_results_explain_the_error_and_allow_a_corrected_call() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let mut run = fixture();
+    let mut run = fixture(directory.path());
     let invalid = call(&run, &json!({"is_decision": true, "summary": null}));
     let result = run.accept_call(directory.path(), &invalid)?;
     assert!(result.is_error);
@@ -111,7 +115,8 @@ fn malformed_results_explain_the_error_and_allow_a_corrected_call() -> TestResul
 
 #[test]
 fn request_uses_new_contract_and_only_one_generated_summary() {
-    let run = fixture();
+    let directory = tempfile::tempdir().unwrap();
+    let run = fixture(directory.path());
     assert_eq!(
         run.request.invocation.toolset,
         Some(nucleus_core::ToolsetRef {
@@ -257,7 +262,7 @@ async fn restart_replays_same_request_and_durable_result_despite_runtime_failure
     let socket = directory.path().join("n.sock");
     let listener = UnixListener::bind(&socket)?;
     let client = NucleusClient::new(&socket)?;
-    let mut run = fixture();
+    let mut run = fixture(directory.path());
     run.save(directory.path())?;
     let request = run.request.clone();
     let tool_call = call(
@@ -303,7 +308,7 @@ async fn runtime_completion_without_a_classification_does_not_produce_a_document
     let socket = directory.path().join("n.sock");
     let listener = UnixListener::bind(&socket)?;
     let client = NucleusClient::new(&socket)?;
-    let mut run = fixture();
+    let mut run = fixture(directory.path());
     run.save(directory.path())?;
     let request = run.request.clone();
     let (result, server) = tokio::join!(

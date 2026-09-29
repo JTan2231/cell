@@ -194,7 +194,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deploy consumes absolute Krisis, Clockwork, Codex, Annals, and Annals config paths, exact lowercase expected library ID, product-owned package/provider bytes, current-user home, and current owned installation state."
+        "statement": "Deploy consumes absolute Krisis, Clockwork, Codex, Annals, and Annals config paths, exact lowercase expected library ID, product-owned package/provider bytes, current-user home, and current owned installation state. Explicit product codex_bin settings replace an existing reader pin; omission retains it. Replacement can proceed when the prior Codex executable is unavailable if the retained receipt and exact observer definition prove ownership; the candidate reader must pass executable and doctor checks."
       },
       {
         "status": "unsupported",
