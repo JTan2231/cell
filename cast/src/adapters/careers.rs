@@ -1,5 +1,6 @@
 use super::{
-    Board, evidence, id, is_discovery_directory, links, string, text, unsupported_shared_ats,
+    Board, ats_job_source_key, evidence, id, is_discovery_directory, links, string, text,
+    unsupported_shared_ats,
 };
 use crate::{
     http::{HttpClient, public_url},
@@ -21,7 +22,7 @@ pub async fn verify(
 ) -> Result<VerificationResult, String> {
     let url = public_url(input)?;
     if let Some(board) = Board::from_url(&url) {
-        return verify_board(http, &board, cursor).await;
+        return verify_board(http, &board, &url, cursor).await;
     }
     if is_discovery_directory(input) {
         return Ok(directory_result());
@@ -44,16 +45,12 @@ pub async fn verify(
 async fn verify_board(
     http: &HttpClient,
     board: &Board,
+    input: &Url,
     cursor: Option<&Value>,
 ) -> Result<VerificationResult, String> {
     match board {
         Board::Greenhouse(token) => {
-            let json = http
-                .get_json(&format!(
-                    "https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
-                ))
-                .await?;
-            parse_greenhouse(&json, board)
+            verify_greenhouse(token, input, async |url| http.get_json(url).await).await
         }
         Board::Ashby(token) => {
             let json = http
@@ -86,6 +83,27 @@ async fn verify_board(
             parse_lever(&json, board, skip)
         }
     }
+}
+
+async fn verify_greenhouse(
+    token: &str,
+    input: &Url,
+    mut get_json: impl AsyncFnMut(&str) -> Result<Value, String>,
+) -> Result<VerificationResult, String> {
+    let board = Board::Greenhouse(token.into());
+    let endpoint = format!("https://boards-api.greenhouse.io/v1/boards/{token}/jobs");
+    if let Some(source_key) = ats_job_source_key(input) {
+        let (_, public_id) = source_key
+            .rsplit_once(':')
+            .ok_or("Greenhouse job URL has no posting id")?;
+        let job = get_json(&format!("{endpoint}/{public_id}")).await?;
+        if id(&job, "id").as_deref() != Some(public_id) {
+            return Err("Greenhouse response does not match the requested posting id".into());
+        }
+        return parse_greenhouse(&json!({"jobs": [job]}), &board);
+    }
+    let json = get_json(&format!("{endpoint}?content=true")).await?;
+    parse_greenhouse(&json, &board)
 }
 
 fn validated_job(title: Option<String>, url: Option<String>) -> Result<(String, String), String> {
@@ -570,6 +588,94 @@ mod tests {
         assert!(result.jobs.is_empty());
         assert!(result.careers_urls.is_empty());
     }
+    #[tokio::test]
+    async fn greenhouse_job_url_fetches_only_the_selected_posting() {
+        for input in [
+            "https://job-boards.greenhouse.io/spacex/jobs/8501225002?gh_jid=8501225002",
+            "https://boards.greenhouse.io/spacex/jobs/8501225002/?gh_src=tracking",
+        ] {
+            let mut requests = vec![];
+            let result = verify_greenhouse("spacex", &Url::parse(input).unwrap(), async |url| {
+                requests.push(url.to_owned());
+                assert_eq!(
+                    url,
+                    "https://boards-api.greenhouse.io/v1/boards/spacex/jobs/8501225002"
+                );
+                Ok(json!({
+                    "id": 8_501_225_002_u64, "internal_job_id": 42,
+                    "title": "Engineer", "company_name": "SpaceX",
+                    "absolute_url": "https://job-boards.greenhouse.io/spacex/jobs/8501225002",
+                    "location": {"name": "Hawthorne, CA"},
+                    "first_published": "2026-08-28T17:07:26-04:00",
+                    "content": "&lt;p&gt;Build systems.&lt;/p&gt;"
+                }))
+            })
+            .await
+            .unwrap();
+            assert_eq!(requests.len(), 1);
+            assert_eq!(result.jobs.len(), 1);
+            let job = &result.jobs[0];
+            assert_eq!(job.source_key, "greenhouse:spacex:8501225002");
+            assert_eq!(job.source_internal_id.as_deref(), Some("42"));
+            assert_eq!(job.location.as_deref(), Some("Hawthorne, CA"));
+            assert_eq!(job.description.as_deref(), Some("Build systems."));
+            assert_eq!(
+                job.source_published_at.as_deref(),
+                Some("2026-08-28T17:07:26-04:00")
+            );
+            assert_eq!(result.company_name.as_deref(), Some("SpaceX"));
+            assert!(result.complete);
+            assert!(result.next_cursor.is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn greenhouse_job_failure_never_falls_back_to_the_board() {
+        let input = Url::parse("https://job-boards.greenhouse.io/acme/jobs/11").unwrap();
+        for response in [
+            Err("HTTP status 404".to_owned()),
+            Err("HTTP response exceeds 4 MiB limit".to_owned()),
+            Ok(json!({"id": 12, "title": "Other", "absolute_url": "https://acme.example/jobs/12"})),
+            Ok(
+                json!({"id": 11, "title": "Other", "absolute_url": "https://job-boards.greenhouse.io/other/jobs/11"}),
+            ),
+            Ok(json!({"id": 11})),
+            Ok(json!({"jobs": []})),
+        ] {
+            let mut requests = 0;
+            let result = verify_greenhouse("acme", &input, async |url| {
+                requests += 1;
+                assert_eq!(
+                    url,
+                    "https://boards-api.greenhouse.io/v1/boards/acme/jobs/11"
+                );
+                response.clone()
+            })
+            .await;
+            assert!(result.is_err());
+            assert_eq!(requests, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn greenhouse_board_collection_still_fetches_the_listing() {
+        let input = Url::parse("https://job-boards.greenhouse.io/acme").unwrap();
+        let result = verify_greenhouse("acme", &input, async |url| {
+            assert_eq!(
+                url,
+                "https://boards-api.greenhouse.io/v1/boards/acme/jobs?content=true"
+            );
+            Ok(json!({"jobs": [
+                {"id": 11, "title": "Engineer", "absolute_url": "https://acme.example/jobs/11"},
+                {"id": 12, "title": "Designer", "absolute_url": "https://acme.example/jobs/12"}
+            ]}))
+        })
+        .await
+        .unwrap();
+        assert_eq!(result.jobs.len(), 2);
+        assert!(result.complete);
+    }
+
     #[test]
     fn greenhouse_public_id_is_identity_and_updated_is_not_published() {
         let result = parse_greenhouse(&json!({"jobs":[{"id":11,"internal_job_id":7,"title":"Engineer","absolute_url":"https://acme.example/job/11","updated_at":"2026-03-01"},{"id":12,"internal_job_id":7,"title":"Engineer EU","absolute_url":"https://acme.example/job/12"}],"meta":{"total":2}}), &Board::Greenhouse("acme".into())).unwrap();
