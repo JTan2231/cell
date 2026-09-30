@@ -223,6 +223,7 @@ esac
             .args(["adapter", operation])
             .env_clear()
             .env("HOME", &self.home)
+            .env("TMPDIR", self.root.join("run"))
             .env("PATH", "/usr/bin:/bin")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

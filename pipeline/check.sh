@@ -50,6 +50,20 @@ done <<EOF
 $(pipeline_products)
 EOF
 
+while IFS='|' read -r provider_id provider_dir expected_entries; do
+    [ -n "$provider_id" ] || continue
+    [ -f "$PIPELINE_ROOT/$provider_dir/provider.json" ] \
+        || pipeline_fail "$provider_id provider is missing: $provider_dir"
+    set -- "$PIPELINE_ROOT/$provider_dir"/entries/*.json
+    [ -f "$1" ] \
+        || pipeline_fail "$provider_id has no entry manifests"
+    [ "$#" -eq "$expected_entries" ] \
+        || pipeline_fail "$provider_id expected $expected_entries entries; found $#"
+    provider_entry_count=$((provider_entry_count + expected_entries))
+done <<EOF
+$PIPELINE_SHARED_PROVIDERS
+EOF
+
 [ "$product_count" -eq "$PIPELINE_EXPECTED_PRODUCT_COUNT" ] \
     || pipeline_fail "expected $PIPELINE_EXPECTED_PRODUCT_COUNT migrated products; found $product_count"
 [ "$provider_entry_count" -eq "$PIPELINE_EXPECTED_PROVIDER_ENTRIES" ] \

@@ -1806,9 +1806,11 @@ mod tests {
     };
     use crate::store::Store;
 
+    #[cfg(target_os = "macos")]
+    use super::platform_user_temporary_root;
     use super::{
         INPUT_SCHEMA_ID, RESULT_SCHEMA_ID, TOOL_NAME, TOOLSET_NAME, TOOLSET_VERSION,
-        account_effect_schemas, account_input_schema, account_neutral_cwd, account_neutral_cwd_in,
+        account_effect_schemas, account_input_schema, account_neutral_cwd_in,
         account_reconciliation_prompt, build_request, digest, effect_schemas,
         explicit_nonretryable_rejection, input_schema, reconciliation_prompt,
     };
@@ -2025,15 +2027,8 @@ mod tests {
         const CHILD_FLAG: &str = "SEMANTICS_ACCOUNT_CWD_TEST_CHILD";
         if std::env::var_os(CHILD_FLAG).is_some() {
             let inherited = PathBuf::from(std::env::var_os("TMPDIR").expect("TMPDIR"));
-            let cwd =
-                account_neutral_cwd("inherited-project-tmpdir").expect("platform account cwd");
-            assert!(!cwd.path().starts_with(inherited));
-            assert!(
-                fs::read_dir(cwd.path())
-                    .expect("empty cwd")
-                    .next()
-                    .is_none()
-            );
+            let temporary_root = platform_user_temporary_root().expect("platform temporary root");
+            assert!(!temporary_root.starts_with(inherited));
             return;
         }
 

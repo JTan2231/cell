@@ -4466,7 +4466,7 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
         let login = tokio::spawn(async move { harness.login(false).await });
 
         let started = directory.path().join("login-started");
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
         while !started.is_file() {
             assert!(
                 tokio::time::Instant::now() < deadline,

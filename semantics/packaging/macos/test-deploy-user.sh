@@ -249,6 +249,16 @@ legacy_bundle="$legacy_package/share/chancery/semantics"
 /usr/bin/plutil -replace schema_version -integer 2 "$legacy_bundle/provider.json"
 /usr/bin/plutil -remove promise_scope "$legacy_bundle/provider.json"
 /usr/bin/plutil -remove overview "$legacy_bundle/provider.json"
+/usr/bin/plutil -remove entries.3 "$legacy_bundle/provider.json"
+/usr/bin/plutil -remove entries.2 "$legacy_bundle/provider.json"
+/usr/bin/plutil -remove entries.1 "$legacy_bundle/provider.json"
+rm "$legacy_bundle/overview.md" \
+    "$legacy_bundle/entries/projects.json" \
+    "$legacy_bundle/entries/reconciliation.json" \
+    "$legacy_bundle/entries/service.json" \
+    "$legacy_bundle/manuals/projects.md" \
+    "$legacy_bundle/manuals/reconciliation.md" \
+    "$legacy_bundle/manuals/service.md"
 /usr/bin/plutil -replace provider.release -string 0.1.0 "$legacy_bundle/provider.json"
 for legacy_entry in "$legacy_bundle"/entries/*.json; do
     /usr/bin/plutil -remove promise "$legacy_entry"

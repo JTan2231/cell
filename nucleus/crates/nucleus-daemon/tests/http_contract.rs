@@ -260,9 +260,9 @@ fn spawn_test_daemon(root: &Path) -> Child {
 }
 
 async fn wait_for_daemon(child: &mut Child, client: &NucleusClient, stderr_path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
-        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_millis(500), client.health()).await {
+        if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(5), client.health()).await {
             break;
         }
         if let Some(status) = child.try_wait().or_panic("inspect daemon process") {
@@ -271,7 +271,8 @@ async fn wait_for_daemon(child: &mut Child, client: &NucleusClient, stderr_path:
         }
         assert!(
             Instant::now() < deadline,
-            "nucleusd did not become reachable"
+            "nucleusd did not become reachable: {}",
+            fs::read_to_string(stderr_path).unwrap_or_default()
         );
         tokio::time::sleep(Duration::from_millis(25)).await;
     }

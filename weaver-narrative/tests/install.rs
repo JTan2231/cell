@@ -37,6 +37,7 @@ impl Deployment {
             .canonicalize()?
             .join(format!("worker-deployment-{}", uuid::Uuid::now_v7()));
         fs::DirBuilder::new().mode(0o700).create(&home)?;
+        fs::DirBuilder::new().mode(0o700).create(home.join("run"))?;
         let bin = home.join(".local/bin");
         fs::create_dir_all(&bin)?;
         fs::write(
@@ -218,7 +219,9 @@ fn maintained_install_redeploy_and_recovery_preserve_documents() -> TestResult {
     )?;
     drop(store);
     deployment.request["run_id"] = json!("redeploy");
-    deployment.request["run_dir"] = json!(deployment.home.join("redeploy"));
+    let run = deployment.home.join("redeploy");
+    fs::DirBuilder::new().mode(0o700).create(&run)?;
+    deployment.request["run_dir"] = json!(run);
     deployment.request["settings"] = Value::Null;
     deployment.inspect()?;
     for phase in ["hold", "drain", "apply", "configure"] {
