@@ -137,8 +137,12 @@ Daily delivery time, time zone, exercise selection, incoming-message progress,
 and payload safety remain Mentor's responsibilities. Clockwork owns the
 configured response to an abend. The schema-two definition defaults to halting
 until explicit approval and uses the installed Email wrapper for the incident
-notification. A failure stops the current pass before further work. A timeout
-halts scheduling; a missed activation alone is not a detected abend. Clockwork
+notification. A failure or timeout stops the current pass before further work.
+Clockwork permits later activations before the shared service-health threshold.
+By default, five consecutive failed read-only checks, at least 60 seconds apart,
+halt the binding and make its alert eligible together. Healthy or inactive
+checks clear a pending episode. A missed activation alone is not a detected
+abend. Clockwork
 does not decide whether a problem is due or an answer has been graded.
 
 Inspect and continue an exact incident through `clockwork.schedule.operate`.

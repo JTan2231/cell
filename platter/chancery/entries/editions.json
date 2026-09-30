@@ -1,6 +1,6 @@
 {
   "id": "platter.editions",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -83,8 +83,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "promise": {
@@ -184,7 +184,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns separate activation, process history, failure halts, incident notifications, and explicit continuation.",
+        "statement": "Clockwork owns separate activation, process history and the shared service-health delay before a new failure halt. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Later activations remain admissible before that threshold; healthy or inactive checks clear a pending episode. Established halts require exact continuation approval.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

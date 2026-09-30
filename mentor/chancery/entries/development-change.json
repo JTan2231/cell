@@ -50,13 +50,13 @@
   "dependencies": [
     {
       "id": "mentor.practice.use",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "mentor.installation.operate",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "semantics.repository.explore",

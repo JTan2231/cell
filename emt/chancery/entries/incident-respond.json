@@ -1,6 +1,6 @@
 {
   "id": "emt.incident.respond",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -62,8 +62,8 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "email.message.send",
@@ -87,8 +87,8 @@
     },
     {
       "id": "emt.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "emt.quota-notices",
@@ -189,7 +189,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clockwork owns incidents, notification ownership and worker scheduling.",
+        "statement": "Clockwork owns incidents, notification ownership and worker scheduling. Its shared service-health threshold establishes a new scheduling halt and alert eligibility together; healthy or inactive checks clear a pending episode and established halts retain their exact approval rule.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

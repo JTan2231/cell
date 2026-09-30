@@ -594,7 +594,7 @@ impl Store {
                     code: &code,
                     activation_id: Some(id),
                     definition_digest: Some(&activation.definition_digest),
-                    halt: definition.manifest.failure.on_abend == AbendPolicy::HaltUntilApproved,
+                    halt: false,
                     email_cli: &email_cli,
                 },
             )?;
@@ -850,7 +850,7 @@ impl Store {
                 code,
                 activation_id: Some(activation_id),
                 definition_digest: Some(&activation.definition_digest),
-                halt: definition.manifest.failure.on_abend == AbendPolicy::HaltUntilApproved,
+                halt: false,
                 email_cli: &email_cli,
             },
         )?;
@@ -908,6 +908,158 @@ impl Store {
             )
         })?;
         self.incident(&id)
+    }
+
+    pub(crate) fn record_broker_failure(
+        &mut self,
+        key: &str,
+        code: &str,
+        occurrence: &str,
+    ) -> Result<()> {
+        validate_failure_metadata(code, occurrence)?;
+        record_abend_in(
+            &self.connection,
+            &AbendInput {
+                key,
+                code,
+                occurrence,
+                activation_id: None,
+                definition_digest: None,
+                halt: false,
+                email_cli: &self.default_email_cli,
+            },
+        )?;
+        Ok(())
+    }
+
+    /// Read immutable insertion order. The sidecar owns progress, not this ledger.
+    pub(crate) fn failure_events(
+        &self,
+        after: i64,
+    ) -> Result<Vec<crate::failure_checks::FailureEvent>> {
+        let mut statement = self.connection.prepare(
+            "SELECT ab.rowid,ab.key,ab.code,ab.occurrence,ab.activation_id,ab.recorded_at,a.definition_digest,ab.incident_id \
+             FROM abends ab LEFT JOIN activations a ON a.id=ab.activation_id WHERE ab.rowid>?1 ORDER BY ab.rowid"
+        ).context("database_read_failed", "read failure insertion order")?;
+        let rows = statement
+            .query_map([after], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                ))
+            })
+            .context("database_read_failed", "read failure events")?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("database_read_failed", "decode failure events")?;
+        let mut events = Vec::new();
+        for (cursor, key, code, occurrence, activation_id, recorded_at, digest, incident_id) in rows
+        {
+            let digest = digest.or_else(|| {
+                occurrence
+                    .strip_prefix("broker/")
+                    .and_then(|rest| rest.split('/').next())
+                    .filter(|digest| {
+                        digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit())
+                    })
+                    .map(str::to_owned)
+            });
+            let definition = digest
+                .as_deref()
+                .map(|value| self.definition(value))
+                .transpose()?;
+            let delayed = incident_id.is_none()
+                && definition.as_ref().is_some_and(|d| {
+                    d.manifest.schema_version >= 2
+                        && d.manifest.failure.on_abend == AbendPolicy::HaltUntilApproved
+                });
+            let email_cli = definition
+                .as_ref()
+                .and_then(|d| d.manifest.failure.email_cli.clone())
+                .unwrap_or_else(|| self.default_email_cli.clone());
+            events.push(crate::failure_checks::FailureEvent {
+                cursor,
+                key,
+                code,
+                occurrence,
+                activation_id,
+                recorded_at,
+                definition_digest: digest,
+                email_cli,
+                delayed,
+            });
+        }
+        Ok(events)
+    }
+
+    /// Confirmation is idempotent even if approval preceded sidecar recovery.
+    pub(crate) fn confirm_failure(
+        &mut self,
+        event: &crate::failure_checks::FailureEvent,
+        now: i64,
+    ) -> Result<IncidentRecord> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .context("database_write_failed", "begin checked failure halt")?;
+        let existing: Option<String> = transaction.query_row(
+            "SELECT id FROM incidents WHERE key=?1 AND (occurrence=?2 OR resumed_at IS NULL) ORDER BY occurrence=?2 DESC LIMIT 1",
+            params![event.key,event.occurrence], |row| row.get(0)
+        ).optional().context("database_read_failed", "check confirmed failure")?;
+        let id = if let Some(id) = existing {
+            id
+        } else {
+            let id = uuid::Uuid::now_v7().to_string();
+            transaction.execute(
+                "INSERT INTO incidents(id,key,activation_id,definition_digest,code,occurrence,created_at,email_cli) VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+                params![id,event.key,event.activation_id,event.definition_digest,event.code,event.occurrence,now,event.email_cli]
+            ).context("database_write_failed", "confirm failure halt and pending alert")?;
+            id
+        };
+        transaction
+            .commit()
+            .context("database_write_failed", "commit checked failure halt")?;
+        self.incident(&id)
+    }
+
+    pub(crate) fn confirmed_occurrence(
+        &self,
+        key: &str,
+        occurrence: &str,
+    ) -> Result<Option<IncidentRecord>> {
+        self.connection
+            .query_row(
+                &format!("{INCIDENT_SELECT} WHERE key=?1 AND occurrence=?2"),
+                params![key, occurrence],
+                incident_from_row,
+            )
+            .optional()
+            .context("database_read_failed", "read confirmed failure occurrence")
+    }
+
+    pub(crate) fn activation_has_abend(&self, activation_id: &str) -> Result<bool> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM abends WHERE activation_id=?1)",
+                [activation_id],
+                |row| row.get(0),
+            )
+            .context("database_read_failed", "read activation failure evidence")
+    }
+
+    pub(crate) fn has_running_abend(&self, key: &str) -> Result<bool> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM activations a JOIN abends ab ON ab.activation_id=a.id WHERE a.key=?1 AND a.state='running')",
+                [key],
+                |row| row.get(0),
+            )
+            .context("database_read_failed", "read active product failure evidence")
     }
 
     pub(crate) fn resume(&mut self, key: &str, incident_id: &str) -> Result<BindingRecord> {
@@ -1506,7 +1658,7 @@ mod tests {
     }
 
     #[test]
-    fn every_abnormal_runtime_outcome_atomically_closes_admission() {
+    fn every_abnormal_runtime_outcome_is_retained_before_checked_halt() {
         use clockwork::api::AbendPolicy;
         for (state, exit, signal) in [
             (ActivationState::StartFailed, None, None),
@@ -1527,10 +1679,13 @@ mod tests {
                 store.activation(&activation.id).expect("activation").state,
                 state
             );
+            assert!(store.active_incident("example/worker").unwrap().is_none());
+            assert!(store.require_unhalted("example/worker").is_ok());
+            let events = store.failure_events(0).unwrap();
+            assert!(events[0].delayed);
             let incident = store
-                .active_incident("example/worker")
-                .expect("incident")
-                .expect("halted");
+                .confirm_failure(&events[0], super::now_unix().unwrap())
+                .unwrap();
             assert_eq!(incident.notification_status, "pending");
             assert!(
                 store
@@ -1585,7 +1740,7 @@ mod tests {
     }
 
     #[test]
-    fn product_report_halts_even_when_the_child_exits_zero_and_is_deduplicated_after_approval() {
+    fn product_report_preserves_checked_halt_even_when_child_exits_zero() {
         let (_temporary, _layout, mut store, digest) =
             policy_fixture(2, clockwork::api::AbendPolicy::HaltUntilApproved);
         let activation = store
@@ -1593,13 +1748,23 @@ mod tests {
             .expect("admit");
         let first = store
             .report_abend(&activation.id, "model_failed", "job/one")
-            .expect("report")
-            .expect("incident");
+            .expect("report");
         let again = store
             .report_abend(&activation.id, "model_failed", "job/one")
-            .expect("report twice")
-            .expect("incident");
-        assert_eq!(first.id, again.id);
+            .expect("report twice");
+        assert!(first.is_none() && again.is_none());
+        assert!(store.require_unhalted("example/worker").is_ok());
+        let event = store.failure_events(0).unwrap().remove(0);
+        let first = store
+            .confirm_failure(&event, super::now_unix().unwrap())
+            .unwrap();
+        assert_eq!(
+            first.id,
+            store
+                .confirm_failure(&event, super::now_unix().unwrap())
+                .unwrap()
+                .id
+        );
         assert!(store.resume("example/worker", &first.id).is_err());
         store
             .finish_activation(&activation.id, ActivationState::Exited, Some(0), None, None)

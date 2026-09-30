@@ -162,8 +162,9 @@ processes. Direct SQLite access is unsupported.
 Schema-one and schema-two manifests, SQLite schema, provider release, product
 release identity, and definition digest are separate compatibility axes.
 Existing definitions keep their content and identity. Changed registered
-meaning requires a new definition and explicit binding selection. A database
-migration alone does not add failure enforcement to schema-one definitions.
+meaning requires a new definition and explicit binding selection. The versioned Clockwork failure-check contract applies its delay to schema-two
+failures without rewriting retained definitions. A database migration alone
+does not add failure enforcement to schema-one definitions.
 No retention horizon, deprecation interval, or cross-release migration window
 is promised.
 

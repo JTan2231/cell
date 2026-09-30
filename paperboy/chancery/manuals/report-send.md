@@ -97,10 +97,13 @@ reuses the exact request and job ID. After a terminal generation failure,
 `--retry-agent` creates a new Nucleus job. There is no automatic new attempt.
 
 The product-owned schema-two daily definition declares `halt-until-approved`.
-Startup failure, crash, timeout, or a nonzero report run creates a durable
-Clockwork halt and one retained incident email. An already accepted daily
-occurrence is an ordinary no-op. Clockwork blocks subsequent scheduled work
-until explicit approval.
+Startup failure, crash, timeout, or a nonzero report run ends the current
+activation. Clockwork permits later activations before the shared service-health
+threshold. By default, five consecutive failed read-only checks, at least 60
+seconds apart, halt the binding and make its alert eligible together. Healthy
+or inactive checks clear a pending episode. An already accepted daily occurrence
+is an ordinary no-op. An established halt requires explicit approval; failed
+briefs and uncertain sends retain their separate recovery rules.
 
 Inspect `clockwork incident list paperboy/daily` and
 `clockwork incident show INCIDENT_ID`. After resolving the cause, explicitly

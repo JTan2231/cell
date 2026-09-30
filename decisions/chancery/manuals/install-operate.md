@@ -170,8 +170,12 @@ Krisis configures Clockwork definition schema 2 for `krisis/observer` with
 (`document_source_unavailable`), including a timeout or protocol error, is a
 handled outcome after Krisis saves the failed observation. It returns zero,
 permits later activations, and creates no pause alert. Other launch, dependency,
-source-validation, classification, or Annals delivery failures halt future
-activations. An empty poll or valid
+source-validation, classification, or Annals delivery failures end the current
+run and begin a pending Clockwork failure episode. Later scheduled activations
+remain admissible until the shared service-health threshold. By default, five
+consecutive failed read-only checks, at least 60 seconds apart, halt the binding
+and make its alert eligible together. Healthy or inactive checks clear a pending
+episode. Failed observations still require explicit retry. An empty poll or valid
 maintenance gate is a successful no-work result. Krisis owns these outcome
 meanings and its configuration; Clockwork owns the durable scheduling incident,
 admission gate, and one retained email notification through

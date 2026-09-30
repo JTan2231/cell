@@ -113,7 +113,10 @@ or establish a launchd availability SLA.
 
 Iatreion uses `clockwork status-snapshot --json`. It opens only an existing
 supported database read-only and reports binding, halt, and recorded runtime
-metadata for joining to explicit Cell units. It does not initialize or migrate
+metadata for joining to explicit Cell units. The additive
+`scheduler_observations.failure_pending` boolean distinguishes a pending failure
+episode from an established halt; pending failure leaves admission open.
+It does not initialize or migrate
 state, reconcile running rows, inspect launchd, claim notifications, or change
 a binding. Runtime records do not establish a current product-domain condition.
 

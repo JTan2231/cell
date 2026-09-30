@@ -1,6 +1,6 @@
 {
   "id": "mentor.installation.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -92,13 +92,13 @@
     },
     {
       "id": "mentor.practice.use",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "nucleus.execution.operate",
@@ -257,7 +257,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns registered worker activation, failure-driven scheduling halts, retained incident notification and explicit continuation. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
+        "statement": "Clockwork owns registered worker activation, the shared service-health delay before a new halt, retained incident notification and exact continuation approval. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

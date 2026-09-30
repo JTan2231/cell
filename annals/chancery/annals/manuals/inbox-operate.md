@@ -157,7 +157,14 @@ never invokes a second liaison for an attempted receipt, adopts an unrelated
 reconciliation, or moves a terminal envelope back to queued. Verify the exact
 job and linked Annals domain result after recovery.
 
-For a scheduled halt, inspect the matching incident:
+A scheduled failure ends the current batch. Clockwork permits later activations
+until the shared service-health threshold establishes a halt. By default, five
+consecutive failed read-only checks, at least 60 seconds apart, halt the binding
+and make its alert eligible together. Healthy or inactive checks clear a pending
+episode. Failed deliveries and attended retry events retain their explicit
+recovery rules.
+
+For an established scheduled halt, inspect the matching incident:
 
 ```sh
 clockwork incident list annals/inbox

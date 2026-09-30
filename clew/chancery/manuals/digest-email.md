@@ -103,8 +103,13 @@ message-size, provider-availability or inbox-delivery guarantee is supplied.
 All selected applications and notes are retained in the message; provider size
 limits can cause failure and do not authorize truncation.
 
-Scheduled failures halt the binding. Inspect
-`clockwork incident list clew/daily-email`. Resolve the cause and any uncertain
+A scheduled failure ends the current send and starts a pending Clockwork failure
+episode. Later scheduled activations remain admissible before the shared
+service-health threshold. By default, five consecutive failed read-only checks,
+at least 60 seconds apart, halt the binding and make its alert eligible together.
+Healthy or inactive checks clear a pending episode. Checks do not resubmit an
+uncertain occurrence. Inspect `clockwork incident list clew/daily-email`.
+Resolve the cause and any uncertain
 submission before explicitly approving
 `clockwork binding resume clew/daily-email INCIDENT_ID`. Continuation permits
 future activations; it does not retry an uncertain message. Deliberate admission

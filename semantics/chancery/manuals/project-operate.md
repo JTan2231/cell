@@ -23,7 +23,7 @@ mutation, or data removal by itself.
 
 1. Select the exact installation, private database, and Annals decisions config.
 2. Inspect project state, retained intake, selected schedule, and runtime history.
-3. Verify Annals exchange 2, Nucleus execution 3, Clockwork schedule 3, and the
+3. Verify Annals exchange 2, Nucleus execution 3, Clockwork schedule 4, and the
    complete Bazaar prompt selection for the intended work.
 4. Preserve existing project pauses, schedule intent, incident halts, and holds.
 5. Stop if ownership, dependency compatibility, admitted jobs, or recovery state
@@ -174,7 +174,11 @@ A runtime failure after a commit preserves that commit. Do not rerun work solely
 because output or transport is missing. Detailed intake and receipt rules are in
 `semantics.reconciliation`.
 
-For a scheduling halt, inspect `clockwork incident list semantics/worker` and
+A scheduled failure ends the current invocation. Clockwork permits later
+activations before the shared service-health threshold establishes a halt.
+Read `semantics.service` for the threshold and pending-episode rules.
+
+For an established scheduling halt, inspect `clockwork incident list semantics/worker` and
 `clockwork incident show INCIDENT_ID`. Resolve the product failure first. Only
 explicit approval followed by `clockwork binding resume semantics/worker
 INCIDENT_ID` releases that halt; it creates no domain retry. Do not clear it

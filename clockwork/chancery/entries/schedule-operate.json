@@ -1,11 +1,11 @@
 {
   "id": "clockwork.schedule.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Register and operate scheduled activations",
-  "summary": "Register immutable product schedules, enforce their default halt-on-abend policy, inspect incidents, explicitly approve continuation, and send retained pause notifications.",
+  "summary": "Register immutable product schedules, delay new failure halts through shared service-health checks, inspect incidents, explicitly approve continuation, and send retained pause notifications.",
   "use_when": [
     "A product-owned non-agent runner should be invoked on a supported interval or daily local-calendar schedule through a centralized current-user broker.",
     "An exact immutable definition should be registered before cutover, a stable binding should switch or disable transactionally, or one selected activation should be run manually.",
@@ -23,10 +23,10 @@
     "Manual and scheduled activation may start one blocked Clockwork exec gate, durably record its process-group PID, then replace it in place with one product-owned launch image after a parent handshake; Clockwork writes runtime metadata and routes product output to the product-selected files without capturing it.",
     "No operation retries a child, submits to Nucleus, stores a secret, interprets product output, or changes product durable state except through the child process itself.",
     "Schema-two runtime or reported abends retain failure evidence and apply the registered response; the default opens one durable incident and blocks future admission until explicit incident-bound approval.",
-    "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. Basic alerts and EMT diagnosis wait for the same consecutive read-only service-check threshold, default five checks at least 60 seconds apart. Broker visits and the EMT worker advance checks independently of product admission; transport retains its existing bounds and provider idempotency limits.",
+    "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. New default-policy abends retain pending episodes and allow later activations before the shared service-health threshold. By default, five consecutive failed read-only checks at least 60 seconds apart establish a halt and alert eligibility together. Explicit binding halt remains immediate. Broker visits and the EMT worker advance due checks; transport retains its existing bounds and provider idempotency limits.",
     "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state.",
     "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds after check eligibility; emt/worker uses the same threshold and only the basic delivery path. A notification view can materialize the incident route under the transport lock.",
-    "Notification policy and check progress live in notification-checks.json. Checks read bounded installed Iatreion reports without running product work, sending mail, retrying failed items or changing halts. Healthy and explicitly inactive observations reset progress; unknown health counts as failed with condition unknown. A resumed incident suppresses its unalerted episode. Admitted delivery and claims retain their recovery rules.",
+    "Notification policy and incident check progress live in notification-checks.json. Schema-one failure-checks.json retains the immutable abend ledger cursor and pending per-key event/check progress. Checks read bounded installed Iatreion reports without running product work, sending mail or retrying failed items. At the threshold, a check establishes a new halt and alert eligibility together. Healthy worker observations, later successful activations without an abend, and inactive intent clear pending episodes; unknown health counts as failed with condition unknown. Established halts and preexisting notification-check progress retain their exact approval and recovery rules.",
     "The Iatreion status snapshot opens only an existing supported database read-only and reports binding, halt, and recorded runtime metadata. It does not reconcile running rows, inspect launchd, claim notifications, or change state."
   ],
   "authority": [
@@ -41,7 +41,7 @@
     "An activation report records whether the direct child failed to start, ran and exited, was signaled, timed out, was skipped for overlap, or was proven lost.",
     "Every overlap records `skipped_overlap` without starting a child; a scheduled overlap returns success to launchd, while a manual overlap reports `activation_busy` and returns 1.",
     "Once a child starts and Clockwork durably records `exited`, `signaled`, or `timed_out`, the broker returns a successful Clockwork envelope and process exit even when the child's exit code is nonzero; that remains runtime evidence only.",
-    "A scheduling halt and its terminal runtime evidence commit atomically. A product report persists its halt before returning even when the product later exits zero. A matching explicit resume clears only that incident; disabled state and failed product work remain unchanged.",
+    "A terminal runtime failure or product report persists immutable abend evidence. The default records a pending episode; shared checks confirm an incident and alert eligibility together at the threshold. Explicit binding halt persists an immediate incident. A matching explicit resume clears only its established incident; disabled state and failed product work remain unchanged.",
     "Email exit zero proves provider submission acceptance only. Notification failure, timeout, or missing subsequent broker invocations never reopens a halted binding."
   ],
   "failure_and_recovery": [
@@ -49,7 +49,7 @@
     "Before mutating an existing binding or launchd projection, Clockwork fsyncs the operation, target, captured prior database selection/plist/loaded state, and any exact candidate definition/plist in a private transition journal; disabling a wholly absent coherent key is only one atomic SQLite tombstone write. On reported transition failure it restores the prior state; after abrupt broker loss, the next switch restores a switch journal before proceeding, while disable first durably replaces either journal with its requested disable intent and consumes that journal without loading a schedule. Fail-disabled cleanup is attempted only while the current projection remains attributable to recorded prior or candidate state; an unrecognized projection is retained, recovery-gated, and reported without mutation.",
     "There is no automatic product retry. Diagnose the product and runtime record, then invoke a product-owned recovery or a separately authorized new Clockwork activation.",
     "A `running` row becomes `lost` only after its recorded broker and any recorded child are both demonstrably absent; elapsed time or a restarted observer alone is insufficient.",
-    "Schema-two omission means halt-until-approved; only explicit continue-next-activation permits further scheduled work after an abend. Overlap, expected empty and waiting outcomes are normal. Binding selection, disable, compensation, restart, and reinstall preserve the halt.",
+    "Schema-two omission means halt-until-approved after the shared service-health threshold; later activations remain admissible before confirmation. An explicit continue-next-activation exception retains the abend without a pending halt episode. Overlap, expected empty and waiting outcomes are normal. Healthy worker observations, later successful activations without an abend, and inactive intent clear pending episodes. Binding selection, disable, compensation, restart and reinstall preserve established halts.",
     "Pending alerts retry at most once per five minutes when a broker visits, with fixed payload and key and a 120-second invocation bound. After 23 hours from the first invocation or a backwards clock jump, status becomes uncertain and later notification retry requires explicit duplicate-risk approval. No independent timer or delivery SLA exists.",
     "Schema-one definitions preserve their original digest and legacy failure semantics after database migration. failure_policy_active exposes this gap until a schema-two definition and current broker plist are selected under product maintenance. Preserve newer incident evidence during schema rollback.",
     "Claims are durable and do not expire or clear a halt. Once claimed, EMT owns send recovery. Older pinned brokers ignore this new metadata; refresh all active brokers before enabling EMT and do not roll back to older brokers with outstanding claims."
@@ -229,7 +229,7 @@
       },
       {
         "status": "declared",
-        "statement": "Incident feed returns items, next_cursor and has_more in insertion order. Notification show returns basic subject/body, saved Reply-To, an optional EMT delivery ID and health_check with threshold, count, last_checked_at, condition and eligible_at. Check progress is visible below the threshold. Incident notification_status continues to describe only Clockwork transport; delegated acceptance is read from EMT."
+        "statement": "Incident feed returns confirmed incidents with items, next_cursor and has_more in insertion order. Notification check returns policy and incident checks plus failures keyed by binding for pending event and check progress. Pending episodes have no incident ID. Notification show returns an existing incident's basic subject/body, saved Reply-To, optional EMT delivery ID and health_check with threshold, count, last_checked_at, condition and eligible_at. Preexisting incident notification progress can remain below threshold. Incident notification_status continues to describe only Clockwork transport; delegated acceptance is read from EMT."
       }
     ],
     "data_semantics": [
@@ -317,7 +317,7 @@
       },
       {
         "status": "declared",
-        "statement": "Shared basic-alert and EMT-diagnosis eligibility defaults to five consecutive failed service checks at least 60 seconds apart. Notification policy can change the threshold, interval and stable Cell root. Existing broker visits and the EMT worker advance due checks; no independent check daemon or timer is added."
+        "statement": "The shared threshold for new halts, basic alerts and EMT diagnosis defaults to five consecutive failed service checks at least 60 seconds apart. Notification policy can change the threshold, interval and stable Cell root. Existing broker visits and the EMT worker advance due checks; no independent check daemon or timer is added."
       },
       {
         "status": "unsupported",
@@ -327,7 +327,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 3, schema-one and schema-two TOML definition formats, SQLite schema two, provider release, product release identity, and each immutable definition remain separate compatibility axes."
+        "statement": "Capability contract version 4, schema-one and schema-two TOML definition formats, SQLite schema two, schema-one failure-check sidecar, provider release, product release identity, and each immutable definition remain separate compatibility axes. Existing incidents remain halted with their current notification-check and exact approval rules; schema-one definitions keep their historical policy."
       },
       {
         "status": "declared",
@@ -395,13 +395,13 @@
     },
     {
       "id": "clockwork.incidents",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.notifications",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.installation",

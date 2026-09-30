@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -28,7 +28,7 @@
     "Installation or schedule generation alone does not prove a running or ready product."
   ],
   "failure_and_recovery": [
-    "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned.",
+    "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "Retain captured inputs after handoff errors. Resume normal pending work with update once the dependency is available.",
     "Use an explicit failed-job interval for retry and a selected retained input for re-examination. Do not infer failed domain work from runtime exit alone.",
     "Keep source, application, installation and activation failures distinct; do not reset the baseline to recover a failed handoff."
@@ -145,7 +145,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. Clockwork owns durable scheduling incidents, admission and one retained email notification. Only explicit binding resume for the incident releases the halt; definition switches, deployment and product resume/retry preserve it. Product domain state and explicit retries remain product-owned."
+        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
       },
       {
         "status": "declared",
@@ -237,8 +237,8 @@
     },
     {
       "id": "annals.inbox.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.work.integrate",
@@ -247,8 +247,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "bazaar.string.read",
@@ -262,8 +262,8 @@
     },
     {
       "id": "conatus.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "conatus.library.explore",
@@ -272,8 +272,8 @@
     },
     {
       "id": "conatus.digest.email",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ]
 }

@@ -35,7 +35,8 @@ preserving public meaning, authority, exact identities, recovery and validation.
 
 ## How the features work together
 
-Clockwork records the scheduling halt and checks whether it is alert-eligible.
+Clockwork retains a pending failure episode, then establishes the scheduling
+halt and alert eligibility together at its shared service-health threshold.
 EMT retains its incident, prepares an exact agent request and keeps the Nucleus
 reference. The agent uses product-owned interfaces and freezes its report before
 Email submission. Clockwork serializes initial-alert ownership with its basic

@@ -1,6 +1,6 @@
 {
   "id": "clew.digest.email",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -26,7 +26,7 @@
   ],
   "failure_and_recovery": [
     "Ledger read failure stops rendering. Missing Cast context leaves all qualifying jobs visible under their Cast IDs with a footer.",
-    "Uncertain acceptance requires provider inspection and explicit retry of retained bytes within 23 hours; scheduled failures halt until explicitly approved."
+    "Uncertain acceptance requires provider inspection and explicit retry of retained bytes within 23 hours. A scheduled failure ends the current send; Clockwork permits later activations before its shared service-health threshold establishes a halt. Healthy or inactive checks clear a pending episode. An established halt requires exact approval."
   ],
   "privacy": [
     "Complete selected statuses, notes, company, role and URLs are disclosed through Email to Resend and Gmail. Frozen occurrences remain private and are not automatically pruned."
@@ -75,8 +75,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "promise": {
@@ -163,7 +163,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork activates the installed runner and enforces scheduling failure halts.",
+        "statement": "Clockwork activates the installed runner and enforces its shared service-health threshold before new scheduling failure halts.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

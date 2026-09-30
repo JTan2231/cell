@@ -1,6 +1,6 @@
 {
   "id": "semantics.reconciliation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -53,7 +53,8 @@
   "failure_and_recovery": [
     "Changed identities or fixed-page replay, nonadvancement, and cycles fail closed.",
     "Ambiguous transport reuses the same retained requester/job and exact request. Conflicting tool redelivery fails.",
-    "Retry refuses an active or unprovable admitted prior job. Preserve committed revisions after runtime failure."
+    "Retry refuses an active or unprovable admitted prior job. Preserve committed revisions after runtime failure.",
+    "A scheduled dependency or reconciliation failure ends the current invocation. The shared service-health threshold delays a new scheduling halt; later activations preserve exact request correlation, prior commits and explicit retry authority."
   ],
   "privacy": [
     "Complete source documents and selected repository snapshots are private retained state and are supplied to Nucleus without workspace, shell, or web access.",

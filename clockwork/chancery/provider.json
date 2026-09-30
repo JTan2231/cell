@@ -8,7 +8,7 @@
   "promise_scope": {
     "authoritative_for": [
       "Clockwork owns immutable scheduled-activation definitions, stable binding selection, generated Clockwork LaunchAgents, overlap admission, direct-child supervision, runtime activation history, durable failure halts and their email notification state.",
-      "Clockwork owns shared consecutive service-check eligibility for basic alerts and EMT diagnosis, the optional initial-notification handoff to EMT, and insertion-ordered incident discovery. It retains check progress, routing and ownership metadata without agent or correspondence bodies."
+      "Clockwork owns shared consecutive service-health checks that delay new default-policy halts, basic alerts and EMT diagnosis together, the optional initial-notification handoff to EMT, and insertion-ordered confirmed incident discovery. It retains immutable abends, pending episode/check progress, routing and ownership metadata without agent or correspondence bodies."
     ],
     "not_authoritative_for": [
       "Each product owns artifact publication, durable work, locks, retries, idempotency, secrets, logs, recovery, and domain success. Iatreion and product probes own the observed operational facts. launchd owns timer delivery under the current macOS user session."

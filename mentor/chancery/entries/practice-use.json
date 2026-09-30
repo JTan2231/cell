@@ -1,6 +1,6 @@
 {
   "id": "mentor.practice.use",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -55,9 +55,9 @@
   ],
   "failure_and_recovery": [
     "Persist the exact grading request before ambiguous admission and rediscover only the same job. Do not create a replacement job automatically after terminal failure.",
-    "Retry only the frozen email payload/key, after explicit scheduling continuation or a manual pass, until the earlier content deadline or 23 hours from first send attempt. Preserve unknown acceptance rather than generate a new payload/key.",
+    "A later admitted pass, including one before the halt threshold, can retry only the frozen email payload/key until the earlier content deadline or 23 hours from first send attempt. After an established halt, scheduled continuation requires exact approval. A manual pass can also revisit the payload. Preserve unknown acceptance rather than generate a new payload/key.",
     "Pause stops new assignments and polling admission; existing work may finish. Expired grading work clears local content and queues cancellation by retained job ID.",
-    "The first failed stage stops the worker. Clockwork blocks future scheduled passes until binding resume names the exact incident. A later pass preserves original content/idempotency deadlines and never creates a replacement model attempt or message identity. Legacy next_attempt backoff timestamps no longer govern admission."
+    "The first failed stage stops the current worker pass. Clockwork permits later scheduled passes before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending episode. An established halt requires exact binding resume approval. A later pass preserves original content/idempotency deadlines and never creates a replacement model attempt or message identity. Legacy next_attempt backoff timestamps no longer govern admission."
   ],
   "privacy": [
     "Account receiving access can expose unrelated metadata through Email, but Mentor fetches full bodies only for its recognized assignment routes. Do not log content.",
@@ -81,8 +81,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "bazaar.string.read",
@@ -217,7 +217,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns registered worker activation, failure-driven scheduling halts, retained incident notification and explicit continuation. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
+        "statement": "Clockwork owns registered worker activation, the shared service-health delay before a new halt, retained incident notification and exact continuation approval. Mentor declares halt-until-approved and owns daily selection, bounded payload reuse and practice completion.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

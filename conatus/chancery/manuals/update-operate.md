@@ -230,6 +230,11 @@ violate the required active-want filtering.
 
 ## Recover a scheduled failure
 
+The current update or send stops on failure. Clockwork permits later scheduled
+activations before the shared service-health threshold establishes a halt. Read
+`conatus.service` for the threshold and pending-episode rules. Product retry and
+uncertain-submission recovery remain separate from future scheduling.
+
 1. Read `clockwork incident list KEY` and `clockwork incident show INCIDENT_ID`.
    Inspect the retained Conatus update report or email occurrence.
 2. Resolve the cause and inspect domain receipts. For uncertain email acceptance,

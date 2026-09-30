@@ -154,10 +154,16 @@ release; an old pinned broker ignores EMT claims and must not run while claims
 exist. Routing uses a version-one sidecar beside Clockwork's schema-two database.
 
 Clockwork's read-only service checks require compatible Iatreion. EMT supplies
-its configured stable Cell root. Preserve Clockwork's `notification-checks.json`,
-routing metadata and incident database in backups. Clockwork owns check policy,
-notification ownership, scheduling and incident-bound continuation. The alert
-threshold delays notifications and diagnosis rather than the scheduling halt.
+its configured stable Cell root. Preserve Clockwork's `failure-checks.json`,
+`notification-checks.json`, routing metadata and incident database in backups.
+Refresh enabled pinned brokers to the new failure-check contract; an older
+broker must not run while the new sidecar exists. Clockwork owns check policy,
+notification ownership, scheduling and incident-bound continuation. The shared
+threshold delays a new scheduling halt, notification and diagnosis
+together. By default, five consecutive failed read-only checks, at least 60
+seconds apart, establish the halt and alert eligibility. Later scheduled
+activations remain admissible before that threshold. Healthy or inactive checks
+clear a pending episode; established halts still require exact approval.
 
 EMT schema, provider release and feature contracts evolve independently.
 Installation and indexed documentation do not establish live readiness. No

@@ -1,6 +1,6 @@
 {
   "id": "semantics.service",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -158,7 +158,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns immutable definitions, selected binding, scheduled process activation, incident halts and notifications.",
+        "statement": "Clockwork owns immutable definitions, selected binding, scheduled process activation and the shared service-health delay before a new halt. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Later activations remain admissible before that threshold; healthy or inactive checks clear a pending episode. Established halts require exact approval. Domain retry and uncertain Nucleus correlation remain Semantics-owned.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
@@ -183,8 +183,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ]
 }

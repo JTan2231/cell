@@ -113,7 +113,12 @@ schedule as external and do not probe the binding. Email's installed wrapper
 loads its existing credential; no credential belongs in a schedule definition.
 Starting at 18:00 makes no promise about completion or inbox arrival time.
 
-The first abend creates a durable Clockwork halt and one incident email. Use
+The first abend ends the current run. Clockwork permits later scheduled
+activations before the shared service-health threshold. By default, five
+consecutive failed read-only checks, at least 60 seconds apart, halt the binding
+and make its alert eligible together. Healthy or inactive checks clear a pending
+episode. Accepted editions and uncertain sends retain their existing protections.
+Use
 `clockwork incident list platter/daily` and `clockwork incident show INCIDENT_ID`
 to inspect it. After repair, explicitly approve future scheduling with
 `clockwork binding resume platter/daily INCIDENT_ID`. This does not retry a

@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -71,7 +71,7 @@
   ],
   "failure_and_recovery": [
     "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
-    "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout closes Clockwork admission and retains one incident notification. Explicit Clockwork continuation permits future scheduling only; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear incidents."
+    "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout ends the current activation. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending failure episode. An established halt requires exact continuation approval; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear established halts."
   ],
   "privacy": [
     "Source text can enter private tool replies and Nucleus records; final email text leaves for Resend and the personal inbox provider. Secrets never enter prompts, product records or Clockwork definitions."
@@ -94,8 +94,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "annals.decision-account.exchange",
@@ -246,7 +246,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork supplies exact release activation, product-configured halt-until-approved enforcement, retained incident notification, explicit continuation, schedule selection and runtime history.",
+        "statement": "Clockwork supplies exact release activation, the shared service-health delay for halt-until-approved, retained incident notification, exact continuation approval, schedule selection and runtime history.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

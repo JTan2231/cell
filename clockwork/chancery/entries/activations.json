@@ -67,13 +67,13 @@
     },
     {
       "id": "clockwork.incidents",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.notifications",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -108,7 +108,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "One activation pins one immutable definition and at most one direct child; no retry submodel or domain-success assertion exists. States are running, start_failed, exited, signaled, timed_out, skipped_overlap and lost. Status snapshots contain recorded binding/halt/runtime metadata, not observed launchd or product condition."
+        "statement": "One activation pins one immutable definition and at most one direct child; no retry submodel or domain-success assertion exists. States are running, start_failed, exited, signaled, timed_out, skipped_overlap and lost. Status snapshots contain recorded binding/halt/runtime metadata and additive scheduler_observations.failure_pending; pending failures leave admission open. They do not establish observed launchd or product condition."
       }
     ],
     "identity_and_units": [

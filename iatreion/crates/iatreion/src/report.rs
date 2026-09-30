@@ -240,9 +240,19 @@ fn apply_scheduler(reported: &mut iatreion_api::ReportedUnit, scheduler: &Schedu
             code: "clockwork_failure_halt".to_owned(),
             summary: "the scheduler will not admit another activation until recovery".to_owned(),
         });
+    } else if scheduler.failure_pending {
+        unit.admission.reasons.push(Reason {
+            code: "failure_pending".to_owned(),
+            summary: format!(
+                "Clockwork binding {} has a failure episode under service checks; scheduling is not failure-halted",
+                scheduler.key
+            ),
+        });
     }
-    unit.activity = if scheduler.recorded_running {
+    unit.activity = if scheduler.recorded_running || unit.activity == Activity::Running {
         Activity::Running
+    } else if unit.activity == Activity::Stopped {
+        Activity::Stopped
     } else {
         Activity::Idle
     };
@@ -260,7 +270,18 @@ fn apply_scheduler(reported: &mut iatreion_api::ReportedUnit, scheduler: &Schedu
             scope: format!("Clockwork binding {}", scheduler.key),
         },
     ]);
-    if unit.evidence.latest_runtime_outcome.is_none() {
+    if scheduler
+        .latest_runtime_outcome
+        .as_ref()
+        .is_some_and(|scheduler_outcome| {
+            unit.evidence
+                .latest_runtime_outcome
+                .as_ref()
+                .is_none_or(|product_outcome| {
+                    scheduler_outcome.occurred_at >= product_outcome.occurred_at
+                })
+        })
+    {
         unit.evidence
             .latest_runtime_outcome
             .clone_from(&scheduler.latest_runtime_outcome);
@@ -291,4 +312,165 @@ pub fn has_unknown_coverage(report: &Report) -> bool {
                 .iter()
                 .any(|unit| unit.group == iatreion_api::Group::Unknown)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use iatreion_api::{Evidence, Group, Intent, Outcome, OutcomeKind};
+
+    use super::*;
+
+    fn reported_unit() -> iatreion_api::ReportedUnit {
+        let mut unit = iatreion_api::declared_unit(
+            "sample",
+            "sample/worker",
+            Some("sample/worker"),
+            Intent::Active,
+            "sample.status.inspect",
+        );
+        unit.readiness.state = ReadinessState::Ready;
+        unit.activity = Activity::Idle;
+        iatreion_api::ReportedUnit {
+            group: Group::Unknown,
+            source_product_id: "sample".to_owned(),
+            observation: unit,
+        }
+    }
+
+    fn scheduler() -> SchedulerObservation {
+        SchedulerObservation {
+            key: "sample/worker".to_owned(),
+            enabled: true,
+            failure_halted: false,
+            failure_pending: false,
+            recorded_running: false,
+            incident_id: None,
+            latest_runtime_outcome: None,
+        }
+    }
+
+    fn outcome(kind: OutcomeKind, occurred_at: i64) -> Outcome {
+        Outcome {
+            kind,
+            occurred_at,
+            reference: None,
+        }
+    }
+
+    #[test]
+    fn pending_failure_keeps_admission_open_and_product_readiness() {
+        let mut reported = reported_unit();
+        let mut scheduler = scheduler();
+        scheduler.failure_pending = true;
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(reported.observation.admission.state, AdmissionState::Open);
+        assert_eq!(reported.observation.readiness.state, ReadinessState::Ready);
+        assert_eq!(reported.group, Group::NeedsAttention);
+        assert!(
+            reported
+                .observation
+                .admission
+                .reasons
+                .iter()
+                .any(|reason| reason.code == "failure_pending")
+        );
+        assert!(
+            !reported
+                .observation
+                .admission
+                .reasons
+                .iter()
+                .any(|reason| reason.code == "failure_halted")
+        );
+    }
+
+    #[test]
+    fn actual_failure_halt_closes_admission() {
+        let mut reported = reported_unit();
+        let mut scheduler = scheduler();
+        scheduler.failure_halted = true;
+        scheduler.incident_id = Some("exact-incident".to_owned());
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(reported.observation.admission.state, AdmissionState::Closed);
+        assert_eq!(
+            reported.observation.readiness.state,
+            ReadinessState::Blocked
+        );
+        assert!(
+            reported
+                .observation
+                .admission
+                .reasons
+                .iter()
+                .any(|reason| reason.code == "failure_halted")
+        );
+    }
+
+    #[test]
+    fn keeps_product_running_evidence_after_a_scheduler_failure() {
+        let mut reported = reported_unit();
+        reported.observation.activity = Activity::Running;
+        let mut scheduler = scheduler();
+        scheduler.failure_pending = true;
+        scheduler.latest_runtime_outcome = Some(outcome(OutcomeKind::Failed, 200));
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(reported.observation.activity, Activity::Running);
+        assert_eq!(reported.observation.readiness.state, ReadinessState::Ready);
+        assert_eq!(
+            reported.observation.evidence.latest_runtime_outcome,
+            scheduler.latest_runtime_outcome
+        );
+    }
+
+    #[test]
+    fn keeps_product_stopped_evidence_without_a_running_activation() {
+        let mut reported = reported_unit();
+        reported.observation.activity = Activity::Stopped;
+        apply_scheduler(&mut reported, &scheduler());
+        assert_eq!(reported.observation.activity, Activity::Stopped);
+        assert_eq!(reported.group, Group::NeedsAttention);
+    }
+
+    #[test]
+    fn joins_newest_runtime_outcome_without_overwriting_domain_evidence() {
+        let mut reported = reported_unit();
+        let domain_success = outcome(OutcomeKind::Succeeded, 150);
+        reported.observation.evidence = Evidence {
+            latest_runtime_outcome: Some(outcome(OutcomeKind::Succeeded, 100)),
+            latest_domain_outcome: Some(domain_success.clone()),
+            latest_domain_success: Some(domain_success.clone()),
+            ..Evidence::default()
+        };
+        let mut scheduler = scheduler();
+        scheduler.latest_runtime_outcome = Some(outcome(OutcomeKind::Failed, 200));
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(
+            reported.observation.evidence.latest_runtime_outcome,
+            scheduler.latest_runtime_outcome
+        );
+        assert_eq!(
+            reported.observation.evidence.latest_domain_outcome,
+            Some(domain_success.clone())
+        );
+        assert_eq!(
+            reported.observation.evidence.latest_domain_success,
+            Some(domain_success)
+        );
+
+        reported.observation.evidence.latest_runtime_outcome =
+            Some(outcome(OutcomeKind::Succeeded, 200));
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(
+            reported.observation.evidence.latest_runtime_outcome,
+            scheduler.latest_runtime_outcome
+        );
+
+        reported.observation.evidence.latest_runtime_outcome =
+            Some(outcome(OutcomeKind::Succeeded, 300));
+        apply_scheduler(&mut reported, &scheduler);
+        assert_eq!(
+            reported.observation.evidence.latest_runtime_outcome,
+            Some(outcome(OutcomeKind::Succeeded, 300))
+        );
+    }
 }
