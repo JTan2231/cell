@@ -12,8 +12,6 @@ research questions, prepare documents, and coordinate assignments. For example:
   your decisions relate to those wants.
 - [Platter](platter/README.md) uses job descriptions and recorded career
   experience to prepare tailored résumés and short briefs.
-- [Mentor](mentor/README.md) sends a daily software design exercise by email
-  and gives feedback on your answer.
 
 I am exploring how AI assistants with different responsibilities can work
 together. Many human problems need more explanation and context than a fixed

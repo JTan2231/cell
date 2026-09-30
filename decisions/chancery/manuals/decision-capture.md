@@ -160,7 +160,7 @@ perform this import. Deployment does not supply missing prompt contents.
 The caller freezes resolved instructions with the existing request or domain
 snapshot. Retries retain that selection. Later edits do not rewrite saved work.
 Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions and Mentor assignment text remain
+product-owned. Annals library instructions remain
 immutable domain captures selected through their existing product operations.
 
 For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the

@@ -234,12 +234,17 @@ product_id=$1
 shift
 stage_candidate=
 test_groups=
+phase=full
 while [ "$#" -gt 0 ]; do
     [ "$#" -ge 2 ] || ci_fail 'missing private gate option value'
     case "$1" in
         --tests)
             test_groups=$2
             case "$test_groups" in product|all) ;; *) ci_fail 'invalid test groups' ;; esac
+            ;;
+        --phase)
+            phase=$2
+            case "$phase" in pre|post) ;; *) ci_fail 'invalid CI phase' ;; esac
             ;;
         --stage-candidate)
             stage_candidate=$2
@@ -248,13 +253,15 @@ while [ "$#" -gt 0 ]; do
                 *) ci_fail 'candidate staging directory must be absolute' ;;
             esac
             ;;
-        *) ci_fail 'usage: PRODUCT --tests product|all [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
+        *) ci_fail 'usage: PRODUCT --tests product|all [--phase pre|post] [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
     esac
     shift 2
 done
 [ -n "$test_groups" ] || ci_fail 'the public dispatcher must select test groups'
 [ -z "$stage_candidate" ] || [ "$test_groups" = all ] \
     || ci_fail 'candidate staging requires both test groups'
+[ -z "$stage_candidate" ] || [ "$phase" != pre ] \
+    || ci_fail 'candidate staging requires the post-test phase'
 pipeline_load_descriptor "$product_id"
 pipeline_validate_descriptor
 
@@ -279,27 +286,37 @@ ci_report_exit() {
     fi
 }
 trap ci_report_exit 0
-ci_stage='shell and packaging'
-ci_shell_and_packaging
-ci_stage='provider versions'
-ci_check_provider_versions
-if [ "$CI_PROVIDER_VALIDATION_PHASE" = before-rust ]; then
-    ci_stage='provider bundles'
-    ci_validate_providers
+if [ "$phase" != post ]; then
+    ci_stage='shell and packaging'
+    ci_shell_and_packaging
+    ci_stage='provider versions'
+    ci_check_provider_versions
+    if [ "$CI_PROVIDER_VALIDATION_PHASE" = before-rust ]; then
+        ci_stage='provider bundles'
+        ci_validate_providers
+    fi
+    ci_stage='extra checks'
+    ci_run_extra "$CI_EXTRA_BEFORE_RUST"
+    ci_stage='rustfmt'
+    ci_fmt
+    ci_stage='clippy'
+    ci_clippy
 fi
-ci_stage='extra checks'
-ci_run_extra "$CI_EXTRA_BEFORE_RUST"
-ci_stage='rustfmt'
-ci_fmt
-ci_stage='clippy'
-ci_clippy
-ci_stage='product tests'
-ci_test product
-if [ "$test_groups" = all ]; then
-    ci_stage='platform tests'
-    ci_test platform
-else
-    printf '%s\n' '==> platform tests skipped by CI selection'
+if [ "$phase" = pre ]; then
+    printf '%s\n' 'ci.sh: pre-test checks passed'
+    exit 0
+fi
+# The dispatcher runs one shared Rust test gate between pre and post phases.
+# Retain the complete private body for existing internal callers.
+if [ "$phase" = full ]; then
+    ci_stage='product tests'
+    ci_test product
+    if [ "$test_groups" = all ]; then
+        ci_stage='platform tests'
+        ci_test platform
+    else
+        printf '%s\n' '==> platform tests skipped by CI selection'
+    fi
 fi
 if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
     ci_stage='provider bundles'

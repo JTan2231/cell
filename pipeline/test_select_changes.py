@@ -21,7 +21,7 @@ class ChangedProjectTests(unittest.TestCase):
         self.log = Path(self.temporary.name) / "gates.jsonl"
         self.environment = os.environ.copy()
         for name in ("CELL_CI_EXPECTED_SOURCE_KEY", "GIT_DIR", "GIT_WORK_TREE",
-                     "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
+                     "GIT_INDEX_FILE", "GIT_COMMON_DIR", "CELL_CI_TEST_THREADS"):
             self.environment.pop(name, None)
         self.environment.update({
             "PYTHONDONTWRITEBYTECODE": "1",
@@ -68,20 +68,48 @@ RELEASE_UNITS='{product}|{product}|package|{directory}/Cargo.toml|{product}-|1'
         self.write("pipeline/ci.sh", '''#!/bin/sh
 set -eu
 ROOT=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
-exec python3 "$ROOT/fixture_gate.py" "$@"
+exec python3 "$ROOT/fixture_product.py" "$@"
 ''', executable=True)
+        self.write("fixture_product.py", '''import os
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(os.environ["FIXTURE_ROOT"])
+arguments = sys.argv[2:]
+phase = arguments[arguments.index("--phase") + 1]
+raise SystemExit(subprocess.run([sys.executable, str(root / "fixture_gate.py"),
+                                sys.argv[1] + "." + phase, *arguments]).returncode)
+''')
+        self.write("pipeline/nextest_tool.py", '''from pathlib import Path
+
+def runner():
+    return Path(__file__).resolve().parent / "fixture-nextest"
+''')
+        self.write("pipeline/parallel_tests.py", '''import os
+from pathlib import Path
+import subprocess
+import sys
+
+root = Path(os.environ["FIXTURE_ROOT"])
+raise SystemExit(subprocess.run([sys.executable, str(root / "fixture_gate.py"),
+                                "parallel-rust", *sys.argv[1:]]).returncode)
+''')
         self.write("pipeline/platform.sh", '''#!/bin/sh
 set -eu
 ROOT=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
 if [ "$1" = catalog ]; then
     exec "$ROOT/pipeline/integrated.sh"
 fi
-exec python3 "$ROOT/fixture_gate.py" "shared-$1"
+suite=$1
+shift
+exec python3 "$ROOT/fixture_gate.py" "shared-$suite" "$@"
 ''', executable=True)
 
         # Root infrastructure gates use this adapter. Only source hashing calls
         # the real client; fake gate bodies never enter the production broker.
-        self.write("ci_broker/client.py", f"""import os
+        self.write("ci_broker/client.py", f"""import json
+import os
 import subprocess
 import sys
 
@@ -91,6 +119,14 @@ elif sys.argv[1] == "run":
     command = sys.argv[sys.argv.index("--") + 1:]
 else:
     raise SystemExit("unexpected fixture broker command")
+if "--verbose-receipt" in sys.argv:
+    child = subprocess.run(command, env=os.environ, stdout=subprocess.PIPE)
+    gate = sys.argv[sys.argv.index("--gate") + 1]
+    print(json.dumps({{"protocol_version": 1, "gate": gate,
+                      "source_key": os.environ["CELL_CI_EXPECTED_SOURCE_KEY"],
+                      "state": "passed" if child.returncode == 0 else "failed",
+                      "exit_code": child.returncode, "execution_id": gate + ".fixture"}}))
+    raise SystemExit(child.returncode)
 raise SystemExit(subprocess.run(command, env=os.environ).returncode)
 """)
         self.write("fixture_gate.py", """import json
@@ -298,15 +334,19 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
-                         ["preflight", "recognition", "beta"])
-        self.assertEqual(gates[-1]["args"], ["--tests", "product"])
+                         ["preflight", "recognition", "beta.pre", "parallel-rust", "beta.post"])
+        self.assertEqual(gates[2]["args"], ["--tests", "product", "--phase", "pre"])
+        self.assertEqual(gates[-1]["args"], ["--tests", "product", "--phase", "post"])
+        self.assertIn("--product", gates[3]["args"])
+        self.assertIn("beta", gates[3]["args"])
+        self.assertNotIn("--platform-product", gates[3]["args"])
         self.assertTrue(gates[-1]["source"].startswith("sha256:"))
 
     def test_explicit_alias_uses_descriptor_directory(self):
         result = self.ci("decisions")
         self.assert_passed(result)
         self.assertEqual([gate["gate"] for gate in self.gates()],
-                         ["preflight", "recognition", "krisis"])
+                         ["preflight", "recognition", "krisis.pre", "parallel-rust", "krisis.post"])
 
     def test_all_root_run_includes_integrated_check(self):
         result = self.ci("--all")
@@ -314,11 +354,12 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         gates = [gate["gate"] for gate in self.gates()]
         self.assertEqual(gates[:2], ["preflight", "recognition"])
         self.assertEqual(set(gates[2:-1]), {
-            "alpha", "beta", "krisis", "shared-pipeline", "shared-broker",
+            "alpha.pre", "beta.pre", "krisis.pre", "alpha.post", "beta.post", "krisis.post",
+            "parallel-rust", "shared-pipeline", "shared-broker",
             "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
             "shared-maintenance", "shared-prompts",
         })
-        self.assertEqual(len(gates), 14)
+        self.assertEqual(len(gates), 18)
         self.assertEqual(gates[-1], "integrated")
 
     def test_explicitly_listing_every_project_does_not_request_integrated_check(self):
@@ -326,16 +367,124 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = [gate["gate"] for gate in self.gates()]
         self.assertEqual(gates[:2], ["preflight", "recognition"])
-        self.assertEqual(set(gates[2:]), {"alpha", "beta", "krisis"})
-        self.assertEqual(len(gates), 5)
+        self.assertEqual(gates[2:], ["alpha.pre", "beta.pre", "krisis.pre", "parallel-rust",
+                                     "alpha.post", "beta.post", "krisis.post"])
+        self.assertEqual(len(gates), 9)
 
     def test_project_failure_propagates_and_stops_later_gates(self):
-        result = self.ci("--all", FIXTURE_FAIL_AT="alpha")
+        result = self.ci("--all", FIXTURE_FAIL_AT="alpha.pre")
         self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
         self.assertEqual([gate["gate"] for gate in self.gates()],
                          ["preflight", "recognition", "shared-pipeline", "shared-broker",
                           "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
-                          "shared-maintenance", "shared-prompts", "alpha"])
+                          "shared-maintenance", "shared-prompts", "alpha.pre"])
+
+    def test_shared_test_failure_stops_all_post_test_gates(self):
+        result = self.ci("alpha", "beta", FIXTURE_FAIL_AT="parallel-rust")
+        self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+        self.assertEqual([gate["gate"] for gate in self.gates()],
+                         ["preflight", "recognition", "alpha.pre", "beta.pre", "parallel-rust"])
+
+    def test_shared_rust_checks_and_platform_targets_join_one_test_gate(self):
+        result = self.ci("--platform", "alpha", "beta")
+        self.assert_passed(result)
+        gates = self.gates()
+        self.assertEqual([gate["gate"] for gate in gates],
+                         ["preflight", "recognition", "shared-install", "alpha.pre", "beta.pre",
+                          "parallel-rust", "alpha.post", "beta.post"])
+        self.assertEqual(gates[2]["args"], ["--checks-only"])
+        arguments = gates[5]["args"]
+        self.assertEqual(arguments.count("--product"), 2)
+        self.assertEqual(arguments.count("--platform-product"), 2)
+        self.assertEqual(arguments[-2:], ["--shared-suite", "install"])
+
+    def test_worker_count_is_explicit_and_invalid_values_fail_before_admission(self):
+        for value in ("0", "-1", "1.5", "many", ""):
+            with self.subTest(value=value):
+                result = self.ci("alpha", CELL_CI_TEST_THREADS=value)
+                self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+                self.assertIn("positive integer", result.stderr)
+                self.assertEqual(self.gates(), [])
+        result = self.ci("alpha", CELL_CI_TEST_THREADS="7")
+        self.assert_passed(result)
+        arguments = next(gate["args"] for gate in self.gates() if gate["gate"] == "parallel-rust")
+        self.assertEqual(arguments[arguments.index("--test-threads") + 1], "7")
+        path = arguments[arguments.index("--nextest-path") + 1]
+        self.assertTrue(Path(path).is_absolute())
+
+    def test_non_rust_plan_does_not_require_the_nextest_tool(self):
+        self.write("pipeline/nextest_tool.py", "raise RuntimeError('must not load nextest')\n")
+        self.git("add", "pipeline/nextest_tool.py")
+        self.git("commit", "-qm", "Unavailable optional runner fixture")
+        result = self.ci()
+        self.assert_passed(result)
+        self.assertEqual([gate["gate"] for gate in self.gates()],
+                         ["preflight", "recognition"])
+
+    def test_missing_nextest_stops_required_test_plan_before_admission(self):
+        self.write("pipeline/nextest_tool.py", "def runner():\n    raise RuntimeError('provision nextest')\n")
+        result = self.ci("alpha")
+        self.assertEqual(result.returncode, 78, result.stdout + result.stderr)
+        self.assertIn("provision nextest", result.stderr)
+        self.assertEqual(self.gates(), [])
+
+    def test_common_rust_executor_change_selects_all_product_and_platform_tests(self):
+        driver = self.root / "pipeline/parallel_tests.py"
+        self.write("pipeline/parallel_tests.py", driver.read_text() + "# changed executor\n")
+        tokens, result = self.plan()
+        self.assertEqual(tokens[5:], ["alpha", "beta", "krisis"])
+        self.assertIn("global Rust runner changed", result.stderr)
+        result = self.ci()
+        self.assert_passed(result)
+        gates = self.gates()
+        arguments = next(gate["args"] for gate in gates if gate["gate"] == "parallel-rust")
+        self.assertEqual(arguments.count("--product"), 3)
+        self.assertEqual(arguments.count("--platform-product"), 3)
+        self.assertEqual(arguments.count("--shared-suite"), 3)
+        self.assertTrue(all(gate["args"][1] == "all" for gate in gates
+                            if gate["gate"].endswith(".pre")))
+
+    def test_test_only_edits_do_not_expand_product_coverage(self):
+        self.write("pipeline/test_parallel_tests.py", "# changed executor tests\n")
+        tokens, result = self.plan()
+        self.assertEqual(tokens[5:], [])
+        self.assertNotIn("global Rust runner changed", result.stderr)
+
+    def test_direct_candidate_staging_is_only_in_the_post_test_phase(self):
+        stage = str(Path(self.temporary.name) / "sealed candidate")
+        result = self.helper("product", "alpha", "--stage-candidate", stage)
+        self.assert_passed(result)
+        gates = self.gates()
+        self.assertEqual([gate["gate"] for gate in gates],
+                         ["shared-install", "alpha.pre", "parallel-rust", "alpha.post"])
+        self.assertNotIn("--stage-candidate", gates[1]["args"])
+        self.assertEqual(gates[-1]["args"], ["--tests", "all", "--phase", "post",
+                                            "--stage-candidate", stage])
+
+    def test_direct_shared_rust_selection_uses_one_parallel_gate(self):
+        result = self.helper("shared", "install", "prompts")
+        self.assert_passed(result)
+        gates = self.gates()
+        self.assertEqual([gate["gate"] for gate in gates],
+                         ["shared-install", "shared-prompts", "parallel-rust"])
+        self.assertEqual(gates[-1]["args"][-4:], ["--shared-suite", "install",
+                                                  "--shared-suite", "prompts"])
+        self.assertNotIn("--product", gates[-1]["args"])
+
+    def test_aggregate_receipt_requires_the_phases_and_real_shared_gate(self):
+        result = self.ci("alpha", "beta", "--json")
+        self.assert_passed(result)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["schema_version"], 1)
+        self.assertEqual(receipt["state"], "passed")
+        required = receipt["selection"]["required_gates"]
+        expected = ["cell.structure", "cell.recognition", "alpha.pre", "beta.pre",
+                    "cell.tests.rust", "alpha.post", "beta.post"]
+        self.assertEqual([gate["gate"] for gate in required], expected)
+        self.assertEqual([gate["gate"] for gate in receipt["gates"]], expected)
+        self.assertTrue(all(gate["source_key"] == receipt["source_key"] for gate in receipt["gates"]))
+        self.assertEqual(required[4]["lane"], "heavy")
+        self.assertEqual(required[4]["command"].count("--product"), 2)
 
     def test_preflight_failure_stops_before_recognition(self):
         result = self.ci("--all", FIXTURE_FAIL_AT="preflight")
@@ -343,12 +492,12 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual([gate["gate"] for gate in self.gates()], ["preflight"])
 
     def test_root_run_rejects_source_change_during_gate(self):
-        result = self.ci("alpha", FIXTURE_CHANGE_AT="alpha")
+        result = self.ci("alpha", FIXTURE_CHANGE_AT="alpha.pre")
         self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
 
     def test_root_run_rejects_index_only_change_during_gate(self):
         self.write("alpha/tracked.txt", "already dirty source\n")
-        result = self.ci(FIXTURE_INDEX_AT="alpha")
+        result = self.ci(FIXTURE_INDEX_AT="alpha.pre")
         self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
 
 

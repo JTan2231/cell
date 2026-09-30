@@ -37,3 +37,10 @@ Read [CI selection](../pipeline/README.md) for committed-range validation and
 [deployment](../deployment/README.md) for exact-source installation and recovery.
 The manager is shared infrastructure; it has no product gate or automatic
 self-deployment target.
+
+Validation changes follow each job's committed candidate. They do not replace
+the installed worker or change an active job's source. Read
+[CI updates](../pipeline/README.md#change-ci-while-a-job-is-active) for the pinned
+test runner and source-update procedure. Replace the installed manager only
+after pausing admission and finishing or recovering active work, as defined in
+[queue operation](chancery/manuals/queue-operate.md).

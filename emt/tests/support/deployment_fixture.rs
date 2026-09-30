@@ -1,4 +1,4 @@
-// Shared isolated process fixture for the Mentor and EMT adapter boundaries.
+// Isolated process fixture for the EMT adapter boundary.
 use serde_json::{Value, json};
 use std::fs;
 use std::io::{Read as _, Write as _};
@@ -93,7 +93,8 @@ impl Deployment {
         if product() == "emt" {
             request["settings"]["cell_root"] = json!(source_root()?);
         }
-        let socket = std::env::temp_dir().join(format!("worker-health-{}.sock", uuid::Uuid::now_v7()));
+        let socket =
+            std::env::temp_dir().join(format!("worker-health-{}.sock", uuid::Uuid::now_v7()));
         let listener = std::os::unix::net::UnixListener::bind(&socket)?;
         listener.set_nonblocking(true)?;
         let stop = Arc::new(AtomicBool::new(false));

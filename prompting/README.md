@@ -5,10 +5,9 @@ stores opaque strings. This library owns Cell's selection format and rendering.
 Products still own permissions, models, schemas, tool implementations, input
 data, and recovery. No prompt grants execution authority.
 
-The import input `seed.json` preserves the original migration components and
-adds separately named project-writing prompts. It includes instructions,
-templates, tool and schema descriptions, Mentor's
-problems and rubric, selected library documents, and compatibility prompts.
+The import input `seed.json` contains the active Cell prompt components and
+separately named project-writing prompts. It includes instructions, templates,
+tool and schema descriptions, selected library documents, and compatibility prompts.
 It is an explicit import artifact, never a runtime fallback.
 
 ## Read a selection
@@ -20,7 +19,7 @@ selection formats, and invalid templates stop request preparation.
 
 Each product reads `cell.prompts.OWNER` once, then reads the exact component
 versions named in that string. Owners are `annals`, `conatus`, `krisis`,
-`semantics`, `paperboy`, `platter`, `weaver`, `mentor`, `emt`, and `ci-manager`.
+`semantics`, `paperboy`, `platter`, `weaver`, `emt`, and `ci-manager`.
 CI Manager freezes its selected repair instructions and template before its
 first model request, then retains every rendered request for recovery. For example:
 
@@ -39,10 +38,9 @@ is one pass: source data cannot introduce another placeholder or prompt lookup.
 Explicit `<bazaar:ID>` references are internal caller constants, resolved only
 in trusted instruction and tool-description fields.
 
-Annals library revisions and Mentor assignments remain immutable domain
-snapshots. Bazaar supplies their initial authored documents. Changing a library
-selection or refreshing Mentor's domain corpus remains an explicit product
-operation. User directions, work documents, answers, and tool results remain
+Annals library revisions remain immutable domain snapshots. Bazaar supplies
+their initial authored documents. Changing a library selection remains an
+explicit product operation. User directions, work documents, and tool results remain
 runtime input rather than shared prompt records.
 
 ## Import before deploying callers
@@ -65,6 +63,8 @@ IDs, reuses identical latest content, and publishes selections after every
 component exists. An interrupted import may leave unused component versions.
 Repeat the same import to finish; inspect history after an uncertain write.
 Publication is per owner, not an atomic cutover of all requesters.
+Retiring a caller removes its components from this import. Retained Bazaar IDs
+and versions remain unchanged.
 
 Selection version 1 is the immutable migration baseline for historical jobs.
 Import the original seed before publishing edits. Keep that baseline and all
@@ -89,8 +89,8 @@ the requester's compatibility procedure.
 
 Annals records the selection in its examination prompt version and context
 digest. Platter captures it with packet inputs. Other requesters preserve the
-resolved request under their existing recovery and retention rules. Mentor
-and EMT retain their existing limits on temporary answer and exchange content.
+resolved request under their existing recovery and retention rules. EMT retains
+its existing limits on temporary exchange content.
 
 CI imports the seed into a private temporary Bazaar database for each admitted
 test gate. It never uses the user's prompt database. Prompt-library edits select

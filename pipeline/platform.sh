@@ -5,8 +5,17 @@ PIPELINE_ROOT=$(CDPATH='' cd "$(dirname "$0")/.." && pwd)
 export PIPELINE_ROOT PYTHONDONTWRITEBYTECODE=1
 . "$PIPELINE_ROOT/pipeline/lib.sh"
 cd "$PIPELINE_ROOT"
-[ "$#" -eq 1 ] || pipeline_fail 'usage: pipeline/platform.sh SUITE'
+[ "$#" -ge 1 ] && [ "$#" -le 2 ] \
+    || pipeline_fail 'usage: pipeline/platform.sh SUITE [--checks-only]'
 suite=$1
+checks_only=0
+if [ "$#" -eq 2 ]; then
+    [ "$2" = --checks-only ] \
+        || pipeline_fail 'usage: pipeline/platform.sh SUITE [--checks-only]'
+    case "$suite" in install|maintenance|prompts) ;; \
+        *) pipeline_fail 'checks-only requires a shared Rust suite' ;; esac
+    checks_only=1
+fi
 case "$suite" in
     pipeline)
         "$PIPELINE_ROOT/pipeline/check.sh"
@@ -22,6 +31,8 @@ case "$suite" in
         done
         python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
+        python3 "$PIPELINE_ROOT/pipeline/test_parallel_tests.py" -q
+        python3 "$PIPELINE_ROOT/pipeline/test_nextest_tool.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_entry.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_budget.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
@@ -41,7 +52,9 @@ case "$suite" in
             -D warnings -F unsafe_code -D clippy::all -D clippy::pedantic \
             -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented \
             -D clippy::unwrap_used -D clippy::expect_used
-        cargo test --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" --locked
+        if [ "$checks_only" = 0 ]; then
+            cargo test --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" --locked
+        fi
         ;;
     catalog) "$PIPELINE_ROOT/pipeline/integrated.sh" ;;
     *) pipeline_fail "unknown platform suite: $suite" ;;

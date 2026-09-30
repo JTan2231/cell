@@ -28,7 +28,7 @@ including broken selectors, are inspected rather than treated as absence.
 Version compatibility does not establish product readiness; adapters also check
 their supported runtime interfaces and configuration.
 Consumers can also require an explicitly indexed installed interface contract.
-For example, Mentor and EMT require Email's account setup and discovery operation.
+For example, EMT requires Email's account setup and discovery operation.
 An older Email release with the same release number but without that operation
 is selected for replacement. These explicit requirements do not turn Chancery's
 documentation dependency graph into runtime or deployment edges.
@@ -37,11 +37,11 @@ Supply initial choices through a private JSON file keyed by canonical product
 name. Subsequent runs reuse product configuration:
 
 ```sh
-./deploy.sh mentor --settings /absolute/setup.json
+./deploy.sh semantics --settings /absolute/setup.json
 ```
 
-For example, `{"mentor":{"receiving_domain":"reply.example.com","enabled":false}}`
-prepares Mentor without enabling its worker. Product installation manuals define
+For example, `{"semantics":{"enabled":false}}`
+prepares Semantics without enabling its worker. Product installation manuals define
 their accepted keys. Supply credential file references, never credential bytes.
 Inspection gathers missing choices before maintenance. Email owns credential
 installation and receiving-account discovery. A `plan` lists settings owners
@@ -190,11 +190,10 @@ affected-only installations keep the installed maintenance command. Candidate
 maintenance preserves owned holds and drain checks without migration or early publication.
 Post-publication verification still proves the actual installed programs.
 
-Mentor and EMT capture worker intent during inspection, suspend their bindings,
-select disabled definitions during configuration, and restore enabled state
+EMT captures worker intent during inspection, suspends its binding,
+selects a disabled definition during configuration, and restores enabled state
 after verification and hold release. Existing pauses and incidents remain.
-An uninitialized Mentor installation uses its product default activation policy.
-Mentor and EMT resolve receiving configuration before maintenance. Conatus
+EMT resolves receiving configuration before maintenance. Conatus
 preserves library identities and its cursor while rebinding Annals. Paperboy and
 Platter reselect existing schedules with the installed program's exact pins.
 Clockwork suspends every captured enabled binding. During activation, product

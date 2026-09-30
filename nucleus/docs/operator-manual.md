@@ -46,7 +46,6 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/chancery/overview.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/chancery/overview.md) |
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/chancery/overview.md) |
-| Mentor | Daily problems and independent answer critiques | [Mentor](/Users/joey/rust/cell/mentor/README.md) |
 | Paperboy | Reports from conversations or accepted Krisis decisions | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
 | Weaver | Narratives authored from free-form directions and Annals reading | [Weaver](/Users/joey/rust/cell/weaver-narrative/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/chancery/overview.md) |
@@ -73,7 +72,7 @@ Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy, Weaver
 Cast --> Platter <-- Vita career works in Annals
 Cast --> Clew application history
-Platter, Clew, Conatus, Mentor, Paperboy, EMT --> Email --> Resend
+Platter, Clew, Conatus, Paperboy, EMT --> Email --> Resend
 installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report
 ```
@@ -141,7 +140,6 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `conatus/update` | Preserve source/feed identity; stop after the first failed update stage. |
 | `krisis/observer` | Preserve coverage and pending document identity; explicit observation retry. |
 | `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
-| `mentor/worker` | Preserve frozen message/key limits; cleanup-only expiry remains available while scheduling is halted. |
 | `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
 | `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip deliberate deployment holds. |
@@ -327,6 +325,15 @@ validation are stale. Linked worktrees share the CI broker and compiler
 resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 [validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
+
+Selected Rust tests run through one parallel nextest stage between the selected
+products' checks before and after tests. The broker retains one compiler writer;
+the test stage has a separate configurable test-process limit. Doctests and
+Python or shell suites remain required separate commands. Install the pinned
+runner on the external work volume before submitting a candidate that uses it.
+An active job keeps its committed candidate. Updating validation source does not
+replace the installed manager; manager replacement still requires the maintenance
+procedure below.
 
 Git publication remains separate. A product release command changes versions,
 commits, tags, and pushes. CI makes private candidate commits and advances

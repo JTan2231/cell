@@ -1,4 +1,4 @@
-include!("../../mentor/tests/support/deployment_fixture.rs");
+include!("support/deployment_fixture.rs");
 fn product() -> &'static str {
     "emt"
 }

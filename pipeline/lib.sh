@@ -3,8 +3,8 @@
 # Shared helpers for the checked-in Cell pipeline descriptors. This file is
 # sourced by the CI, release, generator, and self-test entry points.
 
-PIPELINE_EXPECTED_PRODUCT_COUNT=19
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=111
+PIPELINE_EXPECTED_PRODUCT_COUNT=18
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=108
 # Shared infrastructure providers participate in source catalog validation but
 # are not deployable product release units.
 PIPELINE_SHARED_PROVIDERS='ci-manager|ci_manager/chancery|1'
