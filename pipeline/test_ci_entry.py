@@ -147,6 +147,124 @@ raise SystemExit(int(os.environ["FIXTURE_CI_ENTRY_STATUS"]))
                 self.assertFalse(self.log.exists())
 
 
+class ProductPhaseTests(unittest.TestCase):
+    """Run the actual private shell phases with inert Cargo and fixture tools."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="cell-ci-phase-test-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name) / "source with spaces"
+        self.log = Path(temporary.name) / "commands.jsonl"
+        self.environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
+                            "FIXTURE_PHASE_LOG": str(self.log),
+                            "PATH": str(self.root / "tools") + os.pathsep + os.environ["PATH"]}
+        for relative in ("pipeline/ci.sh", "pipeline/platform.sh", "pipeline/lib.sh"):
+            self.write(relative, (SOURCE / relative).read_text())
+        self.write("Cargo.toml", '[workspace]\n')
+        self.write("Cargo.lock", "fixture\n")
+        self.write("alpha/Cargo.toml", '[package]\nname = "alpha"\nversion = "1.0.0"\n')
+        self.write("alpha/provider/provider.json", '{"release": "1.0.0"}\n')
+        self.write("pipeline/products/alpha.sh", """PIPELINE_SCHEMA=1
+PRODUCT_ID=alpha
+PRODUCT_NAME=Alpha
+PRODUCT_DIR=alpha
+CI_RESOURCE_CLASS=heavy
+RELEASE_BRANCH=main
+DEPLOY_PROFILE=custom
+DEPLOY_CONFLICT_KEYS=alpha
+CARGO_PACKAGES=alpha
+RELEASE_UNITS='alpha|Alpha|package|alpha/Cargo.toml|alpha-|1'
+CI_PROVIDER_VALIDATION_PHASE=after-tests
+PROVIDERS='alpha|alpha|alpha/provider|1'
+CI_RUN_CHECKS='always|checks/packaging.sh'
+CI_EXTRA_BEFORE_RUST=checks/before.sh
+CI_EXTRA_AFTER_BUILD=checks/after.sh
+""")
+        recorder = '''#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import sys
+
+label = Path(sys.argv[0]).name
+if sys.argv[1:] == ["--version"]:
+    print(label + " 1.97.1 (fixture)")
+else:
+    with Path(os.environ["FIXTURE_PHASE_LOG"]).open("a") as stream:
+        stream.write(json.dumps([label, *sys.argv[1:]]) + "\\n")
+'''
+        for relative in ("tools/cargo", "tools/rustc", "pipeline/cargo_tests.py",
+                         "deployment/candidate.py", "checks/packaging.sh", "checks/before.sh",
+                         "checks/after.sh"):
+            self.write(relative, recorder)
+
+    def write(self, relative, value):
+        path = self.root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(value)
+        path.chmod(0o755)
+
+    def commands(self):
+        return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
+
+    def invoke(self, phase=None, group="all", stage=None):
+        command = ["sh", str(self.root / "pipeline/ci.sh"), "alpha", "--tests", group]
+        if phase is not None:
+            command.extend(["--phase", phase])
+        if stage is not None:
+            command.extend(["--stage-candidate", stage])
+        return subprocess.run(command, env=self.environment, capture_output=True, text=True)
+
+    def test_pre_phase_runs_setup_and_linting_without_tests_or_release(self):
+        result = self.invoke("pre")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertEqual([command[0] for command in commands],
+                         ["packaging.sh", "before.sh", "cargo", "cargo"])
+        self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
+                         ["fmt", "clippy"])
+
+    def test_post_phase_runs_provider_docs_release_and_seals_after_build(self):
+        stage = str(self.root.parent / "sealed candidate")
+        result = self.invoke("post", stage=stage)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertEqual([command[0] for command in commands],
+                         ["cargo", "cargo", "cargo", "after.sh", "candidate.py"])
+        self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
+                         ["run", "doc", "build"])
+        self.assertEqual(commands[-1][commands[-1].index("--output") + 1], stage)
+
+    def test_ordinary_product_phase_skips_platform_shell_extras(self):
+        result = self.invoke("pre", group="product")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual([command[0] for command in self.commands()], ["cargo", "cargo"])
+
+    def test_private_full_body_retains_test_group_compatibility(self):
+        result = self.invoke()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        tests = [command for command in self.commands() if command[0] == "cargo_tests.py"]
+        self.assertEqual([command[command.index("--group") + 1] for command in tests],
+                         ["product", "platform"])
+
+    def test_pre_phase_rejects_candidate_staging_before_running_any_checks(self):
+        result = self.invoke("pre", stage=str(self.root.parent / "candidate"))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("post-test phase", result.stderr)
+        self.assertEqual(self.commands(), [])
+
+    def test_shared_checks_only_body_excludes_tests_and_legacy_body_keeps_them(self):
+        script = str(self.root / "pipeline/platform.sh")
+        for extra, expected in ((["--checks-only"], ["fmt", "clippy"]),
+                                ([], ["fmt", "clippy", "test"])):
+            with self.subTest(extra=extra):
+                self.log.unlink(missing_ok=True)
+                result = subprocess.run(["sh", script, "install", *extra], env=self.environment,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual([command[1] for command in self.commands()], expected)
+
+
 class CancelledValidationRecoveryTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(prefix="cell-ci-recovery-test-")

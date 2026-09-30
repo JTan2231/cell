@@ -82,6 +82,14 @@ stale, lost, and cancelled transitions. Old terminal data has a limit of 256
 recent executions and is removed after 14 days. Active and newly finished work
 is never pruned.
 
+The `cell.tests.rust` gate identifies the pinned nextest executable by path,
+version, and hash in addition to the compiler toolchain. Its command records
+the selected product and platform scope and the test worker limit. Tests share
+one admitted heavy body but execute concurrently within that body. The heavy
+lane still permits only one compiler writer. Test workers can create further
+threads or child processes, so the worker limit is not a machine-wide thread
+or process limit.
+
 Inspect a receipt or recover abandoned work using the same repository scope:
 
 ```sh
@@ -100,7 +108,8 @@ It records an expired runner as lost.
 
 Root and product `ci.sh` wrappers route to the installed CI manager. Its
 internal dispatcher selects relevant product and platform tests and always
-invokes this client. The broker schedules each product or shared suite as a
-separate queue entry. Product test-group selection is part of the brokered
-command identity. The shared `pipeline/ci.sh` body is internal. It is not a
-second CI submission path, and callers cannot use it to bypass admission.
+invokes this client. Product checks before and after tests, shared check suites,
+and the parallel Rust test stage have separate queue entries. Selection and
+phase are part of the brokered command identity. The shared `pipeline/ci.sh`
+body is internal. It is not a second CI submission path, and callers cannot use
+it to bypass admission.

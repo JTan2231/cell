@@ -224,6 +224,19 @@ def cargo_jobs() -> int:
     return jobs
 
 
+def execution_toolchain(gate: str, command: list[str]) -> str:
+    key = toolchain_key()
+    if gate != "cell.tests.rust":
+        return key
+    from pipeline import nextest_tool
+    try:
+        selected = Path(command[command.index("--nextest-path") + 1])
+        runner = nextest_tool.identity(selected)
+    except (ValueError, IndexError, OSError) as error:
+        raise broker.BrokerError(f"cannot identify nextest: {error}") from error
+    return "sha256:" + broker.digest_json({"compiler": key, "nextest": runner})
+
+
 def client_parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="subcommand", required=True)
@@ -384,7 +397,7 @@ def run(arguments: argparse.Namespace) -> int:
         "--gate-version",
         gate_version,
         "--toolchain-key",
-        toolchain_key(),
+        execution_toolchain(arguments.gate, command),
         "--lane",
         arguments.lane,
         "--cwd",

@@ -20,6 +20,11 @@ from platform_inputs import (
 )
 
 
+RUST_EXECUTOR_INPUTS = frozenset((
+    "pipeline/parallel_tests.py", "pipeline/nextest_tool.py",
+))
+
+
 class SelectionError(Exception):
     pass
 
@@ -345,6 +350,18 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
             if descriptor or extra or (owned and (catalog or any(fnmatchcase(path, p) for p in patterns))):
                 platform[product].append(path)
 
+    # A change to the common Rust executor changes every product's test
+    # behavior. Validate its ordinary and lifecycle target selection together.
+    executor_changes = sorted(changes & RUST_EXECUTOR_INPUTS)
+    if executor_changes:
+        reason = f"global Rust runner changed: {describe(executor_changes, args.verbose)}"
+        suites["pipeline"].extend(path for path in executor_changes if path not in suites["pipeline"])
+        for product in products:
+            reasons[product].extend(executor_changes)
+            platform[product].append(reason)
+        for suite in ("install", "maintenance", "prompts"):
+            suites[suite].append(reason)
+
     for suite in ("install", "maintenance"):
         if suites[suite]:
             fixture_only = suite == "install" and all(
@@ -463,11 +480,40 @@ def gate_exit_code(receipt: dict) -> int:
     return {"passed": 0, "stale": 75, "lost": 70, "cancelled": 130}[state]
 
 
-def shared_gate(root: Path, suite: str, verbose: bool, environment: dict[str, str]) -> None:
-    lane = "heavy" if suite in ("install", "maintenance", "prompts", "catalog") else "light"
-    broker(root, f"cell.platform.{suite}", lane,
-           ["sh", str(root / "pipeline/platform.sh"), suite],
-           verbose=verbose, environment=environment)
+RUST_SHARED_SUITES = ("install", "maintenance", "prompts")
+
+
+def rust_test_gate(root: Path, products: list[str], platform: list[str],
+                   suites: list[str]) -> tuple[str, str, list[str]] | None:
+    if not products and not suites:
+        return None
+    threads = os.environ.get("CELL_CI_TEST_THREADS", "4")
+    if not re.fullmatch(r"[1-9][0-9]*", threads):
+        raise SelectionError("CELL_CI_TEST_THREADS must be a positive integer")
+    # Resolve the pinned runner only for plans that require Rust tests. Its
+    # immutable absolute path and worker count are part of broker identity.
+    from nextest_tool import runner
+    try:
+        nextest = runner()
+    except (OSError, RuntimeError, ValueError) as error:
+        raise SelectionError(str(error)) from error
+    body = [sys.executable, str(root / "pipeline/parallel_tests.py"),
+            "--nextest-path", str(nextest), "--test-threads", threads]
+    for product in products:
+        body.extend(["--product", product])
+    for product in platform:
+        body.extend(["--platform-product", product])
+    for suite in suites:
+        body.extend(["--shared-suite", suite])
+    return "cell.tests.rust", "heavy", body
+
+
+def shared_check_gate(root: Path, suite: str) -> tuple[str, str, list[str]]:
+    if suite in RUST_SHARED_SUITES:
+        return (f"cell.platform.{suite}.checks", "heavy",
+                ["sh", str(root / "pipeline/platform.sh"), suite, "--checks-only"])
+    lane = "heavy" if suite == "catalog" else "light"
+    return f"cell.platform.{suite}", lane, ["sh", str(root / "pipeline/platform.sh"), suite]
 
 
 def gate_plan(root: Path, selection: Plan,
@@ -476,13 +522,12 @@ def gate_plan(root: Path, selection: Plan,
     if not direct:
         gates.append(("cell.structure", "light", [str(root / "pipeline/check.sh")]))
         gates.append(("cell.recognition", "heavy", [str(root / "pipeline/recognition.sh")]))
-    # Each suite and product obtains admission separately. There is no outer
-    # lease, and selection is part of each product's brokered command identity.
+    # Checks retain separate admissions. The shared test gate owns one heavy
+    # lease while nextest schedules tests across the selected products.
     for suite, why in selection.shared.items():
         if why and suite != "catalog":
-            lane = "heavy" if suite in ("install", "maintenance", "prompts") else "light"
-            gates.append((f"cell.platform.{suite}", lane,
-                          ["sh", str(root / "pipeline/platform.sh"), suite]))
+            gates.append(shared_check_gate(root, suite))
+    products = []
     for product in selection.selected:
         fields = output(["sh", "-eu", "-c", '''
 PIPELINE_ROOT=$1
@@ -496,12 +541,22 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
         gate, lane = fields
         group = "all" if selection.platform[product] else "product"
         body = [str(root / "pipeline/ci.sh"), product, "--tests", group]
+        products.append((gate, lane, body))
+        gates.append((gate + ".pre", lane, [*body, "--phase", "pre"]))
+    test_gate = rust_test_gate(
+        root, selection.selected,
+        [product for product in selection.selected if selection.platform[product]],
+        [suite for suite in RUST_SHARED_SUITES if selection.shared[suite]],
+    )
+    if test_gate:
+        gates.append(test_gate)
+    for gate, lane, body in products:
+        body = [*body, "--phase", "post"]
         if selection.stage_candidate:
             body.extend(["--stage-candidate", selection.stage_candidate])
-        gates.append((gate, lane, body))
+        gates.append((gate + ".post", lane, body))
     if selection.shared["catalog"]:
-        gates.append(("cell.platform.catalog", "heavy",
-                      ["sh", str(root / "pipeline/platform.sh"), "catalog"]))
+        gates.append(shared_check_gate(root, "catalog"))
     return gates
 
 
@@ -606,7 +661,7 @@ def run(root: Path, arguments: list[str], direct: str | None = None) -> int:
                    "PYTHONDONTWRITEBYTECODE": "1"}
     for gate, lane, body in gates:
         broker(root, gate, lane, body, verbose=selection.verbose, environment=environment,
-               receipt=bool(selection.stage_candidate and body[0] == str(root / "pipeline/ci.sh")))
+               receipt=bool(selection.stage_candidate and "--stage-candidate" in body))
     check_plan(root, selection)
     if not selection.quiet and not selection.stage_candidate:
         platform = [product for product in selection.selected if selection.platform[product]]
@@ -635,8 +690,14 @@ def run_shared(root: Path, arguments: list[str]) -> None:
     environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": expected_source,
                    "PYTHONDONTWRITEBYTECODE": "1"}
     check(root, expected_source, expected_status)
-    for suite in suites:
-        shared_gate(root, suite, args.verbose, environment)
+    gates = [shared_check_gate(root, suite) for suite in suites if suite != "catalog"]
+    test_gate = rust_test_gate(root, [], [], [suite for suite in suites if suite in RUST_SHARED_SUITES])
+    if test_gate:
+        gates.append(test_gate)
+    if "catalog" in suites:
+        gates.append(shared_check_gate(root, "catalog"))
+    for gate, lane, body in gates:
+        broker(root, gate, lane, body, verbose=args.verbose, environment=environment)
     check(root, expected_source, expected_status)
     if not args.quiet_result:
         print(f"ci: passed; platform-shared={','.join(suites)}; explicit request")
