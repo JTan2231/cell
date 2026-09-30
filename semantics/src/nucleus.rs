@@ -2027,8 +2027,7 @@ mod tests {
         const CHILD_FLAG: &str = "SEMANTICS_ACCOUNT_CWD_TEST_CHILD";
         if std::env::var_os(CHILD_FLAG).is_some() {
             let inherited = PathBuf::from(std::env::var_os("TMPDIR").expect("TMPDIR"));
-            let temporary_root =
-                platform_user_temporary_root().expect("platform temporary root");
+            let temporary_root = platform_user_temporary_root().expect("platform temporary root");
             assert!(!temporary_root.starts_with(inherited));
             return;
         }
