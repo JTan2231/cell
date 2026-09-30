@@ -92,8 +92,11 @@ and program rollback alone do not refresh pinned broker paths.
 
 Do not execute an unverified retained installer or prune a release referred to
 by a generated plist or running activation. Do not restore an older broker
-that ignores active notification eligibility or delegated claims. Preserve
-incident database, check/routing sidecars, and EMT correspondence together.
+that ignores active notification eligibility or delegated claims, or run an
+older broker while `failure-checks.json` exists. Preserve the incident database,
+`failure-checks.json`, notification check/routing sidecars, and EMT correspondence
+together. SQLite schema two remains unchanged; that alone does not prove an
+older broker compatible with the new sidecar.
 
 ## Detach owned selectors
 

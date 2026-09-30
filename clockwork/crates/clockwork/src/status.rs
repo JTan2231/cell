@@ -14,6 +14,7 @@ pub(crate) fn snapshot(layout: &Layout) -> Result<StatusSnapshot> {
     let started = iatreion_api::now_unix_seconds();
     let store = Store::open_read_only(layout)?;
     let bindings = store.bindings()?;
+    let pending = crate::failure_checks::pending_keys(&store, layout)?;
     let history = store.history(None, 10_000)?;
     let running = history
         .iter()
@@ -90,6 +91,8 @@ pub(crate) fn snapshot(layout: &Layout) -> Result<StatusSnapshot> {
                 key: binding.key.clone(),
                 enabled: binding.enabled,
                 failure_halted: binding.halted_incident.is_some(),
+                failure_pending: binding.halted_incident.is_none()
+                    && pending.contains(&binding.key),
                 recorded_running: history.iter().any(|activation| {
                     activation.key == binding.key && activation.state == ActivationState::Running
                 }),

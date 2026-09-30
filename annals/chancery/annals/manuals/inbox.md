@@ -545,8 +545,12 @@ failed job, including an item-local source failure, and returns nonzero before
 claiming a successor. It does not create an Annals scheduling-pause record.
 Ordinary manual `inbox run` retains its item-local continuation behavior.
 
-Clockwork retains the incident, halts later activations, and queues one email
-notification through `HOME/.local/bin/email`. Inspect `clockwork incident list
+Clockwork retains a pending failure episode and permits later scheduled
+activations before the shared service-health threshold. By default, five
+consecutive failed read-only checks, at least 60 seconds apart, halt the binding
+and make its email alert eligible together. A healthy check or inactive intent,
+including operator pause, clears the pending episode. Checks do not dispatch
+or retry sources. Inspect `clockwork incident list
 annals/inbox` or the `annals/decisions-inbox` key and `clockwork incident show
 INCIDENT_ID`. Only explicit approval followed by `clockwork binding resume KEY
 INCIDENT_ID` releases that scheduling halt. Definition switches, deployment,

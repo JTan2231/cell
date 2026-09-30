@@ -138,8 +138,11 @@ For uncertain email, inspect Resend before using `paperboy reconcile` with an
 acceptance receipt or confirmed nonacceptance. Never infer absence from a timeout.
 A retained submission receipt does not establish final inbox delivery.
 
-A startup failure, crash, timeout, or nonzero report completion halts the
-schedule in Clockwork. Inspect `clockwork incident list paperboy/daily` and
+A startup failure, crash, timeout, or nonzero report completion ends the current
+activation. Clockwork permits later activations before the shared service-health
+threshold. By default, five consecutive failed read-only checks, at least 60
+seconds apart, halt the binding and make its alert eligible together. Healthy
+or inactive checks clear a pending episode. Inspect `clockwork incident list paperboy/daily` and
 `clockwork incident show INCIDENT_ID`. After repair, explicitly approve future
 scheduling with `clockwork binding resume paperboy/daily INCIDENT_ID`. This
 does not retry a brief, create a new agent attempt, reconcile an uncertain send,

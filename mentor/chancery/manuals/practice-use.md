@@ -125,10 +125,12 @@ authorize a new model attempt under another ID.
 
 Before each email attempt Mentor retains the frozen payload, idempotency key,
 and first-attempt time. A failed or uncertain submission stops that pass before
-another message or stage starts. Clockwork owns the scheduling halt; Mentor
-does not schedule a delayed retry. After explicit Clockwork continuation, a
-later pass can revisit only that same payload and key. An explicitly requested
-manual tick can also revisit it. The retry window ends 23 hours after
+another message or stage starts. Clockwork owns the delayed scheduling halt;
+Mentor does not schedule a delayed retry. A later admitted pass, including one
+before the halt threshold, can revisit only that same payload and key. After
+an established halt, a scheduled pass requires explicit Clockwork continuation.
+An explicitly requested manual tick can also revisit it. The retry window ends
+23 hours after
 the first attempt, or at the content deadline if earlier. It stops short of
 Resend's documented 24-hour idempotency retention. An unattempted expired
 message becomes failed; one with an attempt and no confirmed receipt becomes
@@ -141,8 +143,12 @@ corpus, or not-yet-due problem is an ordinary outcome. Restart recovery uses
 the private records rather than rereading a prior critique into product history.
 
 The product-owned schema-two `mentor/worker` definition declares
-`halt-until-approved`. Clockwork records and emails one retained halt incident
-and blocks further scheduled admission. Inspect `clockwork incident list
+`halt-until-approved`. A failed stage ends the current pass. Clockwork permits
+later scheduled passes before the shared service-health threshold. By default,
+five consecutive failed read-only checks, at least 60 seconds apart, halt the
+binding and make its alert eligible together. Healthy or inactive checks clear
+a pending episode. Existing content and idempotency deadlines still limit each
+pass. Inspect `clockwork incident list
 mentor/worker` and `clockwork incident show INCIDENT_ID`. Explicitly approve
 future scheduling with `clockwork binding resume mentor/worker INCIDENT_ID`.
 Schedule enable, Mentor resume,

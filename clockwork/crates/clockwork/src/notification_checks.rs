@@ -1,4 +1,4 @@
-//! Read-only service observations gate initial alerts, never product admission.
+//! Read-only service observations share scheduling-halt and initial-alert eligibility.
 use std::collections::BTreeMap;
 use std::io::Write as _;
 use std::os::unix::fs::OpenOptionsExt as _;
@@ -7,7 +7,9 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use clockwork::api::{IncidentRecord, NotificationCheck};
-use iatreion_api::{Activity, AdmissionState, Intent, ProbeState, ReadinessState, Report};
+use iatreion_api::{
+    Activity, AdmissionState, Intent, OutcomeKind, ProbeState, ReadinessState, Report,
+};
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncReadExt as _;
 
@@ -111,6 +113,18 @@ impl Checks {
             })
     }
 
+    pub(crate) fn seed(&mut self, incident: &IncidentRecord, check: &NotificationCheck) {
+        if incident.resumed_at.is_none() {
+            let saved = self
+                .incidents
+                .entry(incident.id.clone())
+                .or_insert_with(|| check.clone());
+            if saved.eligible_at.is_none() {
+                *saved = check.clone();
+            }
+        }
+    }
+
     pub(crate) fn due(&self, incident: &IncidentRecord, now: i64) -> bool {
         let check = self.view(incident);
         check
@@ -159,7 +173,7 @@ impl Checks {
             } else if !binding.enabled {
                 "inactive"
             } else {
-                condition(report.as_ref(), &incident.key)
+                condition(report.as_ref(), &incident.key, None, store)?
             };
             self.record(incident, condition, now);
         }
@@ -167,7 +181,12 @@ impl Checks {
     }
 }
 
-fn condition(report: Option<&Report>, key: &str) -> &'static str {
+pub(crate) fn condition(
+    report: Option<&Report>,
+    key: &str,
+    failure: Option<&crate::failure_checks::FailureEvent>,
+    store: &Store,
+) -> Result<&'static str> {
     let Some((product, unit)) = report.and_then(|report| {
         report.products.iter().find_map(|product| {
             product
@@ -177,17 +196,17 @@ fn condition(report: Option<&Report>, key: &str) -> &'static str {
                 .map(|unit| (product, &unit.observation))
         })
     }) else {
-        return "unknown";
+        return Ok("unknown");
     };
     if matches!(unit.intent, Intent::Disabled | Intent::Retired)
         || unit.admission.reasons.iter().any(|reason| {
             reason.code.starts_with("operator_") || reason.code.starts_with("maintenance")
         })
     {
-        return "inactive";
+        return Ok("inactive");
     }
     if product.probe_state != ProbeState::Observed {
-        return "unknown";
+        return Ok("unknown");
     }
     if matches!(
         unit.readiness.state,
@@ -199,16 +218,41 @@ fn condition(report: Option<&Report>, key: &str) -> &'static str {
         .any(|reason| reason.code == "failure_halted")
         || unit.activity == Activity::Stopped
     {
-        return "unhealthy";
+        return Ok("unhealthy");
     }
     if unit.readiness.state == ReadinessState::Ready && unit.admission.state == AdmissionState::Open
     {
-        return "healthy";
+        // A live healthy worker can be outside Clockwork (for example an
+        // attended inbox drain). Its lock wins over an earlier overlap exit.
+        if unit.activity == Activity::Running {
+            if failure.is_some() && store.has_running_abend(key)? {
+                return Ok("unhealthy");
+            }
+            return Ok("healthy");
+        }
+        if let Some(failure) = failure {
+            let mut recovered = false;
+            if let Some(outcome) = unit.evidence.latest_runtime_outcome.as_ref()
+                && outcome.kind == OutcomeKind::Succeeded
+                && outcome.occurred_at >= failure.recorded_at
+                && (failure.activation_id.is_some() || outcome.occurred_at > failure.recorded_at)
+                && outcome.reference != failure.activation_id
+            {
+                recovered = match outcome.reference.as_deref() {
+                    Some(id) => !store.activation_has_abend(id)?,
+                    None => true,
+                };
+            }
+            if !recovered {
+                return Ok("unhealthy");
+            }
+        }
+        return Ok("healthy");
     }
-    "unknown"
+    Ok("unknown")
 }
 
-async fn read_report(layout: &Layout, root: &std::path::Path) -> Option<Report> {
+pub(crate) async fn read_report(layout: &Layout, root: &std::path::Path) -> Option<Report> {
     let mut child = tokio::process::Command::new(layout.status_report_cli())
         .args(["report"])
         .arg(root)

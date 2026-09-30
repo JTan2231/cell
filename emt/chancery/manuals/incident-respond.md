@@ -44,8 +44,10 @@ A worker imports one page of 100 incidents and reads at most four 100-record
 receiving pages. Incident creation is idempotent. The feed cursor advances
 after every item on its page is stored. Initial discovery retains historical
 incident metadata but diagnoses only open incidents that pass Clockwork's
-shared service-check threshold. Retained incidents below the threshold remain
-available for later checks. EMT excludes its own emt/worker halt from diagnosis.
+shared service-check threshold. New pending failure episodes have no incident
+and do not enter this feed before confirmation. Preexisting incidents below
+their notification threshold remain available for later checks. EMT excludes
+its own emt/worker halt from diagnosis.
 
 Receiving fetches bodies only for recognized routes. Provider IDs deduplicate
 replies; RFC Message-IDs thread responses. Cursors are scan positions, not
@@ -98,17 +100,21 @@ can delay cancellation. Cancellation cannot undo an action already performed.
 
 ## Initial alert ownership
 
-Clockwork gates both basic alerts and new EMT diagnoses on five consecutive
+Clockwork gates new scheduling halts, basic alerts and new EMT diagnoses on
+five consecutive
 failed read-only service checks, at least 60 seconds apart by default. A healthy
 check resets progress. Explicit inactive intent or operator pause excludes the
-service and resets progress. Unknown health counts as failed with an explicit
+service and clears a pending failure episode. Later scheduled activations remain
+admissible before the threshold; an established halt still requires exact
+approval. Unknown health counts as failed with an explicit
 unknown condition. Historical domain outcomes do not count as service failures.
 `clockwork notification show INCIDENT_ID` exposes the count, threshold, last
 check, condition and eligibility time before or after the threshold is reached.
 
 The existing EMT worker advances due checks through Clockwork using its
 configured Cell root. Checks use the installed bounded Iatreion report. They do
-not run product work, retry failed work or change the scheduling halt. A resumed
+not run or retry product work. At the threshold, a check establishes the halt
+and alert eligibility together. A resumed
 incident suppresses an unalerted diagnosis. A continuous alert episode creates
 no replacement diagnosis; admitted delivery and claims keep their recovery rules.
 

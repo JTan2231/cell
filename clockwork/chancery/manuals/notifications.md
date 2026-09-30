@@ -34,15 +34,24 @@ retains no product output, email response body, or credential. Email loads its
 own credential and owns bounded HTTP transport; exit zero establishes provider
 acceptance, not inbox delivery.
 
-Clockwork retains a pending notification in the same transaction as the halt.
-Basic alerts and EMT diagnosis wait for five consecutive failed read-only
-service checks by default. Checks are at least 60 seconds apart. Clockwork uses
-the installed Iatreion report for the configured Cell checkout. Historical
-domain outcomes do not count as service-check failures. Unknown health counts
-as a failed check with an explicit unknown condition. A healthy check, explicit
-inactive intent or operator pause resets progress and suppresses an unalerted episode.
-Resuming the incident also suppresses it. Existing delivery attempts and claims
-retain their recovery rules.
+New schema-two activation failures start pending episodes without an immediate
+halt or incident. Later activations remain admissible during this delay. The
+shared policy requires five consecutive failed read-only service checks by
+default, at least 60 seconds apart. At the threshold, Clockwork establishes the
+halt and alert eligibility together and retains pending mail with the incident.
+
+Clockwork uses the installed Iatreion report for the configured Cell checkout.
+Historical domain outcomes do not count as service-check failures. Unknown
+health counts as failed with an explicit unknown condition. A healthy worker
+observation, a later successful activation without an abend, or explicit inactive
+intent, including operator pause, clears a pending episode without clearing its
+failure evidence. No check runs or retries product work.
+
+Existing halts remain closed and keep their current notification-check progress.
+Healthy or inactive checks suppress an unalerted notification episode; explicit
+incident resumption also suppresses it. Existing delivery attempts and claims
+retain their recovery rules. An explicit `binding halt` still closes admission
+immediately; its notification retains the service-check gate.
 
 Configure the notification policy and inspect progress:
 
@@ -53,9 +62,13 @@ clockwork notification show INCIDENT_ID
 ```
 
 `notification check` advances due observations without sending mail or running
-product work. Notification show returns `health_check.threshold`, `count`,
-`last_checked_at`, `condition` and `eligible_at`, including progress below the
-threshold. A continuous eligible episode creates no repeated alerts. The
+product work. It can establish a new halt at the shared threshold. Its result
+retains policy and incident checks and adds a `failures` map keyed by binding
+for pending event and check progress. `notification show` selects an existing
+incident and returns `health_check.threshold`, `count`, `last_checked_at`,
+`condition` and `eligible_at`. Preexisting incidents can still have progress
+below their notification threshold. New pending episodes have no incident ID
+to pass to show. A continuous eligible episode creates no repeated alerts. The
 default checkout is `$HOME/rust/cell`; Iatreion must be installed at
 `$HOME/.local/bin/iatreion`. Policy changes do not resume schedules or retry work.
 
@@ -100,9 +113,11 @@ private state root. It contains the configured domain, activation time, saved
 incident reply routes, grace deadlines and optional EMT delivery UUIDs. It
 contains no diagnostic text, received mail or credential. The schema-two
 database remains unchanged. The separate private `notification-checks.json`
-sidecar retains policy, consecutive check progress and eligibility. Back up and
-recover both sidecars with the database; a database-only backup does not
-preserve delegated ownership or alert progress.
+sidecar retains policy and incident notification-check progress. The schema-one
+`failure-checks.json` sidecar retains the immutable abend ledger cursor and
+pending per-key episodes and check progress. Back up and recover all three
+sidecars with the database; a database-only backup does not preserve pending
+failures, delegated ownership or alert progress.
 
 The first notification inspection or sender visit snapshots an eligible
 incident's Reply-To. Its basic-send grace deadline is 120 seconds after the
@@ -132,8 +147,10 @@ There is no independent notification timer or final-delivery guarantee.
 
 Before enabling EMT, refresh all active generated plists to a Clockwork broker
 that understands this handoff. An older pinned broker ignores the routing
-sidecar. Do not run or restore old brokers with delegated ownership present.
-Preserve database, sidecar and EMT exchange state together during recovery;
+sidecar. Refresh every enabled pinned broker for the new failure-check contract.
+Do not run or restore an older broker while `failure-checks.json` exists or
+with delegated ownership present. Preserve database, all sidecars and EMT
+exchange state together during recovery;
 do not erase claims to force another send after uncertain acceptance.
 
 EMT's five-minute diagnosis deadline starts when the incident becomes eligible.
@@ -152,11 +169,13 @@ body, provider response body, credential, or product output. The routing
 sidecar uses private atomic replacement and directory sync. Existing routes,
 claims, and attempted headers remain fixed across policy changes.
 
-The schema-two database, version-one routing sidecar, check metadata, provider
-release, Email contract, and EMT contract are separate compatibility axes.
+The schema-two database, schema-one failure-check sidecar, version-one routing
+sidecar, notification-check metadata, provider release, Email contract, and EMT
+contract are separate compatibility axes.
 Refresh pinned brokers before relying on check eligibility or delegated
 ownership. Older brokers ignore that metadata. Back up and restore database,
-both sidecars, and EMT exchange evidence coherently. Losing a claim can duplicate
+all three sidecars, and EMT exchange evidence coherently. Losing a claim can
+duplicate
 an already accepted message. Do not erase sidecars to force a send.
 
 No independent timer, final delivery guarantee, service-check freshness

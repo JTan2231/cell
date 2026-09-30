@@ -19,7 +19,7 @@ product work, deployment, continuation, or mail.
 | `clockwork.definitions` | Strict immutable manifests, schedules, pinned launch images, literal context, identity, and artifact-verification limits. |
 | `clockwork.bindings` | Stable selection, generated LaunchAgents, disabling, cutover journals, compensation, and timer-delivery limits. |
 | `clockwork.activations` | Admission, overlap, one direct child, timeout, loss proof, process history, doctor, and read-only status evidence. |
-| `clockwork.incidents` | Product failure reports, policy exceptions, durable halts, deduplication, incident feed, and exact approval of future admission. |
+| `clockwork.incidents` | Product failure reports, pending episodes, delayed automatic halts, immediate explicit halts, incident feed, and exact approval of future admission. |
 | `clockwork.notifications` | Consecutive service checks, basic pause alerts, transport uncertainty, EMT routing, grace, and durable delivery ownership. |
 | `clockwork.installation` | Content releases, selectors, candidate-reader validation, coordinated broker refresh, retained state, migration, rollback, and detach. |
 
@@ -28,8 +28,8 @@ product work, deployment, continuation, or mail.
 Use `clockwork.schedule.operate` to register, select, disable, inspect, or run a
 product schedule; inspect incidents and explicitly approved continuation;
 operate retained alerts and optional EMT handoff; or migrate quiescent state.
-This broad entry retains its existing capability kind, stable ID, and contract
-version. Its manual owns procedure order and action-critical checkpoints; its
+This broad entry retains its capability kind and stable ID. Contract four
+includes the shared service-health delay before new automatic halts. Its manual owns procedure order and action-critical checkpoints; its
 required feature contracts supply the detailed explanations.
 
 Use `clockwork.install.operate` to install and verify program/provider bytes,
@@ -48,13 +48,16 @@ The broker resolves the binding only after the transition gate opens, then pins
 one definition at admission. Per-key overlap prevents another direct child.
 Process records describe execution; the product separately determines success.
 
-A schema-two abend applies the product's declared policy. The default retains
-an incident that closes future admission independently of enabled state and
-selected release. Only explicit approval of that incident clears the halt.
-Selection, disable, installation, and notification recovery never approve it.
+A schema-two abend applies the product's declared policy. The default records
+a pending failure episode and allows later activations before the shared
+service-health threshold. By default, five consecutive failed read-only checks, at least 60
+seconds apart, establish the halt and alert eligibility together. Healthy worker
+observations, later successful activations without an abend, and inactive intent
+clear pending episodes. An explicit halt remains immediate. Only exact user
+approval clears an established halt; selection, disable, installation and
+notification recovery never approve it.
 
-Pause alerts use shared read-only service checks before transport. Clockwork
-retains check progress and basic metadata; Iatreion owns observed facts. EMT can
+Clockwork retains check progress and basic metadata; Iatreion owns observed facts. EMT can
 claim initial notification after retaining its own email. Email owns credential
 loading and provider submission. Transport never controls the scheduling halt.
 

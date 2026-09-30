@@ -116,7 +116,10 @@ system services, and dual old-and-new schedules are unsupported.
 
 A changed definition requires explicit selection; it never rewrites history.
 Binding selection and enabled state remain independent of incidents and the
-installed program selector. Transitions preserve all open incidents. No
+installed program selector. Transitions preserve all open incidents. A pending
+failure episode does not set `halted_incident`; `binding show` retains its
+existing fields. Use `notification check` or the read-only status snapshot for
+pending failure evidence. No
 general retention horizon or migration window is promised.
 
 The typed `clockwork::api` client uses the same binding records as the CLI.

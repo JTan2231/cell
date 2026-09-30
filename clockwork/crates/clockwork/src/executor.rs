@@ -29,13 +29,18 @@ pub(crate) async fn run(
 ) -> Result<ActivationRecord> {
     // Alert transport stays reachable before the product's disabled/halted gate.
     if let Err(error) = crate::notification::send_pending(store, layout).await {
+        if error.code().starts_with("failure_checks_")
+            || error.code().starts_with("notification_checks_")
+        {
+            return Err(error);
+        }
         eprintln!(
             "clockwork: pause notification remains pending ({})",
             error.code()
         );
     }
     let outcome = run_inner(store, layout, key, trigger).await;
-    // Close future admission on a pre-admission or supervision failure without
+    // Retain a pre-admission or supervision failure for shared health checks without
     // inventing a terminal process result. Normal gate refusals are not abends.
     if let Err(error) = &outcome
         && !matches!(
@@ -45,14 +50,14 @@ pub(crate) async fn run(
         && let Ok(definition) = store.selected_definition(key)
         && definition.manifest.schema_version >= 2
         && definition.manifest.failure.on_abend == clockwork::api::AbendPolicy::HaltUntilApproved
-        && let Err(persist) = store.import_halt(
+        && let Err(persist) = store.record_broker_failure(
             key,
             error.code(),
-            &format!("broker/{}", uuid::Uuid::now_v7()),
+            &format!("broker/{}/{}", definition.digest, uuid::Uuid::now_v7()),
         )
     {
         eprintln!(
-            "clockwork: unable to persist broker halt ({})",
+            "clockwork: unable to persist broker failure ({})",
             persist.code()
         );
     }

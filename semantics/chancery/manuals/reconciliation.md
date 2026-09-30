@@ -114,8 +114,10 @@ correlations, and job decoders. Those feeds are not new-decision intake routes.
 Schema 3 permits document intake per project and origin fields to be absent;
 migration reinterprets no historical source or semantic revision.
 
-A new dependency or reconciliation error can halt the scheduled binding even
-if its job remains uncertain. A terminal failed or cancelled Nucleus job after
+A new dependency or reconciliation error ends the scheduled invocation even
+if its job remains uncertain. Clockwork delays a new scheduling halt until the
+shared service-health threshold; later activations retain the same correlation
+and domain retry rules. A terminal failed or cancelled Nucleus job after
 a semantic commit preserves that commit. `semantics.service` owns the product's
 scheduled failure rules. A scheduling continuation does not retry domain work.
 

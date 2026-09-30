@@ -10,7 +10,7 @@ General notes, named threads, plain external links, and generic reads require
 no external reader. Explicit application features need Cast read contract two
 for job search, first-job admission, email context, and deployment verification.
 A nonempty schema-one migration also needs Platter read contract one. Email contract four supplies submission; Clockwork contract
-three supplies activation. Clew runs no model requester.
+four supplies activation and the shared service-health delay before a new halt. Clew runs no model requester.
 
 Installation can select programs, initialize empty state, migrate legacy state,
 and change explicitly supplied schedule intent. It adds no ledger notes or application reports

@@ -3,6 +3,7 @@
 
 mod error;
 mod executor;
+mod failure_checks;
 mod launchd;
 mod lock;
 mod manifest;
@@ -442,7 +443,7 @@ async fn run(cli: Cli) -> Result<()> {
         },
         Command::Notification { command } => match command {
             NotificationCommand::Check => emit(
-                &notification::check_pending(&store, &layout).await?,
+                &notification::check_pending(&mut store, &layout).await?,
                 cli.json,
             ),
             NotificationCommand::Policy {

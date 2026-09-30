@@ -115,8 +115,9 @@ records; deleting one to retry delivery is unsupported.
    database and companion `.config.json`; existing destinations must match and
    are never overwritten. With no database, migration initializes paused state
    and reports `backup:null`.
-5. Preserve `quota-notifications/` and Clockwork's `notification-checks.json`,
-   routing metadata and incident database with their private backups. EMT
+5. Preserve `quota-notifications/` and Clockwork's `failure-checks.json`,
+   `notification-checks.json`, routing metadata and incident database with their
+   private backups. Do not run an older broker while the new sidecar exists. EMT
    backups do not restore Nucleus or Email records.
 6. Release only this operation's hold with `emt maintenance release OWNER`
    after verification. Recheck the captured operator intent and exact halt.

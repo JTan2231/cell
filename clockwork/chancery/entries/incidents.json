@@ -1,6 +1,6 @@
 {
   "id": "clockwork.incidents",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -16,7 +16,7 @@
   ],
   "outcome": "Retained immutable failure evidence and an exact open or explicitly resumed incident.",
   "effects": [
-    "Schema-two abends retain deduplicated evidence and enforce selected policy; omission opens one halt and pending alert.",
+    "Schema-two abends retain immutable deduplicated evidence. The default starts a pending per-key failure episode and allows later activations before the shared service-health threshold. At confirmation, a halt and alert eligibility are established together. Explicit binding halt remains immediate.",
     "Resume records approval for one exact incident and opens future admission without enabling a disabled binding or retrying work.",
     "Legacy halt import retains failure evidence and can create an inactive absent-key tombstone."
   ],
@@ -119,7 +119,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "At most one open incident per key; admission checks this with its insert. Terminal runtime failure and halt commit together. Reports commit before return and deduplicate forever within retained history. Switch, disable, compensation, restart, reinstall and rollback preserve halts. Resume clears only its exact incident."
+        "statement": "At most one open incident per key; admission checks this with its insert. Runtime failures and product reports retain immutable abend evidence before return. The default records a pending episode without creating an incident. By default, five consecutive failed read-only checks at least 60 seconds apart establish the halt and alert eligibility together. Healthy worker observations, later successful activations without an abend, and explicit inactive intent clear pending episodes. Explicit binding halt is immediate. Existing incidents, their notification-check progress and exact approval rules remain intact. Resume clears only its exact established halt."
       },
       {
         "status": "declared",
@@ -139,7 +139,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema-one definitions keep digest and legacy behavior after database migration; failure_policy_active exposes absence of schema-two enforcement until explicit selection. Incident, occurrence, provider release, manifest and store schema remain separate."
+        "statement": "Schema-one definitions keep digest and legacy behavior after database migration; failure_policy_active exposes absence of schema-two enforcement until explicit selection. Incident, occurrence, provider release, manifest and store schema remain separate. SQLite schema two remains unchanged. The schema-one failure-checks.json sidecar preserves a ledger cursor and pending episodes. Existing incidents retain their halt, notification progress and exact approval rules; older brokers must not run while the new sidecar exists."
       },
       {
         "status": "unspecified",

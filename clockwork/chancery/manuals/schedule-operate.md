@@ -23,8 +23,10 @@ prerequisites, consequential effects, stop conditions, and verification.
    private distinct output files, and an interval or local daily trigger.
    Keep group and other write permission absent. Do not supply a mutable
    selector, shell string, inherited environment, or secret.
-3. Declare schema-two failure policy. Omission halts until explicit approval;
-   `continue-next-activation` must be an intentional product exception. Keep
+3. Declare schema-two failure policy. Omission selects the shared service-health
+   delay before a halt that requires explicit approval. The first abnormal attempt
+   still ends its current run. `continue-next-activation` must be an intentional
+   product exception. Keep
    product maintenance engaged throughout selection and rollback.
 4. Register the candidate:
 
@@ -128,6 +130,14 @@ inspection. No check proves the next timer delivery.
 
 ## Inspect a halt and approve continuation
 
+New schema-two failures start pending episodes. Later scheduled activations
+remain admissible until the shared threshold confirms sustained service failure.
+By default, five consecutive failed read-only checks, at least 60 seconds apart,
+establish the halt and alert eligibility together. Healthy worker observations,
+later successful activations without an abend, and inactive intent clear pending
+episodes. Existing halts retain their exact approval rule. Read
+`clockwork.incidents` for the full boundary.
+
 1. Inspect the exact retained incident and product failure evidence:
 
    ```sh
@@ -146,8 +156,9 @@ inspection. No check proves the next timer delivery.
    clockwork binding halt owner/name --code legacy_failure --occurrence legacy/ID
    ```
 
-   Verify the durable incident before removing only the old failure-owned
-   scheduling gate. Keep its evidence and all other pauses.
+   This explicit halt is immediate and bypasses the new-failure delay. Verify
+   the durable incident before removing only the old failure-owned scheduling gate.
+   Keep its evidence and all other pauses.
 4. Obtain explicit user approval for the exact open incident. Confirm no active
    activation or pending binding transition, then run:
 
@@ -178,9 +189,10 @@ as scheduling continuation.
    ```
 
    Check does not send mail or run product work. Show can save the incident's
-   Reply-To metadata. Basic alerts and EMT diagnosis share eligibility; unknown
-   health counts as failed, while healthy or explicit inactive intent resets
-   progress. The scheduling halt remains immediate.
+   Reply-To metadata. New halts, basic alerts and EMT diagnosis share the
+   threshold. Unknown health counts as failed; healthy or explicit inactive
+   intent clears pending failure progress. Check can establish a halt at the
+   threshold. Existing halts and notification attempts retain their recovery rules.
 2. Attempt one due basic notification when needed:
 
    ```sh
@@ -227,12 +239,14 @@ as scheduling continuation.
    claim, use EMT evidence for acceptance and its recovery procedure.
 6. Disable new preference with `clockwork notification emt --disable` when
    intended. This preserves saved routes and non-expiring claims. Preserve
-   database, both notification sidecars, and EMT correspondence together.
+   database, `failure-checks.json`, both notification sidecars, and EMT
+   correspondence together.
 
 Stop on uncertain acceptance, missing retained EMT email, incompatible pinned
 brokers, or lost ownership evidence. Do not erase a claim, restore an older
-broker that ignores it, approve unrelated mail, or infer mail success from
-product runtime state.
+broker that ignores it or run an older broker while `failure-checks.json`
+exists. Do not approve unrelated mail or infer mail success from product
+runtime state.
 
 ## Migrate schema-one state explicitly
 

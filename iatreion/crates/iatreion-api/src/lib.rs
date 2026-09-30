@@ -144,11 +144,16 @@ pub struct StatusSnapshot {
 }
 
 /// Clockwork-owned facts that Iatreion can join to a declared scheduled unit.
+/// These flags describe independent facts that can coexist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct SchedulerObservation {
     pub key: String,
     pub enabled: bool,
     pub failure_halted: bool,
+    /// A retained failure episode is being checked while scheduling stays open.
+    #[serde(default)]
+    pub failure_pending: bool,
     pub recorded_running: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub incident_id: Option<String>,
@@ -456,6 +461,15 @@ mod tests {
         let snapshot = static_snapshot("annals", "1.0.0", vec![unit]);
         assert_eq!(snapshot.units[0].admission.reasons.len(), 2);
         assert_eq!(validate_snapshot(&snapshot), Ok(()));
+    }
+
+    #[test]
+    fn reads_scheduler_observations_from_before_pending_failure_support() {
+        let observation: SchedulerObservation = serde_json::from_str(
+            r#"{"key":"sample/worker","enabled":true,"failure_halted":false,"recorded_running":false}"#,
+        )
+        .unwrap();
+        assert!(!observation.failure_pending);
     }
 
     #[test]

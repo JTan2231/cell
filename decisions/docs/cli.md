@@ -81,11 +81,14 @@ A conversation read failure (`document_source_unavailable`), including a timeout
 or protocol error, returns zero after its failed observation is saved. The next
 scheduled run can process other work. Other observation failures return nonzero
 with `observation_processing_failed`. Errors that prevent a durable outcome also
-return nonzero. These errors cause the configured Clockwork schedule to halt.
+return nonzero. These errors begin a pending Clockwork failure episode. The
+shared service-health threshold delays a new scheduling halt; later activations
+remain admissible before that threshold. Read the
+[scheduled failure policy](../chancery/manuals/decision-capture.md#scheduled-failure-policy).
 
 Failed deliveries retain the exact pending document and target. Their observations
 remain failed until explicit retry. Other observations and deliveries wait for
-explicit Clockwork continuation when a scheduling incident is active.
+explicit Clockwork continuation after a scheduling halt is established.
 Repeated hooks and reconciliation never requeue a failed observation.
 
 `krisis observe status [--date YYYY-MM-DD]` reports baseline, queue states,

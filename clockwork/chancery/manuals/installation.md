@@ -173,11 +173,18 @@ absolute checkout. Active pinned brokers must understand check eligibility
 and EMT handoff; stable CLI replacement alone does not refresh them. Additive
 incident feed and routing metadata leave SQLite schema two unchanged.
 
-`notification-checks.json`, `notification-routing.json`, the incident database,
-and EMT correspondence must be backed up and restored together. Older brokers
-ignore check or claim metadata; restoring them with delegated ownership can
-duplicate accepted mail. Removing sidecars to force another alert is unsupported.
-Notification configuration does not resume schedules or retry product work.
+`failure-checks.json`, `notification-checks.json`, `notification-routing.json`,
+the incident database, and EMT correspondence must be backed up and restored
+together. The schema-one failure-check sidecar retains the immutable abend ledger
+cursor and pending per-key episodes; SQLite remains schema two. Refresh every
+enabled pinned broker before relying on the new delay. An older broker must not
+run while this sidecar exists. Existing incidents remain halted and preserve
+their current notification-check progress, delivery attempts and approval rules.
+
+Older brokers ignore check or claim metadata; restoring them with delegated
+ownership can duplicate accepted mail. Removing sidecars to bypass a pending
+episode or force another alert is unsupported. Notification configuration does
+not resume schedules or retry product work.
 
 Current-user LaunchAgents require a GUI login domain. Clockwork provides no
 future timer-delivery or product-readiness promise. Program version, provider

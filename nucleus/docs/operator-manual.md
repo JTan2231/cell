@@ -116,8 +116,15 @@ logs, and domain recovery. A process exit does not establish product success.
 Products report a failed scheduled operation even when its domain result was
 already committed; the commit remains valid.
 
-Schema-two definitions default to `halt-until-approved`. Clockwork durably
-blocks that binding and queues one metadata-only failure alert through Email.
+Schema-two definitions default to `halt-until-approved`. The first abnormal
+scheduled attempt ends its current run. Clockwork retains a pending failure
+episode and permits later activations while the shared service-health gate
+checks for sustained failure. By default, five consecutive failed read-only
+checks, at least 60 seconds apart, halt that binding and make its metadata-only
+alert eligible together. These are health observations, not five product attempts.
+A healthy check or explicit inactive intent, including operator pause, clears
+a pending episode. Recovery after an established halt still requires approval.
+
 Products may explicitly configure `continue-next-activation`. Empty queues,
 deployment holds and declared readiness waits are expected product outcomes;
 they do not become failures solely because no work was performed.
@@ -138,6 +145,8 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
 | `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip deliberate deployment holds. |
+| `clew/daily-email` | Preserve complete application snapshots and frozen messages; require explicit recovery of uncertain submission. |
+| `emt/worker` | Treat ordinary dependency unavailability as waiting; retain exchange identities and use the basic path for its own halt. |
 
 Before migrating Clockwork runtime state, capture and disable existing bindings,
 settle activations, and use its explicit backup-bearing migration. Old schema-one
@@ -165,21 +174,23 @@ sandbox restrictions and approval prompts are disabled. Operating-system
 permissions still apply. Deploy accepting Nucleus support before EMT emits
 the new policy. Retained requests keep their original policy.
 
-Clockwork gates basic alerts and EMT diagnosis on five consecutive failed
-read-only service checks, at least 60 seconds apart by default. It reads a
+Clockwork gates new scheduling halts, basic alerts and EMT diagnosis on the
+same consecutive failed read-only service checks. It reads a
 bounded report from installed Iatreion. Healthy checks reset progress; explicit
 inactive intent or operator pause excludes the service and resets progress.
 Unknown health counts as failed with an explicit unknown condition. Historical
 domain outcomes do not trigger this gate. Configure the threshold, interval and
-stable Cell root with `clockwork notification policy`. Inspect progress with
-`clockwork notification show INCIDENT_ID`, or advance due checks without mail
-or product work with `clockwork notification check`.
+stable Cell root with `clockwork notification policy`. Inspect pending episodes
+and advance due checks with `clockwork notification check`, without mail or
+product work. Inspect confirmed incident notification progress with
+`clockwork notification show INCIDENT_ID`.
 
 Existing broker visits and the EMT worker advance checks. No independent
-daemon is added. The scheduling halt remains immediate and no check retries
-product work. Repeated failed checks in the same alert episode create no new
-alert. A resumed incident suppresses an unalerted episode; existing attempts
-and claims retain their delivery recovery rules.
+daemon is added. A check can establish the halt at the threshold, but it does
+not run or retry product work. Repeated failed checks in the same episode
+create no new alert. A healthy or inactive observation clears a pending episode;
+a resumed incident suppresses an unalerted episode. Existing halts, attempts
+and claims retain their approval and delivery recovery rules.
 
 EMT's five-minute diagnosis deadline starts at alert eligibility. Clockwork's
 optional EMT preference then defers a basic alert for 120 seconds.
@@ -189,10 +200,13 @@ the halt; EMT owns the delegated send outcome. A basic alert can precede a
 late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
 
 Refresh every active pinned Clockwork broker before enabling EMT preference.
-Keep Clockwork's `notification-routing.json` and `notification-checks.json`
-with its incident database during backup and recovery. Older brokers ignore
-claims and check eligibility. Read the
-Clockwork and EMT installed contracts before cutover or rollback.
+Keep Clockwork's `failure-checks.json`, `notification-routing.json` and
+`notification-checks.json` with its incident database during backup and recovery.
+Refresh every enabled pinned broker to the new failure-check contract. Older
+brokers do not understand pending failure episodes and must not run while the
+new sidecar exists. Preserve that state during recovery; do not roll back to an
+older broker or discard it to bypass a pending episode. Read the Clockwork and
+EMT installed contracts before cutover or rollback.
 
 Hold and drain EMT before holding Nucleus during coordinated deployment.
 Already admitted exchanges retain their job and email identities; installers

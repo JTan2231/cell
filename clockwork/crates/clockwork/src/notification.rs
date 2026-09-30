@@ -31,10 +31,13 @@ pub(crate) async fn send_selected(
         return Ok(0);
     };
     let now = now_unix()?;
+    let mut checks = observe_failures(store, layout, now).await?;
     store.connection.execute(
         "UPDATE incidents SET notification_status='uncertain' WHERE notification_status='pending' AND first_attempt_at IS NOT NULL AND (first_attempt_at > ?1 OR ?1 - first_attempt_at >= ?2)",
         params![now, DEDUP_WINDOW],
     ).context("database_write_failed", "retain notifications outside the deduplication window")?;
+    let mut routing = Routing::load(layout)?;
+    observe_checks(store, layout, &mut routing, &mut checks, now).await?;
     let candidates: Vec<(String, String, i64)> = {
         let mut query = store.connection.prepare(
             "SELECT id,email_cli,notification_generation FROM incidents WHERE notification_status='pending' AND (?2 IS NULL OR id = ?2) AND (last_attempt_at IS NULL OR last_attempt_at <= ?1) ORDER BY created_at,id",
@@ -47,8 +50,6 @@ pub(crate) async fn send_selected(
             .collect::<std::result::Result<Vec<_>, _>>()
             .context("database_read_failed", "decode pending notifications")?
     };
-    let mut routing = Routing::load(layout)?;
-    let checks = observe_checks(store, layout, &mut routing, now).await?;
     let mut pending = None;
     for (id, executable, generation) in candidates {
         let incident = store.incident(&id)?;
@@ -109,12 +110,26 @@ pub(crate) async fn send_selected(
     Ok(1)
 }
 
+async fn observe_failures(store: &mut Store, layout: &Layout, now: i64) -> Result<Checks> {
+    let mut checks = Checks::load(layout)?;
+    let mut failures = crate::failure_checks::FailureChecks::load(layout)?;
+    failures
+        .observe(store, layout, &mut checks, now)
+        .await
+        .context(
+            "failure_checks_observation_failed",
+            "observe scheduling failure checks",
+        )?;
+    Ok(checks)
+}
+
 async fn observe_checks(
-    store: &Store,
+    store: &mut Store,
     layout: &Layout,
     routing: &mut Routing,
+    checks: &mut Checks,
     now: i64,
-) -> Result<Checks> {
+) -> Result<()> {
     let incidents = {
         let mut query = store.connection.prepare("SELECT id FROM incidents WHERE notification_status='pending' AND first_attempt_at IS NULL AND notification_generation=0")
             .context("database_read_failed", "prepare unchecked notifications")?;
@@ -135,19 +150,24 @@ async fn observe_checks(
         }
         incidents
     };
-    let mut checks = Checks::load(layout)?;
     checks.observe(store, layout, &incidents, now).await?;
-    Ok(checks)
+    Ok(())
 }
 
-pub(crate) async fn check_pending(store: &Store, layout: &Layout) -> Result<serde_json::Value> {
+pub(crate) async fn check_pending(store: &mut Store, layout: &Layout) -> Result<serde_json::Value> {
     let Some(_lock) = KeyLock::try_acquire_notifications(layout)? else {
         return Ok(serde_json::json!({"busy":true}));
     };
+    let now = now_unix()?;
+    let mut checks = observe_failures(store, layout, now).await?;
     let mut routing = Routing::load(layout)?;
-    let checks = observe_checks(store, layout, &mut routing, now_unix()?).await?;
-    serde_json::to_value(checks)
-        .context("notification_checks_invalid", "encode notification checks")
+    observe_checks(store, layout, &mut routing, &mut checks, now).await?;
+    let mut report = serde_json::to_value(checks)
+        .context("notification_checks_invalid", "encode notification checks")?;
+    report["failures"] =
+        serde_json::to_value(crate::failure_checks::FailureChecks::load(layout)?.pending)
+            .context("failure_checks_invalid", "encode pending failure checks")?;
+    Ok(report)
 }
 
 pub(crate) fn policy(

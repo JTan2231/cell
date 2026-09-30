@@ -1,6 +1,6 @@
 {
   "id": "conatus.service",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -73,8 +73,8 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "promise": {
@@ -137,7 +137,7 @@
       },
       {
         "status": "declared",
-        "statement": "Both schema-two bindings halt on abend until explicitly approved in Clockwork. Product pause, Annals pause, incidents and email uncertainty remain independent. Deliberate scheduled admission during maintenance is a successful skip."
+        "statement": "An abend ends the current run for either schema-two binding. Clockwork permits later activations before its shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending episode. An established halt requires exact approval. Product pause, Annals pause, incidents and email uncertainty remain independent. Deliberate scheduled admission during maintenance is a successful skip."
       },
       {
         "status": "declared",

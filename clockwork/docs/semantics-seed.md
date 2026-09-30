@@ -46,7 +46,7 @@ does not maintain a second operating contract.
 : The direct child's stdout or stderr bytes appended to distinct exact product-selected private files. Clockwork validates and opens those destinations but never ingests their bodies or owns their meaning or retention.
 
 **Failure policy**
-: The registering product's immutable response to a runtime or reported domain abend: halt-until-approved by default, or an explicit continue-next-activation exception. Clockwork enforces the scheduling response without deciding product success.
+: The registering product's immutable response to a runtime or reported domain abend: halt-until-approved after the shared service-health threshold by default, or an explicit continue-next-activation exception. A first abend records a pending episode while later activations remain admissible; confirmed failure establishes a halt and alert eligibility together. Clockwork enforces the scheduling response without deciding product success.
 
 **Scheduling halt**
 : An open Clockwork incident that prevents future activation admission for one stable binding independently of enabled state, selected release, maintenance, or installation. Only approval naming the exact incident clears it.

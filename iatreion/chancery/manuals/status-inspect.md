@@ -22,6 +22,14 @@ and failure halt together. Evidence keeps runtime outcome, domain outcome, and
 latest domain success separate. A process exit never establishes product domain
 success.
 
+Clockwork can retain a failure episode while scheduling stays open for service
+checks. The `failure_pending` reason exposes that episode without a scheduling
+halt or a change to product readiness. Current service health comes from
+independent readiness, activity, and runtime evidence. The join preserves
+product-owned running or stopped activity and the newest runtime outcome.
+Clockwork runtime evidence takes precedence when event times match. Domain
+evidence remains product-owned.
+
 Iatreion derives four display groups. A known failure or blocked prerequisite
 needs attention. Proven retired, disabled, operator-paused, or maintenance-held
 work is intentionally inactive unless a simultaneous failure needs attention.

@@ -124,7 +124,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork activates the installed runner and enforces scheduling failure halts.",
+        "statement": "Clockwork activates the installed runner and enforces its shared service-health threshold before new scheduling failure halts.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
@@ -149,8 +149,8 @@
     },
     {
       "id": "clew.digest.email",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "cast.discovery.explore",
@@ -169,8 +169,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "use_when": [

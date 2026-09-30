@@ -49,11 +49,26 @@ Evidence counts name their records, units, and scope. Runtime outcome, domain
 outcome, and latest domain success remain separate. Observation time says when
 the source was read. Event time says when an outcome occurred.
 
+Clockwork can report a pending failure episode before it halts scheduling.
+Iatreion adds the `failure_pending` admission reason without closing admission
+or changing product readiness. The episode needs attention but does not itself
+prove that current service health is unhealthy. Service checks use independent
+readiness, activity, and runtime evidence.
+
+The scheduler join preserves product-owned running or stopped activity when
+Clockwork records no running activation. A recorded Clockwork activation proves
+running activity. The join retains the newer product or scheduler runtime
+outcome and leaves domain evidence unchanged. Clockwork runtime evidence takes
+precedence when both outcomes have the same whole-second event time.
+
 The human groups are derived presentation. A known failure or blocked
 prerequisite needs attention. Proven retired, disabled, operator-paused, or
 maintenance-held work is intentionally inactive unless a simultaneous failure
 still needs attention. Missing required evidence is unknown. Locally ready and
 admitted active or on-demand work is operating; activity remains visible.
+
+Schema-one scheduler observations include the additive `failure_pending`
+boolean. Its default is false when older observations omit it.
 
 ## Effects and privacy
 

@@ -1,6 +1,6 @@
 {
   "id": "conatus.digest.email",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -25,7 +25,7 @@
   ],
   "failure_and_recovery": [
     "Unavailable supporting context leaves the complete active wants list with a footer. Local read failure stops the send.",
-    "An attempted occurrence without an acceptance receipt requires provider inspection before explicit retry within 23 hours, using unchanged bytes and key. Scheduled failures halt until explicitly approved in Clockwork."
+    "An attempted occurrence without an acceptance receipt requires provider inspection before explicit retry within 23 hours, using unchanged bytes and key. A scheduled failure ends the current send; Clockwork permits later activations before its shared service-health threshold establishes a halt. Healthy or inactive checks clear a pending episode. An established halt requires exact approval."
   ],
   "privacy": [
     "Exact wants, selected quotations and their capture dates leave the machine through Email. Retrying an older frozen message also discloses any source fields and capture timestamps in its retained bytes. Conatus retains frozen messages privately."
@@ -66,13 +66,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "conatus.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -163,7 +163,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork activates the daily runner and owns failure halts.",
+        "statement": "Clockwork activates the daily runner and delays new failure halts until its shared service-health threshold; product send uncertainty and explicit retry remain separate.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

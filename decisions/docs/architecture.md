@@ -61,8 +61,9 @@ Failed observations and their pending documents are excluded from automatic work
 A later explicit retry preserves failure history and existing request or document
 identity. A saved conversation read failure (`document_source_unavailable`)
 returns zero so later scheduled work can proceed. Other new observation failures
-end the worker nonzero and halt its Clockwork schedule. Historical failure counts
-create no new incident.
+end the current worker nonzero. Clockwork delays a new scheduling halt until its
+shared service-health threshold; later activations retain the same explicit retry
+rules. Historical failure counts create no new incident.
 `health` reads durable worker timing and current lock ownership; it does not use
 the failed-observation count. See [CLI](cli.md#worker-health) for state meanings.
 

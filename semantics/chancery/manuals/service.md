@@ -26,7 +26,7 @@ requires no Conversations lookup. Historical jobs retain their original routing
 and recovery contracts, including Conversations contract 4 where required.
 
 Annals exchange 2, Nucleus execution 3 and all Semantics doctor capabilities,
-Clockwork schedule 3, and the selected Bazaar prompt set are prerequisites for
+Clockwork schedule 4, and the selected Bazaar prompt set are prerequisites for
 their respective work. Chancery owns publication and discovery; Semantics does
 not invoke its catalog at runtime. Installation remains distinct from project
 registration, domain reconciliation, and live readiness.
@@ -101,8 +101,12 @@ Clockwork activation context through its otherwise scrubbed environment; it does
 not poll historical completed jobs. Reports contain bounded product failure
 codes and opaque identities, with no source text or raw runtime diagnostics.
 
-Clockwork retains the durable halt, future admission, and one notification through
-Email. Only explicit approval and `clockwork binding resume semantics/worker
+The abnormal attempt ends its current invocation. Clockwork permits later
+scheduled activations before the shared service-health threshold. By default,
+five consecutive failed read-only checks, at least 60 seconds apart, halt the
+binding and make its alert eligible together. Healthy or inactive checks clear
+a pending episode. Checks do not retry reconciliation or replace an uncertain
+Nucleus job. Clockwork owns the resulting halt and notification through Email. Only explicit approval and `clockwork binding resume semantics/worker
 INCIDENT_ID` release that incident halt. Deployment, definition switches, project
 resume, and intake retry preserve it. Resume of scheduling creates no domain
 retry and cannot authorize a new request while the prior job remains uncertain.

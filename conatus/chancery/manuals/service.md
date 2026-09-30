@@ -69,8 +69,11 @@ start delay, catch-up guarantee or domain completion time is promised.
 Both definitions select `[failure] on_abend = "halt-until-approved"`.
 On the first feed, handoff or inbox error, update preserves completed results,
 retains its report and returns nonzero. Annals dispatch stops at its first failed
-source. Clockwork owns the durable scheduling halt and one retained email
-notification through `HOME/.local/bin/email`.
+source. Clockwork retains a pending failure episode and permits later scheduled
+activations before the shared service-health threshold. By default, five
+consecutive failed read-only checks, at least 60 seconds apart, halt the affected
+binding and make its alert eligible together. Healthy or inactive checks clear
+a pending episode. Checks do not retry failed sources or uncertain email.
 
 Only explicit `clockwork binding resume KEY INCIDENT_ID` releases the incident.
 A definition switch, deployment, Conatus resume or Annals recovery cannot clear
