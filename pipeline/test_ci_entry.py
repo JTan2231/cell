@@ -322,6 +322,135 @@ class CancelledValidationRecoveryTests(unittest.TestCase):
         self.assertEqual(self.store.job(self.job["id"])["phase"], "blocked")
 
 
+class WorkerDeploymentTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="cell-ci-deployment-test-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.store = Store(self.root / "state", create=True)
+        self.addCleanup(self.store.db.close)
+        self.store.set("paused", False)
+        self.job = {
+            "id": "fixture-job", "phase": "deploying", "cancel_requested": False,
+            "candidate_commit": "b" * 40, "accepted": True,
+            "policy": {"luna_attempts": 3, "terra_attempts": 1}, "attempts": [],
+            "deployment_request": {"request_id": "ci:fixture-job:deployment:1",
+                                   "source_commit": "b" * 40, "products": ["clew"]},
+        }
+        self.store.db.execute(
+            "INSERT INTO jobs(id,submission_key,phase,created,updated,data) VALUES (?,?,?,0,0,?)",
+            (self.job["id"], "fixture", "deploying", json.dumps(self.job)),
+        )
+        self.worker = Worker.__new__(Worker)
+        self.worker.store, self.worker.root = self.store, self.store.root
+        self.absent = {"schema": 1, "request_id": self.job["deployment_request"]["request_id"],
+                       "state": "not_found", "operation_state": "not_found", "exit_code": 0}
+        self.stopped = {"schema": 1, "state": "stopped", "exit_code": 1,
+                        "detail": "clew cannot use the committed clockwork candidate; required interface contracts are unavailable"}
+        self.worker.deployment_read = mock.Mock(side_effect=[self.absent, self.absent])
+        self.worker.process = mock.Mock(return_value=({"exit_code": 1}, json.dumps(self.stopped).encode(), b""))
+
+    def test_stopped_start_with_absent_operation_finishes_once_and_retains_cause(self):
+        request = self.job["deployment_request"].copy()
+        self.worker.deploying(self.job)
+        self.assertEqual(self.job["phase"], "notifying")
+        self.assertEqual(self.job["outcome"], "failed")
+        self.assertFalse(self.job["unresolved"])
+        self.assertTrue(self.store.get("paused"))
+        self.assertEqual(self.job["deployment_request"], request)
+        self.assertEqual(self.job["deployment_result"], self.stopped)
+        self.assertEqual(json.loads((self.worker.directory(self.job) / "deployment.json").read_text()), self.stopped)
+        self.assertIn(self.stopped["detail"], self.job["notification"]["body"])
+        with mock.patch("ci_manager.manager.send_email", return_value={"accepted": True}):
+            self.worker.notifying(self.job)
+            self.worker.notifying(self.job)
+        self.assertEqual(self.store.job(self.job["id"])["phase"], "failed")
+        self.assertIsNone(self.store.active())
+        self.worker.process.assert_called_once()
+        self.assertEqual(self.worker.deployment_read.call_args_list, [mock.call(self.job, "status")] * 2)
+
+    def test_stopped_reply_preserves_admitted_operation_reconciliation(self):
+        request = self.job["deployment_request"]
+        interrupted = {**self.absent, "state": "interrupted", "operation_state": "needs_reconciliation"}
+        terminal = {"schema": 1, "request_id": request["request_id"], "source_commit": request["source_commit"],
+                    "operation_state": "terminal", "state": "succeeded", "maintenance": {"state": "released"}}
+        self.worker.deployment_read.side_effect = [self.absent, interrupted, interrupted]
+        self.worker.process.side_effect = [
+            ({"exit_code": 1}, json.dumps(self.stopped).encode(), b""),
+            ({"exit_code": 0}, json.dumps(terminal).encode(), b""),
+        ]
+        self.worker.deploying(self.job)
+        self.assertEqual(self.job["phase"], "deploying")
+        self.assertNotIn("outcome", self.job)
+        self.worker.deploying(self.job)
+        self.assertEqual(self.job["outcome"], "succeeded")
+        self.assertTrue(self.job["installation_verified"])
+        self.assertEqual(self.worker.process.call_args_list[0].args[2][2], "start")
+        self.assertEqual(self.worker.process.call_args_list[1].args[2][2], "reconcile")
+
+    def test_lost_stdout_consults_retained_terminal_operation_without_restart(self):
+        request = self.job["deployment_request"]
+        terminal = {"schema": 1, "request_id": request["request_id"], "source_commit": request["source_commit"],
+                    "operation_state": "terminal", "state": "succeeded", "maintenance": {"state": "released"}}
+        self.worker.deployment_read.side_effect = [self.absent, terminal]
+        self.worker.process.return_value = ({"exit_code": 1}, b"", b"lost reply")
+        self.worker.deploying(self.job)
+        self.assertEqual(self.job["phase"], "deploying")
+        self.assertNotIn("deployment_result", self.job)
+        self.worker.deploying(self.job)
+        self.assertEqual(self.job["outcome"], "succeeded")
+        self.worker.process.assert_called_once()
+
+    def test_unproved_stopped_reply_does_not_claim_absent_admission(self):
+        for child, result in (({"exit_code": 0}, self.stopped),
+                              ({"exit_code": 1}, self.stopped | {"schema": 2}),
+                              ({"exit_code": 1}, self.stopped | {"schema": True}),
+                              ({"exit_code": 1}, self.stopped | {"exit_code": 2}),
+                              ({"exit_code": 1}, self.stopped | {"exit_code": True}),
+                              ({"exit_code": 1}, self.stopped | {"operation_state": "active"})):
+            with self.subTest(child=child, result=result):
+                self.worker.deployment_read.reset_mock(side_effect=True)
+                self.worker.deployment_read.return_value = self.absent
+                self.worker.process.return_value = (child, json.dumps(result).encode(), b"")
+                self.worker.deploying(self.job)
+                self.assertEqual(self.job["phase"], "deploying")
+                self.assertNotIn("deployment_result", self.job)
+                self.worker.deployment_read.assert_called_once_with(self.job, "status")
+
+    def test_unrelated_status_or_receipt_cannot_establish_pre_admission_failure(self):
+        for status, receipt in ((self.absent | {"request_id": "other-request"}, self.stopped),
+                                (self.absent | {"schema": 2}, self.stopped),
+                                (self.absent | {"schema": True}, self.stopped),
+                                (self.absent, self.stopped | {"request_id": "other-request"}),
+                                (self.absent, self.stopped | {"source_commit": "c" * 40})):
+            with self.subTest(status=status, receipt=receipt):
+                self.worker.deployment_read.side_effect = [self.absent, status]
+                self.worker.process.return_value = ({"exit_code": 1}, json.dumps(receipt).encode(), b"")
+                with self.assertRaisesRegex(ManagerError, "does not match the requested operation"):
+                    self.worker.deploying(self.job)
+                self.assertEqual(self.job["phase"], "deploying")
+                self.assertNotIn("deployment_result", self.job)
+
+    def test_contradictory_absence_receipt_cannot_establish_pre_admission_failure(self):
+        for changed in ({"state": "stopped"}, {"exit_code": 1}, {"exit_code": False}, {"exit_code": None}):
+            with self.subTest(changed=changed):
+                self.worker.deployment_read.side_effect = [self.absent, self.absent | changed]
+                with self.assertRaisesRegex(ManagerError, "did not establish an absent operation"):
+                    self.worker.deploying(self.job)
+                self.assertEqual(self.job["phase"], "deploying")
+                self.assertNotIn("deployment_result", self.job)
+
+    def test_nonzero_status_exit_cannot_establish_absence_but_retains_terminal_failure(self):
+        with mock.patch("ci_manager.manager.subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 1, json.dumps(self.absent).encode(), b"")):
+            with self.assertRaisesRegex(ManagerError, "did not establish an absent operation"):
+                Worker.deployment_read(self.worker, self.job, "status")
+        terminal = {**self.absent, "state": "stopped", "operation_state": "terminal", "exit_code": 1}
+        with mock.patch("ci_manager.manager.subprocess.run", return_value=subprocess.CompletedProcess(
+                [], 1, json.dumps(terminal).encode(), b"")):
+            self.assertEqual(Worker.deployment_read(self.worker, self.job, "status"), terminal)
+
+
 class WorkerValidationTests(unittest.TestCase):
     def test_validation_calls_internal_runner_with_fixed_base_after_repair(self):
         with tempfile.TemporaryDirectory(prefix="cell-ci-worker-test-") as temporary:

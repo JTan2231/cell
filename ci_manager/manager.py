@@ -333,9 +333,12 @@ class Worker:
                                 capture_output=True, timeout=120,
                                 env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
         try:
-            return json.loads(result.stdout)
+            receipt = json.loads(result.stdout)
         except (ValueError, UnicodeError) as exception:
             raise ManagerError(f"deployment {action} has no machine receipt: {result.stderr.decode('utf-8', 'replace')[-1024:]}") from exception
+        if receipt.get("operation_state") == "not_found" and result.returncode != 0:
+            raise ManagerError(f"deployment {action} did not establish an absent operation")
+        return receipt
 
     def deploying(self, job: dict) -> None:
         request = job["deployment_request"]
@@ -369,7 +372,7 @@ class Worker:
                 name = f"deployment-{ordinal}"
             job["deployment_observations"] = ordinal
             self.save(job)
-            _, output, _ = self.process(job, name, self.deployment_command(job, action), self.worktree(job))
+            child, output, _ = self.process(job, name, self.deployment_command(job, action), self.worktree(job))
             try:
                 result = json.loads(output)
             except (ValueError, UnicodeError) as exception:
@@ -378,6 +381,27 @@ class Worker:
                 self.save(job)
                 return
             if result.get("operation_state") != "terminal":
+                if (action == "start" and type(child.get("exit_code")) is int and child["exit_code"] != 0
+                        and type(result.get("schema")) is int and result["schema"] == 1
+                        and result.get("state") == "stopped" and type(result.get("exit_code")) is int
+                        and result["exit_code"] == child["exit_code"] and "operation_state" not in result):
+                    # A stopped invocation can precede admission. Prove that
+                    # the same operation is still absent before stopping CI.
+                    observed = self.deployment_read(job, "status")
+                    if (type(observed.get("schema")) is not int or observed["schema"] != 1
+                            or observed.get("request_id") != request["request_id"]):
+                        raise ManagerError("deployment status does not match the requested operation")
+                    if (result.get("request_id", request["request_id"]) != request["request_id"]
+                            or result.get("source_commit", request["source_commit"]) != request["source_commit"]):
+                        raise ManagerError("deployment receipt does not match the requested operation")
+                    if observed.get("operation_state") == "not_found":
+                        if (observed.get("state") != "not_found" or type(observed.get("exit_code")) is not int
+                                or observed["exit_code"] != 0):
+                            raise ManagerError("deployment status did not establish an absent operation")
+                        atomic_json(self.directory(job) / "deployment.json", result)
+                        job["deployment_result"] = result
+                        self.finish(job, "failed", "Deployment stopped before admission.")
+                        return
                 job["deployment_observations"] = ordinal + 1
                 self.save(job)
                 return
