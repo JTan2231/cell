@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and verify Clew",
-  "summary": "Install and verify Clew under email admission maintenance, migrate legacy application references to Cast jobs with a private backup, and preserve the daily email schedule.",
+  "summary": "Install and verify Clew under email admission maintenance, convert supported older ledgers to generic entries with a private backup, and preserve application history and daily email scheduling.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -55,13 +55,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The selected immutable release contains clew, clew-install and the matching Chancery provider. Coordinated configure initializes empty schema-two state or migrates schema one with a private consistent backup and exact legacy aliases."
+        "statement": "The selected immutable release contains clew, clew-install, and the matching Chancery provider. Coordinated configure initializes empty schema-three state or converts schema one or two with a private consistent backup and retained exact retry requests and legacy aliases."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no application reports or supplied statuses. Migration preserves original rows, write IDs, timestamps, sequence, corrections and retractions; Platter supplies only the exact legacy-reference-to-Cast-ID mapping."
+        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no new entries, statuses, or threads. Migration preserves entry IDs, times, sequence, text, corrections, retractions, and original write namespace. Existing jobs receive explicit application-report associations in the external reference model. Platter supplies only schema-one legacy-to-Cast mappings; schema-two conversion is local."
       }
     ],
     "identity_and_units": [
@@ -85,32 +85,32 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends and drains email work, prepares the exact disabled definition, then restores enabled intent after releasing its hold. Migration serializes ledger writes, creates a new private schema-one SQLite backup, and commits schema and aliases in one transaction. Old schema-one writers are then rejected. Failure halts, frozen email bytes, keys and receipts remain intact."
+        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends, and drains email work, prepares the exact disabled definition, then restores intent after releasing its hold. Migration excludes ledger writers, creates a new private original-schema SQLite backup, and commits schema three, reference associations, aliases, and exact write requests in one transaction. Old writers are rejected. Failure halts and frozen email bytes, keys, and receipts remain intact."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "There is no completion-time guarantee. Compatible schema-two readers and short SQLite writers can finish across program selection. Schema-one migration uses a separate guarded write boundary and never overwrites an earlier backup."
+        "statement": "There is no completion-time guarantee. Compatible schema-three readers and short SQLite writers can finish across program selection. Migration from schema one or two uses a separate guarded write boundary and never overwrites an earlier backup."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 releases, ledger schema two and email schema one are supported. Contract three adds guarded migration from ledger schema one. Ordinary commands and direct installation do not migrate state. Recovery must use a compatible program and ledger pair; there is no automatic downgrade. Preserve email delivery records across recovery."
+        "statement": "Only cell-install-v2 releases, ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clew requires the complete Cast snapshot reader for first-job admission, search, email context and deployment verification.",
+        "statement": "Application features require the complete Cast snapshot reader for first-job admission, job search, email context, and deployment verification. Generic ledger operations and schema-two conversion do not read Cast.",
         "target": "cast",
         "kind": "readiness",
         "contract": "cast.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Cast job ID. Ordinary schema-two work does not need Platter.",
+        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Cast job ID. Schema-two conversion and generic ledger operations do not read Platter.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"
@@ -133,19 +133,24 @@
   },
   "dependencies": [
     {
-      "id": "clew.state",
+      "id": "clew.ledger.use",
       "min_contract": 1,
       "max_contract_exclusive": 2
     },
     {
-      "id": "clew.application.track",
+      "id": "clew.state",
       "min_contract": 2,
       "max_contract_exclusive": 3
     },
     {
+      "id": "clew.application.track",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
       "id": "clew.digest.email",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.explore",
@@ -176,7 +181,7 @@
   ],
   "outcome": "Verified installed Clew commands, provider and compatible empty or existing ledger.",
   "effects": [
-    "Program deployment selects immutable files and initializes a missing ledger or migrates schema one under maintenance with a private consistent backup. Existing ledger rows and exact retry identities remain intact.",
+    "Program deployment selects immutable files and initializes a missing ledger or converts schema one or two to schema three under maintenance with a private consistent original-schema backup. Existing entry identity, content, and exact retry requests remain intact; no thread is invented.",
     "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
   ],
   "authority": [
@@ -184,10 +189,10 @@
     "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
-    "Installed bytes match the selected candidate, schema-two ledger integrity passes and the complete retained Cast snapshot interface succeeds."
+    "Installed bytes match the selected candidate, schema-three ledger integrity passes and the complete retained Cast snapshot interface succeeds."
   ],
   "failure_and_recovery": [
-    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema two. Missing or colliding migration mappings stop the upgrade. Preserve the private schema-one backup and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
+    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve the private original-schema backup and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
     "Retain email occurrences and uncertain acceptance across recovery. Resolve product and schedule selection before releasing run-owned admission; never erase or approve existing failure incidents."
   ],
   "privacy": [

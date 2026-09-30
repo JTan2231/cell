@@ -1,11 +1,11 @@
 {
   "id": "clew.digest.email",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Preview or send the daily Clew application email",
-  "summary": "Show every tracked application except current rejections, with retained job details and verbatim saved notes, in a deterministic personal email.",
+  "summary": "Show every explicitly tracked application except current rejections, with retained job details and verbatim application notes, in a deterministic personal email.",
   "manual": "manuals/digest-email.md",
   "use_when": [
     "Preview, explicitly send, inspect a retained occurrence, or explicitly retry the daily application snapshot."
@@ -60,8 +60,8 @@
   "dependencies": [
     {
       "id": "clew.application.track",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.explore",
@@ -89,7 +89,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "New rendering needs readable initialized Clew schema-two state. Context needs the Cast snapshot reader. Sending needs a private state directory and installed Email with credentials and network access."
+        "statement": "New rendering needs readable initialized Clew schema-three state. Context needs the Cast snapshot reader. Sending needs a private state directory and installed Email with credentials and network access."
       }
     ],
     "inputs": [
@@ -107,7 +107,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active notes are copied in ledger sequence order. Items sort by company, role and opaque Cast job ID. No application-age or response inference occurs."
+        "statement": "Only active explicit application-report associations contribute status and notes; generic entries and plain cast.job links are excluded. Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active application notes are copied in ledger sequence order. Items sort by company, role and opaque Cast job ID. No application-age, response, or work-completion inference occurs."
       }
     ],
     "identity_and_units": [
@@ -143,7 +143,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Ledger schema is two; email storage remains schema one. Migration preserves frozen payload bytes, send keys, occurrence identity and acceptance receipts. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
+        "statement": "Ledger and CLI JSON schemas are three; email storage remains schema one. Migration from supported ledger schemas preserves frozen payload bytes, send keys, occurrence identity, and acceptance receipts. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
       }
     ],
     "reliances": [

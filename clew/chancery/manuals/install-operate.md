@@ -2,19 +2,20 @@
 
 Use this operation to install, inspect, migrate, prepare a schedule, back up, or
 recover Clew. Read `chancery resolve clew.install.operate` for the required
-`clew.state`, `clew.application.track`, and
+`clew.state`, `clew.ledger.use`, `clew.application.track`, and
 `clew.digest.email` contracts. They own the detailed behavior. This procedure
 keeps prerequisites, effects, stop conditions, and verification in place.
 
-Clew needs Cast read contract two for search, first-job admission, email context,
-and deployment verification. A nonempty schema-one migration also needs Platter
-read contract one. Email contract four supplies submission; Clockwork contract
+General notes, named threads, plain external links, and generic reads require
+no external reader. Explicit application features need Cast read contract two
+for job search, first-job admission, email context, and deployment verification.
+A nonempty schema-one migration also needs Platter read contract one. Email contract four supplies submission; Clockwork contract
 three supplies activation. Clew runs no model requester.
 
 Installation can select programs, initialize empty state, migrate legacy state,
-and change explicitly supplied schedule intent. It adds no application reports
+and change explicitly supplied schedule intent. It adds no ledger notes or application reports
 and performs no preparation or immediate send. Initialize and inspect commands
-grant no mail or status authority.
+grant no note, mail, or status authority.
 
 ## Deploy through the coordinator
 
@@ -29,10 +30,10 @@ grant no mail or status authority.
    false selects disabled intent.
 4. Run `./deploy.sh clew`. The coordinator installs compatible dependencies when
    necessary, captures schedule intent, holds email admission, suspends the
-   binding, and drains sends before configuration. A schema-one ledger uses the
-   guarded migration below.
+   binding, and drains sends before configuration. A schema-one or schema-two
+   ledger uses the guarded migration below.
 5. Confirm the retained deployment outcome. Verification must establish matching
-   selected bytes, schema-two ledger integrity, and a successful complete Cast
+   selected bytes, schema-three ledger integrity, and a successful complete Cast
    snapshot read. Confirm that activation preserved captured or explicit enabled
    intent and retained failure halts.
 
@@ -55,8 +56,8 @@ successful result.
    Use `--home ABSOLUTE_PATH` for an explicit user home and
    `--expected-current absent|releases/HASH` when selection must match an exact
    prior condition. Stop if selectors belong to another owner or integrity fails.
-3. Run `clew init` to create empty schema-two state or check compatible state.
-   Stop for schema one, nonempty foreign state, or unsupported state.
+3. Run `clew init` to create empty schema-three state or check compatible state.
+   Stop for schema one or two, nonempty foreign state, or unsupported state.
 4. Run `clew doctor`, `clew-install inspect`, and candidate verification:
 
    ```sh
@@ -72,23 +73,39 @@ The default ledger is `~/.local/share/clew/ledger.sqlite3`. Use global
 State directories require mode 0700 and databases require mode 0600. Keep all
 private state outside source and release trees.
 
-## Migrate a schema-one ledger
+## Migrate an older ledger
 
-1. Use coordinated deployment. Prevent old schema-one writers from running and
-   let admitted sends finish. Configure requires the sole run-owned email hold.
-2. Confirm that every retained legacy Platter reference has one exact Cast job
-   mapping. Missing mappings or two references for one Cast job stop migration.
-   Do not infer a mapping from text or merge histories.
-3. Let configure create the new private consistent schema-one backup, exclude
-   concurrent ledger writes, and commit schema two with its legacy aliases.
-   Preserve the reported backup path and recovery evidence. A retry creates a
-   new backup and never overwrites an earlier one.
-4. Verify schema-two integrity with the selected program and confirm deployment
-   verification. Keep a schema-two-capable release selected after migration.
+1. Use coordinated deployment to convert supported schema-one or schema-two state
+   to schema three. Let admitted sends finish. Configure requires the sole
+   run-owned email maintenance hold. Ordinary commands and `init` refuse older
+   schemas; direct program installation does not migrate state.
+2. Exclude concurrent ledger writers through the guarded migration transaction.
+3. Resolve every retained legacy reference through Platter's public opportunity
+   reader for schema-one state. Stop on missing mappings or two legacy references
+   that select the same Cast job. An empty schema-one ledger needs no Platter read.
+   Schema-two conversion is local and needs no external reader. Do not infer a
+   mapping from company, role, or URL and do not merge histories.
+4. Let configure create a private, consistent backup of the original database
+   under the state root as `ledger-schemaN-backup-RUN_ID-UUID.sqlite3`, with mode
+   0600. `N` is the original schema version. Refuse to overwrite any earlier
+   backup. An interrupted retry creates a new backup.
+5. Commit schema three, canonical external references, explicit application-report
+   associations, legacy aliases, and exact write requests in one transaction.
+6. Verify ledger integrity and the retained deployment outcome. Preserve the
+   backup and reported recovery evidence until verification succeeds. Keep a
+   schema-three-compatible program selected after migration. Restore only
+   captured or explicit schedule intent after coherent activation.
 
-Migration preserves rows, exact write identity, aliases, text, corrections,
-retractions, and frozen email history. Do not replay a legacy write with a changed
-argument namespace. Direct install and `init` cannot perform this migration.
+Existing job identity becomes a `cast.job` external reference with an explicit
+application-report association. Migration preserves entry IDs, sequence,
+timestamps, supplied text, corrections, and retractions. Legacy aliases retain
+their exact argument identity for retries. No old entry receives an invented
+thread. Migration creates no new report and starts no collection, preparation,
+completion check, or send.
+
+Frozen email occurrences, message bytes, send keys, and acceptance receipts stay
+unchanged. Old writers are rejected after commit. Do not replay a legacy write
+with a changed argument namespace. Migration does not downgrade state.
 
 ## Prepare the daily definition
 
@@ -129,9 +146,9 @@ permits future activation and does not retry an uncertain message.
    Restore only the previously enabled schedule intent after readiness. Preserve
    pre-existing failure halts and unresolved holds.
 
-A rollback to schema one requires its matching ledger backup and reconciliation
-of every post-migration report. Preserve delivery state; a schema-one ledger
-backup does not authorize restoration of older email occurrences.
+Rollback to an older program requires its matching original-schema ledger backup
+and reconciliation of every post-migration entry. Preserve delivery state; a
+ledger backup does not authorize restoration of older email occurrences.
 
 ## Recover program selection
 
@@ -151,5 +168,5 @@ backup does not authorize restoration of older email occurrences.
    only captured enabled intent. Keep unresolved holds and incidents intact.
 
 Stop when program and state versions do not match. Never repair a report by
-editing SQLite. Use the application feature's append-only correction or retraction,
+editing SQLite. Use the ledger feature's append-only correction or retraction,
 or retry an uncertain write with its original ID and identical arguments.

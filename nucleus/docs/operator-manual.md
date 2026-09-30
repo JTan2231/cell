@@ -41,7 +41,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/cast/chancery/overview.md) |
 | Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/bazaar/chancery/overview.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/platter/README.md) |
-| Clew | User-reported application history and daily application snapshots | [Clew](/Users/joey/rust/cell/clew/chancery/overview.md) |
+| Clew | Append-only notes, named threads, optional external links, and explicit application reports with daily snapshots | [Clew](/Users/joey/rust/cell/clew/chancery/overview.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/annals/README.md) |
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/chancery/overview.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/chancery/overview.md) |

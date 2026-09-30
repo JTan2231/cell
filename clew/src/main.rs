@@ -1,13 +1,13 @@
 use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
-use clew::store::{Record, Store};
+use clew::store::{Record, Reference, Store};
 use serde_json::json;
 use std::{collections::BTreeSet, path::PathBuf};
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Record your application status and notes for Cast jobs"
+    about = "Keep an append-only ledger with named threads and optional external references"
 )]
 struct Cli {
     #[arg(long, global = true)]
@@ -27,14 +27,26 @@ enum Command {
     Doctor,
     /// Find candidates by retained URL, company, title, reference or Clew notes.
     Find { query: String },
-    /// Append an explicitly supplied status and/or note to one exact Cast job.
+    /// Search local entries, thread names, statuses and external references.
+    Search { query: String },
+    /// Read the complete history and current status of one named thread.
+    Thread { name: String },
+    /// Read one exact ledger entry and its correction state.
+    Entry { id: String },
+    /// Append a status and/or note, optionally in a named thread.
     Record {
         /// A retained legacy Platter reference, for old reports and exact retries.
-        #[arg(required_unless_present = "cast_job", conflicts_with = "cast_job")]
+        #[arg(conflicts_with = "cast_job")]
         reference: Option<String>,
         /// The exact Cast job ID to track.
         #[arg(long)]
         cast_job: Option<String>,
+        /// Find or create this named ledger thread.
+        #[arg(long)]
+        thread: Option<String>,
+        /// Attach a plain external link. Repeat for additional links.
+        #[arg(long = "ref", value_names = ["NAMESPACE", "EXTERNAL_ID"], num_args = 2)]
+        references: Vec<String>,
         #[arg(long)]
         id: String,
         #[arg(long)]
@@ -88,7 +100,7 @@ fn main() {
                 "clew/ledger",
                 None,
                 iatreion_api::Intent::OnDemand,
-                "clew.application.track",
+                "clew.ledger.use",
             ),
             iatreion_api::declared_unit(
                 "clew",
@@ -122,24 +134,35 @@ fn run() -> Result<()> {
     let data = match cli.command {
         Command::Init => {
             Store::initialize(&root)?;
-            json!({"initialized":true,"schema_version":2})
+            json!({"initialized":true,"schema_version":3})
         }
         Command::Doctor => {
             let store = Store::open(&root, false)?;
             store.check()?;
-            json!({"schema_version":2,"entries":store.entries()?.len()})
+            json!({"schema_version":3,"entries":store.entries()?.len()})
         }
         Command::Find { query } => find(&root, &query)?,
+        Command::Search { query } => {
+            serde_json::to_value(Store::open(&root, false)?.search(&query)?)?
+        }
+        Command::Thread { name } => {
+            serde_json::to_value(Store::open(&root, false)?.thread(&name)?)?
+        }
+        Command::Entry { id } => serde_json::to_value(
+            Store::open(&root, false)?
+                .history_entry(&id)?
+                .context("ledger entry is absent")?,
+        )?,
         Command::Record {
             reference,
             cast_job,
+            thread,
+            references,
             id,
             status,
             notes,
             replaces,
         } => {
-            let _admission = clew::gate(&root).enter()?;
-            let mut store = Store::open(&root, true)?;
             let record = Record {
                 id,
                 platter_job_ref: reference,
@@ -147,28 +170,16 @@ fn run() -> Result<()> {
                 status,
                 notes,
                 replaces,
+                thread,
+                references: references
+                    .chunks_exact(2)
+                    .map(|pair| Reference {
+                        namespace: pair[0].clone(),
+                        external_id: pair[1].clone(),
+                    })
+                    .collect(),
             };
-            let entry = if let Some(entry) = store.existing_record(&record)? {
-                entry
-            } else {
-                if let Some(job_id) = &record.cast_job_id {
-                    if !store.knows_job(job_id)? {
-                        ensure!(
-                            clew::cast_jobs()?
-                                .iter()
-                                .any(|job| job.cast_job_id == *job_id),
-                            "Cast job is not retained"
-                        );
-                    }
-                } else {
-                    ensure!(
-                        store.knows(record.platter_job_ref.as_deref().context("reference")?)?,
-                        "legacy reference has no Clew history; use --cast-job with a retained Cast job"
-                    );
-                }
-                store.record(&record)?
-            };
-            serde_json::to_value(entry)?
+            serde_json::to_value(append_record(&root, &record)?)?
         }
         Command::Retract {
             entry_id,
@@ -207,9 +218,33 @@ fn run() -> Result<()> {
             data["digest"]["body"].as_str().context("preview body")?
         );
     } else {
-        println!("{}", json!({"ok":true,"schema_version":2,"data":data}));
+        println!("{}", json!({"ok":true,"schema_version":3,"data":data}));
     }
     Ok(())
+}
+
+fn append_record(root: &std::path::Path, record: &Record) -> Result<clew::store::Entry> {
+    let _admission = clew::gate(root).enter()?;
+    let mut store = Store::open(root, true)?;
+    if let Some(entry) = store.existing_record(record)? {
+        return Ok(entry);
+    }
+    if let Some(job_id) = &record.cast_job_id {
+        if !store.knows_job(job_id)? {
+            ensure!(
+                clew::cast_jobs()?
+                    .iter()
+                    .any(|job| job.cast_job_id == *job_id),
+                "Cast job is not retained"
+            );
+        }
+    } else if let Some(reference) = &record.platter_job_ref {
+        ensure!(
+            store.knows(reference)?,
+            "legacy reference has no Clew history; use --cast-job with a retained Cast job"
+        );
+    }
+    store.record(record)
 }
 
 fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
@@ -222,21 +257,36 @@ fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
         .map(|item| item.cast_job_id)
         .collect();
     let text = query.to_lowercase();
-    let references: BTreeSet<_> = entries
+    let mut references: BTreeSet<_> = entries
         .iter()
         .filter(|entry| {
-            entry.cast_job_id.to_lowercase().contains(&text)
-                || entry
-                    .platter_job_ref
-                    .as_ref()
-                    .is_some_and(|reference| reference.to_lowercase().contains(&text))
+            entry.references.iter().any(|reference| {
+                reference.namespace == "cast.job"
+                    && reference.external_id.to_lowercase().contains(&text)
+            }) || entry
+                .thread
+                .as_ref()
+                .is_some_and(|thread| thread.name.to_lowercase().contains(&text))
                 || entry
                     .notes
                     .as_ref()
                     .is_some_and(|notes| notes.to_lowercase().contains(&text))
         })
-        .map(|entry| entry.cast_job_id.clone())
+        .flat_map(|entry| {
+            entry
+                .references
+                .iter()
+                .filter(|reference| reference.namespace == "cast.job")
+                .map(|reference| reference.external_id.clone())
+        })
         .collect();
+    references.extend(
+        store
+            .legacy_aliases()?
+            .into_iter()
+            .filter(|(alias, _)| alias.to_lowercase().contains(&text))
+            .map(|(_, job_id)| job_id),
+    );
     let jobs = clew::cast_jobs()
         .context("cannot complete candidate search; Clew list/show remain available")?;
     let mut candidates: Vec<_> = jobs

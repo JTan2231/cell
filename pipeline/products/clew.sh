@@ -4,7 +4,7 @@ PRODUCT_NAME=Clew
 PRODUCT_DIR=clew
 STATUS_SCHEMA=1
 STATUS_COMMAND=clew
-STATUS_UNITS='clew/ledger|on_demand||clew.application.track
+STATUS_UNITS='clew/ledger|on_demand||clew.ledger.use
 clew/daily-email|active|clew/daily-email|clew.digest.email'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
