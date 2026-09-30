@@ -451,6 +451,19 @@ class BrokerCliTests(unittest.TestCase):
 
 
 class RepositoryClientTests(unittest.TestCase):
+    def test_parallel_gate_identifies_exact_nextest_binary(self):
+        from pipeline import nextest_tool
+        command = ["python3", "parallel_tests.py", "--nextest-path", "/tools/nextest"]
+        with mock.patch.object(client, "toolchain_key", return_value="compiler"), \
+                mock.patch.object(nextest_tool, "identity", return_value={"sha256": "first"}) as identity:
+            first = client.execution_toolchain("cell.tests.rust", command)
+            identity.assert_called_once_with(Path("/tools/nextest"))
+            identity.return_value = {"sha256": "second"}
+            self.assertNotEqual(first, client.execution_toolchain("cell.tests.rust", command))
+            self.assertEqual(client.execution_toolchain("fixture", command), "compiler")
+            with self.assertRaises(client.broker.BrokerError):
+                client.execution_toolchain("cell.tests.rust", ["python3", "parallel_tests.py"])
+
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory(prefix="cell-ci-client-test-")
         self.root = Path(self.temporary.name) / "repository"

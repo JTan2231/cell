@@ -43,6 +43,38 @@ accepted source, and emails the outcome. See [the CI manager](../ci_manager/READ
 for setup, effects, status, and recovery. Bare `./ci.sh`, product selection
 arguments, and direct validation flags are not supported CI entry points.
 
+### Prepare or update the test runner
+
+Install the pinned nextest executable before submitting a change that uses the
+parallel Rust test stage:
+
+```sh
+python3 pipeline/nextest_tool.py install
+```
+
+The installer selects nextest 0.9.146 from its fixed upstream macOS archive.
+It verifies the archive and executable hashes and stores the executable on the
+configured external work volume. Validation checks those bytes before admission.
+It does not download a runner during a CI gate or select a runner from `PATH`.
+
+Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
+limit. The default is four concurrent test processes. The dispatcher records
+the limit in the gate command. This limit is separate from the broker's compiler
+job limit. Tests can create additional threads or child processes.
+
+### Change CI while a job is active
+
+Edit and commit validation code normally. The active job uses its own committed
+candidate. A later submission uses the new validation code in its candidate.
+Installing the pinned runner does not replace the active manager or change the
+active job's source.
+
+Replace the installed manager only through its maintenance procedure. Pause
+admission, finish or recover the active job, install the fixed source package,
+and inspect status before resuming. Queued jobs remain retained. Read
+[manager replacement](../ci_manager/chancery/manuals/queue-operate.md) for the
+complete procedure and the limited cancelled-validation exception.
+
 ## Internal validation
 
 The manager invokes `select_changes.py run` with the fixed job base, the exact
@@ -72,11 +104,28 @@ There are two test groups:
   the `cell-install` and `cell-maintenance` packages belong here. Shell frontend
   and runner regressions and product catalog regressions also belong here.
 
-`cargo_tests.py` selects Cargo targets from metadata inside the admitted gate.
-It does not filter test function names or drop unrelated integration targets.
-Formatting, Clippy, provider validation, documentation, release builds, and
-binary version checks remain part of each selected product gate. Library unit
-tests that mix product and lifecycle behavior still run as a complete target.
+`parallel_tests.py` selects Cargo targets from metadata inside one admitted
+heavy gate. The plan identifies each allowed package, target kind, and target
+name. Nextest runs all ordinary, non-ignored tests in these targets through one
+parallel scheduler. It does not select individual test functions by relevance.
+Library targets that mix product and lifecycle behavior remain complete targets.
+Compilation can include other targets from the selected packages; execution
+uses the exact allowed target filter. Shared dependencies use Cargo's combined
+feature selection.
+
+Product checks run in two phases around this test gate. The first phase runs
+shell and packaging checks, applicable provider checks, formatting, and Clippy.
+The second runs applicable provider checks, documentation, release builds,
+binary version checks, and candidate staging. Selected shared Rust suites retain
+their formatting and Clippy checks but execute their tests in the shared test
+gate. Python and shell regression suites remain separate required checks.
+
+Nextest builds and discovers the tests before it runs them. Each test runs in
+its own process. A free worker can execute a test from any selected product or
+shared suite. The run uses no automatic retries and continues after test
+failures. Doctests use separate Cargo commands after nextest, including when
+ordinary tests fail. The test gate fails after these commands finish. Build or
+discovery failure does not establish completed test coverage.
 
 `platform_inputs.py` is the explicit platform input map. Product installer
 sources, packaging, migrations, schemas, maintenance modules, selected runtime
@@ -107,6 +156,11 @@ dependency expansion. The shared suite names are `pipeline`, `broker`,
 `catalog`. A validation with no selected products still checks structure and
 recognition. Its success does not establish full repository validation.
 
+Changes to the parallel runner or its pinned tool selector select all current
+products' product and platform tests and all
+three shared Rust suites. This validates the common executor across its complete
+target inventory. Test-only and documentation edits do not select this expansion.
+
 The validator binds selection and every gate to one source candidate. It
 rejects source, Git status, or HEAD changes during planning or execution as
 stale. The manager's fixed base controls product, platform, and new-product
@@ -120,16 +174,19 @@ candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
 
 Recognition does not run shared library tests. The `install` and `maintenance`
-platform gates format, lint, and test those libraries separately. They are
-infrastructure, with no separate product identity or release unit.
+check gates format and lint those libraries separately. Their tests run in the
+parallel Rust gate. They are infrastructure, with no separate product identity
+or release unit.
 
-The internal dispatcher in `select_changes.py` requests admission from the
-host CI broker for each product or shared suite separately. The broker
-schedules execution; it does not decide relevance. Product bodies receive
-`--tests product|all` as part of their brokered command identity. Product-only
-and full gates cannot join each other. An inherited environment flag cannot
-bypass admission. The manager validates before acceptance and deployment;
-release and deployment preparation do not rerun validation.
+The internal dispatcher in `select_changes.py` requests broker admission for
+each product phase, shared check suite, and the parallel Rust test stage. The
+broker schedules execution; it does not decide relevance. Product bodies receive
+`--tests product|all` and their phase in the brokered command identity. The Rust
+test command records all selected products, platform products, shared Rust
+suites, and its worker limit. Its toolchain identity includes the pinned nextest
+path, version, and executable hash. An inherited flag cannot bypass admission.
+The manager validates before acceptance and deployment; release and deployment
+preparation do not rerun validation.
 
 The broker captures build and test transcripts. The dispatcher reports
 selection before execution and retains the completed product and platform
@@ -190,8 +247,11 @@ hosts, confirm that no release is active before removing a stale
 ## Prompt test state
 
 The shared `prompts` gate checks `cell-prompts`. Changes below `prompting/`
-also select all nine prompt consumers in the manager's validation plan. Each
-consumer test gate imports `prompting/seed.json` into a private temporary Bazaar database and
-sets `CELL_BAZAAR_DATABASE` for its tests. Tests never use the live database.
+also select all current prompt consumers in the manager's validation plan. Each
+parallel test gate imports `prompting/seed.json` into a private temporary Bazaar
+database and retains it until execution finishes. It sets
+`CELL_BAZAAR_DATABASE` for its tests. Consumer reads can share this fixture;
+tests that change strings use separate temporary databases. Tests never use the
+live database.
 The importer runs inside the admitted heavy gate. Keep source prompt text in
 the explicit seed, not in a test-only runtime fallback.
