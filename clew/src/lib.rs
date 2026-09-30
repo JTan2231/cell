@@ -1,4 +1,4 @@
-//! User-reported application history, linked to retained Cast jobs.
+//! An append-only ledger with named threads and optional external references.
 #![allow(clippy::missing_errors_doc)]
 mod delivery;
 pub mod digest;

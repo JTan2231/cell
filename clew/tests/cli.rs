@@ -81,7 +81,11 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
     ];
     let first = call(&arguments)?;
     assert!(first.0);
-    assert_eq!(first.1["data"]["cast_job_id"], "cast-0");
+    assert_eq!(first.1["schema_version"], 3);
+    assert_eq!(
+        first.1["data"]["references"],
+        json!([{"namespace":"cast.job","external_id":"cast-0","role":"application_report"}])
+    );
     let found = call(&[
         "find",
         "https://jobs.ashbyhq.com/acme/role/application?source=test",
@@ -124,5 +128,136 @@ fn exact_reference_admission_and_offline_retries_use_the_installed_reader() -> R
         .0
     );
     assert!(call(&["show", "cast-0"])?.0);
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // Keep the offline thread lifecycle and its retries together.
+fn named_threads_and_standalone_notes_work_without_cast() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let call = |args: &[&str]| -> Result<(bool, Value)> {
+        let output = Command::new(env!("CARGO_BIN_EXE_clew"))
+            .env("HOME", temp.path())
+            .env("CHANCERY_USAGE_DISABLED", "1")
+            .args(args)
+            .output()?;
+        Ok((
+            output.status.success(),
+            serde_json::from_slice(&output.stdout)?,
+        ))
+    };
+    assert!(call(&["init"])?.0);
+    let standalone = call(&["record", "--id", "note", "--notes", "An independent note."])?;
+    assert!(standalone.0);
+    assert!(standalone.1["data"]["thread"].is_null());
+    assert_eq!(standalone.1["data"]["references"], json!([]));
+
+    let start_args = [
+        "record",
+        "--id",
+        "sla-start",
+        "--thread",
+        "SLA implementation",
+        "--notes",
+        "Started the work.",
+    ];
+    let start = call(&start_args)?;
+    assert!(start.0);
+    let done = call(&[
+        "record",
+        "--id",
+        "sla-done",
+        "--thread",
+        "SLA implementation",
+        "--status",
+        "done",
+        "--notes",
+        "Finished the work.",
+        "--ref",
+        "cast.job",
+        "not-retained",
+        "--ref",
+        "git.commit",
+        "repository/commit-id",
+    ])?;
+    assert!(done.0);
+    assert_eq!(done.1["data"]["thread"], start.1["data"]["thread"]);
+    assert_eq!(
+        done.1["data"]["references"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(call(&["list"])?.1["data"], json!([]));
+    assert!(
+        !call(&[
+            "record",
+            "--cast-job",
+            "not-retained",
+            "--id",
+            "application",
+            "--status",
+            "applied"
+        ])?
+        .0
+    );
+
+    let found = call(&["search", "sla implementation"])?;
+    assert!(found.0);
+    assert_eq!(found.1["data"].as_array().map(Vec::len), Some(2));
+    let thread = call(&["thread", "SLA implementation"])?;
+    assert!(thread.0);
+    assert_eq!(thread.1["data"]["status"], "done");
+    assert_eq!(thread.1["data"]["status_entry_id"], "sla-done");
+    assert_eq!(
+        thread.1["data"]["history"].as_array().map(Vec::len),
+        Some(2)
+    );
+    assert_eq!(call(&["entry", "sla-done"])?.1["data"]["id"], "sla-done");
+
+    assert!(
+        !call(&[
+            "record",
+            "--id",
+            "sla-start",
+            "--thread",
+            "Another thread",
+            "--notes",
+            "Started the work."
+        ])?
+        .0
+    );
+    assert!(!call(&["thread", "Another thread"])?.0);
+    let correction = call(&[
+        "record",
+        "--id",
+        "sla-correction",
+        "--replaces",
+        "sla-done",
+        "--status",
+        "in progress",
+        "--notes",
+        "Reporting still remains.",
+    ])?;
+    assert!(correction.0);
+    assert_eq!(correction.1["data"]["thread"], start.1["data"]["thread"]);
+    assert_eq!(correction.1["data"]["references"], json!([]));
+    assert_eq!(
+        call(&["entry", "sla-done"])?.1["data"]["superseded_by"],
+        "sla-correction"
+    );
+    assert_eq!(
+        call(&["thread", "SLA implementation"])?.1["data"]["status"],
+        "in progress"
+    );
+    assert_eq!(call(&start_args)?.1, start.1);
+    assert!(call(&["retract", "sla-start", "--id", "withdraw-start"])?.0);
+    assert_eq!(call(&start_args)?.1, start.1);
+    assert_eq!(
+        call(&["thread", "SLA implementation"])?.1["data"]["history"]
+            .as_array()
+            .map(Vec::len),
+        Some(4)
+    );
+    assert!(call(&["doctor"])?.0);
+    assert!(!temp.path().join(".local/share/clew/email.sqlite3").exists());
     Ok(())
 }

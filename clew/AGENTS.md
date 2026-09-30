@@ -4,14 +4,18 @@ Semantics-Project: clew
 
 - Query Clew's Semantics repository for maintained terminology. Source and tests
   define runtime behavior.
-- Clew owns user-reported application history. Cast owns job identities and
-  retained job details. Use Cast's public snapshot interface. Platter owns
+- Clew owns supplied ledger statements, optional named threads, external
+  reference associations, and explicit application reports. External references
+  are optional links to stable identities outside Clew. Cast owns job identities
+  and retained job details. Use Cast's public snapshot interface. Platter owns
   prepared material; its public reader supplies legacy migration mappings only.
-- Append status and notes only on the user's instruction. Never infer status from
-  postings, delivery, correspondence, or elapsed time.
-- Preserve ledger entries. Corrections append replacements or retractions.
+- Append supplied status and notes only on the user's instruction. Never infer
+  status or completion from postings, delivery, correspondence, elapsed time,
+  or external links. Plain Cast job links are not application reports.
+- Preserve ledger entries. Corrections append replacements or retractions and
+  inherit their target's thread. Named threads hold only an ID and unique name.
 - Preserve exact write identity and legacy reference aliases during migration.
-- Keep private application notes outside the repository.
+- Keep private notes, statuses, thread names, and references outside the repository.
 
 ## Documentation ownership
 

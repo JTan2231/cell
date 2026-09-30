@@ -1,17 +1,19 @@
 # Clew
 
-Clew records your application status and notes for jobs retained by Cast.
-It keeps an append-only history and the latest status you supplied.
-Its daily email shows tracked applications except current rejections, with
-retained job details and saved notes.
+Clew is a private ledger notepad for supplied notes and status. Entries can
+belong to named threads and carry optional links to external stable IDs.
+It preserves append-only history and corrections. Explicit Cast job reports
+also support application tracking and a daily application email.
 
 ```sh
-clew find 'company or job URL'
-clew record --cast-job JOB_ID --id my-application --status applied --notes 'Applied today.'
-clew list
+clew record --id sla-start --thread 'SLA implementation' --notes 'Started the implementation.'
+clew record --id sla-done --thread 'SLA implementation' --status done --notes 'Finished the implementation.'
+clew search SLA
+clew thread 'SLA implementation'
 ```
 
 - [Product overview and feature inventory](chancery/overview.md)
+- [Record and read a ledger notepad](chancery/manuals/ledger-use.md)
 - [Record and read application history](chancery/manuals/application-track.md)
 - [Preview and send the daily email](chancery/manuals/digest-email.md)
 - [Private state and installation lifecycle](chancery/manuals/state.md)

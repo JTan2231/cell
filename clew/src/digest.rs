@@ -54,13 +54,16 @@ pub fn render(entries: &[Entry], opportunities: Option<&[Job]>, date: &str) -> R
         .collect();
     let mut applications = BTreeMap::new();
     for entry in active_entries(entries) {
+        let Some(reference) = entry.application_job_id() else {
+            continue;
+        };
         let item = applications
-            .entry(entry.cast_job_id.as_str())
+            .entry(reference)
             .or_insert_with(|| Application {
-                reference: &entry.cast_job_id,
+                reference,
                 status: None,
                 notes: Vec::new(),
-                opportunity: jobs.get(entry.cast_job_id.as_str()).copied(),
+                opportunity: jobs.get(reference).copied(),
             });
         if let Some(status) = &entry.status {
             item.status = Some(status);

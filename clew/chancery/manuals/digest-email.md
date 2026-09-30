@@ -5,7 +5,9 @@ those whose current supplied status is `rejected`, after trimming whitespace
 and comparing without case sensitivity. Other status text is shown unchanged.
 A missing status appears as `No status recorded`. A notes-only report does not
 change status. Retractions and replacements use the same current-record rules
-as `clew list`.
+as `clew list`. Only explicit application reports contribute status and notes.
+Generic ledger notes and plain `--ref cast.job JOB_ID` links do not appear in the
+application view or email, even when they share a thread with an application report.
 
 Each included application shows company, role, supplied status and all retained
 job URLs. Items sort by company, then role, without case sensitivity, with the
@@ -53,7 +55,7 @@ notes are disclosed to Resend and Gmail. No attachments are sent.
 Clew retains an exact message, a random stable idempotency key, first-attempt
 time and acceptance receipt in private `email.sqlite3` beside `ledger.sqlite3`.
 The email database is schema one and is created on the first send; it does not
-change the schema-two application ledger. Files use mode 0600 under the private
+change the schema-three ledger. Files use mode 0600 under the private
 0700 state directory. Records have no automatic pruning. Back up both databases
 and their sidecars together while commands and scheduling are stopped.
 
@@ -75,7 +77,7 @@ that occurrence.
 3. Run `clew email send --retry ID` only when another submission is authorized.
 
 Retry uses the original message and key, even after statuses or notes change.
-Migration to Cast job identities does not rewrite frozen messages or send keys.
+Ledger migration does not rewrite frozen messages or send keys.
 It is allowed for less than 23 hours after the first attempt, and is refused
 after a backwards clock change. Email's external idempotency window is 24 hours.
 An accepted occurrence returns its receipt without resubmission. After the safe
@@ -106,8 +108,8 @@ Scheduled failures halt the binding. Inspect
 submission before explicitly approving
 `clockwork binding resume clew/daily-email INCIDENT_ID`. Continuation permits
 future activations; it does not retry an uncertain message. Deliberate admission
-during deployment maintenance returns a successful skip. Schema-two read and
-application-report commands remain available during email maintenance.
+during deployment maintenance returns a successful skip. Schema-three ledger read and
+record commands remain available during email maintenance.
 
 CLI dispatch attempts metadata-only Chancery usage recording. It records no
 status, note, email body or credential, and does not change domain success.

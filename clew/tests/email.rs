@@ -1,7 +1,7 @@
 use anyhow::{Context as _, Result};
 use clew::{
     digest,
-    store::{Record, Store},
+    store::{Record, Reference, Store},
 };
 mod common;
 use clew::jobs::Job;
@@ -23,6 +23,7 @@ fn report(
         status: status.map(Into::into),
         notes: notes.map(Into::into),
         replaces: replaces.map(Into::into),
+        ..Record::default()
     })?;
     Ok(())
 }
@@ -144,6 +145,124 @@ fn snapshot_uses_current_status_and_active_notes_in_sequence_order() -> Result<(
     assert_eq!(
         digest::render(&store.entries()?, None, "date")?.application_count,
         4
+    );
+    Ok(())
+}
+
+#[test]
+fn ordinary_links_and_work_notes_do_not_enter_the_application_digest() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))?;
+    let mut store = Store::initialize(temp.path())?;
+    store.record(&Record {
+        id: "standalone".into(),
+        status: Some("completed".into()),
+        notes: Some("private standalone work".into()),
+        ..Record::default()
+    })?;
+    store.record(&Record {
+        id: "threaded".into(),
+        thread: Some("SLA implementation".into()),
+        status: Some("completed".into()),
+        notes: Some("private threaded work".into()),
+        references: vec![Reference {
+            namespace: "cast.job".into(),
+            external_id: "alpha".into(),
+        }],
+        ..Record::default()
+    })?;
+    let empty = digest::render(&store.entries()?, None, "date")?;
+    assert_eq!(empty.body, "No applications to show.\n");
+    assert_eq!(empty.application_count, 0);
+    assert!(empty.context_available);
+    report(
+        &mut store,
+        "application",
+        "alpha",
+        Some("applied"),
+        Some("application note"),
+        None,
+    )?;
+    let latest = store.record(&Record {
+        id: "ordinary-link".into(),
+        status: Some("rejected".into()),
+        notes: Some("private ordinary link".into()),
+        references: vec![Reference {
+            namespace: "cast.job".into(),
+            external_id: "alpha".into(),
+        }],
+        ..Record::default()
+    })?;
+    let rendered = digest::render(
+        &store.entries()?,
+        Some(&[job("alpha", "Acme", "Role")?]),
+        "date",
+    )?;
+    assert_eq!(rendered.application_count, 1);
+    assert!(rendered.context_available);
+    assert_eq!(rendered.ledger_sequence, Some(latest.sequence));
+    assert!(rendered.body.contains("Status: applied"));
+    assert!(rendered.body.contains("application note"));
+    for text in [
+        "private standalone work",
+        "private threaded work",
+        "private ordinary link",
+        "completed",
+        "rejected",
+        "SLA implementation",
+    ] {
+        assert!(!rendered.body.contains(text), "unexpected {text}");
+    }
+    Ok(())
+}
+
+#[test]
+fn corrections_can_change_whether_an_entry_is_an_application_report() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    fs::set_permissions(temp.path(), fs::Permissions::from_mode(0o700))?;
+    let mut store = Store::initialize(temp.path())?;
+    report(
+        &mut store,
+        "application",
+        "alpha",
+        Some("applied"),
+        Some("application note"),
+        None,
+    )?;
+    store.record(&Record {
+        id: "ordinary-link".into(),
+        status: Some("rejected".into()),
+        notes: Some("This was a reference only.".into()),
+        references: vec![Reference {
+            namespace: "cast.job".into(),
+            external_id: "alpha".into(),
+        }],
+        replaces: Some("application".into()),
+        ..Record::default()
+    })?;
+    assert_eq!(
+        digest::render(&store.entries()?, None, "date")?.body,
+        "No applications to show.\n"
+    );
+    report(
+        &mut store,
+        "correct-application",
+        "beta",
+        Some("interview"),
+        Some("correct application note"),
+        Some("ordinary-link"),
+    )?;
+    let rendered = digest::render(&store.entries()?, None, "date")?;
+    assert_eq!(rendered.application_count, 1);
+    assert!(rendered.body.contains("beta [job details unavailable]"));
+    assert!(rendered.body.contains("Status: interview"));
+    assert!(rendered.body.contains("correct application note"));
+    assert!(!rendered.body.contains("alpha"));
+    assert!(!rendered.body.contains("This was a reference only."));
+    store.retract("retract-application", "correct-application", None)?;
+    assert_eq!(
+        digest::render(&store.entries()?, None, "date")?.body,
+        "No applications to show.\n"
     );
     Ok(())
 }

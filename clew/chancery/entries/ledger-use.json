@@ -1,0 +1,151 @@
+{
+  "id": "clew.ledger.use",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Record and read a ledger notepad",
+  "summary": "Append supplied notes and optional status, group entries in named threads, attach optional external links, and search or read retained history without completion checks.",
+  "manual": "manuals/ledger-use.md",
+  "interfaces": [
+    {
+      "label": "Append a note",
+      "invocation": "clew record --id WRITE_ID --thread NAME --notes TEXT"
+    },
+    {
+      "label": "Append a standalone note",
+      "invocation": "clew record --id WRITE_ID --notes TEXT"
+    },
+    {
+      "label": "Attach an external link",
+      "invocation": "clew record --id WRITE_ID --notes TEXT --ref NAMESPACE EXTERNAL_ID"
+    },
+    {
+      "label": "Search retained entries",
+      "invocation": "clew search QUERY"
+    },
+    {
+      "label": "Read a named thread",
+      "invocation": "clew thread NAME"
+    },
+    {
+      "label": "Read one entry",
+      "invocation": "clew entry ENTRY_ID"
+    },
+    {
+      "label": "Correct an entry",
+      "invocation": "clew record --id WRITE_ID --replaces ENTRY_ID --notes TEXT"
+    },
+    {
+      "label": "Retract an entry",
+      "invocation": "clew retract ENTRY_ID --id WRITE_ID --notes TEXT"
+    }
+  ],
+  "use_when": [
+    "The user wants a durable note about work, a migration, or any other subject, with an optional named thread or external identity.",
+    "The user asks for matching recorded statements, a named thread, an exact entry, or correction of supplied content."
+  ],
+  "do_not_use_when": [
+    "The outcome requires automatic interpretation, verified completion, execution of work or migrations, external identity resolution, or scheduled monitoring.",
+    "Use clew.application.track for explicit job reports and application views; a plain external job link supplies context only."
+  ],
+  "outcome": "One committed append-only entry, or the complete selected local entry or thread history and correction markers.",
+  "effects": [
+    "Record commits an entry and any required thread and reference associations atomically. Retract appends a retraction. Read operations return private retained records.",
+    "Generic operations make no external read, network request, send, work execution, or model invocation."
+  ],
+  "authority": [
+    "The caller supplies statements and status. Clew owns their retention, thread membership, reference associations, exact retry identity, and correction history.",
+    "External systems own the meaning and existence of their identifiers. The conversational agent interprets questions from returned statements."
+  ],
+  "success": [
+    "An append succeeds when its entry, thread, and associations commit and the write ID is returned. Exact retries return that original entry.",
+    "Read results include all selected retained entries, with original content and correction markers. They establish what was recorded, not independent completion."
+  ],
+  "failure_and_recovery": [
+    "Retry uncertain writes with the original ID and identical arguments. Different arguments, invalid correction targets, and a mismatched correction thread fail without appending.",
+    "Missing entries or threads and incompatible or unreadable state fail explicitly. Ordinary operations do not initialize, migrate, or repair state."
+  ],
+  "privacy": [
+    "Notes, statuses, thread names, and references remain in private local state and command output. Do not commit or disclose them without authorization.",
+    "Usage observation records command identity and chat correlation, not arguments or content; observation errors do not change results."
+  ],
+  "does_not_authorize": [
+    "Verifying or inferring completion, executing the described work, applying migrations, resolving links, contacting external parties, sending mail, editing SQLite, or deleting history."
+  ],
+  "dependencies": [],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The local user and authorized agent retain supplied statements and retrieve ledger evidence."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Initialized private ledger schema three is required. Generic entries, search, entry reads, and named-thread reads require no Cast, Platter, or network access."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Record requires --id WRITE_ID and at least one nonblank notes or status value. Optional --thread NAME finds or creates a nonblank case-sensitive named thread. Repeatable --ref NAMESPACE EXTERNAL_ID attaches exact nonblank plain links, deduplicated as a set. Optional --replaces targets one active record; retractions require a target and write ID. Search requires a nonblank query."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Schema-three JSON uses ok and data. Entries expose sequence, id, recorded_at, kind, status, notes, replaces, nullable thread {id,name}, and references {namespace,external_id,role}. Search returns matching history entries; entry reads return one history entry. History entries add superseded_by. Thread reads return thread, status, status_entry_id, and full history."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Entries are primary. Thread membership is optional and distinct from optional external links. A thread holds only its ID and unique name. References are opaque external identities, not local subjects. Plain cast.job links do not affect application status or email. Status remains supplied free text. Corrections replace complete content and associations while inheriting thread; retractions preserve history."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "A write ID binds immutable request content, thread selection, association set, correction operation, and any original job-target namespace. Thread IDs are stable local identities; names are exact case-sensitive shorthands. Namespace and external_id identify external references. Sequence orders committed appends. recorded_at is UTC RFC3339 recording time, not an event or completion date."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Case-insensitive substring search covers all retained entry text, status, thread names and IDs, entry IDs, and reference identifiers, including superseded and retracted records. Thread reads cover its entire retained history in ledger order. Each generic read uses one database snapshot. Thread status is the latest active nonnull supplied status. Matching statements and completion claims are evidence of reports only; successive commands can observe later appends."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Current-user local CLI over private SQLite state. Global --state-dir ABSOLUTE_PATH selects an independent explicit private ledger. Reads do not authorize appends or disclosure."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Each append is an immediate SQLite transaction with synchronous FULL. Thread creation, entry, and reference associations commit together. Exact retries return the original entry; conflicting IDs fail. SQL triggers prohibit entry and association updates and deletes. Corrections inherit the target thread; a different explicit thread is rejected. Existing state is never initialized or migrated implicitly."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Complete reads use memory proportional to retained history. SQLite waits up to five seconds for contention. Threads have no rename, merge, or delete operation. Local substring search supplies no ranking or semantic interpretation. No hard corpus size, command latency, or external availability guarantee exists. Clew does not perform automatic completion checks."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Ledger and JSON output schemas are three. Coordinated deployment migrates supported schema-one and schema-two ledgers with a consistent private backup, preserving write IDs, sequence, times, exact content, corrections, legacy aliases, and frozen email state. Migration creates no named threads or new reports. Ordinary operations refuse unsupported state. There is no automatic pruning or downgrade."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "not_applicable",
+        "statement": "Generic ledger operations require no external data, identifier resolver, model service, completion-check service, or external execution system."
+      }
+    ]
+  }
+}

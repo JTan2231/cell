@@ -1,11 +1,11 @@
 {
   "id": "clew.state",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect Clew private state and installation lifecycle",
-  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded legacy migration, and compatible backup and recovery.",
+  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded migration to generic entries and named threads, and compatible backup and recovery.",
   "manual": "manuals/state.md",
   "use_when": [
     "Clew state, integrity observations, installation selection, maintenance, migration or recovery guarantees must be understood."
@@ -15,15 +15,15 @@
   ],
   "outcome": "An interpreted Clew state or installation observation and its supported lifecycle and recovery boundaries.",
   "effects": [
-    "Init creates empty ledger schema two or checks existing compatible state. Inspection and verification read selected files or local integrity without reports.",
-    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate ledger state and preserve explicitly selected schedule intent."
+    "Init creates empty ledger schema three or checks existing compatible state. Inspection and verification read selected files or local integrity without reports.",
+    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one or schema-two ledger state to schema three while preserving schedule intent."
   ],
   "authority": [
     "Clew owns its installation, ledger schema, migration and email admission maintenance. The current user owns access and authorization; the coordinator owns shared deployment ordering.",
     "Platter owns exact legacy opportunity mappings. Clockwork owns schedule selection and failure halts."
   ],
   "success": [
-    "Doctor establishes local schema-two ledger integrity at invocation. Release verification establishes selected file identity and integrity. Coordinated verification also reads the complete Cast snapshot."
+    "Doctor establishes local schema-three ledger integrity at invocation. Release verification establishes selected file identity and integrity. Coordinated verification also reads the complete Cast snapshot."
   ],
   "failure_and_recovery": [
     "Foreign selectors, changed bytes, stale expected selections, incompatible state, unsafe migration mappings and unresolved holds stop the operation. Preserve recovery evidence.",
@@ -59,6 +59,11 @@
   ],
   "dependencies": [
     {
+      "id": "clew.ledger.use",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
       "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
@@ -84,7 +89,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Local state must be private and compatible. Direct installation requires a sealed candidate and matching bundle. Coordinated configuration requires drained run-owned email maintenance; schema-one migration requires the sole hold and exact Platter mappings."
+        "statement": "Local state must be private and compatible. Direct installation requires a sealed candidate and matching bundle. Coordinated configuration requires drained run-owned email maintenance; migration requires the sole hold. A nonempty schema-one migration additionally requires exact Platter mappings."
       }
     ],
     "inputs": [
@@ -96,19 +101,19 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Doctor returns local schema, integrity and retained entry count. Inspection and verification identify selected program files. Coordinated migration reports a new private backup and retains exact legacy aliases."
+        "statement": "Doctor returns local schema, integrity, and retained entry count. Inspection and verification identify selected program files. Coordinated older-ledger migration reports a new private original-schema backup and retains exact aliases and retry requests."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Initialization and installation add no application report. Migration preserves original ledger rows and write identity, including legacy argument aliases, and leaves frozen email bytes, keys and receipts unchanged."
+        "statement": "Initialization and installation add no ledger entry or application report. Migration preserves entry identity, text, correction history, and exact write identity, including legacy argument aliases. It marks existing job history as explicit application reports in normalized external references and creates no threads. Frozen email bytes, keys, and receipts remain unchanged."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable cell-install-v2 releases. Package version, feature contract version, ledger schema two and email schema one are independent identities. Maintenance owners are deployment run IDs."
+        "statement": "Content hashes identify immutable cell-install-v2 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
       }
     ],
     "completeness_and_freshness": [
@@ -126,13 +131,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends and restores captured or explicit intent while preserving halts. Migration excludes writers, creates a new private consistent schema-one backup and commits schema and aliases in one transaction. Old schema-one writers are rejected afterward."
+        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, creates a new private consistent backup of the original schema, and commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "State has no automatic pruning, general automatic backup or deletion operation. Compatible schema-two reads and short writes can finish during email maintenance and program selection."
+        "statement": "State has no automatic pruning, general automatic backup or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
       },
       {
         "status": "unspecified",
@@ -142,7 +147,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 program releases, ledger schema two and email schema one are supported. Coordinated deployment alone migrates ledger schema one. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+        "statement": "Only cell-install-v2 program releases, ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
       },
       {
         "status": "unspecified",
@@ -159,7 +164,7 @@
       },
       {
         "status": "declared",
-        "statement": "A nonempty legacy ledger migration requires the exact legacy-reference-to-Cast-job mapping from the Platter public opportunity reader. Ordinary schema-two work does not require Platter.",
+        "statement": "A nonempty schema-one migration requires the exact legacy-reference-to-Cast-job mapping from the Platter public opportunity reader. Schema-two conversion and ordinary generic ledger work require no Platter read.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"

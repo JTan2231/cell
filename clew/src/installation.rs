@@ -150,7 +150,7 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         && root.join(crate::store::DATABASE).exists()
     {
         // Prove compatibility with the selected program, including recovery
-        // before schema-two publication. Never release an old program on new state.
+        // before ledger publication. Never release an old program on new state.
         cell_install::command::json(
             &installed,
             &[
@@ -177,13 +177,22 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         };
         schedule.activate(&clockwork, KEY, enabled)?;
     }
-    Ok(json!({"schema_version":2,"safe_to_release":true,"migration_backup":migration_backup}))
+    Ok(json!({"schema_version":3,"safe_to_release":true,"migration_backup":migration_backup}))
 }
 
 fn migrate_if_needed(root: &Path, home: &Path, owner: &str) -> Result<Option<PathBuf>> {
     if !root.join(crate::store::DATABASE).exists() || !crate::store::Store::migration_needed(root)?
     {
         return Ok(None);
+    }
+    let version = crate::store::Store::schema_version_at(root)?;
+    let backup = root.join(format!(
+        "ledger-schema{version}-backup-{owner}-{}.sqlite3",
+        uuid::Uuid::now_v7()
+    ));
+    if version == 2 {
+        crate::store::Store::migrate_current(root, &backup)?;
+        return Ok(Some(backup));
     }
     let references = crate::store::Store::legacy_references(root)?;
     let opportunities = if references.is_empty() {
@@ -195,10 +204,6 @@ fn migrate_if_needed(root: &Path, home: &Path, owner: &str) -> Result<Option<Pat
             .items
     };
     let mapping = legacy_mapping(&references, opportunities)?;
-    let backup = root.join(format!(
-        "ledger-schema1-backup-{owner}-{}.sqlite3",
-        uuid::Uuid::now_v7()
-    ));
     crate::store::Store::migrate(root, &mapping, &backup)?;
     Ok(Some(backup))
 }

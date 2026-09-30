@@ -1,6 +1,7 @@
 # Record application status and notes
 
-Clew stores what the user reports about a job retained by Cast. The
+Clew stores explicit application reports in its general ledger. Each report
+selects a job retained by Cast through `--cast-job` or a preserved legacy alias. The
 user supplies every status. The conversational agent finds the intended job
 and resolves material ambiguity before writing. Clew accepts an exact job ID;
 it does not interpret prose or choose a candidate.
@@ -12,8 +13,11 @@ clew find 'company, role, nickname or URL'
 ```
 
 Find reads one complete retained Cast snapshot through `cast.discovery.explore`.
-It searches job IDs, companies, roles, URLs, retained legacy references and Clew
-notes. Notes from superseded records are included as search clues. HTTP URL
+It searches job IDs, companies, roles, URLs, retained legacy references, and
+Cast-linked ledger notes and thread names. Superseded notes remain search clues.
+A plain job link can help identify a job through its notes, but it does not
+create application tracking or contribute status and notes to the application
+view or email. HTTP URL
 queries use supported ATS identity or Cast URL normalization. These local reads
 make no network request. The two products are read in separate snapshots.
 
@@ -38,11 +42,20 @@ clew record --cast-job JOB_ID --id WRITE_ID --status applied --notes 'Applied to
 clew record --cast-job JOB_ID --id NEXT_WRITE_ID --notes 'Recruiter asked about availability.'
 ```
 
-Supply at least one nonblank `--status` or `--notes`. Status is free text, with
+Supply at least one nonblank `--status` or `--notes`. Optional `--thread NAME`
+groups the report with other ledger notes and creates the named thread when
+needed. The report and thread commit together. Status is free text, with
 no required sequence of transitions. Notes retain the supplied text. Omit a
 field to store null. A notes-only entry leaves current status unchanged.
 
-The first record for a job must resolve through the installed Cast snapshot
+Only this explicit application-report form affects application status and the
+daily email. A general record with `--ref cast.job JOB_ID` retains a plain link;
+it does not establish job tracking, add application notes, or change application
+status. Further repeatable `--ref NAMESPACE EXTERNAL_ID` arguments can attach
+plain links to an explicit report. Read `chancery show clew.ledger.use` for
+generic notes, named threads, search, and reference meaning.
+
+The first application report for a job must resolve through the installed Cast snapshot
 reader. An already recorded exact job can receive further reports while Cast is
 unavailable. A closed or unavailable posting remains recordable when Cast retains
 the job. Clew does not assert which packet the user used.
@@ -77,7 +90,7 @@ Show accepts a Cast job ID or a retained legacy Platter alias. An identifier tha
 could select different jobs fails as ambiguous. Its result contains
 `cast_job_id`, `current` and `history`.
 
-List returns each currently tracked job, its latest supplied status,
+List selects only explicit application reports. It returns each currently tracked job, its latest supplied status,
 the supplying `status_entry_id`, and its latest active record. Current status is
 the last nonnull status by ledger sequence among records that have not been
 replaced or retracted. If no such status exists, it is null. If all records for
@@ -89,16 +102,23 @@ entry identifies its immediate `superseded_by` entry when present. The complete
 original text remains retained. The current read and history read are successive
 local observations; another writer can commit between them.
 
-An entry contains a sequence, write ID, `recorded_at`, kind, `cast_job_id`,
-optional `platter_job_ref`, optional status, optional notes and optional `replaces`.
-The Platter reference preserves the exact legacy argument when present.
-Sequence orders committed
-appends. `recorded_at` is the UTC RFC3339 time Clew recorded the report. It is not
-the date of application or response. Put user-supplied historical dates in notes.
+Ledger entries now expose `sequence`, `id`, `recorded_at`, `kind`, optional
+`status`, optional `notes`, optional `replaces`, nullable `thread`, and a
+`references` array. A reference association holds `namespace`, `external_id`,
+and `role`. The report's canonical Cast link has namespace `cast.job` and role
+`application_report`. Additional links use role `link`. The retained write
+request preserves any original legacy argument for exact retries. Thread is
+null or `{id, name}`. Job views retain their exact Cast job identity.
 
-All commands return JSON with `ok`, `schema_version: 2`, and `data`, or a nonzero
+Sequence orders committed appends. `recorded_at` is the UTC RFC3339 time Clew
+recorded the report. It is not the date of application or response. Put supplied
+historical dates in notes.
+
+All commands return JSON with `ok`, `schema_version: 3`, and `data`, or a nonzero
 exit with an error detail. `--json` is accepted for explicit callers. Reads return
-complete selected histories, with no paging or automatic pruning.
+complete selected histories, with no paging or automatic pruning. Entry and
+history JSON use the generic ledger shape, not schema two's mandatory
+`cast_job_id` entry field. `find`, `list`, and `show` remain job views.
 
 ## Correct a report
 
@@ -108,11 +128,15 @@ clew record --cast-job CORRECT_JOB_ID --id CORRECTION_ID --replaces ENTRY_ID \
 clew retract ENTRY_ID --id RETRACTION_ID --notes 'This report concerned another job.'
 ```
 
-A replacement supplies a complete new latest report. Omitted fields become null;
-they are not copied from the target. A supplied status can therefore become the
+A replacement supplies a complete new report and reference associations.
+Omitted fields and links are not copied from the target. Supply `--cast-job` or
+the preserved legacy alias again to retain the explicit application-report
+association. A generic replacement without that association removes its target
+from the application view. The replacement inherits its target's thread; an
+explicitly different `--thread` is rejected. A supplied status can therefore become the
 current status. For a notes-only correction, supply only the corrected notes.
 Retraction removes the target from current reads and can reveal an earlier
-supplied status. Its explanatory notes are retained as correction history.
+supplied status. Its explanatory notes and inherited thread are retained as correction history.
 
 Only an active record can be corrected or retracted. A retraction cannot itself
 be retracted. To restore a report, append it under a new ID. Correct an already
@@ -127,7 +151,7 @@ of ledger rows. Invalid targets and conflicting write IDs leave history unchange
 The default database is `~/.local/share/clew/ledger.sqlite3`, a private regular
 file with mode 0600 in a directory with mode 0700. `--state-dir ABSOLUTE_PATH`
 selects an explicit independent private ledger. Ordinary operations require
-initialized schema-two state and never initialize or migrate it implicitly.
+initialized schema-three state and never initialize or migrate it implicitly.
 Read the `clew.state` feature for initialization, migration and recovery
 guarantees. Read `chancery show clew.install.operate` for the ordered procedures.
 
