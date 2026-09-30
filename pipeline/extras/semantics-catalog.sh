@@ -14,6 +14,7 @@ trap 'exit 143' 15
 
 ln -s "$PIPELINE_ROOT/semantics/chancery" "$registry/semantics"
 ln -s "$PIPELINE_ROOT/annals/chancery/annals" "$registry/annals"
+ln -s "$PIPELINE_ROOT/annals/chancery/annals-usage" "$registry/annals-usage"
 ln -s "$PIPELINE_ROOT/conversations/chancery" "$registry/conversations"
 ln -s "$PIPELINE_ROOT/nucleus/chancery" "$registry/nucleus"
 ln -s "$PIPELINE_ROOT/bazaar/chancery" "$registry/bazaar"

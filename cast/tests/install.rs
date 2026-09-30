@@ -18,6 +18,7 @@ impl Fixture {
     fn adapter_request(&self) -> Value {
         let candidate_dir = self.home.join("candidate");
         fs::create_dir_all(candidate_dir.join("bin")).unwrap();
+        fs::create_dir(self.home.join("run")).unwrap();
         let mut binaries = serde_json::Map::new();
         for (name, original) in [
             ("cast", self.binary.as_path()),

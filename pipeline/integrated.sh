@@ -40,6 +40,17 @@ done <<EOF
 $(pipeline_products)
 EOF
 
+while IFS='|' read -r provider_id provider_dir provider_entries; do
+    [ -n "$provider_id" ] || continue
+    provider_selector="$catalog_registry/$provider_id"
+    [ ! -e "$provider_selector" ] && [ ! -L "$provider_selector" ] \
+        || integrated_fail "duplicate provider ID in source catalog: $provider_id"
+    ln -s "$PIPELINE_ROOT/$provider_dir" "$provider_selector"
+    catalog_expected_entries=$((catalog_expected_entries + provider_entries))
+done <<EOF
+$PIPELINE_SHARED_PROVIDERS
+EOF
+
 [ "$catalog_expected_entries" -eq "$PIPELINE_EXPECTED_PROVIDER_ENTRIES" ] \
     || integrated_fail "expected descriptor inventory of $PIPELINE_EXPECTED_PROVIDER_ENTRIES entries; found $catalog_expected_entries"
 

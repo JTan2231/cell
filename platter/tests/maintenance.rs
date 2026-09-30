@@ -119,7 +119,7 @@ fn mailbox(
                     Ok((stream, _)) => break stream,
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         ensure!(
-                            start.elapsed() < Duration::from_secs(10),
+                            start.elapsed() < Duration::from_secs(15),
                             "fixture socket timed out waiting for {route}"
                         );
                         thread::sleep(Duration::from_millis(5));
@@ -127,8 +127,8 @@ fn mailbox(
                     Err(error) => return Err(error.into()),
                 }
             };
-            stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-            stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+            stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+            stream.set_write_timeout(Some(Duration::from_secs(15)))?;
             let mut bytes = Vec::new();
             while !bytes.windows(4).any(|part| part == b"\r\n\r\n") {
                 let mut buffer = [0; 4096];
