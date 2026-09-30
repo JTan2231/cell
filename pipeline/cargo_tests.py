@@ -28,7 +28,7 @@ def main() -> int:
     )
     workspace = json.loads(metadata.stdout)
     packages = {package["name"]: package for package in workspace["packages"]}
-    prompt_consumers = {"annals", "decisions", "semantics", "paperboy", "platter", "weaver", "mentor", "emt", "conatus", "cell-prompts"}
+    prompt_consumers = {"annals", "decisions", "semantics", "paperboy", "platter", "weaver", "emt", "conatus", "cell-prompts"}
     with tempfile.TemporaryDirectory(prefix="cell-prompt-tests-") as temporary:
         environment = os.environ.copy()
         if prompt_consumers.intersection(args.packages):

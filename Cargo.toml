@@ -29,7 +29,6 @@ members = [
     "bazaar",
     "paperboy",
     "conatus",
-    "mentor",
     "emt",
     "weaver-narrative",
 ]

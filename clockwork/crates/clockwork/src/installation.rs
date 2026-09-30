@@ -233,7 +233,7 @@ print(json.dumps({'ok':True,'data':data}))
             })
             .collect();
         bindings.push(BindingRecord {
-            key: "mentor/worker".into(),
+            key: "emt/worker".into(),
             ..bindings[0].clone()
         });
         bindings.push(BindingRecord {
@@ -256,7 +256,7 @@ print(json.dumps({'ok':True,'data':data}))
             &path,
             serde_json::to_vec(&serde_json::json!({"bindings":bindings,"refreshed":[]}))?,
         )?;
-        activate_bindings(&client, &captured, &["mentor/worker".into()])?;
+        activate_bindings(&client, &captured, &["emt/worker".into()])?;
         let state: serde_json::Value = serde_json::from_slice(&fs::read(&path)?)?;
         assert_eq!(
             state["refreshed"]
@@ -265,7 +265,7 @@ print(json.dumps({'ok':True,'data':data}))
                 .len(),
             25
         );
-        assert!(!client.binding("mentor/worker")?.enabled);
+        assert!(!client.binding("emt/worker")?.enabled);
         assert!(!client.binding("custom/disabled")?.enabled);
         for prior in captured.iter().take(25) {
             let current = client.binding(&prior.key)?;

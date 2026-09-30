@@ -299,7 +299,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
                   or path == f"pipeline/products/{product}.sh"]
         if path == "prompting" or path.startswith("prompting/"):
             owners = [product for product in products if product in {
-                "annals", "decisions", "semantics", "paperboy", "platter", "weaver", "mentor", "emt", "conatus"
+                "annals", "decisions", "semantics", "paperboy", "platter", "weaver", "emt", "conatus"
             }]
         if owners:
             for owner in owners:

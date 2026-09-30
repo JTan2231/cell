@@ -49,7 +49,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 | "paperboy"
                 | "platter"
                 | "weaver"
-                | "mentor"
                 | "emt"
                 | "ci-manager"
         ) || !seen.insert(entry.id.clone())

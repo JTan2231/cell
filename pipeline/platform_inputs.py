@@ -39,8 +39,6 @@ PRODUCT_RUNTIME_INPUTS = {
     "weaver": ("weaver-narrative/src/main.rs", "weaver-narrative/src/operations.rs",
                "weaver-narrative/src/store.rs", "weaver-narrative/src/lib.rs",
                "weaver-narrative/src/schema.sql", "weaver-narrative/src/agent.rs"),
-    "mentor": ("mentor/src/main.rs", "mentor/src/runner.rs",
-               "mentor/src/store.rs", "mentor/src/lib.rs"),
 }
 
 # A shared change selects its own suite. Only installation primitives expand
@@ -67,7 +65,7 @@ SHARED_INPUTS = {
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
     "nucleus", "annals", "decisions", "semantics",
-    "platter", "paperboy", "mentor", "weaver", "clew",
+    "platter", "paperboy", "weaver", "clew",
 ))
 INSTALL_FIXTURE_CONSUMERS = frozenset((
     "bazaar",

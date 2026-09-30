@@ -158,8 +158,8 @@ preserve caller order, with at most 64 IDs and 8192 bytes including spaces.
 Email accepts no arbitrary email headers.
 
 ```sh
-email --payload-stdin --idempotency-key mentor/critique/answer-id \
-  --reply-to mentor-assignment@account.resend.app \
+email --payload-stdin --idempotency-key correspondence/reply/message-id \
+  --reply-to replies@account.resend.app \
   --in-reply-to '<answer@example.com>' \
   --reference '<problem@example.com>' --reference '<answer@example.com>' \
   'Re: Design a rate limiter' -
