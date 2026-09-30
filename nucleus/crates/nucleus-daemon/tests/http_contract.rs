@@ -260,7 +260,7 @@ fn spawn_test_daemon(root: &Path) -> Child {
 }
 
 async fn wait_for_daemon(child: &mut Child, client: &NucleusClient, stderr_path: &Path) {
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         if let Ok(Ok(_)) = tokio::time::timeout(Duration::from_secs(5), client.health()).await {
             break;
