@@ -11,7 +11,7 @@
   "runtime_contracts": {
     "cast": {"cast.discovery.explore": {"minimum": 2, "before": 3}},
     "email": {"email.message.send": {"minimum": 4, "before": 5}},
-    "clockwork": {"clockwork.schedule.operate": {"minimum": 3, "before": 4}}
+    "clockwork": {"clockwork.schedule.operate": {"minimum": 4, "before": 5}}
   },
   "activation_bindings": ["clew/daily-email"],
   "description": "Install Clew under email admission maintenance, preserve application history, and restore the daily email schedule intent.",

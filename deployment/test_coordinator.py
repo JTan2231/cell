@@ -365,6 +365,16 @@ class DeploymentTests(unittest.TestCase):
                     self.assertIn(consumer, metadata[provider].get("companions", []),
                                   f"{provider} must rebuild its embedded consumer {consumer}")
 
+    def test_committed_candidates_satisfy_declared_runtime_contracts(self):
+        revision = cli.git(ROOT, "rev-parse", "HEAD")
+        products = cli.catalog(ROOT, revision)
+        for consumer, item in products.items():
+            for dependency, required in (item["metadata"] or {}).get("runtime_contracts", {}).items():
+                with self.subTest(consumer=consumer, dependency=dependency):
+                    available = cli.contract_versions(products[dependency], root=ROOT, revision=revision)
+                    self.assertTrue(cli.compatible_contracts(available, required),
+                                    f"{consumer} requires {required}; committed {dependency} provides {available}")
+
     def test_binary_adapter_uses_only_the_admitted_candidate_and_supplies_cleanup_verifier(self):
         self.fixture.add_binary_adapter()
         planned = cli.plan(self.fixture.repo, ["usher"])

@@ -363,6 +363,13 @@ source and operation identity, successful installation evidence and released
 maintenance establish the manager's deployment success. Cleanup failure can
 remain visible even when installation and maintenance release succeeded.
 
+If a start invocation returns a completed failure before admission, the manager
+reads the same request again. A `not_found` observation for that exact request
+stops the CI job as a deployment admission failure and pauses the queue. The
+manager retains the stopped diagnostic without creating an admitted deployment
+receipt. An admitted, uncertain, or uncorrelated result retains the normal
+reconciliation and recovery requirements.
+
 The manager creates a deterministic outcome email after deployment or terminal
 failure. It sends to Email's fixed personal recipient.
 
