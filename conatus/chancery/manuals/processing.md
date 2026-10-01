@@ -20,8 +20,9 @@ conatus instructions set --file instructions.md
 
 Use global `--state-dir ABS_PATH` for private Conatus state. The default is
 `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Product commands
-return JSON `{ "ok": true, "data": ... }` or
-`{ "ok": false, "error": "..." }`; `--json` is optional.
+print readable results by default. Use `--json` for machine calls. JSON success
+retains `{ "ok": true, "data": ... }`. Human and JSON errors go to stderr with
+a nonzero exit; JSON errors retain `{ "ok": false, "error": "..." }`.
 
 Initialization needs writable Conatus state, the supported Annals executable,
 a named general library and an explicit existing decisions-library config.

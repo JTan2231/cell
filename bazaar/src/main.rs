@@ -11,7 +11,7 @@ struct Cli {
     /// Select an absolute database path. Defaults to ~/.local/share/bazaar/bazaar.sqlite3.
     #[arg(long, global = true)]
     database: Option<PathBuf>,
-    /// All results use JSON; accepted for explicit callers.
+    /// Emit schema-one JSON instead of readable text.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -54,17 +54,22 @@ struct ContentInput {
 }
 
 fn main() {
-    if let Err(error) = run() {
-        println!(
-            "{}",
-            json!({"schema_version":1,"ok":false,"error":{"detail":format!("{error:#}")}})
-        );
+    let cli = chancery_usage::cli::parse::<Cli>("bazaar", "");
+    let json_output = cli.json;
+    if let Err(error) = run(cli) {
+        if json_output {
+            println!(
+                "{}",
+                json!({"schema_version":1,"ok":false,"error":{"detail":format!("{error:#}")}})
+            );
+        } else {
+            eprintln!("bazaar: {error:#}");
+        }
         std::process::exit(1);
     }
 }
 
-fn run() -> Result<()> {
-    let cli = chancery_usage::cli::parse::<Cli>("bazaar", "");
+fn run(cli: Cli) -> Result<()> {
     let database = if let Some(path) = cli.database {
         path
     } else {
@@ -72,7 +77,7 @@ fn run() -> Result<()> {
         ensure!(home.is_absolute(), "HOME must be absolute");
         bazaar::database_path(&home)
     };
-    let data = match cli.command {
+    let data = match &cli.command {
         Command::Init => {
             Writer::initialize(&database)?;
             json!({"schema_version":1})
@@ -82,16 +87,16 @@ fn run() -> Result<()> {
             json!({"schema_version":1,"integrity":"ok"})
         }
         Command::Get { id, version } => {
-            serde_json::to_value(Reader::open(&database)?.get(&id, version)?)?
+            serde_json::to_value(Reader::open(&database)?.get(id, *version)?)?
         }
         Command::History { id } => {
-            let versions = Reader::open(&database)?.history(&id)?;
+            let versions = Reader::open(&database)?.history(id)?;
             json!({"id":id,"versions":versions})
         }
         Command::Update { id, input } => {
-            let content = if let Some(content) = input.content {
-                content
-            } else if let Some(path) = input.file {
+            let content = if let Some(content) = &input.content {
+                content.clone()
+            } else if let Some(path) = &input.file {
                 std::fs::read_to_string(path).context("cannot read UTF-8 content file")?
             } else {
                 let mut content = String::new();
@@ -100,9 +105,36 @@ fn run() -> Result<()> {
                     .context("cannot read UTF-8 content from standard input")?;
                 content
             };
-            serde_json::to_value(Writer::open(&database)?.update(&id, &content)?)?
+            serde_json::to_value(Writer::open(&database)?.update(id, &content)?)?
         }
     };
-    println!("{}", json!({"schema_version":1,"ok":true,"data":data}));
+    if cli.json {
+        println!("{}", json!({"schema_version":1,"ok":true,"data":data}));
+    } else {
+        match cli.command {
+            Command::Init => println!("Initialized Bazaar database: {}", database.display()),
+            Command::Doctor => println!(
+                "Bazaar database integrity: ok\nDatabase: {}",
+                database.display()
+            ),
+            Command::Get { id, .. } => {
+                println!("ID: {id}\nVersion: {}\n\nContent:", data["version"]);
+                let content = data["content"].as_str().context("missing string content")?;
+                print!("{content}");
+                if !content.ends_with('\n') {
+                    println!();
+                }
+            }
+            Command::History { id } => {
+                println!("Versions for {id} (newest first):");
+                if let Some(versions) = data["versions"].as_array() {
+                    for version in versions {
+                        println!("  {version}");
+                    }
+                }
+            }
+            Command::Update { id, .. } => println!("Stored {id} version {}.", data["version"]),
+        }
+    }
     Ok(())
 }

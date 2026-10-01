@@ -1,6 +1,6 @@
 {
   "id": "cast.discovery.collect",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -88,7 +88,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Ordinary collection emits a run result and retains normalized companies, jobs, source health, query coverage and conservative budget usage. job collect returns schema one with the exact normal Job record. The run's company_observations counts company drafts returned by discovery; status.jobs counts retained job records."
+        "statement": "CLI collection uses readable run outcomes or a short job receipt by default. Global --json selects the existing success JSON results. Ordinary collection emits a run result and retains normalized companies, jobs, source health, query coverage and conservative budget usage. job collect returns schema one with the exact normal Job record. The run's company_observations counts company drafts returned by discovery; status.jobs counts retained job records. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. The status-snapshot --json protocol and native Rust APIs remain unchanged."
       }
     ],
     "data_semantics": [
@@ -154,7 +154,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Collection contract 5 preserves exact-job observation separately from ordinary collection. Database, configuration and export schema numbers remain separate. Configuration compatibility and the ATS exclusion field are defined by cast.state."
+        "statement": "Collection contract 6 preserves exact-job observation separately from ordinary collection. Database, configuration and export schema numbers remain separate. Configuration compatibility and the ATS exclusion field are defined by cast.state."
       },
       {
         "status": "unspecified",
@@ -187,8 +187,8 @@
   "dependencies": [
     {
       "id": "cast.state",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ]
 }

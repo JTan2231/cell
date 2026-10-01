@@ -1,6 +1,6 @@
 {
   "id": "cast.state",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -74,8 +74,8 @@
   "dependencies": [
     {
       "id": "cast.discovery.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -94,7 +94,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "State defaults to ~/.local/share/cast and can be selected with --state-dir PATH or CAST_STATE_DIR. The CLI flag selects independently of environment. config set --file supplies a complete schema-one configuration; config show returns the current complete input."
+        "statement": "State defaults to ~/.local/share/cast and can be selected with --state-dir PATH or CAST_STATE_DIR. The CLI flag selects independently of environment. config set --file supplies a complete schema-one configuration; config show --json returns the current complete machine input."
       },
       {
         "status": "declared",
@@ -108,7 +108,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "State commands return local readiness, complete configuration, source enrollment or ownership-repair counts. Repair counts describe the selected local transaction rather than external collection coverage."
+        "statement": "CLI state commands use readable diagnosis/configuration and short write receipts by default. Global --json selects the existing success JSON results. State commands return local readiness, complete configuration, source enrollment or ownership-repair counts. Repair counts describe the selected local transaction rather than external collection coverage. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. The status-snapshot --json protocol and native Rust APIs remain unchanged."
       }
     ],
     "data_semantics": [

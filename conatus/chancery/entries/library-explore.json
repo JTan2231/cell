@@ -1,6 +1,6 @@
 {
   "id": "conatus.library.explore",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -77,6 +77,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release compatibility or deprecation window is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 3 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "operational_limits": [
@@ -110,7 +114,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON uses {ok:true,data:...} or {ok:false,error:string}. Lists default to 20 records and allow 1 through 100. A selected intake show separates record, retention, interpretation, and associations; each remote read has available data or its own error. Annals unavailability is reported separately from locally retained input. Want records include state: active or archived. Status local.wants contains active and archived counts, including zero. Record fields preserve exact wording/document and source_data. related_records projects only intake grounded in the returned association graph and shares its completeness flags."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. Lists default to 20 records and allow 1 through 100. A selected intake show separates record, retention, interpretation, and associations; each remote read has available data or its own error. Annals unavailability is reported separately from locally retained input. Want records include state: active or archived. Status local.wants contains active and archived counts, including zero. Record fields preserve exact wording/document and source_data. related_records projects only intake grounded in the returned association graph and shares its completeness flags. Human intake lists use summary rows and identify more results; show reads preserve full wording, observations, evidence and completeness fields."
       }
     ],
     "data_semantics": [

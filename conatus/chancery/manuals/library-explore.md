@@ -18,9 +18,13 @@ commands start no model and change no domain records.
 ```
 
 Use global `--state-dir ABS_PATH` to select initialized local state. The default
-is `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Output is JSON
-`{ "ok": true, "data": ... }` or `{ "ok": false, "error": "..." }`;
-`--json` is optional. Intake lists default to 20 and accept 1 through 100.
+is `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Commands
+print readable text by default. Intake lists print summary rows and identify
+when more results are available. Show reads include the full source text and
+separate local records from Annals observations. Use `--json` for the existing
+machine response, `{ "ok": true, "data": ... }`. Human and JSON errors go to
+stderr with a nonzero exit; JSON errors retain
+`{ "ok": false, "error": "..." }`. Intake lists default to 20 and accept 1 through 100.
 They select local intake by source kind. A show selects one exact intake ID and
 separates its `record`, `retention`, `interpretation`, and `associations`. Each
 Annals read reports available data or its own error.

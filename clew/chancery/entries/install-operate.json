@@ -134,28 +134,28 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clew.state",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
-    },
-    {
-      "id": "clew.application.track",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
-    },
-    {
-      "id": "clew.digest.email",
       "min_contract": 4,
       "max_contract_exclusive": 5
     },
     {
+      "id": "clew.application.track",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "clew.digest.email",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
+    },
+    {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "platter.opportunity.explore",
@@ -170,7 +170,7 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     }
   ],
   "use_when": [

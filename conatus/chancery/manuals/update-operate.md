@@ -16,7 +16,9 @@ Do not edit another product's database or spool.
 
 Use global `--state-dir ABS_STATE` for private Conatus state. The default is
 `CONATUS_STATE_DIR` or `~/Library/Application Support/Conatus`. Product commands
-return JSON success data or an error; `--json` is optional. Keep private source
+print readable results by default. Use `--json` for machine calls and retain
+the existing success and error formats. Human and JSON errors go to stderr
+with a nonzero exit. Keep private source
 text, full documents, evidence and model context out of routine logs.
 
 1. Select the exact supported Annals executable, writable general-library state,

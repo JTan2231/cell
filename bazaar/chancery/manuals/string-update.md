@@ -29,14 +29,18 @@ private path. IDs are nonempty exact, case-sensitive strings. Bazaar validates
 no prompt, configuration, or template syntax.
 
 The first update under an ID creates version 1. Each later update creates the
-next version, including identical content. The receipt returns committed `id`,
-`version`, and `content` in schema-one JSON with `ok:true`. Another writer can
-append after that commit, so the receipt does not promise to remain latest.
+next version, including identical content. The default text receipt reports
+the committed ID and version. Another writer can append after that commit, so
+the receipt does not promise to remain latest.
 
-The CLI returns `{"schema_version":1,"ok":true,"data":...}` for success.
-Operational errors return `ok:false` with `error.detail` and exit 1. Invalid
-command syntax uses the Clap stderr diagnostic and exit 2. The optional `--json`
-flag does not change output. Bazaar stores no recording timestamps.
+Use the global `--json` flag for a machine receipt containing committed `id`,
+`version`, and exact `content`. Success uses
+`{"schema_version":1,"ok":true,"data":...}` on stdout. With `--json`,
+operational errors use `ok:false` with `error.detail` on stdout and exit 1.
+Without the flag, operational errors use a text diagnostic on stderr and exit
+1. Invalid command syntax uses Clap's stderr diagnostic and exit 2 in both
+modes. Rust appends and the JSON schema remain unchanged. Bazaar stores no
+recording timestamps.
 
 ## Append through Rust
 

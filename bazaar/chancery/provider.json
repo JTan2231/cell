@@ -28,7 +28,7 @@
       "Content and IDs may be sensitive. Every committed version is retained without automatic deletion. CLI command usage recording omits arguments and content and preserves results after recording errors."
     ],
     "compatibility_and_retirement": [
-      "String versions, database schema one, output schema one, capability versions and product releases are independent. Unsupported or foreign state fails without automatic migration."
+      "String versions, database schema one, JSON output schema one, capability versions and product releases are independent. Ordinary CLI output is readable text by default; explicit --json retains the existing success and operational-error schemas. Native Rust API results remain unchanged. Unsupported or foreign state fails without automatic migration."
     ],
     "operational_limits": [
       "Each update changes one ID. Reads of different IDs have separate snapshots. Bazaar stores whole strings and returns whole version-number histories; no capacity, throughput or latency guarantee is supplied."

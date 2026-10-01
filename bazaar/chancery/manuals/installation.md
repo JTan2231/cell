@@ -80,10 +80,12 @@ string versions and validates no stored content format.
 
 Doctor opens state read-only and checks database identity and SQLite
 `quick_check`. It returns no stored content. It establishes neither the meaning
-of stored text nor future availability. Init and doctor return schema-one JSON;
-operational errors use `ok:false` with `error.detail` and exit 1. Invalid command
-syntax uses the Clap stderr diagnostic and exit 2. The optional `--json` flag
-does not change output.
+of stored text nor future availability. Init and doctor print short readable
+results by default. Use the global `--json` flag for their existing schema-one
+JSON on stdout. With that flag, operational errors use `ok:false` with
+`error.detail` on stdout and exit 1. Without it, operational errors use a text
+diagnostic on stderr and exit 1. Invalid command syntax uses Clap's stderr
+diagnostic and exit 2 in both modes. Rust state operations remain unchanged.
 
 Rust programs import `bazaar::api::{Reader, Writer, Error}` and use
 `bazaar::api::Result<T>` for typed results:

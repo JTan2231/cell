@@ -26,9 +26,11 @@ Conatus preserves the supplied wording and source-reference string. The
 reference is opaque provenance; Conatus neither fetches it nor proves its
 content. Input files are transport and remain unchanged.
 
-A successful response is JSON `{ "ok": true, "data": ... }` identifying the
-locally committed intake record. Errors use
-`{ "ok": false, "error": "..." }`. `--json` is accepted but not required.
+A successful command prints a readable receipt and the complete supplied
+wording for the locally committed intake record. Use `--json` for the existing
+machine response, `{ "ok": true, "data": ... }`. Human and JSON errors go to
+stderr with a nonzero exit; JSON errors retain
+`{ "ok": false, "error": "..." }`.
 The want ID is `want-` followed by a UUIDv7. `captured_at` records local capture
 in UTC Unix seconds; it is not the source's authorship time. The outgoing Annals
 document is frozen with this record. Its work name is the intake ID, and the

@@ -12,6 +12,10 @@ Resolve this entry to read the required `clockwork.definitions`,
 formats and detailed behavior. This procedure owns operation order,
 prerequisites, consequential effects, stop conditions, and verification.
 
+Public `clockwork` commands print plain text by default. Add `--json` when
+a script or typed integration must parse a result. The flagged response
+schemas and the private broker output are unchanged.
+
 ## Prepare and register a definition
 
 1. Obtain the product's exact supported runner contract and authorization for

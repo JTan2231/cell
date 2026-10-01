@@ -94,6 +94,10 @@ conatus maintenance drain
 conatus maintenance release OWNER
 ```
 
+Config and maintenance commands print readable labeled results by default.
+Use `--json` for their existing machine responses. Human and JSON errors go to
+stderr with a nonzero exit; JSON errors retain `{ "ok": false, "error": "..." }`.
+
 Config reads persistent dependency and library selections only. Maintenance
 exposes owner-scoped durable admission holds and drain. Holds survive interruption.
 Send holds the product admission guard. Deliberate scheduled admission during

@@ -1,6 +1,6 @@
 {
   "id": "conatus.want.capture",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -59,6 +59,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release compatibility or deprecation window is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 2 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "operational_limits": [
@@ -88,7 +92,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON {ok:true,data:...} returns the committed intake record. Errors use {ok:false,error:string}. New wants include record.state: active."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. JSON {ok:true,data:...} returns the committed intake record. Errors use {ok:false,error:string}. New wants include record.state: active. Human capture receipts include the complete supplied wording."
       }
     ],
     "data_semantics": [

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.incidents",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -83,6 +83,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Incident records expose UUID, key, activation/definition when available, code, occurrence, creation/resumption times and Clockwork notification status/attempts. Lists use items/has_more with default 20 and positive limit. Feed uses insertion-ordered items/next_cursor/has_more, limits 1 through 1000."

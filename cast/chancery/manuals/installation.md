@@ -54,12 +54,17 @@ Do not place credentials in query configuration, database rows, or logs.
 
 ## Cell deployment setup
 
-The Cell coordinator configures Cast after selecting its release. Configuration
-runs `cast init`, which initializes missing state and preserves existing
-records and consumed budgets without collecting. Optional settings are
-`state_dir` and `config_file`, both absolute paths. A supplied `config_file`
-replaces the complete configuration through `config set --file`. Omitted
-settings retain current values. Deployment creates no collection schedule.
+The Cell coordinator configures Cast after selecting its release. Setup uses
+Cast's native state APIs and product lock. It initializes missing state and
+preserves existing records and consumed budgets without collecting. Optional
+settings are `state_dir` and `config_file`, both absolute paths. A supplied
+`config_file` replaces the complete configuration. Omitted settings retain
+current values. State selection uses `state_dir`, then a nonempty inherited
+`CAST_STATE_DIR`, then `~/.local/share/cast` in the selected home.
+
+Setup does not invoke the selected CLI or source shell configuration. Recovery
+can therefore configure state when the retained CLI does not support `--json`.
+Deployment creates no collection schedule.
 
 Read `cast.state` for private state selection, configuration, and state
 recovery. Program installation and discovery state have separate lifecycles.

@@ -1,6 +1,6 @@
 {
   "id": "semantics.projects",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -81,6 +81,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "The semantics CLI prints plain text by default. --json selects the existing compact command-specific JSON schema and coded failures on stderr. The typed client and pinned worker explicitly request JSON; machine callers must pass --json. Output schemas, retained state, effects and exit statuses are unchanged."
+      },
       {
         "status": "declared",
         "statement": "Project list returns ID, canonical current path, lifecycle status, and HEAD. Project show and operation receipts return the complete selected record; seeding returns the committed bootstrap result."
@@ -165,8 +169,8 @@
   "dependencies": [
     {
       "id": "semantics.repository.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "annals.decision-account.exchange",

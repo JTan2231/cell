@@ -1,6 +1,6 @@
 {
   "id": "semantics.repository.explore",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -16,7 +16,7 @@
     "A project should be registered, moved, paused, seeded, repaired, or automated.",
     "The caller intends to read or mutate Semantics SQLite directly."
   ],
-  "outcome": "A JSON repository snapshot, search result, immutable revision log, or revision-range diff for one exact project and optional historical revision.",
+  "outcome": "A repository snapshot, search result, immutable revision log, or revision-range diff for one exact project and optional historical revision.",
   "effects": [
     "Repository show, search, log, and diff do not append project or semantic changes. Opening retained state can perform a supported versioned migration and therefore honors maintenance admission.",
     "Snapshots are rebuilt from immutable typed effects; no mutable concept projection is consulted.",
@@ -91,6 +91,10 @@
     "outputs": [
       {
         "status": "declared",
+        "statement": "The semantics CLI prints plain text by default. --json selects the existing compact command-specific JSON schema and coded failures on stderr. The typed client and pinned worker explicitly request JSON; machine callers must pass --json. Output schemas, retained state, effects and exit statuses are unchanged."
+      },
+      {
+        "status": "declared",
         "statement": "Project lists return ID, canonical path, status, and HEAD. Repository show and search use schema 2. They return project ID, selected revision, and selected concepts with ID, full label and meaning, active state, replacement, and distinctions. show --provenance returns the full replayed repository with grounds, withdrawals, and revision bookkeeping. Log and diff return complete immutable revision records."
       }
     ],
@@ -153,7 +157,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 2 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."
+        "statement": "Capability contract version 3 preserves stable project and concept IDs and replays schema-two immutable revisions, including legacy Decision groundings; provider release and revision number remain separate."
       },
       {
         "status": "unspecified",

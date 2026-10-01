@@ -84,6 +84,8 @@ Model repair also requires compatible Nucleus execution and the installed
 Bazaar prompt selection `cell.prompts.ci-manager`. It pins versions of
 `ci-manager.repair.instructions` and `ci-manager.repair.prompt`. Missing prompt
 records fail; the worker does not create Bazaar state or use a source fallback.
+The worker reads Bazaar records with `--json`. Install this consumer update
+before selecting a Bazaar release whose default CLI output is readable text.
 Deployment and Email retain their own setup and readiness requirements.
 
 Installation selects manager files and the matching `ci-manager` Chancery

@@ -1,6 +1,6 @@
 {
   "id": "semantics.service",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -82,6 +82,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "The semantics CLI prints plain text by default. --json selects the existing compact command-specific JSON schema and coded failures on stderr. The typed client and pinned worker explicitly request JSON; machine callers must pass --json. Output schemas, retained state, effects and exit statuses are unchanged."
+      },
       {
         "status": "declared",
         "statement": "Doctor returns typed checks; maintenance returns protocol_version 1, contract_version 1, holds and drained; installer receipts, retained transaction/backup, exact release selectors, and selected definition describe the installation outcome."
@@ -183,8 +187,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ]
 }

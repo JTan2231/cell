@@ -1,6 +1,6 @@
 {
   "id": "clew.state",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -52,13 +52,13 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "platter.opportunity.explore",
@@ -68,7 +68,7 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     }
   ],
   "promise": {
@@ -93,7 +93,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration reports a private original-schema backup and retains aliases and retry requests."
+        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration reports a private original-schema backup and retains aliases and retry requests."
       }
     ],
     "data_semantics": [
@@ -144,6 +144,10 @@
       {
         "status": "unspecified",
         "statement": "No future cross-release compatibility window or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

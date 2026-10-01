@@ -12,6 +12,10 @@ state, and schedule details. Direct program installation changes owned program
 and provider selectors; it does not operate product definitions or bindings.
 Coordinated deployment also suspends and refreshes captured broker bindings.
 
+Public `clockwork` commands print plain text by default. Add `--json` when
+a script or typed integration must parse a result. The flagged response
+schemas and the private broker output are unchanged.
+
 ## Prepare and install
 
 1. Select the candidate binary, installer, and provider bundle at absolute paths.

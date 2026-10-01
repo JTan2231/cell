@@ -5,6 +5,10 @@ in an append-only history. Entries can stand alone, belong to a named thread,
 and link to stable identities outside Clew. It also maintains an explicit
 application-report view for Cast jobs and an optional daily application email.
 
+The `clew` command prints readable text by default. Use `--json` for the
+schema-three machine response. Entry and history reads keep the full supplied
+text; search and application lists print summary rows.
+
 Read `chancery show ID` for one feature or procedure. Read
 `chancery resolve ID` for its required contracts and compatibility gaps. These
 commands read the installed publication. They do not check live readiness or

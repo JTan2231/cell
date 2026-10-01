@@ -57,28 +57,28 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.projects",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    },
-    {
-      "id": "semantics.reconciliation",
       "min_contract": 2,
       "max_contract_exclusive": 3
     },
     {
-      "id": "semantics.service",
+      "id": "semantics.reconciliation",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "semantics.service",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "session_surfaces": [

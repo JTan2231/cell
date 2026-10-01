@@ -35,7 +35,7 @@ case "$suite" in
         python3 "$PIPELINE_ROOT/pipeline/test_ci_entry.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_budget.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
-        python3 -m unittest -q ci_manager.test_workspace
+        python3 -m unittest -q ci_manager.test_integrations
         ;;
     broker) python3 -m unittest -q ci_broker.test_broker ;;
     deployment) python3 -m unittest -q deployment.test_coordinator ;;

@@ -114,9 +114,12 @@ Sequence orders committed appends. `recorded_at` is the UTC RFC3339 time Clew
 recorded the report. It is not the date of application or response. Put supplied
 historical dates in notes.
 
-All commands return JSON with `ok`, `schema_version: 3`, and `data`, or a nonzero
-exit with an error detail. `--json` is accepted for explicit callers. Reads return
-complete selected histories, with no paging or automatic pruning. Entry and
+Commands print readable text by default. Find and list print summary rows; show
+prints the full selected history. Use `--json` for machine reads and writes.
+JSON success retains `ok`, `schema_version: 3`, and `data`. Human errors go to
+stderr. JSON errors retain `ok: false` and `error.detail` on stdout, with a
+nonzero exit. JSON reads return complete selected records and histories, with
+no paging or automatic pruning. Entry and
 history JSON use the generic ledger shape, not schema two's mandatory
 `cast_job_id` entry field. `find`, `list`, and `show` remain job views.
 

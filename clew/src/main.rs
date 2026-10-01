@@ -4,6 +4,8 @@ use clew::store::{Record, Reference, Store};
 use serde_json::json;
 use std::{collections::BTreeSet, path::PathBuf};
 
+mod output;
+
 #[derive(Parser)]
 #[command(
     version,
@@ -12,14 +14,14 @@ use std::{collections::BTreeSet, path::PathBuf};
 struct Cli {
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
-    /// Print JSON, including for email previews.
+    /// Print the machine JSON response instead of readable text.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
     command: Command,
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum Command {
     /// Initialize an empty private ledger, or check the existing schema.
     Init,
@@ -74,7 +76,7 @@ enum Command {
     Email(EmailCommand),
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum EmailCommand {
     Preview {
         /// Read the frozen message for a retained occurrence.
@@ -116,19 +118,29 @@ fn main() {
         println!("{snapshot}");
         return;
     }
-    if let Err(error) = run() {
-        println!(
-            "{}",
-            json!({"ok":false,"error":{"detail":format!("{error:#}")}})
-        );
-        std::process::exit(1);
+    let cli = chancery_usage::cli::parse::<Cli>("clew", "");
+    let json_output = cli.json;
+    let command = cli.command.clone();
+    match execute(cli) {
+        Ok(data) if json_output => {
+            println!("{}", json!({"ok":true,"schema_version":3,"data":data}));
+        }
+        Ok(data) => print!("{}", output::render(&command, &data)),
+        Err(error) => {
+            if json_output {
+                println!(
+                    "{}",
+                    json!({"ok":false,"error":{"detail":format!("{error:#}")}})
+                );
+            } else {
+                eprintln!("Error: {error:#}");
+            }
+            std::process::exit(1);
+        }
     }
 }
 
-fn run() -> Result<()> {
-    let cli = chancery_usage::cli::parse::<Cli>("clew", "");
-    let text_preview =
-        !cli.json && matches!(&cli.command, Command::Email(EmailCommand::Preview { .. }));
+fn execute(cli: Cli) -> Result<serde_json::Value> {
     let root = cli.state_dir.unwrap_or(clew::state_dir(&clew::home()?));
     ensure!(root.is_absolute(), "Clew state directory must be absolute");
     let data = match cli.command {
@@ -207,20 +219,7 @@ fn run() -> Result<()> {
             clew::digest::send(&root, scheduled, retry.as_deref())?
         }
     };
-    if text_preview {
-        println!(
-            "From: {}\nTo: {}\nSubject: {}\n\n{}",
-            data["from"].as_str().context("preview sender")?,
-            data["to"].as_str().context("preview recipient")?,
-            data["digest"]["subject"]
-                .as_str()
-                .context("preview subject")?,
-            data["digest"]["body"].as_str().context("preview body")?
-        );
-    } else {
-        println!("{}", json!({"ok":true,"schema_version":3,"data":data}));
-    }
-    Ok(())
+    Ok(data)
 }
 
 fn append_record(root: &std::path::Path, record: &Record) -> Result<clew::store::Entry> {

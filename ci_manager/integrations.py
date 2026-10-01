@@ -225,7 +225,7 @@ def terminal_result(view: dict[str, Any]) -> dict[str, Any] | None:
 
 def _bazaar_get(identifier: str, version: int | None, *, executable: Path,
                 database: Path | None) -> dict[str, Any]:
-    command = [str(executable)]
+    command = [str(executable), "--json"]
     if database is not None:
         command.extend(["--database", str(database)])
     command.extend(["get", identifier])
