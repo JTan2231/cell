@@ -1,8 +1,12 @@
 """Check Rust test selection with in-memory metadata."""
 
 import unittest
+from argparse import Namespace
+from pathlib import Path
+from unittest.mock import patch
 
-from parallel_tests import TestPlan, filterset, make_plan
+from cargo_tests import run_tests
+from parallel_tests import TestPlan, filterset, make_plan, run_plan
 
 
 def target(name, kind="test", test=True, doctest=False):
@@ -40,7 +44,6 @@ class SelectionTests(unittest.TestCase):
             ("alpha", "test", "ordinary"), ("alpha", "example", "sample"),
             ("alpha", "bench", "timing"),
         })
-        self.assertEqual(plan.doctests, {"alpha": True})
         self.assertTrue(plan.offline)
 
     def test_platform_only_coverage_includes_only_lifecycle_targets(self):
@@ -49,7 +52,6 @@ class SelectionTests(unittest.TestCase):
             ("alpha", "bin", "alpha-install"), ("alpha", "test", "install"),
             ("alpha", "test", "maintenance"),
         })
-        self.assertEqual(plan.doctests, {})
 
     def test_shared_suite_is_explicit_and_deduplicated(self):
         plan = make_plan(self.workspace, self.configs, ["alpha", "alpha"], ["alpha"],
@@ -58,8 +60,6 @@ class SelectionTests(unittest.TestCase):
         self.assertIn(("cell-prompts", "bin", "cell-prompts"), plan.targets)
         self.assertNotIn("cell-maintenance", {key[0] for key in plan.targets})
         self.assertEqual(plan.targets[("cell-install", "lib", "cell_install")], {"shared:install"})
-        self.assertEqual(plan.doctests, {"alpha": True, "cell-install": False,
-                                        "cell-prompts": False})
 
     def test_filter_disambiguates_same_target_name_in_different_packages(self):
         plan = make_plan(self.workspace, self.configs, ["alpha", "beta"], ["alpha"], [])
@@ -79,13 +79,25 @@ class SelectionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "absent from metadata: missing"):
             make_plan(self.workspace, config, ["missing"], [], [])
 
-    def test_test_false_library_can_still_require_doctests(self):
+    def test_doctest_only_library_runs_no_tests_in_either_runner(self):
         workspace = {"packages": [package("docs", [target("docs", "lib", False, True)])]}
         config = {"docs": {"packages": ["docs"], "offline": False}}
         plan = make_plan(workspace, config, ["docs"], [], [])
         self.assertEqual(plan.targets, {})
-        self.assertEqual(plan.doctests, {"docs": False})
+        args = Namespace(packages=["docs"], group="product", no_fail_fast=False)
+        with patch("subprocess.run") as run:
+            self.assertEqual(run_plan(Path("/cell"), plan, Path("/nextest"), 4), 0)
+            self.assertEqual(run_tests(args, [], {"docs": workspace["packages"][0]}, {}), 0)
+        run.assert_not_called()
 
+    def test_serial_runner_runs_library_tests_without_doctests(self):
+        args = Namespace(packages=["alpha"], group="product", no_fail_fast=False)
+        packages = {"alpha": package("alpha", [target("alpha", "lib", doctest=True)])}
+        with patch("subprocess.run") as run:
+            run.return_value.returncode = 0
+            self.assertEqual(run_tests(args, [], packages, {}), 0)
+        run.assert_called_once_with(
+            ["cargo", "test", "--package", "alpha", "--lib"], check=False, env={})
 
 
 if __name__ == "__main__":

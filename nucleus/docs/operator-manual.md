@@ -325,8 +325,8 @@ resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 
 Selected Rust tests run through one parallel nextest stage between the selected
 products' checks before and after tests. The broker retains one compiler writer;
-the test stage has a separate configurable test-process limit. Doctests and
-shared infrastructure Python suites remain required separate commands. Install
+the test stage has a separate configurable test-process limit. CI does not run
+doctests. Shared infrastructure Python suites remain separate checks. Install
 the pinned runner on the external work volume before submitting a candidate
 that uses it. An active job keeps its committed candidate. Updating validation
 source does not replace the installed manager; manager replacement still requires

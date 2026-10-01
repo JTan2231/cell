@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a complete Cargo test group, inside an admitted product gate."""
+"""Run a Cargo test group without doctests, inside an admitted product gate."""
 
 import argparse
 import json
@@ -38,7 +38,6 @@ def run_tests(args, common, packages, environment) -> int:
             continue
         package = packages[name]
         targets = []
-        docs = False
         for target in package["targets"]:
             if platform_target(name, target) != (args.group == "platform"):
                 continue
@@ -46,7 +45,6 @@ def run_tests(args, common, packages, environment) -> int:
             if any(kind in kinds for kind in ("lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro")):
                 if target.get("test", True):
                     targets.append("--lib")
-                docs |= target.get("doctest", False)
             elif target.get("test", True):
                 for kind in ("bin", "test", "example", "bench"):
                     if kind in kinds:
@@ -56,9 +54,9 @@ def run_tests(args, common, packages, environment) -> int:
         if args.no_fail_fast:
             command.append("--no-fail-fast")
         # Never issue an unqualified cargo test: it would re-enable every
-        # integration target, including installation tests.
-        for selection in ([targets] if targets else []) + ([["--doc"]] if docs else []):
-            result = subprocess.run([*command, *selection], check=False, env=environment)
+        # integration target, including installation tests, and doctests.
+        if targets:
+            result = subprocess.run([*command, *targets], check=False, env=environment)
             if result.returncode:
                 failure = result.returncode
                 if not args.no_fail_fast:

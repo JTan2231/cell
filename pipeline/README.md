@@ -101,8 +101,8 @@ so selection includes the submitted changes and every retained repair.
 
 There are two target groups:
 
-- The product group selects library and command unit tests, remaining integration
-  targets, and doctests.
+- The product group selects library and command unit tests and remaining
+  integration targets.
 - The platform group selects installer binary unit tests and the shared
   `cell-install` and `cell-maintenance` packages. Its target convention also
   recognizes integration targets named `install` or `maintenance`.
@@ -140,9 +140,8 @@ products and shared suites in the gate command and records its timing separately
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or
 shared suite. The run uses no automatic retries and continues after test
-failures. Doctests use separate Cargo commands after nextest, including when
-ordinary tests fail. The test gate fails after these commands finish. Build or
-discovery failure does not establish completed test coverage.
+failures. CI does not run doctests. Build or discovery failure does not establish
+completed test coverage.
 
 `platform_inputs.py` is the explicit platform input map. Product installer
 sources, packaging, migrations, schemas, maintenance modules, selected runtime

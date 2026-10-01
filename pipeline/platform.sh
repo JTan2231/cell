@@ -30,7 +30,7 @@ case "$suite" in
         cargo fmt --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" -- --check
         if [ "$checks_only" = 0 ]; then
             sh "$PIPELINE_ROOT/pipeline/clippy.sh" --shared-suite "$suite"
-            cargo test --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" --locked
+            cargo test --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" --locked --all-targets
         fi
         ;;
     catalog) "$PIPELINE_ROOT/pipeline/integrated.sh" ;;

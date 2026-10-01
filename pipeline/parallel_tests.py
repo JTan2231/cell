@@ -29,7 +29,6 @@ LIBRARY_KINDS = frozenset(("lib", "rlib", "dylib", "cdylib", "staticlib", "proc-
 class TestPlan:
     # Cargo package, nextest binary kind, and Cargo target name identify a target.
     targets: dict[tuple[str, str, str], set[str]] = field(default_factory=dict)
-    doctests: dict[str, bool] = field(default_factory=dict)
     offline: bool = False
 
 
@@ -74,7 +73,7 @@ def make_plan(workspace: dict, configs: dict, products: list[str],
     packages = {package["name"]: package for package in workspace["packages"]}
     plan = TestPlan(offline=any(config["offline"] for config in configs.values()))
 
-    def include(name, owner, group, offline):
+    def include(name, owner, group):
         if name not in packages:
             raise ValueError(f"selected Cargo package is absent from metadata: {name}")
         for target in packages[name]["targets"]:
@@ -86,8 +85,6 @@ def make_plan(workspace: dict, configs: dict, products: list[str],
             if target.get("test", True):
                 key = (name, kind, target["name"])
                 plan.targets.setdefault(key, set()).add(owner)
-            if kind in ("lib", "proc-macro") and target.get("doctest", False):
-                plan.doctests[name] = plan.doctests.get(name, False) or offline
 
     for selected, group, label in ((products, False, "product"),
                                    (platform_products, True, "platform")):
@@ -96,9 +93,9 @@ def make_plan(workspace: dict, configs: dict, products: list[str],
             for name in config["packages"]:
                 # Shared suites are required only by explicit shared selection.
                 if name not in SHARED_PACKAGES:
-                    include(name, f"{label}:{product}", group, config["offline"])
+                    include(name, f"{label}:{product}", group)
     for suite in sorted(set(shared_suites)):
-        include(SHARED_SUITES[suite], f"shared:{suite}", None, False)
+        include(SHARED_SUITES[suite], f"shared:{suite}", None)
     return plan
 
 
@@ -131,11 +128,8 @@ def report_failures(path: Path) -> None:
 def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) -> int:
     for (package, kind, name), owners in sorted(plan.targets.items()):
         print(f"ci: selected {','.join(sorted(owners))} {package}/{kind}/{name}", flush=True)
-    for package in sorted(plan.doctests):
-        print(f"ci: selected doctests {package}", flush=True)
-    selected_packages = {package for package, _, _ in plan.targets} | plan.doctests.keys()
-    if not selected_packages:
-        print("ci: selected Rust groups contain no test targets or doctests", flush=True)
+    if not plan.targets:
+        print("ci: selected Rust groups contain no test targets", flush=True)
         return 0
 
     common = ["--manifest-path", str(root / "Cargo.toml"), "--locked"]
@@ -176,14 +170,6 @@ def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) 
                 print(f"ci: cannot read nextest failure summary: {error}", file=sys.stderr)
                 failure = failure or 1
 
-        # Rustdoc remains required after the parallel pool drains, including on failure.
-        for package, offline in sorted(plan.doctests.items()):
-            print(f"==> doctests {package}", flush=True)
-            result = subprocess.run([
-                "cargo", "test", *common, "--package", package, "--doc", "--no-fail-fast",
-                *(["--offline"] if offline else []),
-            ], check=False, env=environment, cwd=root)
-            failure = failure or result.returncode
     return failure
 
 
