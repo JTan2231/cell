@@ -1,6 +1,6 @@
 {
   "id": "chancery.provider.publish",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -58,8 +58,8 @@
     },
     {
       "id": "chancery.bundle.validate",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "chancery.directory.discover",

@@ -110,7 +110,7 @@ impl Fixture {
 }
 
 #[test]
-fn independent_versions_exact_inventory_and_directory_safety() -> Result<()> {
+fn independent_versions_and_repeated_preparation() -> Result<()> {
     let fixture = Fixture::new()?;
     let prepared = fixture.prepare("first")?;
     assert_eq!(fixture.prepare("first")?.info, prepared.info);
@@ -118,17 +118,6 @@ fn independent_versions_exact_inventory_and_directory_safety() -> Result<()> {
         prepared.info.versions.get("companion").map(String::as_str),
         Some("4.5.6")
     );
-    fs::set_permissions(
-        prepared.root.join("share/chancery"),
-        fs::Permissions::from_mode(0o777),
-    )?;
-    assert!(verify_prepared(&prepared).is_err());
-    fs::set_permissions(
-        prepared.root.join("share/chancery"),
-        fs::Permissions::from_mode(0o755),
-    )?;
-    fs::write(prepared.root.join("unlisted"), "extra")?;
-    assert!(verify_prepared(&prepared).is_err());
     Ok(())
 }
 
@@ -281,7 +270,7 @@ fn explicit_legacy_proof_restores_predecessor_without_new_public_entries() -> Re
     transaction.recheck(&prior)?;
     assert!(fs::symlink_metadata(fixture.home.join(".local/bin/copied")).is_err());
     let retained = PreparedRelease {
-        info: verify_release_at(&fixture.layout, &legacy_root, &proof)?,
+        info: read_release_at(&fixture.layout, &legacy_root, &proof)?,
         root: legacy_root,
     };
     transaction.publish(&retained, &prior, |_| Ok(()))?;

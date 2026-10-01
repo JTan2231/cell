@@ -1,99 +1,54 @@
-# Install or recover Usher
+# Usher program installation
 
-Use this procedure for an authorized installation, update, inspection, or
-retained-release recovery. Read `usher.installation` for release identity,
-selector, integrity, consistency, and legacy compatibility guarantees. Use
-`chancery resolve usher.install.operate` to include that required contract.
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-## Establish the candidate and authority
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
 
-1. Select ordinary CI delivery or a separately authorized manual installation.
-   Submit source changes with `cell-ci submit COMMIT` or `./ci.sh submit COMMIT`
-   from Cell. The manager integrates, validates, attempts bounded repairs,
-   deploys, and emails the outcome. Verify its retained outcome.
-2. Select a validated source candidate for manual installation. Preparation
-   does not rerun validation or require a CI receipt. Build both production
-   executables through the shared release builder:
-
-```sh
-python3 /absolute/cell/deployment/build.py --source-root /absolute/cell \
-  --product usher --output /absolute/cell-build
-```
-
-3. Establish matching recognition-binary, executing-installer, and provider
-   versions. Inspect the intended prior selection. Use `--home ABSOLUTE_PATH`
-   only for an intentional isolated or alternate-user installation.
-
-Stop when ownership, candidate integrity, or the prior release cannot be proved.
-Do not adopt a foreign selector or edit a retained release.
-
-## Install and verify
-
-1. Install the exact candidate. Add `--expected-current absent|releases/HASH`
-   when installation must require a specific prior selection:
+The default installation root is
+`~/Library/Application Support/Usher/install`. Releases are retained beneath
+`releases/HASH`; `current` selects the program and provider together and `previous`
+retains the superseded selection. Public commands are `~/.local/bin/usher` and
+`~/.local/bin/usher-install`. The provider selector is
+`~/Library/Application Support/Chancery/providers/usher`.
 
 ```sh
-/absolute/cell-build/candidates/usher/bin/usher-install install \
-  --binary /absolute/cell-build/candidates/usher/bin/usher \
-  --bundle /absolute/cell/usher/chancery
-```
-
-2. Verify installed identity and coherent command/provider selection:
-
-```sh
+usher-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
 usher-install inspect
-/absolute/cell-build/candidates/usher/bin/usher-install verify \
-  --binary /absolute/cell-build/candidates/usher/bin/usher \
-  --bundle /absolute/cell/usher/chancery
-usher-install verify-release /absolute/Usher/install/releases/HASH
+usher-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-3. Read `chancery product usher`, `chancery show usher.recognition.inspect`,
-   and `chancery resolve usher.install.operate` to verify the installed
-   overview, feature pages, and required contract reading. Run
-   `usher --register-usage` to register its command inventory.
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery reads
+retained metadata and selects a release in that home's installation directory.
+It does not rebuild the release or restore product data. There is no installer
+`verify` or `verify-release` command. Ordinary runtime checks keep their existing
+behavior.
 
-Installation changes Usher-owned release files and selectors. It creates no
-semantic project, database, worker, schedule, or other product state. It does
-not assess checkout membership. Inspection and verification are read-only;
-version output alone is not integrity proof. No Chancery executable is required
-to install Usher; omit catalog checks when that reader is absent.
+## Deliver programs
 
-For a coordinated manual deployment, use `./deploy.sh usher` from Cell. Its
-sealed Rust adapter owns Usher installation and recovery. The coordinator's
-cleanup policy is separate from direct installer retention.
+Use `cell-ci submit COMMIT` for ordinary committed-source delivery. The manager
+owns integration, validation, deployment, and its outcome email. Inspect the
+retained manager result. Manual installation and recovery use the supplied
+program artifacts under the applicable user authority.
 
-## Recover an exact retained release
+1. Select the intended absolute binary and provider paths.
+2. Run the install command above.
+3. Run `usher --register-usage` to register command inventory separately.
+4. Read `usher-install inspect` to see the selected release.
 
-1. Stop after a failed publication if the recorded prior selection cannot be
-   verified. Preserve the failure evidence; do not overwrite selectors to
-   bypass foreign ownership, changed bytes, or a stale selection.
-2. Select the exact supported retained release under the intended home's
-   `Library/Application Support/Usher/install/releases`. Keep a new-format
-   release's exact Rust `package/install` executable available.
-3. Recover with that executable and the intended current-selection precondition:
+## Recover a release
 
-```sh
-/absolute/retained-release/package/install recover \
-  --release /absolute/Usher/install/releases/HASH \
-  --expected-current releases/CURRENT_HASH
-```
+1. Resolve the retained release under the product installation root.
+2. Run a trusted installer with `recover --release ABSOLUTE_RELEASE_DIRECTORY`.
+3. Read the installation metadata and register the selected command inventory.
 
-4. Inspect and verify the recovered release before declaring completion.
-
-Recovery accepts `--home` and the same `--expected-current` forms as install.
-Selecting a legacy `manifest.txt` release detaches the owned public
-`usher-install` selector. Inspect through the retained Rust `package/install`
-and keep it for later recovery to a Rust release. The legacy shell deployer
-cannot recover from a new-format current release.
-
-This procedure does not authorize Git publication, retained-release deletion,
-foreign-selector takeover, semantic registration, or other product operations.
-Inspection may disclose local paths and integrity metadata. Keep that output
-within the intended local boundary.
-
-## Command usage
-
-With a nonempty `CODEX_THREAD_ID`, Chancery's private usage journal records
-command identity, time, and thread ID, not arguments, output, or outcomes.
-Internal calls are excluded. Recording errors preserve command results.
+Catalog publication and program selection do not establish domain readiness.
+Use ordinary diagnostic commands separately when diagnosis is requested.

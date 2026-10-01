@@ -1,6 +1,6 @@
 {
   "id": "annals.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -24,7 +24,8 @@
     "The decisions provisioner creates the separate database with its immutable decisions role. Existing state must retain that role after the supported schema check. It owns only that database's bound spool, config, logs, backups, and `annals/decisions-inbox` definition. It shares the Annals update lock and never changes `annals/inbox`.",
     "Before opening decisions state or selecting its schedule, the provisioner checks existing mutable control files and both fixed logs. They must be operator-owned private regular files with one hard link. It creates absent logs privately and rejects symbolic or hard-linked targets.",
     "With `--keep-maintenance`, records and retains an Annals-owned decisions maintenance hold for an outer cutover; a later successful invocation clears only that matching owned hold.",
-    "A failed pre-commit cutover restores captured program, service, configuration, library, and spool state according to the supported procedure."
+    "A failed pre-commit cutover restores captured program, service, configuration, library, and spool state according to the supported procedure.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Annals owns its installed programs, library, spool, schedule requirements, configuration, migration, maintenance, domain result, and recovery.",
@@ -32,9 +33,7 @@
     "Nucleus remains separately authoritative for Codex execution and authentication and is not stopped or replaced by an Annals deployment."
   ],
   "success": [
-    "Installed Annals and Annals Usage versions and help surfaces match the selected release.",
-    "Library migration and statistics checks, spool status, the exact Clockwork binding, Nucleus readiness, and Annals Usage diagnostics pass as applicable.",
-    "Maintenance is cleared only after the complete cutover commits and backlog processing is intentionally resumed; an explicitly requested decisions handoff instead reports maintenance still engaged."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
@@ -44,7 +43,7 @@
     "A failed ordinary update restores the previous captured generation before work resumes.",
     "A legacy migration failure before the outer commit registers no definition and restores the system installation; a committed interruption or unproved system-service retirement retains maintenance and its handoff for idempotent completion.",
     "A decisions provisioning failure before binding commit restores the captured config, database, and exact attributable prior schedule state; unprovable restoration leaves only the decisions library maintenance-gated and retains recovery material.",
-    "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and backlog verification."
+    "A fresh-state cutover is destructive to the active generation and requires explicit retained rollback material and a backlog import plan."
   ],
   "privacy": [
     "Installed library, spool, backups, configuration, logs, and Nucleus output may contain complete private sources and model context.",
@@ -103,8 +102,8 @@
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",
@@ -167,11 +166,11 @@
       },
       {
         "status": "declared",
-        "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and a verified uncompleted-backlog import and recovery plan."
+        "statement": "Fresh-state replacement additionally requires explicit destructive authority, retained prior-generation rollback material, and an uncompleted-backlog import and recovery plan."
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning requires a complete cell-install-v2 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a fully verified Annals content release field for field."
+        "statement": "Decisions provisioning requires a complete cell-install-v2 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a recorded Annals content release field for field."
       },
       {
         "status": "declared",
@@ -185,7 +184,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected library path and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
+        "statement": "Maintenance accepts the selected library path and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
       },
       {
         "status": "declared",
@@ -249,7 +248,7 @@
       },
       {
         "status": "declared",
-        "statement": "Post-cutover checks inspect the newly selected installed commands and current service state rather than a retained readiness snapshot."
+        "statement": "Installation completion reflects setup and publication. Runtime diagnostics are separate observations and are not installation gates."
       },
       {
         "status": "unspecified",
@@ -289,7 +288,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell's Annals adapter composes supported primary and dedicated-library initialization or migration without choosing a legacy activation watermark. Group verification precedes release of this run's holds; retained installer maintenance and uncertain recovery remain authoritative."
+        "statement": "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
       },
       {
         "status": "declared",
@@ -313,7 +312,7 @@
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning stages fresh state outside live paths, binds a fresh spool, and starts maintenance before publication. It registers the candidate inactive and drains only an enabled verified prior binding. It backs up before migration, verifies inbox and feed readiness, and switches only `annals/decisions-inbox`. It clears only its own gate unless --keep-maintenance was requested."
+        "statement": "Decisions provisioning prepares fresh state and spool under maintenance, registers an inactive definition, drains owned work, backs up and migrates state, and selects annals/decisions-inbox. It clears only its own gate unless --keep-maintenance was requested."
       },
       {
         "status": "declared",
@@ -367,7 +366,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Primary deployment checks a separately owned Nucleus binary, socket, compatibility, authentication readiness, and requester boundary; decisions provisioning records the supplied absolute Nucleus socket but leaves its current readiness to the outer cutover. Neither stops or replaces Nucleus.",
+        "statement": "Deployment records the supplied Nucleus paths and socket without checking authentication, compatibility, or runtime readiness. It does not stop or replace Nucleus.",
         "target": "nucleus",
         "kind": "readiness",
         "contract": "nucleus.execution.operate"

@@ -189,7 +189,6 @@ class Plan:
     selected: list[str]
     platform: dict[str, list[str]]
     shared: dict[str, list[str]]
-    stage_candidate: str | None
     tests_skipped: bool
 
 
@@ -259,9 +258,7 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
     parser.add_argument("--skip-tests", action="store_true",
                         help="skip test execution while retaining checks and builds")
     parser.add_argument("--quiet-result", action="store_true", help=argparse.SUPPRESS)
-    if direct:
-        parser.add_argument("--stage-candidate", metavar="ABSOLUTE_DIRECTORY")
-    else:
+    if not direct:
         parser.add_argument("--base", metavar="COMMIT", help="compare against this full commit hash")
         parser.add_argument("--candidate", metavar="COMMIT", help="require this clean committed HEAD")
         parser.add_argument("--json", action="store_true", help="emit one aggregate JSON receipt")
@@ -271,9 +268,6 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
         if args.products or args.all:
             parser.error("use --platform to request this product's full gate")
         args.products = [direct]
-    stage_candidate = getattr(args, "stage_candidate", None)
-    if stage_candidate and not Path(stage_candidate).is_absolute():
-        parser.error("candidate staging directory must be absolute")
     if args.all and args.products:
         parser.error("--all cannot be combined with product arguments")
     if not direct and bool(args.base) != bool(args.candidate):
@@ -284,7 +278,6 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
 def make_plan(root: Path, arguments: list[str], direct: str | None = None,
               options: argparse.Namespace | None = None) -> Plan:
     args = options if options is not None else parse_arguments(arguments, direct)
-    stage_candidate = getattr(args, "stage_candidate", None)
     head = output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip()
     before = git_status(root)
     committed = bool(getattr(args, "base", None))
@@ -389,8 +382,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
         for suite in suites:
             suites[suite].append("explicit full platform request")
     for product in selected:
-        if everything or args.platform or stage_candidate:
-            platform[product].append("candidate staging" if stage_candidate else "explicit platform request")
+        if everything or args.platform:
+            platform[product].append("explicit platform request")
         if platform[product]:
             suites["install"].append(f"platform coverage for {product}")
             if product in MAINTENANCE_CONSUMERS:
@@ -435,7 +428,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
     if outside:
         print(f"ci: affected platform products outside requested scope: {','.join(outside)}", file=sys.stderr)
     return Plan(mode, args.verbose, args.quiet_result, expected_source, expected_status,
-                head, base, committed, products, selected, platform, suites, stage_candidate,
+                head, base, committed, products, selected, platform, suites,
                 args.skip_tests)
 
 
@@ -579,8 +572,6 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
             gates.append(test_gate)
     for gate, lane, body in products:
         body = [*body, "--phase", "post"]
-        if selection.stage_candidate:
-            body.extend(["--stage-candidate", selection.stage_candidate])
         gates.append((gate + ".post", lane, body))
     if selection.shared["catalog"]:
         gates.append(shared_check_gate(root, "catalog"))
@@ -688,10 +679,9 @@ def run(root: Path, arguments: list[str], direct: str | None = None) -> int:
     environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
                    "PYTHONDONTWRITEBYTECODE": "1"}
     for gate, lane, body in gates:
-        broker(root, gate, lane, body, verbose=selection.verbose, environment=environment,
-               receipt=bool(selection.stage_candidate and "--stage-candidate" in body))
+        broker(root, gate, lane, body, verbose=selection.verbose, environment=environment)
     check_plan(root, selection)
-    if not selection.quiet and not selection.stage_candidate:
+    if not selection.quiet:
         platform = [product for product in selection.selected if selection.platform[product]]
         shared = [suite for suite, why in selection.shared.items() if why]
         print(f"ci: passed; mode={selection.mode}; product-tests={','.join(selection.selected) or 'none'}; "

@@ -1,45 +1,38 @@
-# Cast installation and program recovery
+# Cast program installation
 
-Cast publishes its Rust payload, static zsh frontend, Rust installer, and
-matching Chancery provider bundle as one content-addressed release. Cast owns
-only its program and provider selectors. Use `cast.install.operate` for the
-installation and recovery procedure.
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-## Installer interfaces
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
+
+The default installation root is
+`~/Library/Application Support/Cast/install`. Releases are retained beneath
+`releases/HASH`; `current` selects the program and provider together and `previous`
+retains the superseded selection. Public commands are `~/.local/bin/cast` and
+`~/.local/bin/cast-install`. The provider selector is
+`~/Library/Application Support/Chancery/providers/cast`.
 
 ```sh
-<TESTED_CAST_INSTALL> install --binary <TESTED_CAST_BINARY> \
-  --bundle /absolute/path/to/cast/chancery \
-  --expected-current absent
+cast-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
+cast-install inspect
 cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-Use a trusted tested installer and a validated candidate. `install` requires
-absolute `--binary` and `--bundle` paths. `--home PATH` selects the operator
-home. `--expected-current absent|releases/HASH` requires an exact expected
-selection. `recover` accepts a canonical owned retained release directory.
-These inputs select programs; they do not authorize collection or state
-replacement.
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery reads
+retained metadata and selects a release in that home's installation directory.
+It does not rebuild the release or restore product data. There is no installer
+`verify` or `verify-release` command. Ordinary runtime checks keep their existing
+behavior.
 
-## Release identity and selection
-
-The installer stages the exact payload, frontend, installer, and provider
-bundle under `~/Library/Application Support/Cast/install/releases/HASH`.
-Their bytes participate in release identity and integrity verification. The
-`cell-install-v2` manifest is `manifest.json`; `package/install` retains the
-Rust installer.
-
-The installed `~/.local/bin/cast`, `~/.local/bin/cast-install`, and Cast
-provider selector follow one atomic `current` release. The deployer takes
-product and catalog writer locks, refuses foreign selectors, checks
-candidate/provider versions, and restores prior selectors after a failed
-switch. Chancery is installed documentation; Cast requires no Chancery runtime
-to collect or read records.
-
-Installation creates no discovery database, daemon, LaunchAgent, scheduler
-binding, provider request, model job, or downstream workflow. It performs no
-live-state migration. Program identity and help/version checks do not prove
-provider authentication or current collection readiness.
+Installation creates no database, schedule, provider request, or collection.
 
 ## Frontend credentials and trust
 
@@ -70,24 +63,6 @@ settings retain current values. Deployment creates no collection schedule.
 
 Read `cast.state` for private state selection, configuration, and state
 recovery. Program installation and discovery state have separate lifecycles.
-
-## Failure and program recovery
-
-Prior releases remain available. Resolve `install/previous` to its canonical
-owned release directory, then select it with a trusted tested
-`cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY`. The installer
-verifies the retained legacy or `cell-install-v2` release before selection.
-Do not execute an unverified retained installer or edit an installed
-content-addressed bundle.
-
-Program recovery leaves discovery state and consumed allowance unchanged. It
-does not restore a database/configuration pair. An older program can reject a
-newer configuration field; verify compatibility before selection.
-
-An abruptly killed deployer can leave its `.update-lock` directory. Confirm
-that no Cast deployer is running before removing a stale installation lock
-and rerunning the intended tested candidate. Never remove another active
-writer's lock. Runtime mutation uses a separate kernel-backed file lock.
 
 ## Command usage
 

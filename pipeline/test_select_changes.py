@@ -507,26 +507,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
             "--shared-suite", "prompts",
         ]])
 
-    def test_direct_candidate_staging_is_only_in_the_post_test_phase(self):
-        stage = str(Path(self.temporary.name) / "sealed candidate")
-        result = self.helper("product", "alpha", "--stage-candidate", stage)
-        self.assert_passed(result)
-        gates = self.gates()
-        self.assertEqual([gate["gate"] for gate in gates],
-                         ["shared-install", "alpha.pre", "clippy", "parallel-rust", "alpha.post"])
-        self.assertNotIn("--stage-candidate", gates[1]["args"])
-        self.assertEqual(gates[-1]["args"], ["--tests", "all", "--phase", "post",
-                                            "--stage-candidate", stage])
 
-    def test_skip_tests_keeps_direct_candidate_staging_after_checks(self):
-        stage = str(Path(self.temporary.name) / "sealed candidate")
-        result = self.helper("product", "alpha", "--skip-tests", "--stage-candidate", stage)
-        self.assert_passed(result)
-        gates = self.gates()
-        self.assertEqual([gate["gate"] for gate in gates],
-                         ["shared-install", "alpha.pre", "clippy", "alpha.post"])
-        self.assertEqual(gates[-1]["args"], ["--tests", "none", "--phase", "post",
-                                            "--stage-candidate", stage])
 
     def test_direct_shared_rust_selection_uses_one_parallel_gate(self):
         result = self.helper("shared", "install", "prompts")

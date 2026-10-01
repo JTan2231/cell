@@ -394,7 +394,7 @@ provider-owned Rust client. The client method is `Client::validate(&Path)`.
 
 The owning product stages its unchanged bundle under
 `share/chancery/PROVIDER_ID` inside its content-addressed release. Bundle bytes
-participate in the release identity and integrity manifest. Its single selector
+participate in release naming and the recorded file manifest. Its single selector
 under `~/Library/Application Support/Chancery/providers/PROVIDER_ID` follows
 that product's `current` release. A failed upgrade or rollback restores the
 program and documentation together. The owning installer must reject a
@@ -405,8 +405,10 @@ packaging action. Product runtime does not invoke the catalog, and product
 installation must remain useful without the reader. Chancery upgrades preserve
 other product selectors. A combined release can carry independently versioned
 providers, as Annals does. Earlier shared installations used `share/chancery`
-directly; the Rust installer verifies that legacy layout when it admits an
-existing installation or recovers a retained release.
+directly; the Rust installer reads that legacy layout when it selects an
+existing installation or recovers a retained release. Installers do not run
+bundle validation or audit retained file integrity. Standalone Chancery validation
+retains its existing behavior.
 
 Deploy a compatible reader before changing the provider schema. Publish the
 required provider releases before cross-product operations or bootstrap

@@ -1,7 +1,7 @@
-# Install and verify Bazaar
+# Install and operate Bazaar
 
 Use this procedure to install or recover Bazaar programs, initialize empty
-private state, or inspect installation and integrity. Read
+private state, or inspect installation metadata. Read
 `chancery resolve bazaar.install.operate` for this procedure with the required
 `bazaar.installation` feature contract. That feature owns detailed package,
 state, access, compatibility, and recovery guarantees.
@@ -25,9 +25,9 @@ Read-only checks change neither selection nor stored versions.
    empty or compatible state. Database checks require initialized schema-one
    state; program-only checks do not. Stop for foreign or unsupported state.
    Do not recreate it to conceal a failed check.
-4. Select an authorized matching sealed program and provider candidate for
+4. Select an authorized program and provider candidate for
    installation, or an exact owned retained release for program recovery.
-   Stop for foreign selectors, changed release bytes, or stale expected selection.
+   Stop for foreign selectors, or stale expected selection.
 
 The current user owns Bazaar programs and state. The Cell coordinator owns
 coordinated deployment ordering; direct installation works independently. No
@@ -56,16 +56,14 @@ run the coordinator from the Cell root:
 
 Inspect the plan before deployment. Bazaar accepts no deployment settings or
 runtime service dependencies. Coordinated configure initializes an empty default
-database or checks its existing schema. Verify must confirm program identity and
-database integrity. Stop on an unsuccessful configure or verify result and
-preserve unresolved installation evidence.
+database or checks its existing schema. Installation runs no separate artifact-integrity, database-integrity, or
+readiness gate. Preserve unresolved installation evidence after an I/O failure.
 
-For direct installation, select the sealed candidate:
+For direct installation, select the candidate:
 
 ```sh
 bazaar-install install --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
 bazaar-install inspect
-bazaar-install verify --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
 ```
 
 Use `--home ABSOLUTE_PATH` and `--expected-current absent|releases/HASH` when
@@ -111,7 +109,7 @@ is intended; do not treat successful program selection as database readiness.
 
    Chancery reads documentation; it establishes no database or program readiness.
    Bazaar installation and core state operations remain useful without that
-   executable. Program/provider verification uses the sealed release checks.
+   executable. Program inspection reads installation metadata without checking artifact integrity.
 
 Use the global `--database` option for initialization and doctor on another
 absolute private database. Init and doctor return schema-one JSON. Operational
@@ -120,12 +118,10 @@ uses a stderr diagnostic and exit 2. Treat either failure as an unsuccessful ste
 
 ## Inspect and recover programs
 
-Inspect selected installation or verify an exact owned release without selecting
-another program:
+Inspect the selected installation without changing programs:
 
 ```sh
 bazaar-install inspect
-bazaar-install verify-release /absolute/owned/release
 ```
 
 Recover only the intended compatible retained program release:
@@ -133,11 +129,10 @@ Recover only the intended compatible retained program release:
 ```sh
 bazaar-install recover --release /absolute/owned/release
 bazaar-install inspect
-bazaar-install verify-release /absolute/owned/release
 ```
 
-Confirm selected program/provider identity after recovery. If initialized state
-exists, run `bazaar doctor` on the selected database to confirm its integrity.
+Read selected program/provider metadata after recovery. Database doctor remains
+a separate explicit diagnostic operation.
 Program-only recovery can preserve an absent database. Recovery preserves the
 separate database and never rewrites string versions.
 Only schema-one state and version-two installation packages are supported.

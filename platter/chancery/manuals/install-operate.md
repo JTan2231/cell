@@ -1,5 +1,10 @@
 # Install and maintain Platter
 
+Installation places resources and performs setup under the documented maintenance
+boundary. It does not gate completion on persistent-state validation, artifact
+integrity audits, or runtime readiness checks. The product's ordinary diagnostics
+and runtime checks remain available separately.
+
 Use this operation to inspect or change the matched Platter program/provider
 release, verify readiness, maintain admission, or migrate supported state.
 Platter owns domain state and compatibility. Cell coordinates selected releases;
@@ -59,23 +64,19 @@ entry does not prove live readiness or authorize dependency upgrades.
 
 ```sh
 platter-install inspect
-platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
-platter-install verify-release /absolute/owned/release
 platter --json doctor
 platter --json doctor --state-only
 ```
 
-`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
-installed release with the candidate and executing installer. `verify-release`
-checks integrity without changing selectors. Full doctor checks retained state,
+`inspect` accepts `--home ABSOLUTE_PATH` and reads release metadata. Installation
+does not run doctor or audit artifact integrity. Separately, full doctor checks retained state,
 configured PDF and documented command/runtime prerequisites. It collects no
 jobs, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
 Executable identity alone does not prove initialized Cast or Vita libraries.
 State-only verification needs no renderer or external service readiness.
 
-Stop for foreign selectors, changed candidate or release bytes, ambiguous state
-roots, unsupported schemas, invalid configuration, failed readiness, or unknown
-ownership. Do not bypass these conditions with another state directory.
+Stop for foreign selectors, ambiguous state roots, failed setup or migration,
+or unknown ownership. Do not bypass these conditions with another state directory.
 
 ## Hold, drain, migrate, and verify
 
@@ -86,8 +87,6 @@ platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
-platter --json doctor --state-only
-platter --json doctor
 platter --json maintenance release OWNER
 ```
 
@@ -95,9 +94,8 @@ platter --json maintenance release OWNER
 2. Observe actual local and exact matching Nucleus/Weaver work drain.
 3. Require the sole matching owner and activity locks before migration or cutover.
 4. Run migration with its selected absolute private backup path.
-5. Verify retained local state before deployment rebinds dependency paths.
-6. Verify full held readiness after configuration and exact candidate publication.
-7. Release only this operation's hold and restore captured activation intent.
+5. Configure dependency paths and publish the candidate.
+6. Release only this operation's hold and restore captured activation intent.
    Release Nucleus last.
 
 Holds are durable and do not expire. Foreign holds and incomplete or failed
@@ -111,10 +109,8 @@ the exact Weaver job IDs retained in Platter runs. It creates no replacement
 model attempt or synthetic domain record. Preserve holds if any matching job,
 local activity, or other owner remains unresolved.
 
-The coordinator can use a sealed selected candidate for maintenance only after
-current installation ownership and schema-seven state are proved read-only.
-Supported predecessor state and affected-only installations use the installed
-command. This choice does not migrate state or start domain work.
+The coordinator uses a selected candidate for maintenance. Affected-only
+installations use the installed command. It does not preflight state compatibility. This choice does not migrate state or start domain work.
 
 Schema-one import commits before backup and hashed file cleanup. Failure before
 commit leaves predecessor state; failure afterward retains new state, originals,
@@ -199,11 +195,11 @@ future activations while retaining history. After repair, explicitly resume the
 exact incident through Clockwork. Binding changes and deployment preserve halts;
 resume permits future scheduling without retrying preparation or uncertain mail.
 
-## Complete verification
+## Complete installation
 
-Verify exact program/provider selection, supported state, full held readiness,
-run-owned hold release, and captured activation intent. Retain the deployment's
-migration backup; interrupted runs reuse only the validated existing backup.
+Complete resource setup, migration, program/provider publication, run-owned
+hold release, and restoration of captured activation intent. Retain the deployment's
+migration backup; interrupted installer runs reuse the recorded backup.
 Register command inventory after installation or update:
 
 ```sh

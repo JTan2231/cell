@@ -418,9 +418,9 @@ class Worker:
         job["deployment_result"] = result
         installed = result.get("state") in {"succeeded", "installed", "cleanup_failed"}
         released = result.get("maintenance", {}).get("state") == "released"
-        job["installation_verified"] = installed and released
-        if job["installation_verified"]:
-            self.finish(job, "succeeded", "Deployment verified the accepted candidate." +
+        job["installation_completed"] = installed and released
+        if job["installation_completed"]:
+            self.finish(job, "succeeded", "Deployment installed the accepted candidate." +
                         (" Cleanup requires attention." if result.get("state") == "cleanup_failed" else ""))
         else:
             self.finish(job, "failed", "Deployment failed or recovery did not establish successful installation.",

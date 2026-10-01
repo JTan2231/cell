@@ -33,6 +33,3 @@ annals-usage|target/release/annals-usage|annals-usage
 annals|target/release/annals-install|annals-install'
 PROVIDERS='annals|annals|annals/chancery/annals|12
 annals-usage|annals-usage|annals/chancery/annals-usage|3'
-CI_BINARY_CHECKS='annals|target/release/annals|annals
-annals-usage|target/release/annals-usage|annals-usage
-annals|target/release/annals-install|annals-install'

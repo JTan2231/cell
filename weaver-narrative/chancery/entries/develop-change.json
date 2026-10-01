@@ -48,13 +48,13 @@
     },
     {
       "id": "weaver.lifecycle",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "ci-manager.queue.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     },
     {
       "id": "semantics.repository.explore",

@@ -39,8 +39,8 @@ normal success.
 Exact-summary changes must prove canonical host matching, active and archived
 metadata lookup, and no turn reads. Process changes must prove that a wrapper's
 persistent descendant cannot outlive its private launch group and that unrelated
-processes remain outside cleanup. Packaging changes must retain content identity,
-tamper rejection, prior selectors, foreign-selector protection, and post-switch
+processes remain outside cleanup. Packaging changes must retain release naming,
+prior selectors, foreign-selector protection, and post-switch
 restoration.
 
 Validate the complete candidate bundle with `chancery validate BUNDLE`.

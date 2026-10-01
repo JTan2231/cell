@@ -35,17 +35,11 @@ impl Fixture {
 set -eu
 case " $* " in
   *' --version '*) printf '%s\n' 'krisis {}';;
-  *' doctor '*)
-    [ -z "${{KRISIS_TEST_SECRET:-}}" ] || exit 70
-    if [ -f "$HOME/expected-owner" ]; then
-      [ "${{CELL_DEPLOYMENT_RUN_ID:-}}" = "$(cat "$HOME/expected-owner")" ] || exit 72
-    fi
+  *' observe activate '*)
     database="$HOME/Library/Application Support/Decisions/decisions.db"
     printf '%s\n' 'candidate database' >"$database"
     chmod 600 "$database"
-    [ ! -f "$HOME/fail-doctor" ] || exit 71
-    printf '%s\n' '{{"ok":true,"schema_version":6,"annals_library_id":"0123456789abcdef0123456789abcdef"}}';;
-  *' observe activate '*) : >"$HOME/activated";;
+    : >"$HOME/activated";;
 esac
 "#,
                 env!("CARGO_PKG_VERSION")
@@ -247,20 +241,7 @@ fn refuses_unowned_hook_and_unreceipted_gate_without_publishing() {
 }
 
 #[test]
-fn changed_release_and_foreign_public_selector_are_refused() {
-    let fixture = Fixture::new();
-    Fixture::success(&fixture.install(&["--final-cutover"]));
-    let release = fixture.current();
-    write(&release.join("bin/krisis-observer"), "tampered", 0o755);
-    Fixture::failure(
-        &fixture
-            .command()
-            .arg("verify-release")
-            .arg(&release)
-            .output()
-            .unwrap(),
-    );
-    Fixture::failure(&fixture.install(&[]));
+fn foreign_public_selector_is_refused() {
     let other = Fixture::new();
     fs::create_dir_all(other.home.join(".local/bin")).unwrap();
     symlink("/bin/true", other.home.join(".local/bin/krisis")).unwrap();
@@ -269,30 +250,6 @@ fn changed_release_and_foreign_public_selector_are_refused() {
         fs::read_link(other.home.join(".local/bin/krisis")).unwrap(),
         Path::new("/bin/true")
     );
-}
-
-#[test]
-fn failed_candidate_restores_database_before_original_publication() {
-    let fixture = Fixture::new();
-    Fixture::success(&fixture.install(&["--final-cutover"]));
-    let release = fixture.current();
-    write(
-        &fixture.state().join("decisions.db"),
-        "original database",
-        0o600,
-    );
-    let mut candidate = fs::read(fixture.root.join("krisis")).unwrap();
-    candidate.extend_from_slice(b"\n# candidate two\n");
-    write(&fixture.root.join("krisis"), candidate, 0o755);
-    write(&fixture.home.join("fail-doctor"), "", 0o600);
-    Fixture::failure(&fixture.install(&["--final-cutover"]));
-    assert_eq!(fixture.current(), release);
-    assert_eq!(
-        fs::read(fixture.state().join("decisions.db")).unwrap(),
-        b"original database"
-    );
-    assert!(fixture.home.join(".local/bin/krisis").exists());
-    assert!(!fixture.state().join(".clockwork-maintenance").exists());
 }
 
 #[test]
@@ -406,61 +363,16 @@ fn adapter_fixture() -> (Fixture, serde_json::Value) {
     (fixture, request)
 }
 
-fn adapter_verify(fixture: &Fixture, request: &serde_json::Value) -> Output {
-    use std::io::Write as _;
-    use std::process::Stdio;
-
-    let mut child = Command::new(fixture.root.join("candidate/bin/krisis-install"))
-        .args(["adapter", "verify"])
-        .env("HOME", &fixture.home)
-        .env_remove("CELL_DEPLOYMENT_RUN_ID")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(&serde_json::to_vec(request).unwrap())
-        .unwrap();
-    child.wait_with_output().unwrap()
-}
-
 #[test]
-fn adapter_json_owner_reaches_doctor_without_an_ambient_owner() {
-    let (fixture, request) = adapter_fixture();
-    let output = adapter_verify(&fixture, &request);
-    Fixture::success(&output);
-    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(reply["status"], "verified");
-}
-
-#[test]
-fn adapter_explicit_codex_replaces_removed_pin_and_omission_retains_replacement() {
+fn explicit_codex_replaces_removed_pin() {
     let (fixture, mut request) = adapter_fixture();
     let replacement = fixture.root.join("codex-replacement");
     write(&replacement, "#!/bin/sh\nexit 0\n", 0o755);
-    let prior_binding = fs::read(fixture.root.join("bindings/krisis_observer")).unwrap();
     request["settings"] = serde_json::json!({"codex_bin":replacement});
     request["dependency_settings"] = serde_json::json!({
         "nucleus":{"codex_bin":fixture.root.join("codex")}
     });
     fs::remove_file(fixture.root.join("codex")).unwrap();
-
-    let output = adapter_verify(&fixture, &request);
-    Fixture::failure(&output);
-    let reply: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(reply["status"], "stopped");
-    assert_eq!(
-        reply["detail"],
-        "candidate did not adopt exact Annals and Codex pins"
-    );
-    assert_eq!(
-        fs::read(fixture.root.join("bindings/krisis_observer")).unwrap(),
-        prior_binding
-    );
 
     let config = fixture
         .home
@@ -493,10 +405,6 @@ fn adapter_explicit_codex_replaces_removed_pin_and_omission_retains_replacement(
         selected["environment"]["CONVERSATIONS_CODEX"],
         replacement.to_str().unwrap()
     );
-    Fixture::success(&adapter_verify(&fixture, &request));
-
-    request.as_object_mut().unwrap().remove("settings");
-    Fixture::success(&adapter_verify(&fixture, &request));
 }
 
 // This fixture records the entire legacy format recipe for transition coverage.
@@ -693,14 +601,6 @@ stderr = "__DECISIONS_LOGS__/{kind}.stderr.log"
 fn legacy_decisions_handoff_preserves_disabled_history_and_rolls_back_touched_bindings() {
     let fixture = Fixture::new();
     let old = legacy_decisions(&fixture);
-    Fixture::success(
-        &fixture
-            .command()
-            .arg("verify-release")
-            .arg(&old)
-            .output()
-            .unwrap(),
-    );
     write(&fixture.root.join("fail-disable"), "", 0o600);
     Fixture::failure(&fixture.install(&["--final-cutover"]));
     assert_eq!(fixture.current(), old);

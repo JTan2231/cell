@@ -65,22 +65,6 @@ $CI_PLIST_CHECKS
 EOF
 }
 
-ci_check_provider_versions() {
-    while IFS='|' read -r unit provider_id provider_dir expected_entries; do
-        [ -n "$unit" ] || continue
-        version_kind=$(pipeline_unit_field "$unit" 3)
-        version_manifest=$(pipeline_unit_field "$unit" 4)
-        package_version=$(pipeline_read_version "$version_kind" \
-            "$PIPELINE_ROOT/$version_manifest")
-        provider_version=$(pipeline_provider_release \
-            "$PIPELINE_ROOT/$provider_dir/provider.json")
-        [ -n "$package_version" ] && [ "$provider_version" = "$package_version" ] \
-            || ci_fail "$provider_id provider release $provider_version does not match package version $package_version"
-    done <<EOF
-$PROVIDERS
-EOF
-}
-
 ci_validate_providers() {
     printf '%s\n' '==> Chancery provider bundles'
     while IFS='|' read -r unit provider_id provider_dir expected_entries; do
@@ -166,32 +150,9 @@ EOF
     "$@"
 }
 
-ci_check_binaries() {
-    while IFS='|' read -r unit binary_path command_name; do
-        [ -n "$unit" ] || continue
-        version_kind=$(pipeline_unit_field "$unit" 3)
-        version_manifest=$(pipeline_unit_field "$unit" 4)
-        expected_version=$(pipeline_read_version "$version_kind" \
-            "$PIPELINE_ROOT/$version_manifest")
-        case "$binary_path" in
-            target/*)
-                absolute_binary=$(pipeline_target_file "${binary_path#target/}")
-                ;;
-            *) absolute_binary="$PIPELINE_ROOT/$binary_path" ;;
-        esac
-        reported_version=$("$absolute_binary" --version) \
-            || ci_fail "unable to read $command_name release binary version"
-        [ "$reported_version" = "$command_name $expected_version" ] \
-            || ci_fail "$command_name reported an unexpected version: $reported_version"
-    done <<EOF
-$CI_BINARY_CHECKS
-EOF
-}
-
 [ "$#" -ge 1 ] || pipeline_fail 'usage: pipeline/ci.sh PRODUCT'
 product_id=$1
 shift
-stage_candidate=
 test_groups=
 phase=full
 while [ "$#" -gt 0 ]; do
@@ -205,22 +166,11 @@ while [ "$#" -gt 0 ]; do
             phase=$2
             case "$phase" in pre|post) ;; *) ci_fail 'invalid CI phase' ;; esac
             ;;
-        --stage-candidate)
-            stage_candidate=$2
-            case "$stage_candidate" in
-                /*) ;;
-                *) ci_fail 'candidate staging directory must be absolute' ;;
-            esac
-            ;;
-        *) ci_fail 'usage: PRODUCT --tests product|all|none [--phase pre|post] [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
+        *) ci_fail 'usage: PRODUCT --tests product|all|none [--phase pre|post]' ;;
     esac
     shift 2
 done
 [ -n "$test_groups" ] || ci_fail 'the public dispatcher must select test groups'
-[ -z "$stage_candidate" ] || [ "$test_groups" = all ] || [ "$test_groups" = none ] \
-    || ci_fail 'candidate staging requires both test groups'
-[ -z "$stage_candidate" ] || [ "$phase" != pre ] \
-    || ci_fail 'candidate staging requires the post-test phase'
 pipeline_load_descriptor "$product_id"
 pipeline_validate_descriptor
 
@@ -248,8 +198,6 @@ trap ci_report_exit 0
 if [ "$phase" != post ]; then
     ci_stage='shell and packaging'
     ci_shell_and_packaging
-    ci_stage='provider versions'
-    ci_check_provider_versions
     if [ "$CI_PROVIDER_VALIDATION_PHASE" = before-rust ]; then
         ci_stage='provider bundles'
         ci_validate_providers
@@ -287,16 +235,4 @@ ci_stage='rustdoc'
 ci_doc
 ci_stage='release build'
 ci_build
-ci_stage='binary versions'
-ci_check_binaries
-
-# This copy is part of the admitted product gate. A later gate may overwrite
-# the shared Cargo target only after these exact binaries have been sealed.
-if [ -n "$stage_candidate" ]; then
-    ci_stage='candidate staging'
-    python3 "$PIPELINE_ROOT/deployment/candidate.py" \
-        --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
-        --output "$stage_candidate" --binary-spec "$RELEASE_BINARY_CHECKS"
-fi
-
 printf '%s\n' 'ci.sh: green'

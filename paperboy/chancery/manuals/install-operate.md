@@ -31,8 +31,9 @@ Clockwork owns activation, durable scheduling halts and incident notification.
 
 Deployment initializes an absent schema-one database or backs up an existing
 supported database before candidate selection. Unsupported versions stop it.
-Held readiness checks create no report or email. Installation succeeds after
-exact candidate readiness and release of the run-owned holds.
+Installation performs setup without artifact-integrity, state-integrity, or
+operational-readiness checks. It succeeds after setup and release of run-owned
+holds. Ordinary doctor and report checks remain separate.
 Direct installer publication and rollback are unavailable; use the coordinator.
 
 ## State and inspection
@@ -175,9 +176,8 @@ setting overrides saved enabled intent. With no setting, an absent binding
 remains absent and a disabled binding stays disabled. Activation follows all
 maintenance releases. Existing Clockwork incidents survive every phase.
 
-Recovery repeats configuration under its retained owner. A repeated backup
-path is accepted only if its integrity and all retained report, agent and
-email-attempt rows match the held Paperboy state.
+Recovery repeats configuration under its retained owner. The retained migration receipt reuses the original backup. The product migration
+command retains its ordinary backup and state rules.
 
 ## Command usage
 

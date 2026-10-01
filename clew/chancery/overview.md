@@ -19,7 +19,7 @@ authorize a note, report, send, schedule, or installation.
 | `clew.digest.email` | Application selection, copied notes, missing job context, frozen occurrences, send authority, uncertain submission, and scheduling failures. |
 | `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration, backup, and compatible recovery. |
 
-Use `clew.install.operate` for installation, verification, guarded migration,
+Use `clew.install.operate` for installation, guarded migration,
 schedule preparation, backup, and recovery procedures. Its required feature
 contracts supply the detailed behavior.
 

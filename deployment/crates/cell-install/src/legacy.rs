@@ -1,8 +1,8 @@
-//! Exact predecessor release evidence shared by product-owned legacy readers.
+//! Predecessor release metadata shared by product-owned readers.
 
 use crate::artifact::{current_uid, hash_bytes, inventory, valid_hash};
 use crate::transaction::{PublicEntry, ReleaseInfo};
-use crate::{Error, Result, file_digest};
+use crate::{Error, Result};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -35,7 +35,6 @@ pub struct LegacyProvider {
 /// # Errors
 /// Rejects malformed JSON/text, duplicate text keys, and nonscalar JSON fields.
 pub fn manifest(path: &Path) -> Result<BTreeMap<String, String>> {
-    file_digest(path)?;
     let bytes = fs::read(path)?;
     if bytes.len() > 1024 * 1024 {
         return Err(Error::new("legacy manifest exceeds one MiB"));
@@ -73,6 +72,43 @@ pub fn manifest(path: &Path) -> Result<BTreeMap<String, String>> {
         }
         Ok(result)
     }
+}
+
+/// Read predecessor release metadata and file paths for installation setup.
+///
+/// # Errors
+/// Returns an error for inaccessible files or malformed metadata.
+pub fn read(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Result<ReleaseInfo> {
+    let values = manifest(&root.join(spec.manifest))?;
+    let (files, _) = inventory(root)?;
+    let mut versions = BTreeMap::new();
+    for provider in spec.providers {
+        let version = if provider.version_key.is_empty() {
+            let data: Value =
+                serde_json::from_slice(&fs::read(root.join(provider.path).join("provider.json"))?)?;
+            data.pointer("/provider/release")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        } else {
+            values
+                .get(provider.version_key)
+                .cloned()
+                .unwrap_or_default()
+        };
+        versions.insert(provider.provider.to_owned(), version);
+    }
+    Ok(ReleaseInfo {
+        release_id: root
+            .file_name()
+            .and_then(|p| p.to_str())
+            .ok_or_else(|| Error::new("invalid release path"))?
+            .to_owned(),
+        format: values.get("format").cloned().unwrap_or_default(),
+        versions,
+        files,
+        public,
+    })
 }
 
 /// Prove the predecessor's exact file inventory, modes, hashes and identity.

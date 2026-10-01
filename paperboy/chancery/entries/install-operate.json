@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -67,7 +67,7 @@
     "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
   ],
   "success": [
-    "A report is generated when its summary is committed. A send succeeds when provider acceptance is retained. Installation succeeds after exact candidate readiness and release of run-owned holds. Schedule enable succeeds when Clockwork commits its binding."
+    "A report exists when its summary commits; a send succeeds when acceptance is retained. Installation succeeds after setup and release of run-owned holds, without artifact-integrity, state-integrity, or operational-readiness checks. Schedule enable succeeds when Clockwork commits its binding."
   ],
   "failure_and_recovery": [
     "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
@@ -84,8 +84,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "email.message.send",
@@ -187,7 +187,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The shared installer takes a supported database backup, selects immutable program/provider bytes, checks held readiness, then releases maintenance. Existing Clockwork selections remain unchanged until explicit schedule enable; disabled selections remain preserved."
+        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The installer takes a database backup, selects program/provider bytes, configures state and releases maintenance. It does not invoke doctor. Existing schedule intent and halts are preserved."
       },
       {
         "status": "declared",

@@ -86,11 +86,6 @@ pub fn inspect(paths: &Paths) -> Result<InstallSnapshot> {
     transaction::inspect_installation(&layout(), &paths.home, &|root| legacy_info(root, paths.uid))
 }
 
-pub fn verify(root: &Path, uid: u32) -> Result<ReleaseInfo> {
-    require(root.is_absolute(), "release path must be absolute")?;
-    transaction::verify_release_at(&layout(), root, &|root| legacy_info(root, uid))
-}
-
 pub fn root(paths: &Paths, info: &ReleaseInfo) -> PathBuf {
     paths.install.join("releases").join(&info.release_id)
 }
@@ -210,13 +205,6 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
     let mut bundle_specs = BTreeMap::new();
     for (name, source) in providers {
         let source = fs::canonicalize(source)?;
-        let manifest: serde_json::Value =
-            serde_json::from_slice(&fs::read(source.join("provider.json"))?)?;
-        require(
-            manifest["provider"]["id"] == name
-                && manifest["provider"]["release"] == env!("CARGO_PKG_VERSION"),
-            "provider and installer versions differ",
-        )?;
         let prefix = format!("share/chancery/{name}");
         add_bundle(&mut files, &source, &prefix)?;
         bundle_specs.insert(
@@ -238,55 +226,23 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
 }
 
 pub fn prepare(paths: &Paths, options: &Install) -> Result<PreparedRelease> {
-    let output = super::support::checked(
+    super::support::checked(
         paths,
         &options.binary,
         &super::support::args(&["--version"]),
         &BTreeMap::new(),
         30,
     )?;
-    require(
-        String::from_utf8_lossy(&output).trim() == format!("krisis {}", env!("CARGO_PKG_VERSION")),
-        "candidate and installer versions differ",
-    )?;
     transaction::prepare_release(&layout(), &paths.home, &plan(options)?)
 }
 
-pub fn matches_candidate(paths: &Paths, info: &ReleaseInfo, options: &Install) -> Result<()> {
-    require(
-        info.format == transaction::TRANSACTION_FORMAT,
-        "selected release is not a Rust candidate",
-    )?;
-    let plan = plan(options)?;
-    require(
-        info.files.len() == plan.files.len(),
-        "candidate artifact inventory differs",
-    )?;
-    for (path, source) in plan.files {
-        let actual = info
-            .files
-            .get(&path)
-            .ok_or_else(|| Error::new("candidate artifact is absent"))?;
-        require(
-            actual.sha256 == file_digest(&source.source)? && actual.mode == source.mode,
-            "selected artifact differs from candidate",
-        )?;
-    }
-    verify(&root(paths, info), paths.uid)?;
-    Ok(())
-}
-
 pub fn stage(paths: &Paths, binary: &Path, source_root: &Path) -> Result<PreparedRelease> {
-    let output = super::support::checked(
+    super::support::checked(
         paths,
         binary,
         &super::support::args(&["--version"]),
         &BTreeMap::new(),
         30,
-    )?;
-    require(
-        String::from_utf8_lossy(&output).trim() == format!("krisis {}", env!("CARGO_PKG_VERSION")),
-        "candidate and installer versions differ",
     )?;
     transaction::prepare_release(
         &layout(),

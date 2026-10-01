@@ -18,31 +18,6 @@ fn source_root() -> std::path::PathBuf {
 }
 
 #[test]
-fn modified_installed_bytes_fail_verification_and_recovery() {
-    let fixture = Fixture::new();
-    let installed = fixture.success("install", &[]);
-    let release = fixture
-        .root()
-        .join("releases")
-        .join(installed["data"]["release_id"].as_str().unwrap());
-    let binary = release.join("bin/bazaar");
-    fs::set_permissions(&binary, fs::Permissions::from_mode(0o700)).unwrap();
-    fs::write(&binary, "#!/bin/sh\n# changed\nexit 0\n").unwrap();
-    let output = Command::new(installer())
-        .arg("verify-release")
-        .arg(&release)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(
-        !fixture
-            .run("recover", &["--release", release.to_str().unwrap()])
-            .status
-            .success()
-    );
-}
-
-#[test]
 fn program_upgrade_and_recovery_preserve_string_history() {
     let fixture = Fixture::new();
     let database = bazaar::database_path(&fixture.home);

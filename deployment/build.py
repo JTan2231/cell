@@ -35,7 +35,7 @@ CONFIG_ENV = ("AR", "CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "SDKROOT",
 
 
 class BuildError(RuntimeError):
-    """Selected release materials could not be built or verified."""
+    """Selected release materials could not be built."""
 
 
 def read_descriptor(source: Path, product: str) -> dict[str, str]:
@@ -143,24 +143,8 @@ def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict
     return environment, configuration
 
 
-def material_paths(source: Path, selected: dict[str, dict[str, Any]]) -> list[str]:
-    prefixes = ["deployment/"]
-    for item in selected.values():
-        directory = item["directory"]
-        prefixes.extend((f"{directory}/packaging/", f"{directory}/chancery",
-                         f"{directory}/provider/", f"{directory}/deployment/"))
-    paths = git(source, "ls-files", "--cached", "--others", "--exclude-standard", "-z").split(b"\0")
-    return sorted({os.fsdecode(path) for path in paths if path and os.fsdecode(path).startswith(tuple(prefixes))})
 
 
-def cache_verify(entry: Path, identity: dict[str, Any]) -> dict[str, Any]:
-    candidate.regular(entry / "manifest.json")
-    manifest = json.loads((entry / "manifest.json").read_text())
-    files = candidate.tree_files(entry)
-    files.pop("manifest.json")
-    if manifest.get("schema") != 1 or manifest.get("identity") != identity or manifest.get("files") != files:
-        raise BuildError("cached release materials changed")
-    return manifest
 
 
 def prepare(source: Path, products: list[str], output: Path, unit: str | None = None) -> dict[str, Any]:
@@ -197,10 +181,7 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
     with lock_path.open("a+b") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         queue_seconds = time.monotonic() - started
-        if candidate.content_source_key(source) != source_key:
-            raise BuildError("source changed before release build")
         if entry.exists():
-            cache_verify(entry, identity)
             cache_hit = True
         else:
             names = sorted({name for item in selected.values() for name in item["binaries"]})
@@ -225,20 +206,7 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
                     candidate.regular(binary)
                     shutil.copyfile(binary, binaries / name)
                     (binaries / name).chmod(0o555)
-                    expected = next(item["binaries"][name]["version"] for item in selected.values()
-                                    if name in item["binaries"])
-                    version = tool_output(source, environment, str(binaries / name), "--version")
-                    if version != expected:
-                        raise BuildError(f"{name} release version differs: expected {expected!r}, found {version!r}")
-                for relative in material_paths(source, selected):
-                    incoming = source / relative
-                    candidate.regular(incoming)
-                    destination = temporary / "materials" / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(incoming, destination)
-                if candidate.content_source_key(source) != source_key:
-                    raise BuildError("source changed during release build")
-                manifest = {"schema": 1, "identity": identity, "files": candidate.tree_files(temporary),
+                manifest = {"schema": 1, "identity": identity,
                             "build_seconds": build_seconds}
                 (temporary / "manifest.json").write_bytes(candidate.json_bytes(manifest))
                 candidate.seal_tree(temporary)
@@ -252,20 +220,12 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         def assemble(product: str) -> tuple[str, dict[str, Any]]:
             item = selected[product]
             manifest = candidate.stage_build(source, product, staging / "candidates" / product,
-                                             item["binary_spec"], target=entry / "binaries", source_key=source_key,
-                                             expected_versions={name: record["version"] for name, record in item["binaries"].items()})
-            for relative, expected in manifest["source_inputs"].items():
-                material = entry / "materials" / relative
-                candidate.regular(material)
-                if candidate.digest(material) != expected:
-                    raise BuildError("cached packaging materials differ from candidate source")
+                                             item["binary_spec"], target=entry / "binaries", source_key=source_key)
             return product, {"candidate_id": manifest["candidate_id"], "source_key": manifest["source_key"],
                              "candidate_dir": str(output / "candidates" / product)}
 
         with ThreadPoolExecutor(max_workers=min(len(selected), 8)) as executor:
             candidates = dict(executor.map(assemble, selected))
-        if candidate.content_source_key(source) != source_key:
-            raise BuildError("source changed during release preparation")
         result = {"schema": 1, "state": "built", "source_key": source_key, "build_key": build_key,
                   "candidates": candidates, "cache_hit": cache_hit, "cache_entry": str(entry),
                   "build_seconds": build_seconds, "queue_seconds": queue_seconds,

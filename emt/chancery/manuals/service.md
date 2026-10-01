@@ -118,14 +118,14 @@ enabling a schedule. The product selector publishes the bundle with its release.
 Initialized updates use `./deploy.sh emt`. The coordinator captures configuration
 and worker intent, disables the worker, holds and drains EMT, records a migration
 receipt, installs the matched release, selects a disabled exact worker definition,
-and verifies readiness. It releases admission and restores enabled state while
+and releases admission and restores enabled state while
 preserving operator pauses and failure halts. Configuration must be valid before
 maintenance. Shared cleanup recognizes EMT's root and preserves active pins.
 
 Product setup accepts current configuration fields and an `enabled` boolean.
 It does not accept incoming-mail progress changes. Omitted settings preserve
 saved values. A fresh valid deployment uses the default worker schedule with
-activation enabled and domain pause removed after verification; explicit
+activation enabled and domain pause removed after configuration; explicit
 `paused` or `enabled` overrides that default. An initialized product's absent
 binding remains absent unless activation is explicitly requested.
 
@@ -139,7 +139,7 @@ a disabled exact definition before release and then applies the captured pause
 and enabled settings. Fresh initialization's temporary pause is not operator
 intent. Existing pauses and failure-halt evidence survive each phase.
 The retained coordinator directory holds the migration receipt with completed
-schema and original backup digests. Recovery verifies and reuses this backup;
+schema and original backup paths. Recovery reuses this backup;
 it does not replace it with already configured state.
 
 Direct selector recovery is unsupported after initialization. Use maintained
@@ -166,6 +166,8 @@ activations remain admissible before that threshold. Healthy or inactive checks
 clear a pending episode; established halts still require exact approval.
 
 EMT schema, provider release and feature contracts evolve independently.
+Installation performs setup without artifact-integrity, state-integrity, or
+operational-readiness checks. Ordinary doctor and worker checks remain unchanged.
 Installation and indexed documentation do not establish live readiness. No
 schema other than one, initialized direct-selector recovery, automatic failed
 assignment replacement, sender authentication or final-delivery guarantee is

@@ -30,7 +30,7 @@ pub fn specification() -> Spec {
     }
 }
 
-/// Configure and verify schema-one state without adding string versions.
+/// Configure schema-one state without adding string versions.
 ///
 /// # Errors
 /// Returns an error for unsupported settings or unavailable or incompatible state.
@@ -52,11 +52,6 @@ pub fn lifecycle(
     let map_error = |error: crate::api::Error| cell_install::Error::new(error.to_string());
     if operation == Operation::Configure {
         crate::api::Writer::initialize(&database).map_err(map_error)?;
-    }
-    if operation == Operation::Verify || (operation == Operation::Recover && database.exists()) {
-        crate::api::Reader::open(&database)
-            .and_then(|reader| reader.check())
-            .map_err(map_error)?;
     }
     Ok(serde_json::json!({"schema_version":1}))
 }

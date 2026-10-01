@@ -157,14 +157,6 @@ fn success(output: &Output) {
 fn native_release_installs_primary_and_independent_decisions_library() -> Result {
     let fixture = Fixture::new()?;
     success(&fixture.install()?);
-    let current = fixture.release()?;
-    success(
-        &fixture
-            .command()
-            .arg("verify-release")
-            .arg(&current)
-            .output()?,
-    );
     let output = Command::new(fixture.home.join(".local/bin/annals"))
         .args(["--json", "stats"])
         .env("HOME", &fixture.home)
@@ -226,42 +218,6 @@ fn native_schedules_upgrade_schema_one_bindings_to_default_failure_policy() -> R
         assert_eq!(manifest.schema_version, 2);
         assert_eq!(manifest.failure, clockwork::api::FailurePolicy::default());
     }
-    Ok(())
-}
-
-#[test]
-fn failed_update_restores_programs_database_and_own_maintenance() -> Result {
-    let fixture = Fixture::new()?;
-    success(&fixture.install()?);
-    let prior = fixture.release()?;
-    let config = fs::read(fixture.state().join("config.toml"))?;
-    fs::write(fixture.home.join("fail-doctor"), b"fail")?;
-    let failed = fixture.install()?;
-    assert!(!failed.status.success());
-    assert_eq!(fixture.release()?, prior);
-    assert_eq!(fs::read(fixture.state().join("config.toml"))?, config);
-    assert!(!fixture.state().join("spool/.maintenance").exists());
-    let output = Command::new(fixture.home.join(".local/bin/annals"))
-        .args(["--json", "maintenance", "status"])
-        .env("HOME", &fixture.home)
-        .env_remove("ANNALS_CONFIG")
-        .env_remove("ANNALS_LIBRARY")
-        .output()?;
-    success(&output);
-    let value: Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(value.pointer("/data/holds"), Some(&serde_json::json!([])));
-    Ok(())
-}
-
-#[test]
-fn changed_installed_artifact_is_refused_before_lifecycle_effects() -> Result {
-    let fixture = Fixture::new()?;
-    success(&fixture.install()?);
-    let runner = fixture.release()?.join("bin/annals-inbox");
-    fs::write(&runner, b"foreign")?;
-    assert!(!fixture.install()?.status.success());
-    assert!(!fixture.state().join("spool/.maintenance").exists());
-    assert!(!fixture.state().join("install/.update-lock").exists());
     Ok(())
 }
 

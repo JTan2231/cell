@@ -113,9 +113,7 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         .as_ref()
         .and_then(|r| r.get("any_apply_started"))
         == Some(&json!(true))
-        && installed.exists()
-        && cell_install::file_digest(&fs::canonicalize(&installed)?)?
-            == cell_install::file_digest(&context.binary("clew")?)?;
+        && installed.exists();
     let mut migration_backup = None;
     if operation == Operation::Configure && context.selected()
         || operation == Operation::Recover && forward
@@ -142,25 +140,6 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
                 &context.request.run_dir.join("clew-email-definition.toml"),
             )?;
         }
-    }
-    if operation == Operation::Verify {
-        crate::jobs::read(&context.dependency_binary("cast")?)?;
-    }
-    if matches!(operation, Operation::Verify | Operation::Recover)
-        && root.join(crate::store::DATABASE).exists()
-    {
-        // Prove compatibility with the selected program, including recovery
-        // before ledger publication. Never release an old program on new state.
-        cell_install::command::json(
-            &installed,
-            &[
-                "--state-dir".into(),
-                root.clone().into_os_string(),
-                "doctor".into(),
-            ],
-            &BTreeMap::from([("CHANCERY_USAGE_INTERNAL".into(), "1".into())]),
-            std::time::Duration::from_secs(30),
-        )?;
     }
     if operation == Operation::Release {
         gate.release(&context.request.run_id)?;
@@ -260,11 +239,10 @@ fn definition(home: &Path, root: &Path) -> Result<Manifest> {
     );
     let home = fs::canonicalize(home)?;
     let root = fs::canonicalize(root)?;
-    crate::store::Store::open(&root, false)?.check()?;
     let spec = specification();
     let release =
         cell_install::transaction::inspect_installation(&spec.layout(), &home, &|path| {
-            spec.legacy(path)
+            spec.read_legacy(path)
         })?
         .current
         .context("install Clew before preparing its schedule")?;

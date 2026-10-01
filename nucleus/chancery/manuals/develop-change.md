@@ -64,8 +64,8 @@ matching `codex-code-mode-host`. Inspect the version, model catalog, app-server
 schema, and every consumed semantic. Run the real local-tool compatibility test
 against the staged files in isolated validation. It uses a local mock endpoint,
 temporary state, and no production credentials. Assert the command result;
-completion alone is insufficient. Installation and live readiness verify the
-sealed file identities without model calls. Update the adapter, compatibility
+completion alone is insufficient. Normal live readiness verifies runtime file identities without model calls.
+Installation does not perform that check. Update the adapter, compatibility
 tests, and installation instructions together before deployment.
 
 For execution capacity, preserve one global ceiling of eight active attempts.
@@ -110,12 +110,10 @@ never edit an installed immutable bundle in place.
 
 When deployment is separately authorized, quiesce requesters if replacing the
 daemon could lose active work. Preserve the recovery material required by the
-selected playbook. After cutover, prove matching CLI and daemon versions,
-runtime health and its `maxActiveJobs`, `activeJobs`, and `availableSlots`
-capacity, and the exact harness and account. Report requester admission
-separately: a quota pause can remain after successful installation.
-Deployment readiness checks do not submit model jobs or create synthetic
-requester records.
+selected playbook. Installation performs setup without artifact-integrity,
+persistent-state-integrity, or operational-readiness checks. Ordinary health,
+account, and requester diagnostics remain separate. No installation operation
+submits a synthetic model job or creates a requester record.
 
 Stop if a destructive migration or credential move lacks a recovery decision,
 an affected requester cannot be quiesced, or the exact candidate harness has

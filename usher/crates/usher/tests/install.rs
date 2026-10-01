@@ -139,7 +139,7 @@ impl Fixture {
 }
 
 #[test]
-fn installs_both_commands_and_verifies_exact_candidate_without_state() -> TestResult {
+fn installs_both_commands_without_state() -> TestResult {
     let fixture = Fixture::new()?;
     let reply = fixture.install()?;
     let release_id = reply["data"]["release_id"]
@@ -151,25 +151,6 @@ fn installs_both_commands_and_verifies_exact_candidate_without_state() -> TestRe
         .join(release_id);
     assert!(release.join("package/install").is_file());
     assert!(fixture.home.join(".local/bin/usher-install").is_symlink());
-    let output = fixture
-        .command()
-        .arg("verify")
-        .arg("--binary")
-        .arg(&fixture.binary)
-        .arg("--bundle")
-        .arg(&fixture.bundle)
-        .output()?;
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stdout)
-    );
-    let output = fixture
-        .command()
-        .arg("verify-release")
-        .arg(&release)
-        .output()?;
-    assert!(output.status.success());
     assert!(
         !fixture
             .home
@@ -188,12 +169,7 @@ fn adapter_runs_complete_lifecycle_and_recovers_lost_apply_reply() -> TestResult
     let (success, inspected) = fixture.adapter("inspect", &request)?;
     assert!(success, "{inspected}");
     request["prior"] = inspected["data"].clone();
-    for (operation, status) in [
-        ("hold", "held"),
-        ("drain", "drained"),
-        ("apply", "applied"),
-        ("verify", "verified"),
-    ] {
+    for (operation, status) in [("hold", "held"), ("drain", "drained"), ("apply", "applied")] {
         let (success, reply) = fixture.adapter(operation, &request)?;
         assert!(success, "{operation}: {reply}");
         assert_eq!(reply["status"], status);
@@ -208,7 +184,7 @@ fn adapter_runs_complete_lifecycle_and_recovers_lost_apply_reply() -> TestResult
 }
 
 #[test]
-fn adapter_rejects_forged_evidence_and_stale_baseline() -> TestResult {
+fn adapter_rejects_foreign_product_and_stale_baseline() -> TestResult {
     let fixture = Fixture::new()?;
     let mut request = fixture.request()?;
     let (_, inspected) = fixture.adapter("inspect", &request)?;
@@ -217,50 +193,9 @@ fn adapter_rejects_forged_evidence_and_stale_baseline() -> TestResult {
     let (success, reply) = fixture.adapter("apply", &request)?;
     assert!(!success);
     assert_eq!(reply["status"], "stopped");
-    request["candidate"]["candidate_id"] = json!("sha256:forged");
-    assert!(!fixture.adapter("inspect", &request)?.0);
     let mut request = fixture.request()?;
     request["product"] = json!("foreign");
     assert!(!fixture.adapter("inspect", &request)?.0);
-    Ok(())
-}
-
-#[test]
-fn adapter_accepts_python_candidate_hashes_with_unicode_source_paths() -> TestResult {
-    let fixture = Fixture::new()?;
-    let filename = "café-🙂.md";
-    let mut request = fixture.request()?;
-    fs::write(
-        fixture.bundle.join("manuals").join(filename),
-        "Unicode provider material",
-    )?;
-    let candidate = &mut request["candidate"];
-    candidate["source_inputs"][format!("usher/chancery/manuals/{filename}")] = json!(
-        cell_install::file_digest(&fixture.bundle.join("manuals").join(filename))?
-    );
-    candidate
-        .as_object_mut()
-        .ok_or("missing candidate")?
-        .remove("candidate_id");
-    let encoded =
-        serde_json::to_string(candidate)?.replace(filename, "caf\\u00e9-\\ud83d\\ude42.md") + "\n";
-    candidate["candidate_id"] = json!(format!("sha256:{:x}", Sha256::digest(encoded.as_bytes())));
-    let (success, reply) = fixture.adapter("inspect", &request)?;
-    assert!(success, "{reply}");
-    Ok(())
-}
-
-#[test]
-fn adapter_rejects_unlisted_provider_files() -> TestResult {
-    let fixture = Fixture::new()?;
-    let request = fixture.request()?;
-    fs::write(
-        fixture.bundle.join("manuals/unlisted.md"),
-        "not in passed candidate",
-    )?;
-    let (success, reply) = fixture.adapter("inspect", &request)?;
-    assert!(!success);
-    assert_eq!(reply["status"], "stopped");
     Ok(())
 }
 
@@ -293,26 +228,6 @@ fn interrupted_first_publication_can_recover_to_captured_absence() -> TestResult
 }
 
 #[test]
-fn exact_provider_changes_invalidate_candidate_verification() -> TestResult {
-    let fixture = Fixture::new()?;
-    fixture.install()?;
-    fs::write(
-        fixture.bundle.join("manuals/added.md"),
-        "changed provider bytes",
-    )?;
-    let output = fixture
-        .command()
-        .arg("verify")
-        .arg("--binary")
-        .arg(&fixture.binary)
-        .arg("--bundle")
-        .arg(&fixture.bundle)
-        .output()?;
-    assert!(!output.status.success());
-    Ok(())
-}
-
-#[test]
 fn foreign_recovery_path_and_stale_selection_are_rejected() -> TestResult {
     let fixture = Fixture::new()?;
     fixture.install()?;
@@ -333,25 +248,5 @@ fn foreign_recovery_path_and_stale_selection_are_rejected() -> TestResult {
         .arg(Path::new("/tmp/foreign"))
         .output()?;
     assert!(!output.status.success());
-    Ok(())
-}
-
-#[test]
-fn direct_install_rejects_an_installer_from_another_product_release() -> TestResult {
-    let fixture = Fixture::new()?;
-    let path = fixture.bundle.join("provider.json");
-    let mut provider: Value = serde_json::from_slice(&fs::read(&path)?)?;
-    provider["provider"]["release"] = json!("99.0.0");
-    fs::write(path, serde_json::to_vec(&provider)?)?;
-    let output = fixture
-        .command()
-        .arg("install")
-        .arg("--binary")
-        .arg(&fixture.binary)
-        .arg("--bundle")
-        .arg(&fixture.bundle)
-        .output()?;
-    assert!(!output.status.success());
-    assert!(!fixture.home.join(".local/bin/usher").exists());
     Ok(())
 }

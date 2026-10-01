@@ -26,7 +26,4 @@ RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus
 nucleus|target/release/nucleusd|nucleusd
 nucleus|target/release/nucleus-install|nucleus-install'
-CI_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus
-nucleus|target/release/nucleusd|nucleusd
-nucleus|target/release/nucleus-install|nucleus-install'
 PROVIDERS='nucleus|nucleus|nucleus/chancery|10'

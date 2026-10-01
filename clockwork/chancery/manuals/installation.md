@@ -17,13 +17,9 @@ clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY
 ./deploy.sh clockwork
 ```
 
-The Rust installer requires a tested regular executable binary, its matching
-Rust installer, complete provider bundle, and a separately supplied regular
-executable Chancery reader, all at absolute paths. Candidate `clockwork VERSION`
-output must exactly match provider and installer release. The overview, feature
-contracts, and procedures use provider schema four. The reader must support
-that schema and its validation/discovery interfaces; Chancery 0.8 supports them.
-A catalog entry or successful structural check does not prove live readiness.
+The Rust installer accepts the binary, installer, and provider files at absolute
+paths. It places those files and publishes their selectors without comparing
+versions, validating provider contents, or probing runtime readiness.
 
 Direct installation creates no runtime database, registers no product
 schedule, changes no binding, writes no `org.clockwork.*` plist, and runs no
@@ -40,15 +36,11 @@ The installer hashes the exact binary, Rust installer, public layout, and
 complete provider tree into one immutable release under
 `$HOME/Library/Application Support/Clockwork/install/releases`. Its
 `cell-install-v2` manifest is `manifest.json`. The retained installer appears
-at `bin/clockwork-install` and `package/install`. The installer also verifies
-the supported legacy release format when admitting an existing installation
-or recovering a retained release.
+at `bin/clockwork-install` and `package/install`. The installer reads retained release metadata when selecting an existing
+installation or recovering a retained release.
 
-The explicit candidate reader validates the provider copy inside that exact
-staged release before any public selector mutation. Before commit, it must
-discover every indexed Clockwork entry through the installed provider registry
-and selected path. Whole-bundle content participates in release identity and
-integrity. No runtime state belongs in the provider or release.
+Provider files are copied with the release. Installation does not invoke a
+Chancery reader or validate discovery. No runtime state belongs in the release.
 
 One atomic current selector connects both public views:
 
@@ -61,24 +53,21 @@ One atomic current selector connects both public views:
   -> .../Clockwork/install/current/share/chancery/clockwork
 ```
 
-An update validates existing selector form and retained releases. Identical
+An update retains owned selector boundaries and release metadata. Identical
 installation is idempotent. A changed candidate preserves a valid prior
 selection as `previous` and atomically replaces `current`. Optional
 `--expected-current` enforces the caller's captured absent or `releases/HASH`
-expectation. Symbolic candidates, foreign public paths, selectors escaping the
-owned release tree, version mismatches, malformed manifests, and changed
-release bytes are refused rather than adopted.
+expectation. Foreign public paths and selectors outside the owned installation remain
+unsupported.
 
-A failed installed version/help check before commit restores prior current,
+A failed publication before commit restores prior current,
 previous, command, installer, and provider views. If coherent restoration
 cannot be completed, all owned public selectors are detached and the
 fail-closed state is reported while releases remain. Diagnostics and retained
-selectors supply recovery evidence; bypassing content checks or replacing a
-foreign path is unsupported.
+selectors supply recovery evidence; replacing a foreign path is unsupported.
 
-After commit, recovery with a trusted tested installer verifies and selects a
-canonical owned retained release. An unverified installer from that release is
-not a recovery trust basis. Program rollback changes stable program/provider
+After commit, recovery reads metadata and selects an owned retained release.
+Select the retained installer explicitly. Program rollback changes program/provider
 selection but leaves product bindings and generated plists unchanged. Each
 plist pins an exact content-addressed broker; releases cannot be pruned while
 any plist or running activation may refer to them.

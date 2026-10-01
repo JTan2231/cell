@@ -1,6 +1,6 @@
 {
   "id": "emt.service",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -65,7 +65,7 @@
     "Verify matched program/provider, valid configuration, known drain counts and the selected schedule, pause, hold and exact halt intent. Doctor observations do not prove receiving access or delivery."
   ],
   "failure_and_recovery": [
-    "Retain original migration receipt, verified private backup and captured operator intent. Release only the exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
+    "Retain the original migration receipt, private backup and captured operator intent. Release only the exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
   ],
   "privacy": [
     "Correspondence, Nucleus references, quota records and backups remain private and retained without automatic deletion. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
@@ -81,8 +81,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "email.account.operate",
@@ -159,7 +159,7 @@
       },
       {
         "status": "declared",
-        "statement": "The worker skips overlap and does not wait for model completion. Coordinated updates capture operator intent, hold and drain, retain verified migration evidence, install matched bytes and restore intent after readiness checks. Existing pauses and failure halts survive."
+        "statement": "The worker skips overlap and does not wait for model completion. Coordinated updates capture intent, hold and drain, retain migration evidence, install bytes and restore intent after configuration. Installation does not perform artifact-integrity, state-integrity or readiness checks. Existing pauses and failure halts survive."
       },
       {
         "status": "declared",

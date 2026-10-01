@@ -1,6 +1,6 @@
 {
   "id": "nucleus.service",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -22,7 +22,7 @@
     "Requesters own workflow settlement, domain evidence, and retry decisions; a coordinator releases only its own holds."
   ],
   "success": [
-    "The requested supported service response proves the observed condition. Installation requires matching programs, exact harness/authentication/protocol readiness, and applicable owned drain proof.",
+    "Installation completes program, provider, and service setup under the applicable owned hold and drain. It performs no artifact-integrity, persistent-state-integrity, or operational-readiness checks. Ordinary service diagnostics establish their separate observations.",
     "Requester admission is reported separately because a quota pause can remain after successful installation."
   ],
   "failure_and_recovery": [
@@ -78,7 +78,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Service changes use matching sealed programs and documentation, the exact staged Codex runtime, and supported private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
+        "statement": "Service changes select programs, documentation, a Codex runtime path, and private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
       },
       {
         "status": "declared",
@@ -92,7 +92,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation and recovery select exact sealed program, provider-bundle, harness, and retained journal identities."
+        "statement": "Installation and recovery select program, provider-bundle, harness path, and retained journal metadata without integrity proofs."
       }
     ],
     "outputs": [
@@ -128,7 +128,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Readiness reflects the live runtime at observation time. Deployment proof accepts a healthy quota-paused service but rejects an unexplained pause; a hold requires its sole matching owner and complete drain."
+        "statement": "Readiness reflects the live runtime at observation time. Installation does not invoke health. A deployment hold still requires its sole matching owner and complete drain."
       },
       {
         "status": "unspecified",
@@ -156,7 +156,7 @@
       },
       {
         "status": "declared",
-        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Controlled restart establishes the resident executable; successful recovery removes the journal only after held live health and exact-copy checks."
+        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Recovery reinstalls and starts the recorded candidate; successful setup removes the journal without health or exact-copy checks."
       },
       {
         "status": "declared",
@@ -166,7 +166,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Deployment checks run no model jobs or synthetic requester records. Service installation waits up to two minutes for migration, compaction, and health. There is no automatic backup/restore command or general output pruning."
+        "statement": "Deployment runs no model jobs or synthetic requester records. Service installation starts the daemon without waiting for migration, compaction, or health. There is no automatic backup/restore command or general output pruning."
       },
       {
         "status": "unspecified",
@@ -176,7 +176,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. The complete Codex runtime is staged and sealed by both file hashes; selected upgrades reuse a configured runtime only when both identities match the tested staged pair."
+        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. Staging records runtime file hashes for ordinary admission checks without validating them. Selected upgrades use the staged runtime unless settings provide codex_bin."
       },
       {
         "status": "declared",
@@ -190,7 +190,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Live installation and admission readiness rely on the exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
+        "statement": "Live admission readiness relies on the exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
         "target": "codex",
         "kind": "external"
       },

@@ -132,14 +132,14 @@ old agent processes.
 1. Run the authorized initialized update through `./deploy.sh emt`. The
    coordinator captures configuration and worker intent, disables the worker,
    holds and drains EMT, records migration evidence, installs matched bytes,
-   selects a disabled exact definition and verifies readiness before release.
+   selects a disabled exact definition and releases its own holds after setup.
 2. Supply setup configuration or `enabled` and `paused` intent only when
-   authorized. Omitted settings preserve saved values. Fresh valid deployment
-   defaults to activation after verification; an existing absent binding remains
+   authorized. Omitted settings preserve saved values. Fresh deployment
+   defaults to activation after configuration; an existing absent binding remains
    absent unless activation is explicitly requested. Incoming-mail progress
    changes are not setup inputs.
 3. Verify the retained coordinator migration receipt, completed schema and
-   original backup digests. Confirm restored pause, enabled state and existing
+   original backup paths. Confirm restored pause, enabled state and existing
    failure-halt evidence. A requester-only update leaves Nucleus admission open;
    Nucleus replacement waits for EMT exchanges before holding the service.
 4. Run the next authorized ordinary `./deploy.sh emt` command after an
@@ -148,8 +148,7 @@ old agent processes.
    backup and captured configuration. Restore a disabled exact
    definition before release, then apply captured operator intent. Do not replace
    the original backup with already configured state.
-5. Run `emt --register-usage` and verify matched binary and installed provider
-   publication after installation or update.
+5. Run `emt --register-usage` and inspect installed release metadata after installation or update.
 
 Retain unresolved holds when recovery evidence cannot be established. Stop an
 initialized direct-selector recovery attempt. Installation, initialization,
@@ -157,9 +156,10 @@ configuration, admission and scheduling remain separate effects.
 
 ## Verify the endpoint
 
-Require the selected program and provider to match, configuration and schema to
-be valid, maintenance counts to be known, and schedule, pause and halt intent to
-match the authorized operation. Interpret each operation receipt separately.
+Installation performs setup without artifact-integrity, state-integrity, or
+operational-readiness checks. Require known maintenance counts and preserve the
+authorized schedule, pause, and halt intent. Ordinary doctor and worker checks
+remain separate. Interpret each operation receipt separately.
 Email acceptance proves submission to the provider; product evidence establishes
 intervention success. Receiving authorization and final delivery require their
 own evidence. No timer, model accuracy or final-delivery deadline is promised.

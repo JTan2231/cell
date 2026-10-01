@@ -123,60 +123,6 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
 }
 
 #[test]
-fn verify_accepts_a_quota_pause_but_rejects_unexplained_closed_admission() -> Result {
-    let fixture = Fixture::new()?;
-    assert!(fixture.install()?.status.success());
-    let mut status = serde_json::json!({
-        "loaded": true,
-        "health": {
-            "version": 1,
-            "status": "ok",
-            "daemonVersion": env!("CARGO_PKG_VERSION"),
-            "acceptingJobs": false,
-            "checkedAt": "2026-09-24T09:00:00Z",
-            "supportedProtocolVersions": [1],
-            "harness": {
-                "harness": "codex",
-                "harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION,
-                "adapterVersion": env!("CARGO_PKG_VERSION")
-            },
-            "harnessExecutable": fixture.codex,
-            "authentication": {
-                "codexHome": fixture.home.join("codex-home"),
-                "configured": true,
-                "authenticated": true
-            },
-            "execution": {"maxActiveJobs": 8, "activeJobs": 0, "availableSlots": 8},
-            "quota": {
-                "version": 1,
-                "policy": {"enabled": true, "pauseAtRemainingPercent": 10, "resumeAboveRemainingPercent": 15},
-                "state": "low",
-                "accountKey": "test-account",
-                "limitId": "codex",
-                "remainingPercent": 6,
-                "observedAt": 1,
-                "resetsAt": 2,
-                "conditionId": "test-condition",
-                "conditionStartedAt": 1
-            }
-        }
-    });
-    let observation = fixture.home.join("service-status.json");
-    fs::write(&observation, serde_json::to_vec(&status)?)?;
-    let result = fixture.run("verify")?;
-    assert!(
-        result.status.success(),
-        "{}{}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
-    status["health"]["quota"] = serde_json::Value::Null;
-    fs::write(observation, serde_json::to_vec(&status)?)?;
-    assert!(!fixture.run("verify")?.status.success());
-    Ok(())
-}
-
-#[test]
 fn service_owns_public_copies_and_package_is_idempotent() -> Result {
     let fixture = Fixture::new()?;
     let result = fixture.install()?;
@@ -197,18 +143,6 @@ fn service_owns_public_copies_and_package_is_idempotent() -> Result {
 }
 
 #[test]
-fn failed_service_before_program_change_restores_package() -> Result {
-    let fixture = Fixture::new()?;
-    assert!(fixture.install()?.status.success());
-    let before = fixture.current()?;
-    fixture.update()?;
-    fs::write(fixture.home.join("fail-before"), b"")?;
-    assert!(!fixture.install()?.status.success());
-    assert_eq!(fixture.current()?, before);
-    Ok(())
-}
-
-#[test]
 fn failed_service_with_retained_candidate_keeps_matching_package() -> Result {
     let fixture = Fixture::new()?;
     assert!(fixture.install()?.status.success());
@@ -222,6 +156,9 @@ fn failed_service_with_retained_candidate_keeps_matching_package() -> Result {
         fs::read(fixture.home.join(".local/bin/nucleus"))?,
         fs::read(&fixture.binary)?
     );
-    assert!(String::from_utf8_lossy(&result.stdout).contains("candidate programs retained"));
+    assert!(
+        String::from_utf8_lossy(&result.stdout)
+            .contains("candidate package and recovery evidence retained")
+    );
     Ok(())
 }

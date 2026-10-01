@@ -142,7 +142,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.5.3 uses queue contract 6 and retains journal
+arguments. Manager release 0.5.3 uses queue contract 7 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
@@ -164,7 +164,7 @@ explicitly, or `--run-tests` to run the selected product and platform tests.
 The job freezes this choice. Existing jobs without the choice still run tests.
 The request key includes this choice; do not reuse it with a different test policy.
 Skipping tests retains structure, recognition, syntax, provider, formatting,
-lint, documentation, build, version, and candidate checks. It skips Rust tests
+lint, documentation and build checks. It skips Rust tests
 and shared Python regression suites. Receipts and outcome emails state when
 tests were skipped. Product selection still controls
 automatic deployment. A passing result with skipped tests supplies no test evidence.
@@ -372,7 +372,7 @@ hold.
 The manager freezes a deployment request ID, exact accepted source commit and
 selected products. It reads that operation before starting or reconciling it.
 The coordinator owns installation, maintenance release, and recovery. Matching
-source and operation identity, successful installation evidence and released
+source and operation identity, completed installation outcome and released
 maintenance establish the manager's deployment success. Cleanup failure can
 remain visible even when installation and maintenance release succeeded.
 

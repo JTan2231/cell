@@ -73,8 +73,7 @@ machine-wide task liveness.
 A protocol, handshake, pagination, timeout, or identity failure stops the
 operation. Inspect the selected path and version before changing installations.
 Do not add an executable fallback, read private storage, change authentication,
-or terminate unrelated processes to bypass an error. Provider installation
-proves publication integrity; it does not prove live App Server readiness.
+or terminate unrelated processes to bypass an error. Provider installation selects program files; it does not prove live App Server readiness.
 
 Provider release, entry contract version, selected Codex version, and App Server
 protocol are distinct. No App Server availability, wall-clock latency,
@@ -84,40 +83,32 @@ installed contract for this data surface; complete resolution preserves that gap
 
 ## Installed release and selectors
 
-The macOS deployment has no service to start and no credential to source. It owns:
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-- `~/.local/bin/conversations` and `~/.local/bin/conversations-install` as stable selectors;
-- `~/Library/Application Support/Conversations/install/releases/HASH` as the immutable release;
-- `install/current` and `install/previous` selectors under that product directory; and
-- `~/Library/Application Support/Chancery/providers/conversations`, selecting the current release's bundle.
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
 
-The `cell-install-v2` release identity covers the binary, Rust installer, public
-layout, and complete Chancery bundle. `manifest.json` records the exact inventory;
-`package/install` retains the installer bytes. An identical deployment is a no-op.
-Existing release bytes are verified before reuse. A selected current or previous
-release must have an exact content-addressed selector, a self-consistent manifest,
-and matching component hashes.
+The installation root is
+`~/Library/Application Support/Conversations/install`. Public `conversations`,
+`conversations-install`, and the Conversations provider follow `current`.
+`previous` retains the prior selection. `manifest.json` describes the
+`cell-install-v2` layout, and `package/install` retains the installer.
+Recovery also reads the previous shell format.
 
-A PID-aware product lock serializes Conversations updates. A shared Chancery
-catalog-writer lock serializes provider publication across the shared Rust
-installers. The installer takes the product lock before the catalog lock and
-recovers stale owners. It publishes `current` atomically. A failed version or
-help check after switching restores the previous selectors. If restoration
-cannot be verified, it detaches them. Foreign selectors, malformed or tampered
-selected releases, and a provider selector without a current release are rejected.
-
-Deployment snapshots `current` before waiting for the lock and rejects stale
-cutover by default. A caller can make the guard explicit with
-`--expected-current absent` or `--expected-current releases/HASH`.
-
-Deployment does not run `doctor`, scan metadata, copy transcripts, or alter
-Codex authentication. Recovery validates the complete retained release before
-selecting it and never executes a retained installer to verify the release.
-It supports both the previous shell-installed format and `cell-install-v2`.
+Deployment does not run `doctor`, read history, or change Codex authentication.
+It starts no service. The optional doctor command retains its normal App Server
+handshake and metadata behavior; it is separate from installation.
 
 Krisis and Paperboy embed the Conversations library. Rebuild and deploy each
-consumer to apply a library change. Replacing the CLI does not update those
-callers. Explicit consumer executable pins take precedence over library defaults.
+consumer to apply library changes. Replacing the CLI does not update them.
 
 ## Command usage
 

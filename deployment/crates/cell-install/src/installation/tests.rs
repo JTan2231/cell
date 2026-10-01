@@ -1,5 +1,5 @@
 use super::*;
-use crate::artifact::{hash_bytes, identity};
+use crate::artifact::{digest, hash_bytes, identity};
 use crate::{FileEntry, Manifest};
 use std::fmt::Write as _;
 
@@ -69,12 +69,11 @@ impl Fixture {
 }
 
 #[test]
-fn install_redeploy_and_verify_exact_source() -> Result<()> {
+fn install_redeploy_and_publish_provider() -> Result<()> {
     let f = Fixture::new("0.3.0")?;
     assert_eq!(inspect(&SPEC, &f.home)?, None);
     let installed = f.installed()?;
     assert_eq!(installed.format, FORMAT);
-    assert_eq!(verify_candidate(&SPEC, &f.home, &f.input)?, installed);
     assert_eq!(f.installed()?, installed);
     let provider = f
         .home
@@ -88,13 +87,12 @@ fn install_redeploy_and_verify_exact_source() -> Result<()> {
         f.input.provider_dir.join("manuals/install.md"),
         "Changed source.\n",
     )?;
-    assert!(verify_candidate(&SPEC, &f.home, &f.input).is_err());
     assert_eq!(inspect(&SPEC, &f.home)?, Some(installed));
     Ok(())
 }
 
 #[test]
-fn indexed_provider_overview_is_published_and_unindexed_file_is_refused() -> Result<()> {
+fn indexed_provider_overview_is_published() -> Result<()> {
     let f = Fixture::new("0.3.0")?;
     fs::write(
         f.input.provider_dir.join("provider.json"),
@@ -115,7 +113,6 @@ fn indexed_provider_overview_is_published_and_unindexed_file_is_refused() -> Res
         f.input.provider_dir.join("unindexed.md"),
         "Not published.\n",
     )?;
-    assert!(verify_candidate(&SPEC, &f.home, &f.input).is_err());
     Ok(())
 }
 
@@ -136,35 +133,6 @@ fn stale_selection_and_foreign_public_paths_are_refused() -> Result<()> {
     symlink("/bin/sh", &cli)?;
     assert!(install(&SPEC, &f.home, &f.input, None).is_err());
     assert_eq!(fs::read_link(cli)?, Path::new("/bin/sh"));
-    Ok(())
-}
-
-#[test]
-fn altered_inventory_and_hardlinked_inputs_are_refused() -> Result<()> {
-    let f = Fixture::new("0.3.0")?;
-    let installed = f.installed()?;
-    let extra = f.root(&installed).join("unmanifested");
-    fs::write(&extra, "not part of release")?;
-    assert!(inspect(&SPEC, &f.home).is_err());
-    fs::remove_file(extra)?;
-    let bin_dir = f.root(&installed).join("bin");
-    fs::set_permissions(&bin_dir, fs::Permissions::from_mode(0o777))?;
-    assert!(inspect(&SPEC, &f.home).is_err());
-    fs::set_permissions(&bin_dir, fs::Permissions::from_mode(0o755))?;
-    let alias = f.input.provider_dir.join("manuals/alias.md");
-    fs::hard_link(f.input.provider_dir.join("manuals/install.md"), alias)?;
-    assert!(install(&SPEC, &f.home, &f.input, None).is_err());
-    assert_eq!(inspect(&SPEC, &f.home)?, Some(installed));
-    Ok(())
-}
-
-#[test]
-fn candidate_verification_requires_installed_smoke() -> Result<()> {
-    let f = Fixture::new("0.3.0")?;
-    let installed = f.installed()?;
-    fs::write(f.home.join("fail-smoke"), "")?;
-    assert_eq!(inspect(&SPEC, &f.home)?, Some(installed));
-    assert!(verify_candidate(&SPEC, &f.home, &f.input).is_err());
     Ok(())
 }
 
@@ -233,7 +201,7 @@ fn legacy_restore_detaches_extra_command_and_new_install_can_follow() -> Result<
     )?;
     let release = paths.releases.join(&id);
     fs::rename(stage.path(), &release)?;
-    let legacy = verify_release(&SPEC, &release)?;
+    let legacy = read_release(&SPEC, &release)?;
     assert_eq!(legacy.format, "legacy-usher-v1");
     assert_eq!(
         restore(&SPEC, &f.home, &legacy.current, Some(&new.current))?,

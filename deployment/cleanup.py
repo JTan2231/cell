@@ -243,47 +243,13 @@ def installer_locks(home, installs):
                 path.rmdir()
 
 
-def trusted_installers(home, installers=None, usher_installer=None):
-    """The coordinator supplies admitted candidates; retained releases supply no trust."""
-    result = {}
-    for supplied, path in (installers or {}).items():
-        product = "decisions" if supplied == "krisis" else supplied
-        require(product in PRODUCTS and product not in result,
-                "history verifier has an unknown or duplicate product")
-        result[product] = Path(path)
-    if usher_installer is not None:
-        require("usher" not in result, "Usher history verifier was supplied twice")
-        result["usher"] = Path(usher_installer)
-    for path in result.values():
-        require(path.is_absolute() and path.resolve(strict=True) == path,
-                "history verifier must be an exact sealed candidate path")
-        require(not any(path.is_relative_to(home / "Library/Application Support" / application / "install")
-                        for application in PRODUCTS.values()),
-                "retained installers cannot establish trust for history deletion")
-        info = regular(path)
-        require(info.st_mode & stat.S_IXUSR, "history verifier is not executable")
-    return result
-
-
-def parse_installers(values):
-    result = {}
-    for value in values:
-        product, separator, path = value.partition("=")
-        require(separator and product and path, "use --installer PRODUCT=ABSOLUTE_PATH")
-        product = "decisions" if product == "krisis" else product
-        require(product in PRODUCTS and product not in result,
-                "history verifier has an unknown or duplicate product")
-        result[product] = Path(path)
-    return result
-
-
-def clean_installed_release_history(home: Path, usher_installer: Path | None = None, *,
-                                    installers: dict[str, Path] | None = None) -> dict:
-    """Prune known Cell installation trees using only supplied trusted candidates."""
+def clean_installed_release_history(home: Path, products: list[str] | None = None) -> dict:
+    """Prune unreferenced releases within the known installation trees."""
     require(home.is_absolute() and home.resolve(strict=True) == home,
             "cleanup requires the canonical operator home")
     require_deployment_lock()
-    verifiers = trusted_installers(home, installers, usher_installer)
+    selected = {"decisions" if product == "krisis" else product for product in products or []}
+    require(selected <= PRODUCTS.keys(), "unknown cleanup product")
     source = Path(__file__).resolve().parents[1]
     base = home / "Library/Application Support"
     installs = {}
@@ -293,7 +259,7 @@ def clean_installed_release_history(home: Path, usher_installer: Path | None = N
         require(metadata.get("application") == application, "Cell installation metadata differs")
         installs[application] = base / application / "install"
     with installer_locks(home, installs):
-        return prune(home, installs, verifiers)
+        return prune(home, installs, selected)
 
 
 def lifecycle_barriers(base, application, install):
@@ -314,12 +280,11 @@ def lifecycle_barriers(base, application, install):
                 "product maintenance or migration recovery remains")
 
 
-def prune(home, installs, verifiers=None):
+def prune(home, installs, selected):
     base = home / "Library/Application Support"
     currents, selectors, previous, releases, receipts = {}, {}, [], [], []
-    verifiers = verifiers or {}
-    retained_unverified = set()
     product_history = {}
+    unselected = set()
     for product, application in PRODUCTS.items():
         install = base / application / "install"
         lifecycle_barriers(base, application, install)
@@ -327,9 +292,8 @@ def prune(home, installs, verifiers=None):
             continue
         for path in (base, base / application, install, install / "releases"):
             directory(path)
-        verifier = verifiers.get(product)
-        product_history[product] = ("verified" if verifier is not None
-                                    else "retained_without_verified_installer")
+        pruning = product in selected
+        product_history[product] = "pruned" if pruning else "retained_unselected"
         for name in ("current", "previous"):
             link = install / name
             if not link.exists() and not link.is_symlink():
@@ -341,54 +305,21 @@ def prune(home, installs, verifiers=None):
             selectors[link] = target
             if name == "current":
                 currents[application] = install / target
-            elif verifier is not None:
+            elif pruning:
                 previous.append(link)
         # An uninstalled retained tree has no current ownership proof.
         require(application in currents, "retained installation has no current release")
         for release in (install / "releases").iterdir():
             directory(release)
             require(HEX.fullmatch(release.name), "unrecognized release directory")
-            manifests = [path for path in (release / "manifest.json", release / "manifest.txt") if path.exists()]
-            require(len(manifests) == 1, "release has no unique manifest")
-            manifest = read_record(manifests[0])
-            require(manifest.get("release_id") == release.name
-                    and manifest.get("product", product) in {product, "krisis" if product == "decisions" else product},
-                    "release manifest ownership is unproved")
-            if verifier is None:
-                retained_unverified.add(release)
-            else:
-                reply = json.loads(inspect_command([verifier, "verify-release", release]))
-                require(isinstance(reply, dict) and reply.get("ok") is True
-                        and isinstance(reply.get("data"), dict)
-                        and reply["data"].get("release_id") == release.name,
-                        "release history verification did not prove its identity")
-            for path in release.rglob("*"):
-                if path.is_dir() and not path.is_symlink():
-                    directory(path)
-                else:
-                    regular(path)
             releases.append(release)
+            if not pruning:
+                unselected.add(release)
         for name in ("last-update.json", "last-update.txt"):
             path = install / name
-            if path.exists() or path.is_symlink():
-                receipt = read_record(path)
-                selected = receipt.get("release_id", receipt.get("release", "").removeprefix("releases/"))
-                completed = receipt.get("completed_at")
-                if product == "semantics" and name == "last-update.json" and not completed:
-                    # Semantics records completion through its released maintenance
-                    # state; lifecycle_barriers already excludes pending transactions.
-                    snapshot = receipt.get("rollback_snapshot")
-                    completed = (receipt.get("version") == 1
-                                 and receipt.get("maintenance_retained") is False
-                                 and isinstance(receipt.get("clockwork_definition"), str)
-                                 and HEX.fullmatch(receipt["clockwork_definition"])
-                                 and isinstance(snapshot, str)
-                                 and Path(snapshot).parent == base / application / "backups/deployments")
-                require(completed and selected == currents[application].name,
-                        "installation history receipt is not completed current state")
-                if verifier is not None:
-                    receipts.append(path)
-    protected = live_pins(home, installs, currents) | retained_unverified
+            if pruning and (path.exists() or path.is_symlink()):
+                receipts.append(path)
+    protected = live_pins(home, installs, currents) | unselected
     require(all(link.is_symlink() and os.readlink(link) == target for link, target in selectors.items()),
             "release selectors changed during cleanup inspection")
     require(shutil.rmtree.avoids_symlink_attacks, "safe directory removal is unavailable")
@@ -397,7 +328,7 @@ def prune(home, installs, verifiers=None):
         link.unlink()
     for path in removed:
         # Installed bundles can be sealed read-only. Only obsolete releases
-        # already validated above may have owner write restored for removal.
+        # selected above may have owner write restored for removal.
         for root, _, _ in os.walk(path, followlinks=False):
             entry = Path(root)
             info = directory(entry)
@@ -417,13 +348,10 @@ if __name__ == "__main__":
     try:
         require(sys.platform == "darwin", "cleanup is a coordinated macOS operation")
         parser = argparse.ArgumentParser(description=__doc__)
-        parser.add_argument("--usher-installer", type=Path)
-        parser.add_argument("--installer", action="append", default=[], metavar="PRODUCT=ABSOLUTE_PATH")
+        parser.add_argument("--product", action="append", default=[])
         arguments = parser.parse_args()
         os.umask(0o077)
-        print(json.dumps(clean_installed_release_history(Path(pwd.getpwuid(os.getuid()).pw_dir),
-                                                       arguments.usher_installer,
-                                                       installers=parse_installers(arguments.installer)),
+        print(json.dumps(clean_installed_release_history(Path(pwd.getpwuid(os.getuid()).pw_dir), arguments.product),
                          separators=(",", ":"), sort_keys=True))
     except (CleanupError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
         print(f"cell-deploy: installed release cleanup failed: {error}", file=sys.stderr)

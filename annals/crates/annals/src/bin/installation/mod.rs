@@ -40,9 +40,6 @@ enum Command {
     ProvisionDecisions(DecisionsArgs),
     MigrateToUser(migration::Args),
     Inspect(HomeArgs),
-    VerifyRelease {
-        release: PathBuf,
-    },
     Recover {
         transaction: PathBuf,
         #[command(flatten)]
@@ -120,10 +117,6 @@ pub fn main() -> ExitCode {
         Command::ProvisionDecisions(args) => lifecycle::provision(&args),
         Command::MigrateToUser(args) => migration::run(&args),
         Command::Inspect(args) => home(args.home).and_then(|home| protocol::inspect(&home, None)),
-        Command::VerifyRelease { release } => {
-            cell_install::verify_release_at(&release::layout(), &release, &release::legacy)
-                .map(|info| json!({"ok":true,"data":info}))
-        }
         Command::Recover {
             transaction,
             home: args,

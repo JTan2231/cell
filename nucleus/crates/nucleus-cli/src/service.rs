@@ -21,8 +21,6 @@ pub enum ServiceError {
     DaemonNotFound,
     #[error("unable to locate Codex; pass --codex or set NUCLEUS_CODEX")]
     CodexNotFound,
-    #[error("Codex runtime is incomplete or changed: {0}")]
-    InvalidCodexRuntime(String),
     #[error("Codex home must be an existing absolute directory: {0}")]
     InvalidCodexHome(PathBuf),
     #[error("a loaded {SERVICE_LABEL} service has no managed plist at {0}")]
@@ -120,14 +118,6 @@ pub struct InstallResult {
     pub paths: ServicePaths,
     pub codex: PathBuf,
     pub codex_home: PathBuf,
-    previous: PreviousInstallation,
-    target: String,
-}
-
-impl InstallResult {
-    pub fn rollback(&self) -> Result<(), ServiceError> {
-        self.previous.restore(&self.paths, &self.target, true)
-    }
 }
 
 #[derive(Debug)]
@@ -271,8 +261,6 @@ pub fn install(
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
     let codex = find_codex(codex_source)?;
-    nucleus_codex::runtime_bundle::verify_runtime(&codex)
-        .map_err(|error| ServiceError::InvalidCodexRuntime(error.to_string()))?;
     let source_codex_home = find_codex_home(codex_home_source)?;
     let target = service_target()?;
     let was_loaded = launchctl([OsStr::new("print"), OsStr::new(&target)])?
@@ -295,7 +283,6 @@ pub fn install(
         }
         let plist = render_plist(&paths, &codex);
         atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
-        validate_plist(&paths.launch_agent)?;
         command_success(
             "/bin/launchctl",
             &launchctl([OsStr::new("enable"), OsStr::new(&target)])?,
@@ -308,7 +295,7 @@ pub fn install(
         // Credential authority may be refreshed by a running daemon. Import it
         // only after the previous service is fully stopped. Authentication is
         // deliberately excluded from rollback so later refreshes remain
-        // authoritative even if bootstrap or the health check fails.
+        // authoritative even if bootstrap fails.
         prepare_owned_codex_home(&paths.codex_home, source_codex_home.as_deref())?;
         command_success(
             "/bin/launchctl",
@@ -340,8 +327,6 @@ pub fn install(
         paths,
         codex,
         codex_home: owned_codex_home,
-        previous,
-        target,
     })
 }
 
@@ -723,19 +708,6 @@ fn restore_file(path: &Path, snapshot: Option<&FileSnapshot>) -> Result<(), Serv
     }
 }
 
-fn validate_plist(path: &Path) -> Result<(), ServiceError> {
-    let output = Command::new("/usr/bin/plutil")
-        .arg("-lint")
-        .arg(path)
-        .output()
-        .map_err(|source| ServiceError::Io {
-            operation: "validate LaunchAgent plist",
-            path: path.to_path_buf(),
-            source,
-        })?;
-    command_success("/usr/bin/plutil", &output)
-}
-
 fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<(), ServiceError> {
     let file_name = path
         .file_name()
@@ -989,22 +961,6 @@ mod tests {
         assert!(plist.contains(
             "<string>/Users/example/Library/Application Support/Nucleus/codex-home</string>"
         ));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn rendered_plist_is_valid_for_plutil() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(Path::new("/Users/example"));
-        let plist = temporary.path().join("org.nucleus.daemon.plist");
-        atomic_write(
-            &plist,
-            render_plist(&paths, Path::new("/opt/homebrew/bin/codex")).as_bytes(),
-            0o600,
-        )
-        .or_panic("write plist");
-
-        validate_plist(&plist).or_panic("plist should pass plutil");
     }
 
     #[test]

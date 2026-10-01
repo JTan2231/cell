@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Install and verify Clew",
-  "summary": "Install and verify Clew under email admission maintenance, convert supported older ledgers to generic entries with a private backup, and preserve application history and daily email scheduling.",
+  "title": "Install Clew",
+  "summary": "Install Clew under email admission maintenance, convert supported older ledgers with a private backup, and preserve application history and daily scheduling.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -73,7 +73,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verification checks selected installed bytes, local ledger integrity and the complete retained Cast snapshot interface at that invocation. Migration requires a mapping for every legacy ledger reference and refuses missing or colliding mappings. It establishes no future availability."
+        "statement": "Installation performs setup without selected-byte integrity, local ledger integrity, or Cast snapshot checks. Migration retains its ordinary mapping requirements for every legacy reference. Installation establishes no future availability."
       }
     ],
     "access": [
@@ -103,7 +103,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Application features require the complete Cast snapshot reader for first-job admission, job search, email context, and deployment verification. Generic ledger operations and schema-two conversion do not read Cast.",
+        "statement": "Application features require the complete Cast snapshot reader for first-job admission, job search, and email context. Installation and generic ledger operations do not probe Cast.",
         "target": "cast",
         "kind": "readiness",
         "contract": "cast.discovery.explore"
@@ -139,8 +139,8 @@
     },
     {
       "id": "clew.state",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clew.application.track",
@@ -179,7 +179,7 @@
   "do_not_use_when": [
     "Recording an application update or changing Platter preparation."
   ],
-  "outcome": "Verified installed Clew commands, provider and compatible empty or existing ledger.",
+  "outcome": "Installed Clew commands and provider, with coordinated state setup or migration.",
   "effects": [
     "Program deployment selects immutable files and initializes a missing ledger or converts schema one or two to schema three under maintenance with a private consistent original-schema backup. Existing entry identity, content, and exact retry requests remain intact; no thread is invented.",
     "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
@@ -189,7 +189,7 @@
     "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
-    "Installed bytes match the selected candidate, schema-three ledger integrity passes and the complete retained Cast snapshot interface succeeds."
+    "Program selection, requested state setup, and maintenance release complete. Installation does not check artifact integrity, ledger integrity, or the Cast snapshot."
   ],
   "failure_and_recovery": [
     "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve the private original-schema backup and unresolved installation evidence. Unsupported or nonempty foreign state fails.",

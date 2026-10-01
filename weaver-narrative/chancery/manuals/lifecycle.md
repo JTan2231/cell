@@ -19,7 +19,6 @@ weaver maintenance hold RUN_ID
 weaver maintenance drain
 weaver maintenance release RUN_ID
 weaver-install inspect
-weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID
 ```
 
 The explicit Annals config must select an existing identity-bound decisions
@@ -55,7 +54,7 @@ supply that separate evidence. Documentation presence, a selected executable,
 or an incomplete observation cannot prove live readiness.
 
 Doctor and maintenance describe selected state and available dependency
-evidence at invocation. Release verification describes one exact release.
+evidence at invocation. Installation inspection describes selected release metadata.
 There is no promised readiness horizon, response latency, service availability,
 or release cadence.
 
@@ -85,10 +84,8 @@ retired; its workflow records are not imported or replaced.
 
 The maintained installer uses the shared Cell content-addressed file transaction
 and adapter. Public binary and Chancery selectors follow the selected release.
-It refuses foreign selectors, altered candidates, and unsupported legacy
-installation formats. Direct installer `install` and `recover` are refused;
-use the Cell coordinator. Read-only inspection and verification remain
-available. Uninstall detaches owned selectors and retains private state.
+It refuses foreign selectors and unsupported legacy installation formats. Direct installer `install` and `recover` are refused;
+use the Cell coordinator. Read-only inspection remains available. Uninstall detaches owned selectors and retains private state.
 
 The first installation requires a private settings file containing only
 `weaver.annals_config`, an absolute path to the existing decisions config.
@@ -98,8 +95,9 @@ prompt contents must already exist before new authoring preparation; deployment
 does not supply missing prompt text.
 
 The coordinator holds and drains Weaver, selects the immutable program/provider
-release, initializes absent state or checks schema 1, and verifies the database,
-Annals reads, and Nucleus readiness. It releases only its own hold. Installation
+release, and initializes or configures state through the product initializer.
+It performs no separate artifact-integrity, state-integrity, source-read, or
+Nucleus-readiness checks. Ordinary product checks remain unchanged. It releases only its own hold. Installation
 publishes program bytes locally. It does not author or publish a narrative,
 send email, retry a job, or guarantee future model availability.
 

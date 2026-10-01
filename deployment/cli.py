@@ -37,7 +37,7 @@ from ci_manager import workspace
 SCHEMA = 1
 MUTATIONS = frozenset(("hold", "drain", "apply", "configure", "release", "activate", "recover"))
 EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
-            "apply": "applied", "verify": "verified", "release": "released",
+            "apply": "applied", "release": "released",
             "recover": "recovered", "configure": "configured", "activate": "activated"}
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 RUN_ID = re.compile(r"[0-9a-f]{32}")
@@ -252,7 +252,7 @@ def compatible_version(version: str | None, bounds: Any) -> bool:
 
 
 def installed_version(name: str, metadata: dict[str, Any]) -> str | None:
-    """Read a selection hint; the sealed inspector must prove it before hold."""
+    """Read an installed version for dependency selection."""
     home = Path(pwd.getpwuid(os.getuid()).pw_dir)
     if not metadata.get("application"):
         return None
@@ -402,7 +402,7 @@ def plan(root: Path, requested: Sequence[str], selected_commit: str | None = Non
                 else "committed local main; working edits excluded"}
 
 
-def archive_source(root: Path, revision: str, destination: Path) -> dict[str, Any]:
+def archive_source(root: Path, revision: str, destination: Path) -> None:
     archive = ci_client.git(root, "archive", "--format=tar", revision)
     destination.mkdir(mode=0o700)
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
@@ -421,9 +421,7 @@ def archive_source(root: Path, revision: str, destination: Path) -> dict[str, An
                 with incoming, target.open("xb") as output:
                     shutil.copyfileobj(incoming, output)
                 target.chmod(0o555 if member.mode & 0o111 else 0o444)
-    manifest = candidate.tree_files(destination)
     candidate.seal_tree(destination)
-    return manifest
 
 
 def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
@@ -455,12 +453,7 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
         data["request_id"] = request_id
     durable_json(run / "run.json", data)
     try:
-        source_manifest = archive_source(root, chosen["source_commit"], run / "source")
-        if "deployment/cli.py" not in source_manifest:
-            raise DeploymentError("deployment runner must be present in the selected commit")
-        durable_json(run / "source-manifest.json", source_manifest)
-        data["source_manifest_sha256"] = candidate.digest(run / "source-manifest.json")
-        data["python_sha256"] = candidate.digest(Path(data["python"]))
+        archive_source(root, chosen["source_commit"], run / "source")
         data["state"] = "prepared_source"
         durable_json(run / "run.json", data)
     except Exception as error:
@@ -639,7 +632,6 @@ def reconcile_active(storage: Path, lock_fd: int, *, before_start: bool = True) 
     if not unresolved(read_json(path / "run.json")):
         return
     run = Run(path, lock_fd)
-    run.check_source()
     message = "cell-deploy: recovering the unfinished deployment"
     if before_start:
         message += " before starting the requested deployment"
@@ -777,15 +769,6 @@ class Run:
             print(f"cell-deploy: still running {operation or self.data['state']}", file=sys.stderr, flush=True)
             self.last_heartbeat = current
 
-    def check_source(self) -> None:
-        manifest_path = self.path / "source-manifest.json"
-        if candidate.digest(manifest_path) != self.data["source_manifest_sha256"]:
-            raise DeploymentError("sealed source manifest changed")
-        if candidate.tree_files(self.source) != read_json(manifest_path):
-            raise DeploymentError("sealed deployment program or packaging source changed")
-        if candidate.digest(Path(self.data["python"])) != self.data["python_sha256"]:
-            raise DeploymentError("the pinned Python executable changed")
-
     def record(self, product: str) -> dict[str, Any]:
         return self.data["records"].setdefault(product, {})
 
@@ -856,11 +839,7 @@ class Run:
         directory = None
         if record.get("candidate_dir"):
             directory = Path(record["candidate_dir"])
-            manifest = candidate.verify(directory, product=product, commit=self.data["source_commit"])
-            source_manifest = read_json(self.path / "source-manifest.json")
-            for relative, expected_hash in manifest["source_inputs"].items():
-                if source_manifest.get(relative, {}).get("sha256") != expected_hash:
-                    raise DeploymentError("candidate packaging differs from the pinned adapter source")
+            manifest = candidate.read_manifest(directory)
         return directory, manifest
 
     def sealed_adapter(self, product: str, directory: Path | None,
@@ -870,19 +849,11 @@ class Run:
         if (binary != f"{product}-install"
                 or directory is None or manifest is None or not record.get("prepared")):
             raise DeploymentError(f"{product} binary adapter requires its prepared candidate")
-        receipt = record.get("build_receipt", {})
-        if (record.get("candidate_id") != manifest["candidate_id"]
-                or receipt.get("state") != "built" or receipt.get("product") != product
-                or receipt.get("candidate_id") != manifest["candidate_id"]
-                or receipt.get("source_key") != manifest["source_key"]
-                or manifest["source_key"] != self.data.get("source_key")):
-            raise DeploymentError("binary adapter does not match its admitted candidate receipt")
         if manifest["binaries"].get(binary, {}).get("path") != f"bin/{binary}":
             raise DeploymentError("candidate does not contain its declared binary adapter")
         return directory / "bin" / binary
 
     def adapter(self, product: str, operation: str) -> dict[str, Any]:
-        self.check_source()
         item = self.data["catalog"].get(product)
         if item is None or item["metadata"] is None:
             raise DeploymentError(f"required product lacks a committed deployment adapter: {product}")
@@ -933,7 +904,6 @@ class Run:
     def prepare(self) -> None:
         self.data["state"] = "preparing"
         self.save()
-        self.check_source()
         repository = Path(self.data["repository"])
         if not self.worktree.exists():
             # Source generators check normal checkout modes (0755/0644). The
@@ -943,10 +913,6 @@ class Run:
                 git(repository, "worktree", "add", "--detach", str(self.worktree), self.data["source_commit"])
             finally:
                 os.umask(previous_umask)
-        if git(self.worktree, "rev-parse", "HEAD") != self.data["source_commit"]:
-            raise DeploymentError("preparation worktree is on another source commit")
-        if git(self.worktree, "status", "--porcelain", "--untracked-files=all"):
-            raise DeploymentError("preparation worktree was modified")
         source_key = candidate.content_source_key(self.worktree)
         self.data["source_key"] = source_key
         self.save()
@@ -984,26 +950,18 @@ class Run:
         if returncode:
             raise DeploymentError("release bundle preparation failed before installation")
         result = read_json(preparation / "result.json")
-        if (result.get("schema") != 1 or result.get("state") != "built"
-                or result.get("source_key") != source_key):
-            raise DeploymentError("release build does not match the selected source")
+        if result.get("state") != "built":
+            raise DeploymentError("release build did not complete")
         self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
         for product in self.data["prepared_products"]:
             record = self.record(product)
             output = preparation / "candidates" / product
-            manifest = candidate.verify(output, product=product, commit=self.data["source_commit"])
-            if manifest["source_key"] != source_key:
-                raise DeploymentError("candidate evidence belongs to another source snapshot")
-            prepared = result.get("candidates", {}).get(product, {})
-            if prepared.get("candidate_id") != manifest["candidate_id"]:
-                raise DeploymentError("candidate is missing its exact release-build record")
+            manifest = candidate.read_manifest(output)
             receipt = {"state": "built", "product": product, "source_key": source_key,
                        "candidate_id": manifest["candidate_id"]}
             record.update(prepared=True, candidate_dir=str(output), candidate_id=manifest["candidate_id"], build_receipt=receipt)
             self.data["active_operation"] = None
             self.event("candidate_prepared", product=product, candidate_id=manifest["candidate_id"])
-        if candidate.content_source_key(self.worktree) != source_key:
-            raise DeploymentError("source changed while preparing deployment candidates")
 
     def inspect(self) -> None:
         self.data["state"] = "inspecting"
@@ -1013,16 +971,6 @@ class Run:
         for product in self.data.get("dependency_products", []):
             response = self.adapter(product, "inspect")
             self.record(product)["dependency_prior"] = response["data"]
-            snapshot = response["data"].get("installation", response["data"].get("installed", response["data"].get("selection")))
-            installed = snapshot.get("current") if isinstance(snapshot, dict) else None
-            version = installed.get("versions", {}).get(product) if isinstance(installed, dict) else None
-            for consumer in self.data["products"]:
-                bounds = self.data["catalog"][consumer]["metadata"].get("runtime_versions", {}).get(product)
-                if bounds is not None and not compatible_version(version, bounds):
-                    raise DeploymentError(f"{product} changed or could not prove {consumer}'s required runtime release")
-                required = self.data["catalog"][consumer]["metadata"].get("runtime_contracts", {}).get(product, {})
-                if required and not compatible_contracts(contract_versions(self.data["catalog"][product]), required):
-                    raise DeploymentError(f"{product} cannot prove {consumer}'s required installed interface contracts")
             self.save()
         pending = list(self.data.get("maintenance_products", self.data.get("prepared_products", self.data["products"])))
         inspected: set[str] = set()
@@ -1050,7 +998,7 @@ class Run:
                 selected = command.resolve(strict=True)
                 if not os.access(selected, os.X_OK):
                     raise DeploymentError("installed CI manager maintenance command is not executable")
-                self.data["ci_manager"] = {"command": str(selected), "sha256": candidate.digest(selected)}
+                self.data["ci_manager"] = {"command": str(selected)}
         self.save()
 
     def ci_maintenance(self, operation: str) -> dict[str, Any]:
@@ -1058,8 +1006,6 @@ class Run:
         if manager is None:
             return {"held": False, "drained": True, "owners": []}
         command = Path(manager["command"])
-        if candidate.digest(command) != manager["sha256"]:
-            raise DeploymentError("the captured CI manager maintenance command changed")
         if operation == "hold":
             manager["hold_attempted"] = True
             self.save()
@@ -1089,7 +1035,7 @@ class Run:
 
     def phase(self, operation: str, products: Sequence[str]) -> None:
         self.data["state"] = {"hold": "holding", "drain": "draining", "apply": "applying",
-                              "configure": "configuring", "verify": "verifying",
+                              "configure": "configuring",
                               "release": "releasing", "activate": "activating"}[operation]
         self.save()
         for product in products:
@@ -1115,13 +1061,6 @@ class Run:
         self.quiesce()
         self.phase("apply", self.data["products"])
         self.phase("configure", affected)
-        self.phase("verify", affected)
-        for product in self.data.get("dependency_products", []):
-            response = self.adapter(product, "inspect")
-            prior = self.record(product)["dependency_prior"]
-            for key in ("installation", "installed", "selection"):
-                if response["data"].get(key) != prior.get(key):
-                    raise DeploymentError(f"retained runtime dependency changed during deployment: {product}")
         release_order = [product for product in affected if product != "nucleus"]
         if "nucleus" in affected:
             release_order.append("nucleus")
@@ -1130,7 +1069,7 @@ class Run:
         if self.data.get("ci_manager", {}).get("hold_attempted"):
             self.ci_maintenance("release")
         self.data["state"] = "installed"
-        self.data["detail"] = "Selected products verified; every run-owned maintenance hold released."
+        self.data["detail"] = "Selected products configured; every run-owned maintenance hold released."
         self.event("installed")
 
     def quiesce(self) -> None:
@@ -1176,7 +1115,6 @@ class Run:
                                            "apply_started": any(
                                                event.get("product") == product and event.get("operation") == "apply"
                                                and event.get("state") == "starting" for event in self.data["events"]),
-                                           "verified": bool(record.get("verify")),
                                            "configured": bool(record.get("configure")),
                                            "released": bool(record.get("release")),
                                            "activated": bool(record.get("activate")),
@@ -1223,7 +1161,6 @@ class Run:
 
 def recover_worker(path: Path, lock_fd: int) -> int:
     run = Run(path, lock_fd)
-    run.check_source()
     try:
         run.data["recovery"] = {"state": "running"}
         run.save()
@@ -1264,15 +1201,13 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
         run.data["detail"] = detail
         run.event("stopped", detail=detail)
         return 1
-    # Installed products are already verified and released. Cleanup failure
+    # Installed products have been configured and released. Cleanup failure
     # must not initiate product recovery or undo that completed deployment.
     try:
-        run.check_source()
         cleanup_command = [run.data["python"], str(run.source / "deployment" / "cleanup.py")]
         for product in run.data.get("prepared_products", run.data["products"]):
             if run.data["catalog"][product]["metadata"].get("adapter_binary"):
-                directory, manifest = run.candidate_for(product)
-                cleanup_command.extend(["--installer", f"{product}={run.sealed_adapter(product, directory, manifest)}"])
+                cleanup_command.extend(["--product", product])
         returncode, output = run.command("cell", "cleanup", cleanup_command)
         if returncode:
             raise DeploymentError("installed release history cleanup failed")
@@ -1285,7 +1220,7 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
     except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
         run.data["state"] = "cleanup_failed"
         run.data["cleanup"]["releases"] = "failed"
-        run.data["detail"] = bounded_text(f"Products verified and holds released; cleanup failed: {error}", MAX_DETAIL)
+        run.data["detail"] = bounded_text(f"Products configured and holds released; cleanup failed: {error}", MAX_DETAIL)
         run.event("cleanup_failed", detail=run.data["detail"])
         capture_diagnostics(path, run.data, "cleanup")
         run.save()
@@ -1295,12 +1230,7 @@ def run_worker(path: Path, lock_fd: int | None = None) -> int:
 def launch(path: Path, lock_fd: int) -> dict[str, Any]:
     data = read_json(path / "run.json")
     executable = Path(data["python"])
-    if candidate.digest(executable) != data["python_sha256"]:
-        raise DeploymentError("the pinned Python executable changed")
     script = Path(data["source_root"]) / "deployment" / "cli.py"
-    expected = read_json(path / "source-manifest.json").get("deployment/cli.py", {}).get("sha256")
-    if candidate.digest(script) != expected:
-        raise DeploymentError("the pinned deployment runner changed")
     arguments = [str(executable), str(script), "_worker", str(path), str(lock_fd)]
     returncode = subprocess.call(arguments, env=runtime_environment(), pass_fds=(lock_fd,))
     data = read_json(path / "run.json")

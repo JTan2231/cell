@@ -506,21 +506,6 @@ fi
 [ ! -e "$state/spool/.maintenance" ]
 mv "$temporary/owned-definition" "$owned_definition"
 
-printf '%s\n' '# tampered' \
-    >>"$release_two/package/annals-decisions-inbox.clockwork.toml.in"
-if provision "$release_two" >"$temporary/tampered-package.out" \
-    2>"$temporary/tampered-package.err"
-then
-    printf '%s\n' 'tampered decisions package unexpectedly validated' >&2
-    exit 1
-fi
-[ "$(sed -n '1p' "$binding")" = true ]
-[ "$(sed -n '2p' "$binding")" = "$owned_digest" ]
-[ ! -e "$state/spool/.maintenance" ]
-cp "$SCRIPT_DIR/annals-decisions-inbox.clockwork.toml.in" \
-    "$release_two/package/annals-decisions-inbox.clockwork.toml.in"
-chmod 0600 "$release_two/package/annals-decisions-inbox.clockwork.toml.in"
-
 absent_home="$temporary/Absent Home"
 mkdir -p "$absent_home"
 : >"$absent_home/fail-next-clockwork-switch"

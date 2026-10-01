@@ -1,6 +1,6 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -17,14 +17,6 @@
     {
       "label": "Inspect installation",
       "invocation": "platter-install inspect"
-    },
-    {
-      "label": "Verify installed candidate",
-      "invocation": "platter-install verify --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH"
-    },
-    {
-      "label": "Verify retained release",
-      "invocation": "platter-install verify-release ABSOLUTE_RELEASE_DIRECTORY"
     },
     {
       "label": "Read readiness",
@@ -58,16 +50,17 @@
   "effects": [
     "Matched executable/installer/provider bytes publish through owned selectors as one immutable release. Direct install/recover are refused in favor of coordinated Cell maintenance.",
     "Durable owner-keyed holds prevent new mutations while admitted work settles. Drain observes matching requester summaries and can cancel orphaned exact matching work. Migration preserves retained identities and writes a complete current-schema backup before hashed legacy cleanup.",
-    "Readiness checks do not collect sources, read Vita works, render PDF, submit models, or send. Explicit supplied setup can initialize a missing template or create activation intent; deployment itself prepares no packets and sends no email."
+    "Readiness checks do not collect sources, read Vita works, render PDF, submit models, or send. Explicit supplied setup can initialize a missing template or create activation intent; deployment itself prepares no packets and sends no email.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Platter owns domain compatibility, hold/drain scope, state migration, readiness, and product definition. Cell owns coordinated selected release sequencing and installation transactions. Nucleus owns matching execution/cancellation and Clockwork owns binding activation/incident policy."
   ],
   "success": [
-    "Installed runtime/installer/provider identity and supported local state are verified under the run-owned hold, then full readiness and captured activation intent are verified before that hold is released."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
-    "Foreign selectors/holds, altered release/candidate bytes, ambiguous roots, unsupported schemas, missing/conflicting migration inputs, and failed or incomplete drain stop the operation and retain recovery evidence.",
+    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
     "Old binaries cannot operate schema seven. Binary-only rollback cannot undo migration; select a compatible candidate or explicitly chosen complete predecessor data/files backup with matching binary. Interrupted cleanup and receipts require exact unchanged evidence."
   ],
   "privacy": [
@@ -94,8 +87,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",
@@ -163,7 +156,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Requester hold/drain precedes Nucleus hold; verify exact held candidate/state and full readiness before owner release, with Nucleus released last. Holds never expire. Candidate maintenance is allowed only after ownership and read-only schema-seven proof, without migration/domain work."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       },
       {
         "status": "declared",
@@ -213,7 +206,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, sequencing, artifact integrity, and compensation; their source operation manual remains authority without an independent installed Cell contract.",
+        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, sequencing, release metadata, and compensation; their source operation manual remains authority without an independent installed Cell contract.",
         "target": "cell-deployment",
         "kind": "control"
       },

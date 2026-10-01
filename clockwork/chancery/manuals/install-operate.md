@@ -1,6 +1,11 @@
 # Install or diagnose Clockwork
 
-Use this procedure for authorized installation, diagnosis, verified program
+Installation places resources and performs setup under the documented maintenance
+boundary. It does not gate completion on persistent-state validation, artifact
+integrity audits, or runtime readiness checks. The product's ordinary diagnostics
+and runtime checks remain available separately.
+
+Use this procedure for authorized installation, diagnosis, program
 rollback, selector detach, or explicit state migration. Read the required
 `clockwork.installation` and `clockwork.schedule.operate` contracts for release,
 state, and schedule details. Direct program installation changes owned program
@@ -9,54 +14,17 @@ Coordinated deployment also suspends and refreshes captured broker bindings.
 
 ## Prepare and install
 
-1. Build and validate one tested candidate binary, Rust installer, and complete
-   provider bundle. Use absolute paths to regular executable candidates and
-   an explicitly supplied Chancery reader that supports provider schema four.
-   Confirm binary, installer, and provider release versions match exactly.
-   Deployment requires its own authority; ordinary CI delivery uses the manager.
-2. Inspect prior selectors, retained release integrity, and foreign-path risks.
-   Run the tested installer:
+1. Select the candidate binary, installer, and provider bundle at absolute paths.
+2. Run the installer with `install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE`.
+   Use `--home ABSOLUTE_HOME` for an alternate home and `--expected-current` to
+   retain a captured selector expectation.
+3. Register command inventory with `clockwork --register-usage`.
 
-   ```sh
-   <TESTED_CLOCKWORK_INSTALL> install \
-     --binary <TESTED_CLOCKWORK_BINARY> \
-     --bundle /absolute/clockwork/chancery \
-     --chancery /absolute/path/to/chancery
-   ```
-
-   Use `--home ABSOLUTE_HOME` only for intentional alternate-home or isolated
-   installation. Use `--expected-current absent|releases/HASH` when the caller
-   must enforce its captured selector expectation.
-3. Verify staged content identity and the retained previous generation. The
-   candidate reader must validate the exact staged bundle before any selector
-   mutation and discover every indexed entry through the selected provider
-   before commit. The whole overview, feature, and procedure tree belongs to
-   the immutable release.
-4. Verify installed selection and published reading:
-
-   ```sh
-   clockwork --version
-   clockwork --help
-   chancery product clockwork
-   chancery list --provider clockwork
-   chancery show clockwork.install.operate
-   chancery resolve clockwork.install.operate
-   chancery doctor
-   clockwork --register-usage
-   ```
-
-5. Run `clockwork doctor` only when its bounded effects are intended. It may
-   prepare private directories, initialize an empty unversioned schema-two
-   store, and mark running rows lost after broker and child absence is proved.
-   Inspect its quick-check, executable, launchctl, and transition evidence.
-   It executes no product and proves no future timer or domain success.
-
-Stop if version, candidate-reader availability, provider schema, exact content,
-selector ownership, or coherent rollback cannot be proved. Do not replace a
-foreign path or bypass a tamper check. Identical installation is idempotent.
-Failure before commit restores prior selectors, or detaches all owned public
-selectors when coherent restoration cannot be completed. Retain reported paths
-and evidence before retrying.
+The installer prepares resource directories and publishes command and provider
+selectors. It does not audit release bytes, compare provider versions, validate
+persistent state, or run doctor. It preserves owned-path boundaries, writer
+locks, and selector compensation. Runtime diagnosis remains available separately
+through `clockwork doctor`; that command's state effects are unchanged.
 
 ## Coordinate broker refresh
 
@@ -78,7 +46,7 @@ and program rollback alone do not refresh pinned broker paths.
 ## Roll back a program release
 
 1. Preserve failure evidence. Resolve `install/previous` to the canonical owned
-   retained release and verify it with a trusted tested installer.
+   retained release and select its installer.
 2. Recover through the explicit candidate reader:
 
    ```sh
@@ -90,7 +58,7 @@ and program rollback alone do not refresh pinned broker paths.
 3. Verify program, installer, provider, and current selector together. Inspect
    product bindings separately; program rollback does not rewrite their plists.
 
-Do not execute an unverified retained installer or prune a release referred to
+Do not prune a release referred to
 by a generated plist or running activation. Do not restore an older broker
 that ignores active notification eligibility or delegated claims, or run an
 older broker while `failure-checks.json` exists. Preserve the incident database,

@@ -157,7 +157,7 @@
       },
       {
         "status": "declared",
-        "statement": "The complete runtime includes codex, matching codex-code-mode-host, and nucleus-runtime.json with SHA-256 identities. Installation, health, and admission verify files; the manifest detects changes but does not independently authenticate origin."
+        "statement": "The complete runtime includes codex, matching codex-code-mode-host, and nucleus-runtime.json with SHA-256 identities. Normal health and admission verify files; installation does not; the manifest detects changes but does not independently authenticate origin."
       }
     ],
     "reliances": [

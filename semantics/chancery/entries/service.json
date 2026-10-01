@@ -1,6 +1,6 @@
 {
   "id": "semantics.service",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -40,15 +40,15 @@
   "effects": [
     "Installation writes a content-addressed release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite after backup.",
     "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
-    "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs."
+    "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Semantics owns program/provider selection, state migrations, update and worker locks, product holds, readiness checks, and product recovery.",
     "Clockwork owns scheduled activation, process history, incident halts and notification; Nucleus owns runtime evidence. Shared coordination retains each product commit boundary."
   ],
   "success": [
-    "Doctor reports schema 3 and green database, markers, Annals feed, and Nucleus reconciliation checks without creating domain work.",
-    "The provider follows the matching release; the binding selects its exact runner and preserved enabled intent with existing pauses/halts still effective."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Foreign/changed artifacts, unsafe state files, unavailable existing runtime, or unknown ownership fail closed.",
@@ -72,7 +72,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Effects require authorized matching validated candidates, proved owned selectors/files and worker/database quiescence, private complete backup, and compatible dependencies. Unsupported old public admission needs its documented compatibility release first."
+        "statement": "Effects require authorized matching candidates, proved owned selectors/files and worker/database quiescence, private complete backup, and compatible dependencies. Unsupported old public admission needs its documented compatibility release first."
       }
     ],
     "inputs": [
@@ -118,7 +118,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Installer and uninstall serialize updates, hold the worker flock, fence public work, prove SQLite closed, and back up database plus sidecars before candidate doctor. Pre-commit rollback restores captured evidence; durable commit recovers forward."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       },
       {
         "status": "declared",
@@ -144,7 +144,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Readiness and controlled installation verify the exact selected Annals decisions feed/library through exchange 2.",
+        "statement": "The separate runtime doctor checks the selected Annals decisions feed and library through exchange 2. Installation does not replay the feed.",
         "target": "annals",
         "kind": "readiness",
         "contract": "annals.decision-account.exchange"
@@ -178,8 +178,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",

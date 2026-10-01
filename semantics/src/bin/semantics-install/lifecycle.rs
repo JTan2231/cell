@@ -109,58 +109,9 @@ pub(super) fn legacy(root: &Path) -> cell_install::Result<ReleaseInfo> {
     ];
     let text = fs::read_to_string(root.join("manifest.txt"))?;
     let old = text.starts_with("format=1\n");
-    let values = cell_install::legacy::manifest(&root.join("manifest.txt"))?;
-    let keys = [
-        "format",
-        "release_id",
-        "version",
-        "binary_sha256",
-        "frontend_sha256",
-        "runner_sha256",
-        if old {
-            "plist_sha256"
-        } else {
-            "clockwork_template_sha256"
-        },
-        "deployer_sha256",
-        "uninstaller_sha256",
-        "chancery_sha256",
-    ];
-    let mut expected = String::new();
-    for key in keys {
-        expected.push_str(key);
-        expected.push('=');
-        expected.push_str(values.get(key).map_or("", String::as_str));
-        expected.push('\n');
-    }
-    let version = values.get("version").map_or("", String::as_str);
-    let base = version.split(['+', '-']).next().unwrap_or("");
-    let valid_version = base.split('.').count() == 3
-        && base
-            .split('.')
-            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
-    if text != expected || !valid_version {
-        return Err(cell_install::Error {
-            message: "legacy Semantics manifest is not canonical".into(),
-            disposition: cell_install::Disposition::Unchanged,
-        });
-    }
-    let spec = cell_install::InstallSpec {
-        product: "semantics",
-        application: "Semantics",
-        commands: &["semantics"],
-        provider: "semantics",
-    };
-    let files = cell_install::provider_inventory(&root.join("share/chancery/semantics"), &spec)?;
-    if files.len() != 7 {
-        return Err(cell_install::Error {
-            message: "legacy Semantics provider inventory differs".into(),
-            disposition: cell_install::Disposition::Unchanged,
-        });
-    }
     let mut public = layout().public;
     public.retain(|entry| entry.path != Path::new(".local/bin/semantics-install"));
-    cell_install::legacy::verify(
+    cell_install::legacy::read(
         root,
         &LegacySpec {
             format: if old { "1" } else { "2" },
@@ -179,8 +130,8 @@ pub(super) fn legacy(root: &Path) -> cell_install::Result<ReleaseInfo> {
     )
 }
 
-pub(super) fn verify_release(release: &Path) -> Result<ReleaseInfo> {
-    Ok(cell_install::transaction::verify_release_at(
+pub(super) fn read_release(release: &Path) -> Result<ReleaseInfo> {
+    Ok(cell_install::transaction::read_release_at(
         &layout(),
         release,
         &legacy,
@@ -190,17 +141,6 @@ pub(super) fn verify_release(release: &Path) -> Result<ReleaseInfo> {
 pub(super) fn prepare(args: &Candidate) -> Result<PreparedRelease> {
     if !args.binary.is_absolute() || !args.bundle.is_absolute() {
         return fail("candidate binary and bundle must be absolute");
-    }
-    digest(&args.binary)?;
-    if fs::metadata(&args.binary)?.mode() & 0o111 == 0 {
-        return fail("Semantics candidate is not executable");
-    }
-    let version = Command::new(&args.binary).arg("--version").output()?;
-    if !version.status.success()
-        || String::from_utf8_lossy(&version.stdout).trim()
-            != format!("semantics {}", env!("CARGO_PKG_VERSION"))
-    {
-        return fail("candidate and installer versions disagree");
     }
     let inputs = tempfile::tempdir()?;
     let mut files = BTreeMap::from([
@@ -281,7 +221,7 @@ fn current(paths: &Paths) -> Result<Option<String>> {
             if !value.strip_prefix("releases/").is_some_and(valid_hash) {
                 return fail("invalid Semantics current selector");
             }
-            verify_release(&paths.install.join(&path))?;
+            read_release(&paths.install.join(&path))?;
             Ok(value.to_owned())
         })
         .transpose()
@@ -301,17 +241,6 @@ pub(super) fn inspect(home: &HomeArgs) -> Result<Value> {
     Ok(
         json!({"installed":installed,"current":current.as_deref().unwrap_or("absent"),"controls":controls}),
     )
-}
-
-pub(super) fn verify(args: &Candidate) -> Result<Value> {
-    let prepared = prepare(args)?;
-    let value = inspect(&args.home)?;
-    if value["installed"]["current"]["release_id"] != prepared.info.release_id {
-        return fail("installed Semantics release differs from the sealed candidate");
-    }
-    let paths = Paths::new(&args.home)?;
-    paths.doctor(&paths.payload(), None, None)?;
-    Ok(value)
 }
 
 pub(super) struct Paths {
@@ -457,9 +386,6 @@ impl Paths {
     fn service(&self) -> String {
         format!("gui/{}/org.semantics.worker", self.uid)
     }
-    pub fn payload(&self) -> PathBuf {
-        self.install.join("current/libexec/semantics")
-    }
     fn selectors(&self) -> Vec<PathBuf> {
         vec![
             self.install.join("current"),
@@ -543,76 +469,36 @@ impl Paths {
         }
         Ok(result["data"].clone())
     }
-    pub fn doctor(&self, payload: &Path, watermark: Option<&str>, run: Option<&str>) -> Result<()> {
-        let annals = self.home.join(".local/bin/annals");
-        if !fs::metadata(&annals).is_ok_and(|m| m.is_file() && m.mode() & 0o111 != 0) {
-            return fail("Annals executable is unavailable");
-        }
-        let config = self
-            .home
-            .join("Library/Application Support/Annals/decisions/config.toml");
-        if !fs::symlink_metadata(&config)?.is_file() {
-            return fail("Annals decisions config is unavailable");
-        }
-        let execute = |args: &[&str]| -> Result<Value> {
+    pub fn initialize(&self, payload: &Path, watermark: Option<&str>) -> Result<()> {
+        semantics::store::Store::open(&self.database)?;
+        if let Some(watermark) = watermark {
             let output = Command::new(payload)
-                .args(["--database"])
+                .arg("--database")
                 .arg(&self.database)
-                .arg("--json")
-                .args(args)
+                .args([
+                    "--json",
+                    "project",
+                    "activate-annals",
+                    "--final-decisions-watermark",
+                    watermark,
+                ])
                 .env_clear()
                 .env("HOME", &self.home)
                 .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
                 .env(
                     "CELL_DEPLOYMENT_RUN_ID",
-                    run.map_or_else(
-                        || std::env::var("CELL_DEPLOYMENT_RUN_ID").unwrap_or_default(),
-                        str::to_owned,
-                    ),
+                    std::env::var("CELL_DEPLOYMENT_RUN_ID").unwrap_or_default(),
                 )
-                .env("SEMANTICS_ANNALS", &annals)
-                .env("SEMANTICS_ANNALS_CONFIG", &config)
+                .env("SEMANTICS_ANNALS", self.home.join(".local/bin/annals"))
+                .env(
+                    "SEMANTICS_ANNALS_CONFIG",
+                    self.home
+                        .join("Library/Application Support/Annals/decisions/config.toml"),
+                )
                 .output()?;
             if !output.status.success() {
-                return fail("Semantics candidate readiness failed");
+                return fail("Semantics Annals activation failed");
             }
-            Ok(serde_json::from_slice(&output.stdout)?)
-        };
-        if let Some(watermark) = watermark {
-            if watermark.is_empty() {
-                return fail("final Decisions watermark is empty");
-            }
-            execute(&[
-                "project",
-                "activate-annals",
-                "--final-decisions-watermark",
-                watermark,
-            ])?;
-        }
-        let doctor = execute(&["doctor"])?;
-        let checks = doctor["checks"]
-            .as_array()
-            .ok_or("Semantics doctor omitted checks")?;
-        if doctor["ok"] != true
-            || [
-                "database",
-                "participation_markers",
-                "annals_decision_feed",
-                "nucleus_reconciliation",
-            ]
-            .iter()
-            .any(|name| {
-                !checks.iter().any(|c| {
-                    c["name"] == *name
-                        && c["ok"] == true
-                        && (*name != "database"
-                            || c["detail"]
-                                .as_str()
-                                .is_some_and(|s| s.starts_with("schema 3 at")))
-                })
-            })
-        {
-            return fail("Semantics doctor did not prove schema 3 and every required dependency");
         }
         Ok(())
     }
@@ -744,7 +630,7 @@ pub(super) fn binding(paths: &Paths, current: Option<&str>) -> Result<Binding> {
         let release = paths
             .install
             .join(current.ok_or("selected Clockwork binding has no current release")?);
-        verify_release(&release)?;
+        read_release(&release)?;
         let actual = paths.clock(&["definition", "show", digest])?;
         if actual["digest"] != *digest
             || actual["key"] != KEY
@@ -773,7 +659,7 @@ fn legacy_plist(paths: &Paths, selected: Option<&str>) -> Result<(bool, bool)> {
         let release = paths
             .install
             .join(selected.ok_or("legacy LaunchAgent has no current release")?);
-        verify_release(&release)?;
+        read_release(&release)?;
         let mut template = fs::read_to_string(release.join("package/org.semantics.worker.plist"))?;
         for (key, path) in [
             (
@@ -830,11 +716,8 @@ fn restore_database(paths: &Paths, transaction: &Transaction, backup: &Path) -> 
         let name = format!("semantics.db{suffix}");
         let saved = backup.join(&name);
         match transaction.backup_files.get(&name) {
-            Some(expected) => {
+            Some(_) => {
                 private_file(&saved, paths.uid, true)?;
-                if digest(&saved)? != *expected {
-                    return fail("Semantics retained database backup changed");
-                }
             }
             None if exists(&saved) => {
                 return fail("Semantics retained backup has an unexpected sidecar");
@@ -964,7 +847,7 @@ fn rollback(
             .ok_or("missing recovery candidate")?,
     );
     let prepared = PreparedRelease {
-        info: verify_release(&release)?,
+        info: read_release(&release)?,
         root: release,
     };
     tx.recover(&transaction.baseline, &prepared, false, |_| Ok(()))?;
@@ -1163,10 +1046,9 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         transaction.database_backed_up = true;
         transaction.database_touched = true;
         save(&transaction, &backup)?;
-        paths.doctor(
+        paths.initialize(
             &prepared.root.join("libexec/semantics"),
             args.final_decisions_watermark.as_deref(),
-            None,
         )?;
         if transaction.hold_owned {
             let hold = Hold {
@@ -1274,7 +1156,7 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
                 .ok_or("missing candidate recovery release")?,
         );
         let prepared = PreparedRelease {
-            info: verify_release(&release)?,
+            info: read_release(&release)?,
             root: release,
         };
         let digest = transaction
@@ -1300,7 +1182,6 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
         if definition["manifest"] != self::definition(&paths, &prepared.root)? {
             return fail("forward recovery definition differs from exact retained candidate");
         }
-        paths.doctor(&prepared.root.join("libexec/semantics"), None, None)?;
         tx.recover(&transaction.baseline, &prepared, true, |_| Ok(()))?;
         let selection = if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
             paths.clock(&["binding", "disable", KEY, "--select", digest])
@@ -1456,26 +1337,6 @@ mod tests {
         let (_root, paths, backup, transaction) = backup_fixture()?;
         fs::remove_file(backup.join("semantics.db"))?;
         assert!(restore_database(&paths, &transaction, &backup).is_err());
-        assert_eq!(fs::read(&paths.database)?, b"candidate database");
-        assert_eq!(
-            fs::read(paths.state.join("semantics.db-wal"))?,
-            b"candidate WAL"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn changed_backup_sidecar_does_not_replace_the_live_database() -> Result<()> {
-        let (_root, paths, backup, transaction) = backup_fixture()?;
-        write_private(&backup.join("semantics.db-wal"), b"changed saved WAL")?;
-        let error = restore_database(&paths, &transaction, &backup)
-            .err()
-            .ok_or("expected database recovery to fail")?;
-        assert!(
-            error
-                .to_string()
-                .contains("retained database backup changed")
-        );
         assert_eq!(fs::read(&paths.database)?, b"candidate database");
         assert_eq!(
             fs::read(paths.state.join("semantics.db-wal"))?,

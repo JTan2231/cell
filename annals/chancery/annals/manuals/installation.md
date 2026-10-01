@@ -22,12 +22,12 @@ its separate admission and binding authority.
 
 ## Release selection and recovery
 
-The deployer stages a complete content-addressed release and checks candidate
-programs and the Nucleus boundary. It starts Annals maintenance, drains
+The deployer stages a content-addressed release without artifact or dependency
+readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
-and exact Clockwork definition digest, and checks the installed commands.
+and exact Clockwork definition digest, and publishes the installed commands.
 The definition is first registered inactive. Before the deployer disables or
-replaces a binding, it verifies the current release and compares every stored
+replaces a binding, it reads current release metadata and compares every stored
 executable-definition field with it. A foreign definition with the same key
 stays untouched. The first handoff similarly removes only an exactly owned
 legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
@@ -98,10 +98,9 @@ not ownership, and an extra launchd key is treated as foreign.
 
 ## Dedicated decisions installation
 
-The Rust provisioner is the exact release-local installer in the strict
-`cell-install-v2` file inventory. Its configuration and native definition
-rendering are compiled into those admitted bytes. A source sibling, mutable
-selector, or tampered executable is rejected before state or binding mutation.
+The Rust provisioner uses release metadata and compiled configuration and
+definition rendering. It does not compare its executing bytes with the retained
+installer or audit the release inventory.
 
 This authorizes creation or supported migration only under
 `$HOME/Library/Application Support/Annals/decisions` and registration or
@@ -110,15 +109,13 @@ change Nucleus, or inspect or mutate the primary `annals/inbox` binding. It
 shares Annals' product-wide `install/.update-lock`, so it cannot race the
 primary deployer.
 
-The provisioner validates the complete release and selected prior definition.
+The provisioner reads release metadata and attributes the selected prior definition.
 It creates and binds fresh state outside live paths, then starts maintenance
 before a run-at-load definition can be selected. It registers the candidate
 inactive, drains an enabled owned prior binding, and takes a consistent backup
-before migration. It checks inbox and feed readiness, then switches the exact
-definition.
+before migration. It switches the exact definition after setup and migration.
 
-Fresh state has the immutable `decisions` role. A `general` database fails
-readiness even if its persistent ID matches the config. Foreign or
+Fresh state has the immutable `decisions` role. Ordinary Annals commands retain their library-role checks. Foreign or
 concurrently changed state stops the operation. A pre-commit failure restores
 captured state and the exact prior selection and enabled state. A previously
 disabled schedule stays disabled throughout recovery. If exact restoration
@@ -142,10 +139,9 @@ maintenance gate remains engaged.
 
 ## Deployment admission and coordination
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
+The coordinator's `apply` phase stages release files.
+`configure` runs product configuration, migration and selector publication with
+scheduling disabled. `release` removes only the named admission hold.
 After every affected hold is released, `activate` restores the captured enabled
 state of the current selected definition. An originally disabled binding stays
 disabled. Clockwork incident halts and product pauses remain in force.
@@ -189,15 +185,15 @@ requires maintenance support from the installed CLI. Unsupported old binaries
 stop coordinated inspection before effects and need one compatibility update
 through the existing deployers and quiescence procedure; the new candidate
 cannot fence an old binary. Recovery invokes each retained product transaction with the matching outer
-run owner before it verifies the recovered installation. Unknown ownership,
+run owner before it releases the recovered installation. Unknown ownership,
 changed evidence, or incomplete recovery retains the outer hold.
 
 ## Destructive replacement
 
 Fresh-state replacement moves the active library and spool into one retained
 rollback generation. It imports only the uncompleted backlog in preserved
-lane order and resumes after verification. It requires explicit destructive
-authority and a verified backlog and recovery plan. Read `annals.install.operate`
+lane order and resumes after setup. It requires explicit destructive
+authority and a backlog import and recovery plan. Read `annals.install.operate`
 for the procedure.
 
 ## Verification, privacy, and retirement
@@ -213,12 +209,10 @@ key, launchd label, command pathname, or provider pathname is not ownership;
 leave it intact unless a product-owned operation has proved the exact current
 definition, fully rendered legacy plist, and selector targets before mutation.
 
-The deployment adapter verifies library statistics, inbox status, the decisions
-feed watermark, and Annals Usage doctor while preserving operator pauses.
-When Annals is selected for upgrade, verification requires the exact admitted
-candidate. When it participates only in maintenance, verification requires its
-installed release to remain identical to the captured inspection baseline.
-Verification does not create works, reconciliations, or Nucleus jobs.
+Installation does not run library statistics, inbox status, Annals Usage doctor,
+or an inbox maintenance smoke check. It reads library identity where setup needs
+it, preserves operator pauses, and performs the requested initialization,
+backup, migration, and publication. Runtime diagnostics remain separate.
 
 ## Configuration and limits
 
@@ -242,7 +236,7 @@ program. Product runtime does not invoke Chancery.
 The default inbox-lock wait is 3,900 seconds. `ANNALS_UPDATE_WAIT_SECONDS`
 accepts a nonnegative replacement. It is not an overall deployment timeout:
 Clockwork disable can wait for its child, which has no activation timeout.
-`--no-start` verifies installation without changing scheduler state. It does
+`--no-start` installs files and state without changing scheduler state. It does
 not complete scheduled installation and cannot be combined with `--fresh-state`.
 
 Annals installs only its own bindings and selectors. A closed inbox storage

@@ -197,15 +197,7 @@ fn source_root() -> TestResult<PathBuf> {
 fn maintained_install_redeploy_and_recovery_preserve_documents() -> TestResult {
     let mut deployment = Deployment::new()?;
     deployment.inspect()?;
-    for phase in [
-        "hold",
-        "drain",
-        "apply",
-        "configure",
-        "verify",
-        "release",
-        "activate",
-    ] {
+    for phase in ["hold", "drain", "apply", "configure", "release", "activate"] {
         deployment.run(phase)?;
     }
     let root = deployment.root();
@@ -237,27 +229,5 @@ fn maintained_install_redeploy_and_recovery_preserve_documents() -> TestResult {
         Some("Retained prose")
     );
     assert!(weaver::gate(&root).status()?.holds.is_empty());
-    Ok(())
-}
-
-#[test]
-fn altered_candidate_and_foreign_selector_are_refused() -> TestResult {
-    use std::os::unix::fs::symlink;
-    let deployment = Deployment::new()?;
-    symlink(
-        "/foreign/program",
-        deployment.home.join(".local/bin/weaver"),
-    )?;
-    assert!(!deployment.invoke("inspect")?.0);
-    assert_eq!(
-        fs::read_link(deployment.home.join(".local/bin/weaver"))?,
-        PathBuf::from("/foreign/program")
-    );
-    fs::remove_file(deployment.home.join(".local/bin/weaver"))?;
-    let binary = deployment.request["candidate_dir"]
-        .as_str()
-        .ok_or("candidate missing")?;
-    fs::write(PathBuf::from(binary).join("bin/weaver"), "altered")?;
-    assert!(!deployment.invoke("inspect")?.0);
     Ok(())
 }

@@ -83,7 +83,7 @@ recent executions and is removed after 14 days. Active and newly finished work
 is never pruned.
 
 The `cell.tests.rust` gate identifies the pinned nextest executable by path,
-version, and hash in addition to the compiler toolchain. Its command records
+and configured version in addition to the compiler toolchain. Its command records
 the selected product and platform scope and the test worker limit. Tests share
 one admitted heavy body but execute concurrently within that body. The heavy
 lane still permits only one compiler writer. Test workers can create further

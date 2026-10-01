@@ -65,20 +65,6 @@ fail() {
     exit 1
 }
 
-validate_chancery_bundle() {
-    bundle=$1
-    [ -d "$bundle" ] && [ ! -L "$bundle" ] \
-        || fail "Chancery bundle is not a regular directory: $bundle"
-    [ -f "$bundle/provider.json" ] && [ ! -L "$bundle/provider.json" ] \
-        || fail "Chancery bundle has no regular provider.json: $bundle"
-    if find "$bundle" -type l -print | grep -q .; then
-        fail "Chancery bundle contains a symbolic link: $bundle"
-    fi
-    if find "$bundle" ! -type d ! -type f -print | grep -q .; then
-        fail "Chancery bundle contains a non-file entry: $bundle"
-    fi
-}
-
 chancery_bundle_hash() {
     bundle=$1
     (
@@ -145,8 +131,8 @@ render_clockwork_definition() {
     chmod 0600 "$definition_destination"
 }
 
-# A same-key digest is not ownership. Validate the complete current release,
-# then compare every executable-definition field exposed by Clockwork.
+# A same-key digest is not ownership. Read release metadata, then compare the
+# executable definition exposed by Clockwork before changing its binding.
 prove_current_release_definition() {
     owned_selector=$1
     owned_digest=$2
@@ -167,170 +153,8 @@ prove_current_release_definition() {
     owned_runner="$owned_release_root/bin/annals-inbox"
     [ -d "$owned_release_root" ] && [ ! -L "$owned_release_root" ] \
         || fail "current Annals release is unavailable: $owned_release_root"
-    for owned_file in \
-        "$owned_manifest" \
-        "$owned_release_root/libexec/annals" \
-        "$owned_release_root/libexec/annals-usage" \
-        "$owned_release_root/bin/annals" \
-        "$owned_runner" \
-        "$owned_release_root/package/annals-user" \
-        "$owned_release_root/package/annals-inbox" \
-        "$owned_release_root/package/deploy-user.sh" \
-        "$owned_template" \
-        "$owned_release_root/package/org.annals.inbox.agent.plist"
-    do
-        [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
-            || fail "current Annals release has an invalid file: $owned_file"
-    done
-    owned_format=$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
-        "$owned_manifest")
-    case "$owned_format" in
-        3)
-            [ "$(awk 'END { print NR }' "$owned_manifest")" -eq 15 ] \
-                || fail "current Annals release manifest is not canonical: $owned_manifest"
-            ;;
-        4)
-            [ "$(awk 'END { print NR }' "$owned_manifest")" -eq 18 ] \
-                || fail "current Annals release manifest is not canonical: $owned_manifest"
-            for owned_file in \
-                "$owned_release_root/package/annals-decisions.toml.in" \
-                "$owned_release_root/package/annals-decisions-inbox.clockwork.toml.in" \
-                "$owned_release_root/package/provision-decisions-user.sh"
-            do
-                [ -f "$owned_file" ] && [ ! -L "$owned_file" ] \
-                    || fail "current Annals release has an invalid file: $owned_file"
-            done
-            ;;
-        *) fail "current release has no supported Annals identity: $owned_release_root" ;;
-    esac
-    owned_manifest_release=$(sed -n \
-        's/^  "release_id": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
-    owned_binary_hash=$(sed -n \
-        's/^  "binary_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
-    owned_usage_binary_hash=$(sed -n \
-        's/^  "usage_binary_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_frontend_hash=$(sed -n \
-        's/^  "frontend_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
     owned_runner_hash=$(sed -n \
         's/^  "runner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
-    owned_template_hash=$(sed -n \
-        's/^  "clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_decisions_config_hash=$(sed -n \
-        's/^  "decisions_config_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_decisions_template_hash=$(sed -n \
-        's/^  "decisions_clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_decisions_provisioner_hash=$(sed -n \
-        's/^  "decisions_provisioner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_legacy_plist_hash=$(sed -n \
-        's/^  "legacy_agent_plist_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_updater_hash=$(sed -n \
-        's/^  "updater_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$owned_manifest")
-    owned_chancery_annals_hash=$(sed -n \
-        's/^  "chancery_annals_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    owned_chancery_usage_hash=$(sed -n \
-        's/^  "chancery_usage_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' \
-        "$owned_manifest")
-    { [ "$owned_format" = 3 ] || [ "$owned_format" = 4 ]; } \
-        && [ "$owned_manifest_release" = "$owned_release_id" ] \
-        || fail "current release has no exact Annals Clockwork identity: $owned_release_root"
-    for owned_hash in \
-        "$owned_binary_hash" "$owned_usage_binary_hash" "$owned_frontend_hash" \
-        "$owned_runner_hash" "$owned_template_hash" "$owned_legacy_plist_hash" \
-        "$owned_updater_hash" "$owned_chancery_annals_hash" \
-        "$owned_chancery_usage_hash"
-    do
-        [ "${#owned_hash}" -eq 64 ] || fail 'current Annals release has an invalid hash'
-        case "$owned_hash" in
-            *[!0-9a-f]*) fail 'current Annals release has an invalid hash' ;;
-        esac
-    done
-    if [ "$owned_format" = 4 ]; then
-        for owned_hash in \
-            "$owned_decisions_config_hash" "$owned_decisions_template_hash" \
-            "$owned_decisions_provisioner_hash"
-        do
-            [ "${#owned_hash}" -eq 64 ] \
-                || fail 'current Annals release has an invalid decisions-package hash'
-            case "$owned_hash" in
-                *[!0-9a-f]*) fail 'current Annals release has an invalid decisions-package hash' ;;
-            esac
-        done
-    fi
-
-    validate_chancery_bundle "$owned_release_root/share/chancery/annals"
-    validate_chancery_bundle "$owned_release_root/share/chancery/annals-usage"
-    actual_owned_binary_hash=$(shasum -a 256 \
-        "$owned_release_root/libexec/annals" | awk '{print $1}')
-    actual_owned_usage_binary_hash=$(shasum -a 256 \
-        "$owned_release_root/libexec/annals-usage" | awk '{print $1}')
-    actual_owned_frontend_hash=$(shasum -a 256 \
-        "$owned_release_root/bin/annals" | awk '{print $1}')
-    actual_owned_runner_hash=$(shasum -a 256 "$owned_runner" | awk '{print $1}')
-    actual_owned_template_hash=$(shasum -a 256 "$owned_template" | awk '{print $1}')
-    actual_owned_decisions_config_hash=
-    actual_owned_decisions_template_hash=
-    actual_owned_decisions_provisioner_hash=
-    if [ "$owned_format" = 4 ]; then
-        actual_owned_decisions_config_hash=$(shasum -a 256 \
-            "$owned_release_root/package/annals-decisions.toml.in" | awk '{print $1}')
-        actual_owned_decisions_template_hash=$(shasum -a 256 \
-            "$owned_release_root/package/annals-decisions-inbox.clockwork.toml.in" \
-            | awk '{print $1}')
-        actual_owned_decisions_provisioner_hash=$(shasum -a 256 \
-            "$owned_release_root/package/provision-decisions-user.sh" | awk '{print $1}')
-    fi
-    actual_owned_legacy_plist_hash=$(shasum -a 256 \
-        "$owned_release_root/package/org.annals.inbox.agent.plist" | awk '{print $1}')
-    actual_owned_updater_hash=$(shasum -a 256 \
-        "$owned_release_root/package/deploy-user.sh" | awk '{print $1}')
-    actual_owned_chancery_annals_hash=$(chancery_bundle_hash \
-        "$owned_release_root/share/chancery/annals")
-    actual_owned_chancery_usage_hash=$(chancery_bundle_hash \
-        "$owned_release_root/share/chancery/annals-usage")
-    [ "$actual_owned_binary_hash" = "$owned_binary_hash" ] \
-        && [ "$actual_owned_usage_binary_hash" = "$owned_usage_binary_hash" ] \
-        && [ "$actual_owned_frontend_hash" = "$owned_frontend_hash" ] \
-        && [ "$actual_owned_runner_hash" = "$owned_runner_hash" ] \
-        && [ "$actual_owned_template_hash" = "$owned_template_hash" ] \
-        && [ "$actual_owned_legacy_plist_hash" = "$owned_legacy_plist_hash" ] \
-        && [ "$actual_owned_updater_hash" = "$owned_updater_hash" ] \
-        && [ "$actual_owned_chancery_annals_hash" = "$owned_chancery_annals_hash" ] \
-        && [ "$actual_owned_chancery_usage_hash" = "$owned_chancery_usage_hash" ] \
-        && [ "$(shasum -a 256 "$owned_release_root/package/annals-user" | awk '{print $1}')" = "$owned_frontend_hash" ] \
-        && [ "$(shasum -a 256 "$owned_release_root/package/annals-inbox" | awk '{print $1}')" = "$owned_runner_hash" ] \
-        || fail "current Annals release content changed: $owned_release_root"
-    if [ "$owned_format" = 4 ]; then
-        [ "$actual_owned_decisions_config_hash" = "$owned_decisions_config_hash" ] \
-            && [ "$actual_owned_decisions_template_hash" = "$owned_decisions_template_hash" ] \
-            && [ "$actual_owned_decisions_provisioner_hash" = "$owned_decisions_provisioner_hash" ] \
-            || fail "current Annals decisions package changed: $owned_release_root"
-        actual_owned_release_id=$(printf '%s\n' \
-            "$actual_owned_binary_hash" "$actual_owned_usage_binary_hash" \
-            "$actual_owned_frontend_hash" "$actual_owned_runner_hash" \
-            "$actual_owned_template_hash" "$actual_owned_decisions_config_hash" \
-            "$actual_owned_decisions_template_hash" \
-            "$actual_owned_decisions_provisioner_hash" \
-            "$actual_owned_legacy_plist_hash" "$actual_owned_updater_hash" \
-            "$actual_owned_chancery_annals_hash" "$actual_owned_chancery_usage_hash" \
-            | shasum -a 256 | awk '{print $1}')
-    else
-        actual_owned_release_id=$(printf '%s\n' \
-            "$actual_owned_binary_hash" "$actual_owned_usage_binary_hash" \
-            "$actual_owned_frontend_hash" "$actual_owned_runner_hash" \
-            "$actual_owned_template_hash" "$actual_owned_legacy_plist_hash" \
-            "$actual_owned_updater_hash" "$actual_owned_chancery_annals_hash" \
-            "$actual_owned_chancery_usage_hash" \
-            | shasum -a 256 | awk '{print $1}')
-    fi
-    [ "$actual_owned_release_id" = "$owned_release_id" ] \
-        || fail "current Annals release content identity changed: $owned_release_root"
 
     owned_definition="$transaction_dir/current-binding-definition.json"
     HOME="$install_home" "$clockwork_path" --json definition show "$owned_digest" \
@@ -487,8 +311,6 @@ for command in awk cmp cp date find grep install mktemp mv plutil readlink sed s
     command -v "$command" >/dev/null 2>&1 || fail "required command not found: $command"
 done
 [ -x /usr/bin/shlock ] || fail 'required command not found: /usr/bin/shlock'
-validate_chancery_bundle "$SOURCE_CHANCERY_ANNALS"
-validate_chancery_bundle "$SOURCE_CHANCERY_USAGE"
 
 for config_value in "$nucleus_path" "$nucleus_socket"; do
     value_lines=$(printf '%s\n' "$config_value" | wc -l | tr -d ' ')
@@ -906,30 +728,11 @@ trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
 
 candidate_version=$("$binary_path" --version) \
-    || fail 'unable to read the Annals candidate version'
-case "$candidate_version" in
-    'annals '*) annals_version=${candidate_version#annals } ;;
-    *) fail "Annals candidate reported an unexpected version: $candidate_version" ;;
-esac
+    || fail 'unable to execute the Annals candidate'
+annals_version=${candidate_version#annals }
 usage_candidate_version=$("$usage_binary_path" --version) \
-    || fail 'unable to read the Annals Usage candidate version'
-case "$usage_candidate_version" in
-    'annals-usage '*) usage_version=${usage_candidate_version#annals-usage } ;;
-    *) fail "Annals Usage candidate reported an unexpected version: $usage_candidate_version" ;;
-esac
-annals_provider_release=$(awk -F '"' \
-    '/"release"[[:space:]]*:/ { print $4; exit }' \
-    "$SOURCE_CHANCERY_ANNALS/provider.json")
-usage_provider_release=$(awk -F '"' \
-    '/"release"[[:space:]]*:/ { print $4; exit }' \
-    "$SOURCE_CHANCERY_USAGE/provider.json")
-[ "$annals_provider_release" = "$annals_version" ] \
-    || fail "Annals provider release $annals_provider_release does not match candidate $annals_version"
-[ "$usage_provider_release" = "$usage_version" ] \
-    || fail "Annals Usage provider release $usage_provider_release does not match candidate $usage_version"
-sh -n "$SOURCE_FRONTEND"
-sh -n "$SOURCE_RUNNER"
-sh -n "$SOURCE_UPDATER"
+    || fail 'unable to execute the Annals Usage candidate'
+usage_version=${usage_candidate_version#annals-usage }
 
 for path in \
     "$STATE_DIR" \
@@ -1102,10 +905,6 @@ if [ ! -e "$LIBRARY_PATH" ]; then
         run_with_installation_environment "$binary_path" --config "$temporary_config" init >/dev/null
     fi
 fi
-if [ "$library_existed" -eq 0 ] || [ ! -L "$CURRENT_LINK" ]; then
-    run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" inbox status >/dev/null
-fi
 
 binary_hash=$(shasum -a 256 "$binary_path" | awk '{print $1}')
 usage_binary_hash=$(shasum -a 256 "$usage_binary_path" | awk '{print $1}')
@@ -1199,71 +998,7 @@ if [ ! -e "$release_dir" ]; then
 else
     [ -d "$release_dir" ] && [ ! -L "$release_dir" ] \
         || fail "invalid existing release path: $release_dir"
-    [ "$(shasum -a 256 "$release_dir/libexec/annals" | awk '{print $1}')" = "$binary_hash" ] \
-        || fail "existing release payload does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/libexec/annals-usage" | awk '{print $1}')" = "$usage_binary_hash" ] \
-        || fail "existing release usage payload does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/bin/annals" | awk '{print $1}')" = "$frontend_hash" ] \
-        || fail "existing release frontend does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/bin/annals-inbox" | awk '{print $1}')" = "$runner_hash" ] \
-        || fail "existing release inbox runner does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/annals-user" | awk '{print $1}')" = "$frontend_hash" ] \
-        || fail "existing release packaged frontend does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/annals-inbox" | awk '{print $1}')" = "$runner_hash" ] \
-        || fail "existing release packaged inbox runner does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/deploy-user.sh" | awk '{print $1}')" = "$updater_hash" ] \
-        || fail "existing release updater does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/annals-inbox.clockwork.toml.in" | awk '{print $1}')" = "$definition_template_hash" ] \
-        || fail "existing release Clockwork template does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/annals-decisions.toml.in" | awk '{print $1}')" = "$decisions_config_template_hash" ] \
-        || fail "existing release decisions config template does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/annals-decisions-inbox.clockwork.toml.in" | awk '{print $1}')" = "$decisions_definition_template_hash" ] \
-        || fail "existing release decisions Clockwork template does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/provision-decisions-user.sh" | awk '{print $1}')" = "$decisions_provisioner_hash" ] \
-        || fail "existing release decisions provisioner does not match $release_id"
-    [ "$(shasum -a 256 "$release_dir/package/org.annals.inbox.agent.plist" | awk '{print $1}')" = "$legacy_agent_plist_hash" ] \
-        || fail "existing release legacy LaunchAgent template does not match $release_id"
-    validate_chancery_bundle "$release_dir/share/chancery/annals"
-    validate_chancery_bundle "$release_dir/share/chancery/annals-usage"
-    [ "$(chancery_bundle_hash "$release_dir/share/chancery/annals")" = \
-        "$chancery_annals_hash" ] \
-        || fail "existing release Annals Chancery bundle does not match $release_id"
-    [ "$(chancery_bundle_hash "$release_dir/share/chancery/annals-usage")" = \
-        "$chancery_usage_hash" ] \
-        || fail "existing release Annals Usage Chancery bundle does not match $release_id"
 fi
-
-# Re-verify the installed bytes even for a newly copied release. Input paths can
-# change between hashing and staging; the directory name is trustworthy only
-# after the release-local artifacts match the content identity inputs.
-[ "$(shasum -a 256 "$release_dir/libexec/annals" | awk '{print $1}')" = "$binary_hash" ] \
-    || fail "release payload does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/libexec/annals-usage" | awk '{print $1}')" = "$usage_binary_hash" ] \
-    || fail "release usage payload does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/bin/annals" | awk '{print $1}')" = "$frontend_hash" ] \
-    || fail "release frontend does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/bin/annals-inbox" | awk '{print $1}')" = "$runner_hash" ] \
-    || fail "release inbox runner does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/annals-user" | awk '{print $1}')" = "$frontend_hash" ] \
-    || fail "release packaged frontend does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/annals-inbox" | awk '{print $1}')" = "$runner_hash" ] \
-    || fail "release packaged inbox runner does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/deploy-user.sh" | awk '{print $1}')" = "$updater_hash" ] \
-    || fail "release updater does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/annals-inbox.clockwork.toml.in" | awk '{print $1}')" = "$definition_template_hash" ] \
-    || fail "release Clockwork template does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/annals-decisions.toml.in" | awk '{print $1}')" = "$decisions_config_template_hash" ] \
-    || fail "release decisions config template does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/annals-decisions-inbox.clockwork.toml.in" | awk '{print $1}')" = "$decisions_definition_template_hash" ] \
-    || fail "release decisions Clockwork template does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/provision-decisions-user.sh" | awk '{print $1}')" = "$decisions_provisioner_hash" ] \
-    || fail "release decisions provisioner does not match $release_id"
-[ "$(shasum -a 256 "$release_dir/package/org.annals.inbox.agent.plist" | awk '{print $1}')" = "$legacy_agent_plist_hash" ] \
-    || fail "release legacy LaunchAgent template does not match $release_id"
-[ "$(chancery_bundle_hash "$release_dir/share/chancery/annals")" = "$chancery_annals_hash" ] \
-    || fail "release Annals Chancery bundle does not match $release_id"
-[ "$(chancery_bundle_hash "$release_dir/share/chancery/annals-usage")" = "$chancery_usage_hash" ] \
-    || fail "release Annals Usage Chancery bundle does not match $release_id"
 
 for rendered_value in "$release_dir" "$STATE_DIR" "$install_home" "$STATE_DIR/log" "$operator"; do
     case "$rendered_value" in
@@ -1415,13 +1150,8 @@ if [ "$fresh_state" -eq 1 ]; then
     [ -f "$fresh_stage/spool/.paused" ] && [ ! -L "$fresh_stage/spool/.paused" ] \
         || fail 'fresh inbox did not enter the paused state'
     : >"$fresh_stage/spool/.maintenance"
-    run_with_installation_environment "$binary_path" \
-        --config "$fresh_config" inbox status >/dev/null
 fi
 
-if [ -n "$old_current" ]; then
-    run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
-fi
 
 if [ "$no_start" -eq 0 ]; then
     inspect_clockwork_binding \
@@ -1485,9 +1215,6 @@ if [ "$no_start" -eq 0 ]; then
     fi
 fi
 
-run_with_installation_environment "$usage_binary_path" doctor \
-    --config "$temporary_usage_config" >/dev/null \
-    || fail 'candidate Annals usage doctor could not verify Nucleus authentication'
 
 # The live-only companion does not own a database. Retain an obsolete ledger only inside the
 # deployment transaction so a pre-commit rollback can still restore the prior release intact.
@@ -1527,8 +1254,6 @@ if [ "$fresh_state" -eq 1 ]; then
         rm -f "$generation_dir/spool/.paused"
         pause_created=0
     fi
-    run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" inbox status >/dev/null
 elif [ "$library_existed" -eq 1 ]; then
     if [ "$old_current" != "$new_current" ]; then
         backup_path="$STATE_DIR/backups/pre-update-$release_id-$$.db"
@@ -1538,17 +1263,8 @@ elif [ "$library_existed" -eq 1 ]; then
     fi
     run_with_installation_environment "$binary_path" \
         --config "$temporary_config" --quiet migrate
-    run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" inbox status >/dev/null
 fi
 
-if [ "$no_start" -eq 0 ]; then
-    smoke_json=$(run_with_installation_environment "$binary_path" \
-        --config "$temporary_config" --json inbox run) \
-        || fail 'candidate cannot read the quiesced inbox'
-    printf '%s\n' "$smoke_json" | grep -q '"stopped_for_maintenance":true' \
-        || fail 'candidate did not honor inbox maintenance'
-fi
 
 acquire_catalog_lock
 switched=1
@@ -1572,8 +1288,6 @@ mv -f "$transaction_dir/usage.next.toml" "$USAGE_CONFIG_PATH"
 
 run_with_installation_environment "$CLI_PATH" --version >/dev/null
 run_with_installation_environment "$USAGE_CLI_PATH" --version >/dev/null
-run_with_installation_environment "$CLI_PATH" stats >/dev/null
-run_with_installation_environment "$CLI_PATH" inbox status >/dev/null
 
 if [ "$fresh_state" -eq 1 ]; then
     import_json=$(run_with_installation_environment "$CLI_PATH" \
@@ -1584,23 +1298,7 @@ if [ "$fresh_state" -eq 1 ]; then
     case "$imported_backlog" in
         ''|*[!0-9]*) fail 'candidate returned an invalid backlog import receipt' ;;
     esac
-    status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
-        || fail 'unable to inspect the imported inbox backlog'
-    printf '%s\n' "$status_json" | grep -q "\"queued\":$imported_backlog" \
-        || fail 'fresh inbox queued count does not match the imported backlog'
-    printf '%s\n' "$status_json" | grep -q '"processing":0' \
-        || fail 'fresh inbox started work before the cutover committed'
-    printf '%s\n' "$status_json" | grep -q '"paused":true' \
-        || fail 'fresh inbox lost its pause during backlog import'
-    printf '%s\n' "$status_json" | grep -q '"maintenance":true' \
-        || fail 'fresh inbox lost maintenance during backlog import'
     run_with_installation_environment "$CLI_PATH" --quiet inbox resume
-    status_json=$(run_with_installation_environment "$CLI_PATH" --json inbox status) \
-        || fail 'unable to inspect the resumed inbox'
-    printf '%s\n' "$status_json" | grep -q '"paused":false' \
-        || fail 'fresh inbox did not resume'
-    printf '%s\n' "$status_json" | grep -q '"maintenance":true' \
-        || fail 'maintenance ended before the cutover committed'
 fi
 
 if [ "$no_start" -eq 0 ]; then

@@ -1,4 +1,4 @@
-# Install and verify Clew
+# Install Clew
 
 Use this operation to install, inspect, migrate, prepare a schedule, back up, or
 recover Clew. Read `chancery resolve clew.install.operate` for the required
@@ -8,7 +8,7 @@ keeps prerequisites, effects, stop conditions, and verification in place.
 
 General notes, named threads, plain external links, and generic reads require
 no external reader. Explicit application features need Cast read contract two
-for job search, first-job admission, email context, and deployment verification.
+for job search, first-job admission, and email context.
 A nonempty schema-one migration also needs Platter read contract one. Email contract four supplies submission; Clockwork contract
 four supplies activation and the shared service-health delay before a new halt. Clew runs no model requester.
 
@@ -32,20 +32,18 @@ grant no note, mail, or status authority.
    necessary, captures schedule intent, holds email admission, suspends the
    binding, and drains sends before configuration. A schema-one or schema-two
    ledger uses the guarded migration below.
-5. Confirm the retained deployment outcome. Verification must establish matching
-   selected bytes, schema-three ledger integrity, and a successful complete Cast
-   snapshot read. Confirm that activation preserved captured or explicit enabled
-   intent and retained failure halts.
+5. Confirm the retained deployment outcome and captured or explicit schedule intent.
+   Deployment does not check artifact integrity, ledger integrity, or the Cast
+   snapshot. Ordinary doctor and application checks remain separate.
 
 Stop for missing dependencies, unresolved or foreign holds, an incomplete drain,
-invalid state, unsafe migration mappings, changed release bytes, or foreign
-selectors. Preserve operation evidence for coordinator recovery. Do not release
+unsafe migration mappings, failed setup, or foreign selectors. Preserve operation evidence for coordinator recovery. Do not release
 holds, approve incidents, or force an older incompatible program to obtain a
 successful result.
 
 ## Install program files directly
 
-1. Select a sealed validated candidate and matching provider bundle. Confirm that
+1. Select a candidate and matching provider bundle. Confirm that
    any existing ledger is compatible. Direct installation does not migrate it.
 2. Run the installer:
 
@@ -55,17 +53,11 @@ successful result.
 
    Use `--home ABSOLUTE_PATH` for an explicit user home and
    `--expected-current absent|releases/HASH` when selection must match an exact
-   prior condition. Stop if selectors belong to another owner or integrity fails.
+   prior condition. Stop if selectors belong to another owner .
 3. Run `clew init` to create empty schema-three state or check compatible state.
    Stop for schema one or two, nonempty foreign state, or unsupported state.
-4. Run `clew doctor`, `clew-install inspect`, and candidate verification:
-
-   ```sh
-   clew-install verify --binary /absolute/candidate/clew --bundle /absolute/clew/chancery
-   ```
-
-   Confirm ledger integrity and the selected release. Doctor does not probe Cast;
-   confirm the required snapshot interface separately before first-job work.
+4. Run `clew-install inspect` to read selected release metadata. Use `clew doctor`
+   separately when a ledger diagnostic is needed; installation does not call it.
 5. Run `clew --register-usage` to register command identities without reports.
 
 The default ledger is `~/.local/share/clew/ledger.sqlite3`. Use global
@@ -91,8 +83,8 @@ private state outside source and release trees.
    backup. An interrupted retry creates a new backup.
 5. Commit schema three, canonical external references, explicit application-report
    associations, legacy aliases, and exact write requests in one transaction.
-6. Verify ledger integrity and the retained deployment outcome. Preserve the
-   backup and reported recovery evidence until verification succeeds. Keep a
+6. Read the retained deployment outcome. Preserve the
+   backup and reported recovery evidence until deployment completes. Keep a
    schema-three-compatible program selected after migration. Restore only
    captured or explicit schedule intent after coherent activation.
 
@@ -142,7 +134,7 @@ permits future activation and does not retry an uncertain message.
 3. Reconcile uncertain write IDs and provider acceptance before replaying work.
    Older ledger history may no longer know a committed write. Older email history
    may permit a duplicate send.
-4. Run `clew doctor` with a matching program and verify installation integrity.
+4. Run `clew doctor` with a matching program when a ledger diagnostic is needed.
    Restore only the previously enabled schedule intent after readiness. Preserve
    pre-existing failure halts and unresolved holds.
 
@@ -155,17 +147,15 @@ ledger backup does not authorize restoration of older email occurrences.
 1. Preserve ledger, email, maintenance, and unresolved installation evidence.
    Disable the daily binding and settle sends before rollback to a release that
    does not understand daily email state.
-2. Verify the retained owned release with
-   `clew-install verify-release /absolute/owned/release`. Confirm its compatibility
-   with the retained ledger before selection.
+2. Select a retained owned release that supports the retained ledger schema.
+   Program recovery does not check state compatibility.
 3. Select it with `clew-install recover --release /absolute/owned/release`.
    File recovery preserves private state. It does not downgrade the schema or
    retry mail. Follow retained coordinator recovery for an interrupted coordinated
    deployment so admission remains held until program and schedule selections
    are coherent.
-4. Run `clew doctor` and `clew-install inspect`. Confirm selected file integrity,
-   ledger compatibility, and the required Cast snapshot interface before restoring
-   only captured enabled intent. Keep unresolved holds and incidents intact.
+4. Run `clew-install inspect` to read release metadata. Ledger and Cast diagnostics
+   remain separate. Restore only captured enabled intent. Keep unresolved holds and incidents intact.
 
 Stop when program and state versions do not match. Never repair a report by
 editing SQLite. Use the ledger feature's append-only correction or retraction,

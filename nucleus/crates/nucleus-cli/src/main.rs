@@ -301,12 +301,6 @@ enum CliError {
     HealthTimeout(String),
     #[error("nucleusd reported an unhealthy state: {0}")]
     ServiceUnhealthy(String),
-    #[error(
-        "new service was unhealthy ({health}); restoring the previous installation also failed: {rollback}"
-    )]
-    InstallHealthRollback { health: String, rollback: String },
-    #[error("new service was unhealthy ({0}); the installation was rolled back")]
-    InstallUnhealthyRestored(String),
 }
 
 #[derive(Serialize)]
@@ -321,7 +315,6 @@ struct InstalledOutput<'a> {
     logs: &'a Path,
     codex: &'a Path,
     codex_home: &'a Path,
-    health: nucleus_core::HealthResponseV1,
 }
 
 #[derive(Serialize)]
@@ -915,19 +908,6 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
                 codex.as_deref(),
                 codex_home.as_deref(),
             )?;
-            let health =
-                match wait_for_health(&installed.paths.socket, deployment_guard.as_ref()).await {
-                    Ok(health) => health,
-                    Err(health_error) => {
-                        if let Err(rollback) = installed.rollback() {
-                            return Err(CliError::InstallHealthRollback {
-                                health: health_error.to_string(),
-                                rollback: rollback.to_string(),
-                            });
-                        }
-                        return Err(CliError::InstallUnhealthyRestored(health_error.to_string()));
-                    }
-                };
             print_json(
                 &InstalledOutput {
                     service: service::SERVICE_LABEL,
@@ -939,7 +919,6 @@ async fn run_service(command: ServiceCommand, compact: bool) -> Result<(), CliEr
                     logs: &installed.paths.log_dir,
                     codex: &installed.codex,
                     codex_home: &installed.codex_home,
-                    health,
                 },
                 compact,
             )

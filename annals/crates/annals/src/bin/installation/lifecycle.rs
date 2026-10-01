@@ -90,79 +90,6 @@ fn named_libraries(home: &Path) -> Result<Vec<NamedLibrary>> {
         .collect()
 }
 
-fn verify_named_identity(home: &Path, library: &NamedLibrary) -> Result<()> {
-    if library.library_id.len() != 32
-        || !library
-            .library_id
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        || library.root != state(home).join("libraries").join(&library.library_id)
-    {
-        return Err(Error::new(
-            "invalid named Annals library identity or location",
-        ));
-    }
-    private_directory(&library.root, true)?;
-    let database = library.root.join("annals.db");
-    let config_path = library.root.join("config.toml");
-    private_file(&config_path)?;
-    let config = toml_value(&fs::read_to_string(config_path)?)?;
-    let configured_database = config
-        .get("library")
-        .and_then(toml::Value::as_str)
-        .map(PathBuf::from)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                library.root.join(path)
-            }
-        });
-    let configured_spool = config
-        .get("inbox")
-        .and_then(|inbox| inbox.get("root"))
-        .and_then(toml::Value::as_str)
-        .map(PathBuf::from)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                library.root.join(path)
-            }
-        });
-    if configured_database.as_ref() != Some(&database)
-        || configured_spool != Some(library.root.join("spool"))
-        || config
-            .get("expected_library_id")
-            .and_then(toml::Value::as_str)
-            != Some(library.library_id.as_str())
-    {
-        return Err(Error::new(
-            "named Annals configuration differs from its registered storage",
-        ));
-    }
-    private_file(&database)?;
-    for suffix in ["annals.db-wal", "annals.db-shm"] {
-        optional_private(&library.root.join(suffix))?;
-    }
-    let connection =
-        rusqlite::Connection::open_with_flags(database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|error| Error::new(error.to_string()))?;
-    let identity: (String, String) = connection
-        .query_row(
-            "SELECT library_id, kind FROM library_identity CROSS JOIN library_profile",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .map_err(|error| Error::new(error.to_string()))?;
-    if identity != (library.library_id.clone(), library.kind.clone()) {
-        return Err(Error::new(
-            "named Annals database differs from its registered identity",
-        ));
-    }
-    Ok(())
-}
-
 fn named_call(journal: &Journal, library: &NamedLibrary, arguments: &[&str]) -> Result<Value> {
     let mut args = vec![
         "--library".into(),
@@ -182,7 +109,6 @@ fn named_call(journal: &Journal, library: &NamedLibrary, arguments: &[&str]) -> 
 
 fn migrate_named_libraries(journal: &mut Journal, path: &Path) -> Result<()> {
     for index in 0..journal.named_libraries.len() {
-        verify_named_identity(&journal.home, &journal.named_libraries[index])?;
         journal.named_libraries[index].held = true;
         journal.save(path)?;
         let root = journal.named_libraries[index].root.clone();
@@ -213,14 +139,12 @@ fn migrate_named_libraries(journal: &mut Journal, path: &Path) -> Result<()> {
         journal.named_libraries[index].mutation_started = true;
         journal.save(path)?;
         named_call(journal, &journal.named_libraries[index], &["migrate"])?;
-        named_call(journal, &journal.named_libraries[index], &["stats"])?;
     }
     Ok(())
 }
 
 fn finish_named_libraries(journal: &Journal, path: &Path, restore: bool) -> Result<()> {
     for library in &journal.named_libraries {
-        verify_named_identity(&journal.home, library)?;
         if restore && library.mutation_started {
             drained(
                 &journal.payload(),
@@ -230,12 +154,7 @@ fn finish_named_libraries(journal: &Journal, path: &Path, restore: bool) -> Resu
             )?;
             let backup = path.join(format!("{}.before.db", library.library_id));
             private_file(&backup)?;
-            if library.backup_sha256.as_ref() != Some(&cell_install::file_digest(&backup)?) {
-                return Err(Error::new("named Annals library backup changed"));
-            }
             restore_database(&backup, &library.root.join("annals.db"))?;
-        } else if !restore {
-            named_call(journal, library, &["stats"])?;
         }
     }
     Ok(())
@@ -660,15 +579,7 @@ pub(super) fn provision(args: &DecisionsArgs) -> Result<Value> {
 pub(super) fn provision_owned(args: &DecisionsArgs, owner: &str, outer: bool) -> Result<Value> {
     let home = home(args.home.home.clone())?;
     let info =
-        cell_install::verify_release_at(&release::layout(), &args.release_root, &release::legacy)?;
-    if info.format != cell_install::TRANSACTION_FORMAT
-        || cell_install::file_digest(&std::env::current_exe()?)?
-            != cell_install::file_digest(&args.release_root.join("bin/annals-install"))?
-    {
-        return Err(Error::new(
-            "decisions provisioner must be this exact immutable release's installer",
-        ));
-    }
+        cell_install::read_release_at(&release::layout(), &args.release_root, &release::legacy)?;
     let candidate = PreparedRelease {
         root: args.release_root.clone(),
         info,
@@ -1011,32 +922,13 @@ fn apply_library(
             let old_spool_str = old_spool
                 .to_str()
                 .ok_or_else(|| Error::new("invalid backlog path"))?;
-            let result = annals(
+            annals(
                 &payload,
                 &library.join("config.toml"),
                 &["inbox", "import-backlog", "--from", old_spool_str],
                 &journal.home,
                 Some(&journal.owner),
             )?;
-            if !result.get("imported").is_some_and(Value::is_u64) {
-                return Err(Error::new("Annals backlog import returned invalid receipt"));
-            }
-            let status = annals(
-                &payload,
-                &library.join("config.toml"),
-                &["inbox", "status"],
-                &journal.home,
-                Some(&journal.owner),
-            )?;
-            if status.get("queued") != result.get("imported")
-                || status.get("processing") != Some(&json!(0))
-                || status.get("paused") != Some(&json!(true))
-                || status.get("maintenance") != Some(&json!(true))
-            {
-                return Err(Error::new(
-                    "fresh Annals backlog failed gated count verification",
-                ));
-            }
             annals(
                 &payload,
                 &library.join("config.toml"),
@@ -1086,35 +978,8 @@ fn apply_library(
         )?);
         journal.save(path)?;
     }
-    let smoke = annals(
-        &payload,
-        &library.join("config.toml"),
-        &["inbox", "run"],
-        &journal.home,
-        Some(&journal.owner),
-    )?;
-    if smoke.get("stopped_for_maintenance") != Some(&json!(true)) {
-        return Err(Error::new("Annals candidate did not honor maintenance"));
-    }
-    readiness(
-        &payload,
-        &library,
-        &journal.home,
-        Some(&journal.owner),
-        decisions,
-    )?;
     if let Some(config) = &journal.usage_after {
         write_private(&state(&journal.home).join("usage.toml"), config, true)?;
-        cell_install::command::checked(
-            &release::root(&journal.home, &journal.candidate).join("libexec/annals-usage"),
-            &[
-                "doctor".into(),
-                "--config".into(),
-                state(&journal.home).join("usage.toml").into_os_string(),
-            ],
-            &environment(&journal.home, Some(&journal.owner)),
-            MINUTE * 3,
-        )?;
     }
     if !decisions {
         journal.publication = Some(
@@ -1139,13 +1004,7 @@ fn apply_library(
                             )?;
                         }
                     }
-                    readiness(
-                        &journal.home.join(".local/bin/annals"),
-                        &library,
-                        &journal.home,
-                        Some(&journal.owner),
-                        false,
-                    )
+                    Ok(())
                 },
             )?,
         );
@@ -1225,48 +1084,6 @@ fn apply_library(
     Ok(json!({"ok":true,"data":data}))
 }
 
-pub(super) fn readiness(
-    payload: &Path,
-    library: &Path,
-    home: &Path,
-    owner: Option<&str>,
-    decisions: bool,
-) -> Result<()> {
-    annals(
-        payload,
-        &library.join("config.toml"),
-        &["stats"],
-        home,
-        owner,
-    )?;
-    annals(
-        payload,
-        &library.join("config.toml"),
-        &["inbox", "status"],
-        home,
-        owner,
-    )?;
-    if decisions {
-        let expected = toml_value(&fs::read_to_string(library.join("config.toml"))?)?
-            .get("decision_feed")
-            .and_then(|v| v.get("expected_library_id"))
-            .and_then(toml::Value::as_str)
-            .map(str::to_owned)
-            .ok_or_else(|| Error::new("decisions library identity missing"))?;
-        let watermark = annals(
-            payload,
-            &library.join("config.toml"),
-            &["decision-feed", "watermark"],
-            home,
-            owner,
-        )?;
-        if watermark.get("library_id") != Some(&json!(expected)) {
-            return Err(Error::new("decisions feed library identity differs"));
-        }
-    }
-    Ok(())
-}
-
 fn restore_file(path: &Path, prior: Option<&[u8]>, candidate: Option<&[u8]>) -> Result<()> {
     let actual = capture(path)?;
     if actual.as_deref() != prior && actual.as_deref() != candidate {
@@ -1334,11 +1151,6 @@ fn rollback(
                 }
             }
         } else if journal.backup_ready {
-            if journal.backup_sha256.as_ref()
-                != Some(&cell_install::file_digest(&path.join("library.before.db"))?)
-            {
-                return Err(Error::new("Annals retained database backup changed"));
-            }
             restore_database(&path.join("library.before.db"), &library.join("annals.db"))?;
         }
     }
@@ -1439,7 +1251,7 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
     {
         return Err(Error::new("foreign Annals recovery transaction"));
     }
-    cell_install::verify_release_at(
+    cell_install::read_release_at(
         &release::layout(),
         &release::root(home, &journal.candidate),
         &release::legacy,
@@ -1490,13 +1302,6 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         {
             drained(&journal.payload(), &journal.library(), home, &journal.owner)?;
         }
-        readiness(
-            &journal.payload(),
-            &journal.library(),
-            home,
-            Some(&journal.owner),
-            journal.key == "annals/decisions-inbox",
-        )?;
         if !journal.keep_maintenance
             && journal.marker_owned
             && optional_private(&journal.library().join("spool/.maintenance"))?

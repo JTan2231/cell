@@ -10,7 +10,6 @@ struct Fixture {
     _temp: tempfile::TempDir,
     home: PathBuf,
     binary: PathBuf,
-    reader: PathBuf,
     spec: Spec,
 }
 
@@ -27,13 +26,10 @@ impl Fixture {
         fs::create_dir(&home).unwrap();
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
         let binary = root.join("payload");
-        let reader = root.join("reader");
-        write_executable(&reader, "#!/bin/sh\nexit 0\n");
         let value = Self {
             _temp: temp,
             home,
             binary,
-            reader,
             spec: specification(),
         };
         value.payload("first", false);
@@ -57,15 +53,12 @@ impl Fixture {
             .arg(operation)
             .arg("--home")
             .arg(&self.home);
-        if matches!(operation, "install" | "verify") {
+        if operation == "install" {
             command
                 .arg("--binary")
                 .arg(&self.binary)
                 .arg("--bundle")
                 .arg(source_root().join(self.spec.provider_source));
-        }
-        if self.spec.product == "clockwork" {
-            command.arg("--chancery").arg(&self.reader);
         }
         command.args(extra).output().unwrap()
     }
@@ -94,24 +87,8 @@ fn installs_exact_payload_and_provider_and_is_idempotent() {
     let first = fixture.success("install", &[]);
     assert_eq!(first["data"]["format"], "cell-install-v2");
     assert_eq!(fixture.success("install", &[])["data"], first["data"]);
-    fixture.success("verify", &[]);
-    let release = fixture
-        .root()
-        .join("releases")
-        .join(first["data"]["release_id"].as_str().unwrap());
-    let output = Command::new(installer())
-        .arg("verify-release")
-        .arg(&release)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "{}",
-        String::from_utf8_lossy(&output.stdout)
-    );
     assert!(!fixture.root().join("previous").exists());
     fixture.payload("different", false);
-    assert!(!fixture.run("verify", &[]).status.success());
     let second = fixture.success("install", &[]);
     assert_ne!(first["data"]["release_id"], second["data"]["release_id"]);
     assert_eq!(

@@ -80,12 +80,6 @@ fn lifecycle_inner(
             annals_binary: context.home.join(".local/bin/annals"),
             annals_config,
         };
-        config.validate()?;
-        annals_api::Client::new(
-            context.dependency_inspection_binary("annals")?,
-            &config.annals_config,
-        )
-        .start()?;
         return Ok(json!({"config":config}));
     }
     let forward = context

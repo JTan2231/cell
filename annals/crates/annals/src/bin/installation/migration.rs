@@ -402,16 +402,13 @@ impl State<'_> {
             .ok_or_else(|| failure("invalid migration release identity"))?;
         let release = self.target.join("install").join(selected);
         dir(&release, self.uid)?;
-        let verified = self.user_checked(
-            &std::env::current_exe()?,
-            &["verify-release".into(), release.as_os_str().to_owned()],
+        let info = cell_install::read_release_at(
+            &super::release::layout(),
+            &release,
+            &super::release::legacy,
         )?;
-        let verified: Value = serde_json::from_slice(&verified.stdout)?;
-        if verified["ok"] != true || verified["data"]["release_id"] != release_id {
-            return Err(failure("migration release identity was not verified"));
-        }
         let runner = release.join("bin/annals-inbox");
-        let launch = if verified["data"]["format"] == cell_install::TRANSACTION_FORMAT {
+        let launch = if info.format == cell_install::TRANSACTION_FORMAT {
             json!({"kind":"direct","program":runner,"sha256":hash(&runner)?})
         } else {
             json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":hash(Path::new("/bin/sh"))?,"script":runner,"script_sha256":hash(&runner)?})

@@ -52,12 +52,9 @@ success policy is introduced.
    lost proof, reported failure with exit zero, overlap, re-observation after
    approval, and halt preservation. Use only local Email doubles. Preserve
    fixed payload, idempotency horizon, eligible checks, and non-expiring claims.
-6. Check packaging version matching, complete content identity, candidate-reader
-   validation before selector mutation, installed discovery, idempotent
-   deployment, foreign/tampered refusal, rollback, and selector-only uninstall
-   when affected. Validate the source provider and review product, show, and
-   resolve with a temporary registry. Preserve explicit unknown and
-   uncontracted reliance gaps; structural validation cannot prove prose complete.
+6. Exercise resource setup, owned selectors, maintenance, publication recovery,
+   and captured scheduler intent. Packaging does not validate candidate versions,
+   artifact integrity, provider discovery, persistent state, or runtime readiness.
 
 Stop when migration, compatibility, external agreement, ownership, privacy, or
 coherent recovery evidence is missing. Keep every affected contract consistent.

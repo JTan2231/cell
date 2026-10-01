@@ -252,11 +252,8 @@ compatible, authenticated, and accepting jobs. Its execution fields report
 
 `authentication_busy` identifies credential-operation contention. An active
 job alone does not make an account read busy or prove a bad credential.
-The deployment health client accepts a healthy service with open admission or
-a reported quota pause. The installer reads `service status` for this runtime
-proof. When a hold exists, the client requires that exact owner's sole hold
-and complete drain. These checks preserve quota admission; ordinary health
-remains strict.
+Read `chancery show nucleus.service` for service status during quota pauses
+and maintenance. Installation does not use health as a completion gate.
 
 Do not maintain a dated installed-version table here. A source checkout or
 catalog entry does not establish the currently running release.
@@ -354,19 +351,17 @@ The coordinator selects a local `main` commit and prepares immutable candidates.
 Product declarations order selected releases and identify affected installations
 to hold. The plan adds missing or incompatible runtime dependencies and declared
 installed companions, and reports each selection reason. Consumer-owned release
-bounds select compatible candidates; sealed product inspectors prove retained
-dependencies and their runtime prerequisites before maintenance.
+bounds select compatible candidates. Product installers read retained installation
+metadata before maintenance.
 Annals includes Usage; `decisions` aliases `krisis`.
 
-Selected Platter upgrades can use their sealed candidate for maintenance after
-the product proves compatibility with its retained state. This permits repair
-of a broken installed maintenance reader. Installation ownership, admission
-holds, drain, and installed readiness checks still apply. Read
-`chancery show platter.install.operate` for the compatibility boundary.
+Selected products use their supplied candidate for maintenance. Affected-only
+products use their installed command. Admission holds and drain still apply.
+Read each product's installation contract for its setup and recovery operations.
 
 The shared sequence is:
 
-1. Prepare and verify all selected candidates before maintenance.
+1. Prepare all selected candidates before maintenance.
 2. Hold and drain each affected consumer before its providers, so admitted work
    can finish using its dependencies.
 3. When replacing Nucleus, hold it after requester continuation work has finished.
@@ -374,19 +369,20 @@ The shared sequence is:
 4. Prepare selected releases, then configure affected products in dependency order.
    Products retain their atomic state-and-file transactions. Nucleus starts its
    replacement service under its hold before requesters configure against it.
-5. Verify selected candidate identity and affected-only installed readiness.
-6. Release requester holds, then release Nucleus last when it is held.
-7. Activate product schedules according to captured intent. Preserve existing
+5. Release requester holds, then release Nucleus last when it is held.
+6. Activate product schedules according to captured intent. Preserve existing
    pauses, disabled bindings and incident halts.
 
 A hold belongs to one run, survives process exit, and does not expire. Releasing
 it preserves other holds, operator pauses, and disabled schedules. Drain must
 include durable unfinished work and associated Nucleus jobs.
 
-Verification creates no model jobs or synthetic domain records. Recovery must
-establish a coherent prior or candidate installation before releasing admission.
-An uncertain apply is not repeated blindly. Matching files and health alone do
-not prove replacement of a resident Nucleus daemon.
+Installation performs resource setup, program selection, and required state
+initialization or migration. It does not run persistent-state integrity, artifact
+integrity, or operational-readiness checks. CI does not assert those removed
+installation checks. Ordinary product diagnostics and runtime guards remain.
+Recovery restores the recorded prior or candidate setup before releasing
+admission. An uncertain apply is not repeated blindly.
 
 Setup settings supply missing choices once through `--settings ABSOLUTE_JSON`.
 Product adapters reuse existing configuration, initialize missing state, update
@@ -424,8 +420,8 @@ contract owns its state, migration, scheduler, and recovery procedure.
 An older executable may ignore a candidate's admission hold. Install a compatible
 maintenance-capable release through the product's existing procedure first.
 Capture enabled schedules and operator pauses before stopping admission.
-Settle domain work and Nucleus jobs, install the compatible release, and verify
-its maintenance interface. Restore only the captured enabled state after readiness.
+Settle domain work and Nucleus jobs, install the compatible release, and restore
+only the captured enabled state after setup completes.
 
 Adapters invoke product-owned initialization and local credential setup from
 supplied settings. External authentication still requires a valid supplied
@@ -620,8 +616,8 @@ shared facts or procedures change.
    them through the CI manager. Verify its validation and deployment outcome.
 3. Publish only when authorized. Release requires clean `main` synchronized
    with `origin/main` and creates the commit and tag.
-4. Verify runtime health and report requester admission after the manager
-   deployment. A quota pause can remain after successful installation.
+4. Read the retained manager deployment result and report requester admission.
+   Installation does not establish operational readiness.
    For a separate manual installation or recovery, quiesce affected work and
    deploy matching CLI and daemon candidates before restoring admission.
 
@@ -640,7 +636,7 @@ The adapter requires Codex `0.154.0-alpha.6.2`. Stage its complete runtime with
 CI submission. The source must include the matching `codex-code-mode-host`.
 The installer records both file identities and publishes the complete runtime
 under `~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
-It refuses to overwrite a different staged runtime. See
+An existing staged directory is reused from its recorded manifest. See
 `chancery show nucleus.execution.operate` for the installation procedure and
 `chancery show nucleus.service` for source and recovery guarantees.
 
@@ -654,14 +650,10 @@ and fails if it is absent. For a direct development test, `NUCLEUS_TEST_CODEX`
 can select an explicit complete source runtime. Managed CI does not pass this
 override to the test, so validation uses the staged deployment candidate.
 
-Installation and live readiness check the runtime files and recorded identities
-without model calls. Every selected deployment requires the tested staged
-runtime. A configured runtime remains selected only when both file identities
-match that pair. A different or incomplete installation uses the staged replacement.
-The coordinator captures the candidate identities before maintenance and
-verifies them before cutover and after installation. Retain the previous runtime
-for supported recovery. A runtime upgrade does not clear requester failure
-halts or authorize retries.
+Installation copies and selects the configured runtime without using health or
+artifact-integrity checks as an installation gate. Ordinary runtime admission
+continues to enforce its harness and authentication requirements. A runtime
+upgrade does not clear requester failure halts or authorize retries.
 
 ### Public protocol or client change
 
@@ -741,9 +733,9 @@ private prompts, sources, and tool values.
 | Runtime completion without the required record | Follow the product's failure policy. |
 | Unresolved deployment hold | Use that product's retained recovery procedure. |
 
-After a shared change, verify matching programs, service status, exact harness,
-account access, and affected product readiness. Release only holds and pauses
-owned by the operation. Preserve pre-existing disabled schedules.
+After a shared change, read the retained installation outcome. Use product
+diagnostics separately when operational evidence is needed. Release only holds
+and pauses owned by the operation. Preserve pre-existing disabled schedules.
 
 ## Where facts and changes belong
 

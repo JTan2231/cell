@@ -261,7 +261,6 @@ esac
         let prior = self.begin();
         let applied = self.success("apply", Some(&prior), Value::Null);
         self.success("configure", Some(&prior), Value::Null);
-        self.success("verify", Some(&prior), Value::Null);
         self.success("release", Some(&prior), Value::Null);
         self.success("activate", Some(&prior), Value::Null);
         applied["release_id"].as_str().unwrap().to_owned()
@@ -274,7 +273,7 @@ esac
 }
 
 #[test]
-fn fresh_repeat_upgrade_and_verified_recovery_preserve_state() {
+fn fresh_repeat_upgrade_and_recovery_preserve_state() {
     let mut fixture = Fixture::new();
     let state = fixture.home.join(".local/share/job-packets");
     fs::create_dir_all(&state).unwrap();
@@ -371,54 +370,6 @@ fn selected_candidate_bootstraps_compatible_maintenance_without_publication() {
 }
 
 #[test]
-fn candidate_maintenance_does_not_override_predecessor_or_foreign_state() {
-    let mut fixture = Fixture::new();
-    fixture.install();
-    fixture.prepare("second", false);
-    let prior = fixture.success("inspect", None, Value::Null);
-    fs::write(
-        fixture.home.join("fail-first-maintenance"),
-        b"old observer fails",
-    )
-    .unwrap();
-    let root = platter::default_state_dir(&fixture.home).unwrap();
-    let connection = rusqlite::Connection::open(root.join(platter::store::DATABASE)).unwrap();
-    connection.pragma_update(None, "user_version", 5).unwrap();
-    fs::write(fixture.home.join("operations"), b"").unwrap();
-
-    assert!(
-        !fixture
-            .adapter("hold", Some(&prior), Value::Null)
-            .status
-            .success()
-    );
-    assert_eq!(
-        fs::read_to_string(fixture.home.join("operations")).unwrap(),
-        "first maintenance hold fixture-run\n"
-    );
-    assert_eq!(
-        connection
-            .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
-            .unwrap(),
-        5
-    );
-
-    connection.pragma_update(None, "user_version", 999).unwrap();
-    fs::write(fixture.home.join("operations"), b"").unwrap();
-    let output = fixture.adapter("hold", Some(&prior), Value::Null);
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stdout).contains("unsupported Platter database schema")
-    );
-    assert!(
-        fs::read(fixture.home.join("operations"))
-            .unwrap()
-            .is_empty()
-    );
-    assert!(!fixture.home.join("hold").exists());
-}
-
-#[test]
 fn publication_failure_restores_prior_and_keeps_hold_for_recovery() {
     let mut fixture = Fixture::new();
     let first = fixture.install();
@@ -492,7 +443,7 @@ fn direct_mutation_cannot_bypass_maintenance() {
 }
 
 #[test]
-fn apply_requires_drained_sole_hold_and_compatible_state() {
+fn apply_requires_drained_sole_hold() {
     let fixture = Fixture::new();
     let prior = fixture.success("inspect", None, Value::Null);
     assert!(
@@ -510,20 +461,6 @@ fn apply_requires_drained_sole_hold_and_compatible_state() {
             .success()
     );
     fs::remove_file(fixture.home.join("busy")).unwrap();
-    fs::write(fixture.home.join("incompatible"), b"unsupported schema").unwrap();
-    fixture.success("apply", Some(&prior), Value::Null);
-    assert!(
-        !fixture
-            .adapter("configure", Some(&prior), Value::Null)
-            .status
-            .success()
-    );
-    assert!(fixture.install_root().join("current").exists());
-    assert_eq!(
-        fs::read_to_string(fixture.home.join("hold")).unwrap(),
-        "fixture-run"
-    );
-    fs::remove_file(fixture.home.join("incompatible")).unwrap();
     fs::write(fixture.home.join("hold"), b"another-owner").unwrap();
     assert!(
         !fixture
@@ -538,30 +475,7 @@ fn apply_requires_drained_sole_hold_and_compatible_state() {
 }
 
 #[test]
-fn sealed_candidate_provider_and_owned_selectors_are_required() {
-    let fixture = Fixture::new();
-    fs::write(fixture.candidate_dir.join("bin/platter"), b"changed bytes").unwrap();
-    assert!(
-        !fixture
-            .adapter("inspect", None, Value::Null)
-            .status
-            .success()
-    );
-    assert!(!fixture.install_root().exists());
-
-    let fixture = Fixture::new();
-    fs::write(
-        fixture.source.join("platter/chancery/extra"),
-        b"unsealed provider",
-    )
-    .unwrap();
-    assert!(
-        !fixture
-            .adapter("inspect", None, Value::Null)
-            .status
-            .success()
-    );
-
+fn owned_selectors_are_required() {
     let fixture = Fixture::new();
     fs::create_dir_all(fixture.home.join(".local/bin")).unwrap();
     let public = fixture.home.join(".local/bin/platter");
@@ -575,140 +489,5 @@ fn sealed_candidate_provider_and_owned_selectors_are_required() {
     assert_eq!(
         fs::read_link(public).unwrap(),
         Path::new("/foreign/platter")
-    );
-}
-
-#[test]
-fn failed_verification_and_release_tampering_keep_maintenance() {
-    let fixture = Fixture::new();
-    let prior = fixture.begin();
-    let release = fixture.success("apply", Some(&prior), Value::Null);
-    fs::write(
-        fixture.home.join("doctor-failure"),
-        b"dependency unavailable",
-    )
-    .unwrap();
-    assert!(
-        !fixture
-            .adapter("verify", Some(&prior), Value::Null)
-            .status
-            .success()
-    );
-    assert_eq!(
-        fs::read_to_string(fixture.home.join("hold")).unwrap(),
-        "fixture-run"
-    );
-    fs::remove_file(fixture.home.join("doctor-failure")).unwrap();
-    let binary = fixture
-        .install_root()
-        .join("releases")
-        .join(release["release_id"].as_str().unwrap())
-        .join("bin/platter");
-    fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
-    fs::write(binary, b"tampered installed payload").unwrap();
-    assert!(
-        !fixture
-            .adapter("verify", Some(&prior), Value::Null)
-            .status
-            .success()
-    );
-    assert_eq!(
-        fs::read_to_string(fixture.home.join("hold")).unwrap(),
-        "fixture-run"
-    );
-}
-
-#[test]
-fn affected_absent_platter_checks_state_without_requiring_runtime_dependencies() {
-    let mut fixture = Fixture::new();
-    fixture.selected = false;
-    fs::write(
-        fixture.home.join("doctor-failure"),
-        b"Email lacks attachments",
-    )
-    .unwrap();
-    let prior = fixture.begin();
-    fixture.success("verify", Some(&prior), Value::Null);
-    assert!(
-        fs::read_to_string(fixture.home.join("operations"))
-            .unwrap()
-            .contains("doctor --state-only")
-    );
-    fixture.success("release", Some(&prior), Value::Null);
-    assert!(!fixture.install_root().join("current").exists());
-    assert!(!fixture.home.join("hold").exists());
-}
-
-#[test]
-fn failed_prerequisites_recover_compatible_absent_and_installed_prior() {
-    for installed in [false, true] {
-        let mut fixture = Fixture::new();
-        let expected = if installed {
-            Some(fixture.install())
-        } else {
-            None
-        };
-        fixture.prepare("candidate-with-unavailable-dependency", false);
-        let prior = fixture.begin();
-        fs::write(
-            fixture.home.join("doctor-failure"),
-            b"Email lacks attachments",
-        )
-        .unwrap();
-        assert!(
-            !fixture
-                .adapter("verify", Some(&prior), Value::Null)
-                .status
-                .success()
-        );
-        let recovered = fixture.success(
-            "recover",
-            Some(&prior),
-            json!({"any_apply_started":false,"verified":false}),
-        );
-        assert_eq!(recovered["installed"], "prior");
-        assert_eq!(recovered["safe_to_release"], true);
-        assert_eq!(
-            recovered["installation"]["current"]["release_id"],
-            json!(expected)
-        );
-        fixture.success("release", Some(&prior), Value::Null);
-        assert!(!fixture.home.join("hold").exists());
-    }
-}
-
-#[test]
-fn prior_recovery_still_requires_state_compatibility_and_selected_verify_full_readiness() {
-    let fixture = Fixture::new();
-    fixture.install();
-    let prior = fixture.begin();
-    fixture.success("apply", Some(&prior), Value::Null);
-    fs::write(
-        fixture.home.join("doctor-failure"),
-        b"dependency unavailable",
-    )
-    .unwrap();
-    // Even when exact bytes were already selected, selected verification must
-    // prove readiness to use this release.
-    assert!(
-        !fixture
-            .adapter("verify", Some(&prior), Value::Null)
-            .status
-            .success()
-    );
-    fs::write(fixture.home.join("incompatible"), b"unsupported state").unwrap();
-    assert!(
-        !fixture
-            .adapter(
-                "recover",
-                Some(&prior),
-                json!({"any_apply_started":true,"verified":false})
-            )
-            .status
-            .success()
-    );
-    assert_eq!(
-        fs::read_to_string(fixture.home.join("hold")).unwrap(),
-        "fixture-run"
     );
 }

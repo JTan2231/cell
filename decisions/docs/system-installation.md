@@ -56,7 +56,7 @@ config to Annals; it never chooses a library by fallback or `--library`.
 ## Prepare and final cutover
 
 Preparation is the default. It installs the content-addressed release,
-registers and fully verifies its Clockwork definition, prepares private logs,
+registers its Clockwork definition, prepares private logs,
 and deliberately leaves the maintenance marker in place. It does not change
 the current release, command, provider, hook, database, baseline, or any
 Clockwork binding.
@@ -71,9 +71,9 @@ Clockwork definition, observer ownership receipt bound to the target, and legacy
 plist. It disables enabled schedules only after verifying ownership. It then
 suspends the old hook command for its timeout, verifies SQLite is idle, and saves
 the database and sidecars. In a scrubbed environment, it runs the prepared
-payload through schema 6 migration and doctor before publishing the command and providers.
+payload through schema 6 migration and baseline activation before publishing the command and providers.
 
-Doctor uses the same explicitly selected Codex executable as the observer and
+The separate runtime doctor uses the selected Codex executable and
 checks Conversations, exact Nucleus capabilities and requester contract, and:
 
 ```text
@@ -85,12 +85,10 @@ set `CONVERSATIONS_CODEX` to that same path; the installed command does not
 inherit Clockwork's observer environment. Doctor and process also require the
 complete explicit Annals arguments documented in the CLI contract.
 
-It accepts only the standard success envelope with contract version 1 and the
-configured library ID. The baseline is created once during explicit final
+The baseline is created once during explicit final
 cutover, before the exact Krisis hook and `krisis/observer` binding become
-executable. The deployer rereads the active and legacy bindings after the
-switch, proves the exact candidate is enabled and the legacy schedules are not,
-then removes the maintenance marker.
+executable. The deployer selects the active binding, retires owned legacy schedules,
+and removes its maintenance marker.
 
 The observer definition runs every 60 seconds with `run_at_load = false`, pins
 the exact release-local runner and interpreter digest, records the selected
@@ -102,10 +100,9 @@ Interactive `krisis` diagnostics remain detailed.
 
 ## Coordinated deployment maintenance
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
+The coordinator's `apply` phase stages release files.
+`configure` runs product configuration, migration and selector publication with
+scheduling disabled. `release` removes only the named admission hold.
 After every affected hold is released, `activate` restores the captured enabled
 state of the current selected definition. An originally disabled binding stays
 disabled. Clockwork incident halts and product pauses remain in force.
@@ -117,8 +114,8 @@ unavailable existing runtime is not treated as an empty job inventory.
 
 `krisis-install adapter OP` is the sealed Rust product boundary used by Cell's
 deployment coordinator. It composes the product-owned prepare and final-cutover
-lifecycle, retains product-owned maintenance through group verification, and
-releases only the coordinator's named hold after verification. The separate
+lifecycle, retains product-owned maintenance through group configuration, and
+releases only the coordinator's named hold after configuration. The separate
 installer marker is authenticated by its own receipt and inode. It
 preserves captured schedule enabled booleans and the write-once observer
 baseline. An ordinary update never invents a legacy activation watermark or
@@ -143,14 +140,12 @@ An ordinary Annals dependency update may change the exact Annals executable
 or config pin while preserving the persistent decisions-library ID. Before
 changing it, Krisis proves the selected prior definition against the prior
 release and private ownership receipt's old binary, config, and library ID.
-It then validates the newly requested target with candidate doctor. Matching
+It then records the newly requested target. Matching
 only the new paths does not prove ownership of the old definition. A changed
 library ID, foreign receipt, or unproved prior definition stops the update;
 this transition does not rebind durable account identity to another library.
 
-Group release removes only the coordinator's named hold after product
-verification. Recovery invokes this owner's retained product transaction before checking
-readiness. It keeps scheduling disabled and retains restored evidence under
+Group release removes only the coordinator's named hold after product configuration. Recovery invokes this owner's retained product transaction before releasing its hold. It keeps scheduling disabled and retains restored evidence under
 `backups/deployments/`. Unknown ownership or incomplete recovery keeps admission held.
 
 ## Verification
@@ -187,22 +182,19 @@ untouched and stop the operation. It retains the database, baseline, receipt
 ledger, legacy Decisions history, releases, logs, and Clockwork history.
 Deleting those requires a separate destructive decision.
 
-The deployment adapter verifies the installed dependency configuration with
-doctor. Verification does not create observations or submit Nucleus jobs.
+The deployment adapter does not invoke doctor. Runtime diagnosis is separate.
 
 ## Retained installation artifacts
 
-The package builds and seals both `krisis` and `krisis-install`. The shared
-`cell-install` Rust library verifies the complete `cell-install-v2` manifest,
-artifact hashes and modes, both provider bundles, and current/previous/public
-selectors. Krisis owns the hook, private state, dependency pins, scheduler
+The package builds and seals both `krisis` and `krisis-install`. The shared `cell-install` Rust library copies release files and publishes owned
+selectors. It reads release metadata without auditing hashes, modes, provider
+contents, or version alignment. Krisis owns the hook, private state, dependency pins, scheduler
 handoff, maintenance receipts, and database recovery. The static `krisis`
 frontend and `krisis-observer` interpreter script remain release data because
 the runtime contract pins those exact interpreted images.
 
 Each release retains `bin/krisis-install` and the same executable at
-`package/install`. `krisis-install verify-release ABSOLUTE_RELEASE` performs
-read-only integrity verification. `krisis-install inspect [--home ABSOLUTE_HOME]`
+`package/install`. `krisis-install inspect [--home ABSOLUTE_HOME]`
 checks the selected installation. Retained `package/install install` finds its
 sibling package and provider data; pass the exact retained payload as `--binary`
 and the same explicit dependency pins. Legacy formats 2, 3, and 4 remain exact
@@ -256,8 +248,7 @@ failed observations remain terminal history; cutover does not re-alert or retry
 them. The retired Decisions schedules remain disabled. Schema-one definitions
 keep their old policy until a schema-two definition is explicitly selected.
 
-Coordinated recovery restores the exact recorded product transaction before it
-checks readiness. Its private journal binds the deployment owner, home, prior
+Coordinated recovery restores the exact recorded product transaction before it releases its hold. Its private journal binds the deployment owner, home, prior
 selection and candidate release to captured database, hook and schedule state.
 It does not reclassify observations or run `observe activate` again. Evidence
 from another owner or an older journal without that identity stays retained
@@ -268,7 +259,7 @@ Deployment settings accept only `codex_bin` and `enabled`. `enabled` must be a b
 Set `codex_bin` to an absolute executable path to replace an existing reader pin.
 Omit it to retain the installed pin. For the current ChatGPT app layout, use
 `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
-The installer verifies the replacement and records it in the observer definition.
+The installer records the replacement in the observer definition.
 The observer continues to use only that recorded path.
 An unavailable prior Codex executable does not prevent replacement when its
 retained receipt and exact observer definition still prove ownership.

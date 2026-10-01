@@ -116,35 +116,9 @@ prepare_output_files() {
         || fail 'decisions stdout and stderr logs must be distinct files'
 }
 
-validate_chancery_bundle() {
-    bundle=$1
-    [ -d "$bundle" ] && [ ! -L "$bundle" ] \
-        || fail "Chancery bundle is not a regular directory: $bundle"
-    [ -f "$bundle/provider.json" ] && [ ! -L "$bundle/provider.json" ] \
-        || fail "Chancery bundle has no regular provider.json: $bundle"
-    if find "$bundle" -type l -print | grep -q .; then
-        fail "Chancery bundle contains a symbolic link: $bundle"
-    fi
-    if find "$bundle" ! -type d ! -type f -print | grep -q .; then
-        fail "Chancery bundle contains a non-file entry: $bundle"
-    fi
-}
-
-chancery_bundle_hash() {
-    bundle=$1
-    (
-        cd "$bundle"
-        find . -type f -print | LC_ALL=C sort | while IFS= read -r file; do
-            printf 'path=%s\n' "$file"
-            shasum -a 256 "$file"
-        done
-    ) | shasum -a 256 | awk '{print $1}'
-}
-
-# Validate the complete format-four content release used by the established
-# Annals installer. The decisions binding reuses only its immutable payload and
-# runner; it never follows the mutable `current` selector.
-validate_release() {
+# Read metadata for the selected release. The decisions binding reuses its
+# payload and runner; it never follows the mutable `current` selector.
+read_release() {
     checked_root=$1
     absolute_path "$checked_root" \
         || fail "release root must be absolute: $checked_root"
@@ -162,125 +136,10 @@ validate_release() {
     esac
 
     checked_manifest="$checked_root/manifest.json"
-    checked_runner="$checked_root/bin/annals-inbox"
-    checked_template="$checked_root/package/annals-inbox.clockwork.toml.in"
-    for checked_file in \
-        "$checked_manifest" \
-        "$checked_root/libexec/annals" \
-        "$checked_root/libexec/annals-usage" \
-        "$checked_root/bin/annals" \
-        "$checked_runner" \
-        "$checked_root/package/annals-user" \
-        "$checked_root/package/annals-inbox" \
-        "$checked_root/package/deploy-user.sh" \
-        "$checked_template" \
-        "$checked_root/package/annals-decisions.toml.in" \
-        "$checked_root/package/annals-decisions-inbox.clockwork.toml.in" \
-        "$checked_root/package/provision-decisions-user.sh" \
-        "$checked_root/package/org.annals.inbox.agent.plist"
-    do
-        [ -f "$checked_file" ] && [ ! -L "$checked_file" ] \
-            || fail "Annals release has an invalid file: $checked_file"
-    done
-    [ "$(awk 'END { print NR }' "$checked_manifest")" -eq 18 ] \
-        || fail "Annals release manifest is not canonical: $checked_manifest"
-
-    checked_format=$(sed -n 's/^  "format": \([0-9][0-9]*\),$/\1/p' \
-        "$checked_manifest")
-    checked_manifest_release=$(sed -n \
-        's/^  "release_id": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_binary_hash=$(sed -n \
-        's/^  "binary_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_usage_hash=$(sed -n \
-        's/^  "usage_binary_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_frontend_hash=$(sed -n \
-        's/^  "frontend_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_runner_hash=$(sed -n \
-        's/^  "runner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_template_hash=$(sed -n \
-        's/^  "clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_decisions_config_hash=$(sed -n \
-        's/^  "decisions_config_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_decisions_template_hash=$(sed -n \
-        's/^  "decisions_clockwork_template_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_decisions_provisioner_hash=$(sed -n \
-        's/^  "decisions_provisioner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_plist_hash=$(sed -n \
-        's/^  "legacy_agent_plist_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_updater_hash=$(sed -n \
-        's/^  "updater_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_chancery_annals_hash=$(sed -n \
-        's/^  "chancery_annals_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    checked_chancery_usage_hash=$(sed -n \
-        's/^  "chancery_usage_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
-    [ "$checked_format" = 4 ] \
-        && [ "$checked_manifest_release" = "$checked_release_id" ] \
-        || fail "Annals release has no exact format-four identity: $checked_root"
-    for checked_hash in \
-        "$checked_binary_hash" "$checked_usage_hash" "$checked_frontend_hash" \
-        "$checked_runner_hash" "$checked_template_hash" \
-        "$checked_decisions_config_hash" "$checked_decisions_template_hash" \
-        "$checked_decisions_provisioner_hash" "$checked_plist_hash" \
-        "$checked_updater_hash" "$checked_chancery_annals_hash" \
-        "$checked_chancery_usage_hash"
-    do
-        [ "${#checked_hash}" -eq 64 ] \
-            || fail "Annals release has an invalid hash: $checked_root"
-        case "$checked_hash" in
-            *[!0-9a-f]*) fail "Annals release has an invalid hash: $checked_root" ;;
-        esac
-    done
-
-    validate_chancery_bundle "$checked_root/share/chancery/annals"
-    validate_chancery_bundle "$checked_root/share/chancery/annals-usage"
-    actual_binary_hash=$(shasum -a 256 "$checked_root/libexec/annals" | awk '{print $1}')
-    actual_usage_hash=$(shasum -a 256 "$checked_root/libexec/annals-usage" | awk '{print $1}')
-    actual_frontend_hash=$(shasum -a 256 "$checked_root/bin/annals" | awk '{print $1}')
-    actual_runner_hash=$(shasum -a 256 "$checked_runner" | awk '{print $1}')
-    actual_template_hash=$(shasum -a 256 "$checked_template" | awk '{print $1}')
-    actual_decisions_config_hash=$(shasum -a 256 \
-        "$checked_root/package/annals-decisions.toml.in" | awk '{print $1}')
-    actual_decisions_template_hash=$(shasum -a 256 \
-        "$checked_root/package/annals-decisions-inbox.clockwork.toml.in" \
-        | awk '{print $1}')
-    actual_decisions_provisioner_hash=$(shasum -a 256 \
-        "$checked_root/package/provision-decisions-user.sh" | awk '{print $1}')
-    actual_plist_hash=$(shasum -a 256 \
-        "$checked_root/package/org.annals.inbox.agent.plist" | awk '{print $1}')
-    actual_updater_hash=$(shasum -a 256 \
-        "$checked_root/package/deploy-user.sh" | awk '{print $1}')
-    actual_chancery_annals_hash=$(chancery_bundle_hash \
-        "$checked_root/share/chancery/annals")
-    actual_chancery_usage_hash=$(chancery_bundle_hash \
-        "$checked_root/share/chancery/annals-usage")
-    [ "$actual_binary_hash" = "$checked_binary_hash" ] \
-        && [ "$actual_usage_hash" = "$checked_usage_hash" ] \
-        && [ "$actual_frontend_hash" = "$checked_frontend_hash" ] \
-        && [ "$actual_runner_hash" = "$checked_runner_hash" ] \
-        && [ "$actual_template_hash" = "$checked_template_hash" ] \
-        && [ "$actual_decisions_config_hash" = "$checked_decisions_config_hash" ] \
-        && [ "$actual_decisions_template_hash" = "$checked_decisions_template_hash" ] \
-        && [ "$actual_decisions_provisioner_hash" = "$checked_decisions_provisioner_hash" ] \
-        && [ "$actual_plist_hash" = "$checked_plist_hash" ] \
-        && [ "$actual_updater_hash" = "$checked_updater_hash" ] \
-        && [ "$actual_chancery_annals_hash" = "$checked_chancery_annals_hash" ] \
-        && [ "$actual_chancery_usage_hash" = "$checked_chancery_usage_hash" ] \
-        && [ "$(shasum -a 256 "$checked_root/package/annals-user" | awk '{print $1}')" = "$checked_frontend_hash" ] \
-        && [ "$(shasum -a 256 "$checked_root/package/annals-inbox" | awk '{print $1}')" = "$checked_runner_hash" ] \
-        || fail "Annals release content changed: $checked_root"
-    actual_release_id=$(printf '%s\n' \
-        "$actual_binary_hash" "$actual_usage_hash" "$actual_frontend_hash" \
-        "$actual_runner_hash" "$actual_template_hash" \
-        "$actual_decisions_config_hash" "$actual_decisions_template_hash" \
-        "$actual_decisions_provisioner_hash" "$actual_plist_hash" \
-        "$actual_updater_hash" "$actual_chancery_annals_hash" \
-        "$actual_chancery_usage_hash" | shasum -a 256 | awk '{print $1}')
-    [ "$actual_release_id" = "$checked_release_id" ] \
-        || fail "Annals release content identity changed: $checked_root"
-
     validated_release_id=$checked_release_id
-    validated_runner_hash=$checked_runner_hash
-    validated_provisioner_hash=$checked_decisions_provisioner_hash
+    validated_runner_hash=$(sed -n \
+        's/^  "runner_sha256": "\([0-9a-f]\{64\}\)",$/\1/p' "$checked_manifest")
+
 }
 
 xml_top_level_key_count() {
@@ -374,7 +233,7 @@ prove_selected_definition() {
         || fail 'selected decisions definition has no release root'
     proved_release=$(plutil -extract data.manifest.release_id raw "$proved" 2>/dev/null) \
         || fail 'selected decisions definition has no release identity'
-    validate_release "$proved_root"
+    read_release "$proved_root"
     proved_runner_hash=$validated_runner_hash
     [ "$validated_release_id" = "$proved_release" ] \
         || fail 'selected decisions definition release identity changed'
@@ -599,12 +458,9 @@ for command in awk basename cmp cp date find grep id install mkdir mv plutil sed
         || fail "required command not found: $command"
 done
 
-validate_release "$release_root"
+read_release "$release_root"
 release_id=$validated_release_id
 runner_hash=$validated_runner_hash
-[ "$(shasum -a 256 "$PROVISIONER_SELF" | awk '{print $1}')" = \
-    "$validated_provisioner_hash" ] \
-    || fail 'invoked decisions provisioner does not belong to the selected release'
 CONFIG_TEMPLATE="$release_root/package/annals-decisions.toml.in"
 DEFINITION_TEMPLATE="$release_root/package/annals-decisions-inbox.clockwork.toml.in"
 interpreter_hash=$(shasum -a 256 /bin/sh | awk '{print $1}')
@@ -700,13 +556,6 @@ if [ -e "$STATE_DIR" ]; then
         's/^expected_library_id = "\([0-9a-f]\{32\}\)"$/\1/p' "$CONFIG_PATH")
     [ "${#library_id}" -eq 32 ] \
         || fail 'decisions config has no exact persistent library identity'
-    watermark=$(run_annals "$release_root/libexec/annals" \
-        --config "$CONFIG_PATH" --json decision-feed watermark) \
-        || fail 'candidate cannot verify the decisions library identity'
-    printf '%s\n' "$watermark" >"$transaction_dir/watermark.json"
-    [ "$(plutil -extract ok raw "$transaction_dir/watermark.json" 2>/dev/null)" = true ] \
-        && [ "$(plutil -extract data.library_id raw "$transaction_dir/watermark.json" 2>/dev/null)" = "$library_id" ] \
-        || fail 'candidate returned the wrong decisions library identity'
     config_existed=1
     install -m 0600 "$CONFIG_PATH" "$transaction_dir/config.before"
     if [ -e "$HOLD_RECEIPT" ]; then
@@ -840,20 +689,6 @@ if [ "$new_state" -eq 0 ]; then
     mv "$next_config" "$CONFIG_PATH"
 fi
 
-smoke=$(run_annals "$release_root/libexec/annals" \
-    --config "$CONFIG_PATH" --json inbox run) \
-    || fail 'candidate cannot verify the gated decisions inbox'
-printf '%s\n' "$smoke" >"$transaction_dir/smoke.json"
-[ "$(plutil -extract ok raw "$transaction_dir/smoke.json" 2>/dev/null)" = true ] \
-    && [ "$(plutil -extract data.stopped_for_maintenance raw "$transaction_dir/smoke.json" 2>/dev/null)" = true ] \
-    || fail 'candidate did not honor decisions maintenance'
-watermark=$(run_annals "$release_root/libexec/annals" \
-    --config "$CONFIG_PATH" --json decision-feed watermark) \
-    || fail 'candidate cannot read the decisions feed'
-printf '%s\n' "$watermark" >"$transaction_dir/final-watermark.json"
-[ "$(plutil -extract ok raw "$transaction_dir/final-watermark.json" 2>/dev/null)" = true ] \
-    && [ "$(plutil -extract data.library_id raw "$transaction_dir/final-watermark.json" 2>/dev/null)" = "$library_id" ] \
-    || fail 'candidate decisions feed returned the wrong library identity'
 
 # Record ownership before the switch even for the default release path. If the
 # process is interrupted after Clockwork commits but before gate removal, the

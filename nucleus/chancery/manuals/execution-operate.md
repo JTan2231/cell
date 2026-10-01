@@ -133,8 +133,7 @@ Stage the complete supported Codex runtime before installation:
 ```
 
 The selected source directory must contain `codex` and the matching
-`codex-code-mode-host`. Retain the previous runtime for recovery. Staging checks
-and seals the pair; it does not select a service runtime or import credentials.
+`codex-code-mode-host`. Retain the previous runtime for recovery. Staging copies the pair and records a manifest for normal runtime checks; it does not select a service runtime or import credentials.
 The operator selects the source release. File digests do not authenticate its
 origin. See `nucleus.invocation` for the exact supported harness and
 `nucleus.service` for staging paths and installation guarantees.
@@ -145,7 +144,7 @@ Nucleus owns its resulting private credential. Preserve existing owned
 credentials. Never put credential bytes in deployment settings.
 
 Use coordinated maintenance when replacing a daemon could lose work. The
-installer allows up to two minutes for migration, compaction, and health.
+installer starts the service without waiting for health, migration, or compaction.
 A failed cutover can restore captured programs only when the database schema
 is unchanged. A schema change prevents binary-only rollback. Authentication
 is excluded from program and database rollback.
@@ -159,11 +158,11 @@ nucleus health
 nucleus account --wait 0
 ```
 
-Verify the expected CLI, daemon, exact harness, protocol, and account before
-restoring requester admission. Deployment readiness permits a reported quota
-pause but still requires runtime readiness; a held service requires the run's
-sole drained hold. Successful installation does not reopen quota admission.
-No readiness check should submit a synthetic model job.
+Installation performs no artifact-integrity, persistent-state-integrity, or
+operational-readiness checks. The commands above are separate diagnostics.
+Ordinary daemon startup and admission keep their runtime checks. A held service
+still requires the run's sole drained hold. Installation does not reopen quota
+admission or submit a synthetic model job.
 
 ## Recover interrupted cutover
 
@@ -182,8 +181,8 @@ do not prove which executable is resident. It does not cancel or retry work,
 roll back a database, or restore an older credential. Authentication import is
 allowed only when the owned file is absent and the source was recorded.
 
-Keep the journal and candidate on failure. Verify held live health and exact
-program copies before considering recovery complete. Follow the shared manual
+Keep the journal and candidate on failure. Recovery completes after the recorded
+service setup operation succeeds. Follow the shared manual
 for group release; release no unrelated pause or failure halt.
 
 ## Recover authentication

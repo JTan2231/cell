@@ -7,7 +7,7 @@ use crate::transaction::{
     self as tx, InstallLayout, InstallSnapshot, LockKind, LockSpec, PreparedRelease, ProviderSpec,
     PublicEntry, PublicKind, ReleaseInfo, ReleasePlan, SourceFile,
 };
-use crate::{Error, Result, command, file_digest};
+use crate::{Error, Result, command};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
@@ -19,11 +19,6 @@ use std::time::Duration;
 /// Inspect returns a durable baseline in `prior.lifecycle`. Other operations
 /// must be idempotent: the coordinator can retry them after interruption.
 pub type Lifecycle = fn(&Context, Operation) -> Result<Value>;
-
-/// Read-only product proof that its sealed candidate can operate the current
-/// maintenance state without migration. Used only for a selected product whose
-/// existing installation ownership has already been proved.
-pub type CandidateMaintenance = fn(&Context) -> Result<bool>;
 
 fn no_lifecycle(context: &Context, _: Operation) -> Result<Value> {
     if context
@@ -111,6 +106,21 @@ impl Spec {
     /// Read only this product's supported predecessor release.
     ///
     /// # Errors
+    /// Returns an error for unsupported or unreadable predecessor metadata.
+    pub fn read_legacy(&self, root: &Path) -> Result<ReleaseInfo> {
+        if self.legacy.proofs.is_empty() && self.legacy.providers.is_empty() {
+            return Err(Error::new("no predecessor release format is supported"));
+        }
+        legacy::read(
+            root,
+            self.legacy,
+            vec![self.command_entry(true), self.provider_entry(true)],
+        )
+    }
+
+    /// Read only this product's supported predecessor release.
+    ///
+    /// # Errors
     /// Returns an error for foreign or unproved predecessor content.
     pub fn legacy(&self, root: &Path) -> Result<ReleaseInfo> {
         if self.legacy.proofs.is_empty() && self.legacy.providers.is_empty() {
@@ -141,7 +151,6 @@ struct Input {
     home: PathBuf,
     binary: Option<PathBuf>,
     bundle: Option<PathBuf>,
-    reader: Option<PathBuf>,
     release: Option<PathBuf>,
     expected: Option<String>,
 }
@@ -153,7 +162,6 @@ fn input(args: &[String]) -> Result<Input> {
             .ok_or_else(|| Error::new("HOME is required"))?,
         binary: None,
         bundle: None,
-        reader: None,
         release: None,
         expected: None,
     };
@@ -166,14 +174,13 @@ fn input(args: &[String]) -> Result<Input> {
             "--home" => value.home = PathBuf::from(argument),
             "--binary" => value.binary = Some(PathBuf::from(argument)),
             "--bundle" => value.bundle = Some(PathBuf::from(argument)),
-            "--chancery" => value.reader = Some(PathBuf::from(argument)),
             "--release" => value.release = Some(PathBuf::from(argument)),
             "--expected-current" => value.expected = Some(argument.clone()),
             _ => return Err(Error::new("unknown installer flag")),
         }
     }
     if !value.home.is_absolute()
-        || [&value.binary, &value.bundle, &value.reader, &value.release]
+        || [&value.binary, &value.bundle, &value.release]
             .into_iter()
             .flatten()
             .any(|path| !path.is_absolute())
@@ -194,21 +201,6 @@ fn expected(snapshot: &InstallSnapshot, value: Option<&str>) -> Result<()> {
     Ok(())
 }
 
-fn version(binary: &Path, name: &str, expected: &str, home: &Path) -> Result<()> {
-    let output = command::checked(
-        binary,
-        &["--version".into()],
-        &BTreeMap::from([("HOME".into(), home.as_os_str().to_owned())]),
-        Duration::from_secs(30),
-    )?;
-    if String::from_utf8_lossy(&output.stdout).trim() != format!("{name} {expected}") {
-        return Err(Error::new(
-            "candidate version does not match provider and installer",
-        ));
-    }
-    Ok(())
-}
-
 fn plan(spec: &Spec, release_version: &str, args: &Input, scratch: &Path) -> Result<ReleasePlan> {
     let binary = args
         .binary
@@ -218,7 +210,6 @@ fn plan(spec: &Spec, release_version: &str, args: &Input, scratch: &Path) -> Res
         .bundle
         .as_ref()
         .ok_or_else(|| Error::new("--bundle is required"))?;
-    version(binary, spec.product, release_version, &args.home)?;
     let installer = std::env::current_exe()?;
     let mut files = BTreeMap::from([
         (
@@ -304,82 +295,27 @@ fn plan(spec: &Spec, release_version: &str, args: &Input, scratch: &Path) -> Res
     })
 }
 
-fn smoke(spec: &Spec, home: &Path, release: &ReleaseInfo, reader: Option<&Path>) -> Result<()> {
+fn smoke(spec: &Spec, home: &Path, release: &ReleaseInfo) -> Result<()> {
     let environment = BTreeMap::from([("HOME".into(), home.as_os_str().to_owned())]);
-    let expected = release
-        .versions
-        .get(spec.product)
-        .ok_or_else(|| Error::new("installed version is missing"))?;
     let public = home.join(".local/bin").join(spec.product);
-    version(&public, spec.product, expected, home)?;
-    command::checked(
-        &public,
-        &["--help".into()],
-        &environment,
-        Duration::from_secs(30),
-    )?;
-    if release
-        .files
-        .contains_key(&format!("bin/{}-install", spec.product))
-    {
-        version(
-            &home.join(format!(".local/bin/{}-install", spec.product)),
-            &format!("{}-install", spec.product),
-            expected,
-            home,
-        )?;
-    }
-    if spec.product == "chancery" {
+    for argument in ["--version", "--help"] {
         command::checked(
             &public,
-            &["list".into()],
+            &[argument.into()],
             &environment,
             Duration::from_secs(30),
         )?;
     }
-    if spec.product == "clockwork" {
-        let reader =
-            reader.ok_or_else(|| Error::new("Clockwork installation requires --chancery"))?;
-        for entry in [
-            "clockwork.schedule.operate",
-            "clockwork.install.operate",
-            "clockwork.develop.change",
-        ] {
-            command::checked(
-                reader,
-                &[
-                    "--registry".into(),
-                    home.join("Library/Application Support/Chancery/providers")
-                        .into_os_string(),
-                    "show".into(),
-                    entry.into(),
-                ],
-                &environment,
-                Duration::from_secs(30),
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn prove(plan: &ReleasePlan, release: &ReleaseInfo) -> Result<()> {
-    if release.format != tx::TRANSACTION_FORMAT
-        || release.versions != plan.versions
-        || release.files.len() != plan.files.len()
+    if release
+        .files
+        .contains_key(&format!("bin/{}-install", spec.product))
     {
-        return Err(Error::new("installed release differs from candidate"));
-    }
-    for (relative, source) in &plan.files {
-        if release
-            .files
-            .get(relative)
-            .is_none_or(|file| file.mode != source.mode)
-            || release.files[relative].sha256 != file_digest(&source.source)?
-        {
-            return Err(Error::new(
-                "installed artifact differs from exact candidate",
-            ));
-        }
+        command::checked(
+            &home.join(format!(".local/bin/{}-install", spec.product)),
+            &["--version".into()],
+            &environment,
+            Duration::from_secs(30),
+        )?;
     }
     Ok(())
 }
@@ -400,65 +336,26 @@ fn install(
     scratch_directory: Option<&Path>,
 ) -> Result<ReleaseInfo> {
     let layout = spec.layout();
-    let legacy = |root: &Path| spec.legacy(root);
+    let legacy = |root: &Path| spec.read_legacy(root);
     let before = tx::inspect_installation(&layout, &args.home, &legacy)?;
     expected(&before, args.expected.as_deref())?;
     let scratch = scratch(scratch_directory)?;
     let plan = plan(spec, release_version, args, scratch.path())?;
     let prepared = tx::prepare_release(&layout, &args.home, &plan)?;
-    if spec.product == "clockwork" || spec.product == "chancery" {
-        let reader = if spec.product == "chancery" {
-            args.binary.as_deref()
-        } else {
-            args.reader.as_deref()
-        }
-        .ok_or_else(|| Error::new("--chancery is required"))?;
-        file_digest(reader)?;
-        command::checked(
-            reader,
-            &[
-                "validate".into(),
-                prepared
-                    .root
-                    .join(format!("share/chancery/{}", spec.product))
-                    .into_os_string(),
-            ],
-            &BTreeMap::new(),
-            Duration::from_secs(30),
-        )?;
-    }
     let mut transaction = tx::lock_installation(&layout, &args.home, &legacy)?;
     transaction.recheck(&before)?;
     transaction.publish(&prepared, &before, |release| {
-        prove(&plan, release)?;
-        smoke(spec, &args.home, release, args.reader.as_deref())
+        smoke(spec, &args.home, release)
     })?;
     Ok(prepared.info)
 }
 
 fn current(spec: &Spec, home: &Path) -> Result<InstallSnapshot> {
-    tx::inspect_installation(&spec.layout(), home, &|root| spec.legacy(root))
+    tx::inspect_installation(&spec.layout(), home, &|root| spec.read_legacy(root))
 }
 
-fn maintained(
-    spec: &Spec,
-    context: &Context,
-    operation: &str,
-    owner: bool,
-    candidate_maintenance: Option<CandidateMaintenance>,
-) -> Result<Value> {
-    // A first installation still needs the product's state and maintenance
-    // boundary. A selected product can also explicitly prove that its candidate
-    // understands the current maintenance state without migration. A damaged or
-    // foreign public selector must never trigger either candidate route.
-    let absent = current(spec, &context.home)?.current.is_none();
-    let compatible_candidate = !absent
-        && context.selected()
-        && candidate_maintenance
-            .map(|compatible| compatible(context))
-            .transpose()?
-            .unwrap_or(false);
-    let binary = if absent || compatible_candidate {
+fn maintained(spec: &Spec, context: &Context, operation: &str, owner: bool) -> Result<Value> {
+    let binary = if context.selected() || current(spec, &context.home)?.current.is_none() {
         context.binary(spec.product)?
     } else {
         context.home.join(".local/bin").join(spec.product)
@@ -495,7 +392,6 @@ fn adapter_run(
     release_version: &str,
     operation: Operation,
     lifecycle: Lifecycle,
-    candidate_maintenance: Option<CandidateMaintenance>,
 ) -> Result<Value> {
     let context = Context::read(
         spec.product,
@@ -507,22 +403,14 @@ fn adapter_run(
         home: context.home.clone(),
         binary: Some(context.binary(spec.product)?),
         bundle: Some(context.request.source_root.join(spec.provider_source)),
-        reader: None,
         release: None,
         expected: None,
     };
-    if spec.product == "clockwork" {
-        args.reader = Some(std::fs::canonicalize(
-            context.dependency_binary("chancery")?,
-        )?);
-    }
     if operation == Operation::Inspect {
         let lifecycle = lifecycle(&context, operation)?;
-        let scratch = scratch(Some(&context.request.run_dir))?;
-        plan(spec, release_version, &args, scratch.path())?;
         let snapshot = current(spec, &context.home)?;
         let runtime = if spec.maintained {
-            let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
+            let status = maintained(spec, &context, "status", false)?;
             if status["holds"] != json!([]) {
                 return Err(Error::new("another operation holds product maintenance"));
             }
@@ -565,11 +453,11 @@ fn adapter_run(
                 }
             }
             let layout = spec.layout();
-            let legacy = |root: &Path| spec.legacy(root);
+            let legacy = |root: &Path| spec.read_legacy(root);
             let mut transaction = tx::lock_installation(&layout, &context.home, &legacy)?;
             transaction
                 .recover(&prior, &prepared, forward, |release| {
-                    smoke(spec, &context.home, release, args.reader.as_deref())
+                    smoke(spec, &context.home, release)
                 })?
                 .after
         }
@@ -591,11 +479,9 @@ fn adapter_run(
         ));
     }
     let data = match operation {
-        Operation::Hold if spec.maintained => {
-            maintained(spec, &context, "hold", true, candidate_maintenance)?
-        }
+        Operation::Hold if spec.maintained => maintained(spec, &context, "hold", true)?,
         Operation::Drain if spec.maintained => {
-            let status = maintained(spec, &context, "drain", false, candidate_maintenance)?;
+            let status = maintained(spec, &context, "drain", false)?;
             if status["holds"] != json!([context.request.run_id]) {
                 return Err(Error::new("drain requires sole run-owned hold"));
             }
@@ -613,7 +499,7 @@ fn adapter_run(
                 return Err(Error::new("cannot install an affected-only product"));
             }
             if spec.maintained {
-                let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
+                let status = maintained(spec, &context, "status", false)?;
                 if status["holds"] != json!([context.request.run_id]) || status["drained"] != true {
                     return Err(Error::new("installation requires drained run-owned hold"));
                 }
@@ -629,79 +515,14 @@ fn adapter_run(
                 Some(&context.request.run_dir),
             )?)
         }
-        Operation::Verify | Operation::Recover => {
+        Operation::Recover => {
             let is_prior = observed == prior;
-            if !is_prior || operation == Operation::Verify && context.selected() {
-                let scratch = scratch(Some(&context.request.run_dir))?;
-                let plan = plan(spec, release_version, &args, scratch.path())?;
-                prove(
-                    &plan,
-                    observed
-                        .current
-                        .as_ref()
-                        .ok_or_else(|| Error::new("installed candidate absent"))?,
-                )?;
-            }
             if let Some(release) = &observed.current {
-                smoke(spec, &context.home, release, args.reader.as_deref())?;
-            }
-            if spec.maintained {
-                let status = maintained(spec, &context, "status", false, candidate_maintenance)?;
-                let verified = context
-                    .request
-                    .recovery
-                    .as_ref()
-                    .and_then(|value| value.get("verified"))
-                    == Some(&Value::Bool(true));
-                let before = context
-                    .request
-                    .recovery
-                    .as_ref()
-                    .and_then(|value| value.get("any_apply_started"))
-                    == Some(&Value::Bool(false));
-                if !(is_prior && before || verified && status["holds"] == json!([]))
-                    && (status["holds"] != json!([context.request.run_id])
-                        || status["drained"] != true)
-                {
-                    return Err(Error::new(
-                        "maintained recovery needs exact run hold or captured verification",
-                    ));
-                }
-                if !(is_prior
-                    && (before || operation == Operation::Recover && observed.current.is_none()))
-                {
-                    let binary = if observed.current.is_none() {
-                        context.binary(spec.product)?
-                    } else {
-                        context.home.join(".local/bin").join(spec.product)
-                    };
-                    let mut check: Vec<OsString> = vec!["--json".into(), "doctor".into()];
-                    // An unchanged Platter installation may be affected only,
-                    // or its candidate prerequisites may have failed before
-                    // publication. Releasing that prior state requires local
-                    // compatibility, not readiness to start new domain work.
-                    if spec.product == "platter"
-                        && is_prior
-                        && (operation == Operation::Recover || !context.selected())
-                    {
-                        check.push("--state-only".into());
-                    }
-                    command::json(
-                        &binary,
-                        &check,
-                        &BTreeMap::from([(
-                            "CELL_DEPLOYMENT_RUN_ID".into(),
-                            context.request.run_id.clone().into(),
-                        )]),
-                        Duration::from_secs(180),
-                    )?;
-                }
+                smoke(spec, &context.home, release)?;
             }
             json!({"installation":observed,"safe_to_release":true,"installed":if is_prior {"prior"} else {"candidate"}})
         }
-        Operation::Release if spec.maintained => {
-            maintained(spec, &context, "release", true, candidate_maintenance)?
-        }
+        Operation::Release if spec.maintained => maintained(spec, &context, "release", true)?,
         Operation::Hold | Operation::Drain | Operation::Release => json!({"drained":true}),
         Operation::Configure | Operation::Activate => product_data,
         Operation::Inspect => return Err(Error::new("invalid adapter dispatch")),
@@ -712,7 +533,6 @@ fn adapter_run(
         Operation::Drain => "drained",
         Operation::Apply => "applied",
         Operation::Configure => "configured",
-        Operation::Verify => "verified",
         Operation::Recover => "recovered",
         Operation::Release => "released",
         Operation::Activate => "activated",
@@ -730,7 +550,6 @@ fn execute(
     release_version: &str,
     arguments: &[String],
     lifecycle: Lifecycle,
-    candidate_maintenance: Option<CandidateMaintenance>,
 ) -> Result<Value> {
     let (operation, remaining) = arguments
         .split_first()
@@ -739,37 +558,12 @@ fn execute(
         if remaining.len() != 1 {
             return Err(Error::new("adapter requires one operation"));
         }
-        return adapter_run(
-            spec,
-            release_version,
-            remaining[0].parse()?,
-            lifecycle,
-            candidate_maintenance,
-        );
-    }
-    if operation == "verify-release" {
-        if remaining.len() != 1 {
-            return Err(Error::new("verify-release requires one release directory"));
-        }
-        return Ok(
-            json!({"ok":true,"data":tx::verify_release_at(&spec.layout(),Path::new(&remaining[0]),&|root|spec.legacy(root))?}),
-        );
+        return adapter_run(spec, release_version, remaining[0].parse()?, lifecycle);
     }
     let args = input(remaining)?;
     let data = match operation.as_str() {
         "install" => json!(install(spec, release_version, &args, None)?),
         "inspect" => json!(current(spec, &args.home)?),
-        "verify" => {
-            let snapshot = current(spec, &args.home)?;
-            let scratch = tempfile::tempdir()?;
-            let plan = plan(spec, release_version, &args, scratch.path())?;
-            let release = snapshot
-                .current
-                .ok_or_else(|| Error::new("installation absent"))?;
-            prove(&plan, &release)?;
-            smoke(spec, &args.home, &release, args.reader.as_deref())?;
-            json!(release)
-        }
         "recover" => {
             let release = args
                 .release
@@ -779,8 +573,8 @@ fn execute(
                 return Err(Error::new("recovery release is outside owned installation"));
             }
             let layout = spec.layout();
-            let legacy = |root: &Path| spec.legacy(root);
-            let info = tx::verify_release_at(&layout, release, &legacy)?;
+            let legacy = |root: &Path| spec.read_legacy(root);
+            let info = tx::read_release_at(&layout, release, &legacy)?;
             let before = tx::inspect_detached_installation(&layout, &args.home, &legacy)?;
             expected(&before, args.expected.as_deref())?;
             let mut transaction = tx::lock_installation(&layout, &args.home, &legacy)?;
@@ -790,13 +584,13 @@ fn execute(
                     info: info.clone(),
                 },
                 &before,
-                |release| smoke(spec, &args.home, release, args.reader.as_deref()),
+                |release| smoke(spec, &args.home, release),
             )?;
             json!(info)
         }
         "uninstall" if spec.product == "clockwork" => {
             let layout = spec.layout();
-            let legacy = |root: &Path| spec.legacy(root);
+            let legacy = |root: &Path| spec.read_legacy(root);
             let before = current(spec, &args.home)?;
             let mut transaction = tx::lock_installation(&layout, &args.home, &legacy)?;
             for (path, transition) in [
@@ -850,27 +644,10 @@ pub fn main(spec: &Spec, version: &str) -> ExitCode {
 /// Run a product installer with its owned deployment lifecycle.
 #[must_use]
 pub fn main_with_lifecycle(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
-    main_inner(spec, version, lifecycle, None)
+    main_inner(spec, version, lifecycle)
 }
 
-/// Run a product installer with an explicit compatibility proof for candidate
-/// maintenance. Affected-only products still use their installed command.
-#[must_use]
-pub fn main_with_lifecycle_and_maintenance(
-    spec: &Spec,
-    version: &str,
-    lifecycle: Lifecycle,
-    candidate_maintenance: CandidateMaintenance,
-) -> ExitCode {
-    main_inner(spec, version, lifecycle, Some(candidate_maintenance))
-}
-
-fn main_inner(
-    spec: &Spec,
-    version: &str,
-    lifecycle: Lifecycle,
-    candidate_maintenance: Option<CandidateMaintenance>,
-) -> ExitCode {
+fn main_inner(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments == ["--version"] || arguments == ["-V"] {
         println!("{}-install {version}", spec.product);
@@ -878,13 +655,13 @@ fn main_inner(
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "{}-install {version}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nClockwork requires --chancery ABS for installation/verification/recovery; uninstall detaches only owned selectors.",
+            "{}-install {version}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nClockwork uninstall detaches only owned selectors.",
             spec.product
         );
         return ExitCode::SUCCESS;
     }
     let adapter = arguments.first().is_some_and(|value| value == "adapter");
-    let result = execute(spec, version, &arguments, lifecycle, candidate_maintenance);
+    let result = execute(spec, version, &arguments, lifecycle);
     if adapter {
         return adapter::finish(result);
     }

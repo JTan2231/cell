@@ -37,10 +37,6 @@ enum Command {
     Install(CandidateArgs),
     /// Inspect the owned installation without changing it.
     Inspect(HomeArgs),
-    /// Verify the installation against the supplied exact candidate.
-    Verify(CandidateArgs),
-    /// Validate a retained release without executing its contents.
-    VerifyRelease { release: PathBuf },
     /// Restore an owned retained release using the current installer.
     Recover {
         #[arg(long)]
@@ -136,18 +132,6 @@ fn release_input(binary: PathBuf, provider_dir: PathBuf) -> Result<ReleaseInput>
     if !binary.is_absolute() || !provider_dir.is_absolute() {
         return Err(Failure::input("candidate paths must be absolute"));
     }
-    cell_install::file_digest(&provider_dir.join("provider.json"))?;
-    let provider: Value =
-        serde_json::from_slice(&std::fs::read(provider_dir.join("provider.json"))?)?;
-    if provider
-        .pointer("/provider/release")
-        .and_then(Value::as_str)
-        != Some(env!("CARGO_PKG_VERSION"))
-    {
-        return Err(Failure::input(
-            "Usher candidate requires its version-matched installer",
-        ));
-    }
     let installer = std::env::current_exe()?;
     Ok(ReleaseInput {
         binaries: BTreeMap::from([
@@ -169,8 +153,8 @@ fn retained_selector(home: &Path, release: &Path) -> Result<String> {
             "recovery release must belong to this Usher installation",
         ));
     }
-    let verified = cell_install::verify_release(&SPEC, release)?;
-    Ok(verified.current)
+    let release = cell_install::read_release(&SPEC, release)?;
+    Ok(release.current)
 }
 
 fn run(command: Command) -> Result<Value> {
@@ -186,25 +170,6 @@ fn run(command: Command) -> Result<Value> {
             )?)
         }
         Command::Inspect(args) => json!(cell_install::inspect(&SPEC, &home_path(args.home)?)?),
-        Command::Verify(args) => {
-            if args.expected_current.is_some() {
-                return Err(Failure::input(
-                    "--expected-current applies to installation, not verification",
-                ));
-            }
-            let input = release_input(args.binary, args.bundle)?;
-            json!(cell_install::verify_candidate(
-                &SPEC,
-                &home_path(args.home.home)?,
-                &input
-            )?)
-        }
-        Command::VerifyRelease { release } => {
-            if !release.is_absolute() {
-                return Err(Failure::input("retained release path must be absolute"));
-            }
-            json!(cell_install::verify_release(&SPEC, &release)?)
-        }
         Command::Recover {
             release,
             home,

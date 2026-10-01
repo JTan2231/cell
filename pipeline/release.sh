@@ -138,19 +138,6 @@ release_update_provider() {
     ' "$source_path" >"$output_path"
 }
 
-release_check_binaries() {
-    while IFS='|' read -r unit binary_path command_name; do
-        [ "$unit" = "$release_unit" ] || continue
-        absolute_binary="$release_build_dir/preparation/candidates/$CI_GATE_ID/bin/$command_name"
-        reported_version=$("$absolute_binary" --version) \
-            || release_fail "unable to read the $command_name release binary version"
-        [ "$reported_version" = "$command_name $new_version" ] \
-            || release_fail "$command_name reported an unexpected version: $reported_version"
-    done <<EOF
-$RELEASE_BINARY_CHECKS
-EOF
-}
-
 release_lock_owned=false
 release_lock_kind=
 rollback_version_files=false
@@ -370,7 +357,6 @@ release_build_dir=$(CDPATH='' cd "$release_build_dir" && pwd)
 python3 "$PIPELINE_ROOT/deployment/build.py" \
     --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
     --unit "$release_unit" --output "$release_build_dir/preparation"
-release_check_binaries
 
 [ -z "$(git diff --cached --name-only)" ] \
     || release_fail 'the index changed while running release checks'

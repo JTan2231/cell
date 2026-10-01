@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -137,7 +137,7 @@
       {"status": "declared", "statement": "The final notification relies on Email's fixed-recipient, stable-key submission and acceptance receipt. Inbox delivery remains outside manager success.", "target": "email", "kind": "control", "contract": "email.message.send"},
       {"status": "declared", "statement": "Commit reachability, merge results, patch acceptance and application, private worktrees and atomic accepted-ref updates rely on Git. No dedicated installed Chancery contract describes this dependency.", "target": "git", "kind": "external"},
       {"status": "declared", "statement": "Candidate coverage and gate evidence rely on Cell's committed-range CI dispatcher and host broker. These remain independently authoritative and have no dedicated installed Chancery contract.", "target": "cell-ci-validation", "kind": "control"},
-      {"status": "declared", "statement": "Exact-source deployment, installed-state verification and maintenance recovery rely on the Cell deployment coordinator and selected product installers; no dedicated coordinator Chancery contract is installed.", "target": "cell-deployment", "kind": "control"},
+      {"status": "declared", "statement": "Exact-source installation and maintenance recovery rely on the Cell deployment coordinator and selected product installers; no dedicated coordinator Chancery contract is installed.", "target": "cell-deployment", "kind": "control"},
       {"status": "declared", "statement": "The macOS user service relies on launchd supervision, while the manager retains domain state and singleton ownership.", "target": "launchd", "kind": "external"}
     ]
   },

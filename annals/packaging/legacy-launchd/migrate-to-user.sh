@@ -499,8 +499,6 @@ fi
 
 run_as_operator "$binary_path" --version >/dev/null
 run_as_operator "$usage_binary_path" --version >/dev/null
-run_as_operator "$LEGACY_FRONTEND" stats >/dev/null \
-    || fail 'the legacy library cannot be inspected'
 
 install -d -m 0700 "$TRANSACTION_DIR"
 install -m 0600 "$LEGACY_STATE/config.toml" "$TRANSACTION_DIR/config.toml"

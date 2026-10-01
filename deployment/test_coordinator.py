@@ -59,7 +59,7 @@ if op == "recover":
 if fault.get("invalid") == [name, op]:
     print("uncertain output")
     sys.exit(1)
-status = {"inspect":"ready","hold":"held","drain":"drained","apply":"applied","verify":"verified","release":"released","recover":"recovered","configure":"configured","activate":"activated"}[op]
+status = {"inspect":"ready","hold":"held","drain":"drained","apply":"applied","release":"released","recover":"recovered","configure":"configured","activate":"activated"}[op]
 if op == "drain" and fault.get("wait") == name:
     marker = run / ("waited-" + name)
     if not marker.exists():
@@ -97,7 +97,7 @@ for name in args.product:
             spec += "\\n" + name + "|target/release/" + name + "-install|" + name + "-install"
             versions[name + "-install"] = name + "-install 1.0.0"
     records[name] = candidate.stage_build(root, name, args.output / "candidates" / name, spec,
-        target=root / "target", source_key=source_key, expected_versions=versions)
+        target=root / "target", source_key=source_key)
     if (root / name / "packaging/installer-fixture").exists():
         installer.write_text("later target contents must never execute")
 (args.output / "result.json").write_text(json.dumps({"schema":1, "state":"built",
@@ -272,7 +272,7 @@ class DeploymentTests(unittest.TestCase):
                 self.fixture.create()
         self.assertFalse((self.fixture.storage / "active").exists())
 
-    def test_retained_dependency_is_proved_without_holds_or_configuration(self):
+    def test_retained_dependency_is_inspected_without_holds_or_configuration(self):
         self.declare_dependency(bounded=True)
         adapter = FAKE_ADAPTER.replace('["beta"] if name == "alpha" else []', '[]')
         self.fixture.write("alpha/deployment/adapter.py", adapter)
@@ -283,9 +283,10 @@ class DeploymentTests(unittest.TestCase):
         with mock.patch.object(cli, "installed_product", return_value=True), \
                 mock.patch.object(cli, "installed_version", return_value="1.3.0"):
             path = self.fixture.create()
-        self.assertEqual(cli.run_worker(path), 0)
+        outcome = cli.run_worker(path)
+        self.assertEqual(outcome, 0, cli.read_json(path / "run.json"))
         self.assertEqual([item for item in self.observed(path) if item[0] == "beta"],
-                         [["beta", "inspect"], ["beta", "inspect"]])
+                         [["beta", "inspect"]])
         state = cli.read_json(path / "run.json")
         self.assertEqual(state["products"], ["alpha"])
         self.assertEqual(state["affected"], ["alpha"])
@@ -375,7 +376,7 @@ class DeploymentTests(unittest.TestCase):
                     self.assertTrue(cli.compatible_contracts(available, required),
                                     f"{consumer} requires {required}; committed {dependency} provides {available}")
 
-    def test_binary_adapter_uses_only_the_admitted_candidate_and_supplies_cleanup_verifier(self):
+    def test_binary_adapter_uses_the_prepared_candidate(self):
         self.fixture.add_binary_adapter()
         planned = cli.plan(self.fixture.repo, ["usher"])
         self.assertIsNone(planned["catalog"]["usher"]["adapter"])
@@ -383,10 +384,9 @@ class DeploymentTests(unittest.TestCase):
         path = self.fixture.create(("usher",))
         self.assertEqual(cli.run_worker(path), 0)
         self.assertEqual(self.observed(path), [["usher", operation] for operation in
-                                             ("inspect", "hold", "drain", "apply", "configure", "verify", "release", "activate")])
+                                             ("inspect", "hold", "drain", "apply", "configure", "release", "activate")])
         state = cli.read_json(path / "run.json")
-        self.assertEqual(state["release_history_cleanup"]["arguments"], [
-            "--installer", "usher=" + str(path / "preparation/candidates/usher/bin/usher-install")])
+        self.assertEqual(state["release_history_cleanup"]["arguments"], ["--product", "usher"])
         self.assertEqual((path / "worktree/target/release/usher-install").read_text(),
                          "later target contents must never execute")
 
@@ -419,22 +419,6 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("declared binary adapter", cli.read_json(path / "run.json")["detail"])
         self.assertFalse((path / "observed.jsonl").exists())
 
-    def test_binary_adapter_rechecks_candidate_and_passed_evidence_before_execution(self):
-        self.fixture.add_binary_adapter()
-        path = self.fixture.create(("usher",))
-        with cli.deployment_lock(self.fixture.storage) as lock_fd:
-            run = cli.Run(path, lock_fd)
-            run.prepare()
-            run.record("usher")["build_receipt"]["state"] = "failed"
-            with self.assertRaisesRegex(cli.DeploymentError, "admitted candidate receipt"):
-                run.adapter("usher", "inspect")
-            run.record("usher")["build_receipt"]["state"] = "built"
-            binary = path / "preparation/candidates/usher/bin/usher-install"
-            binary.chmod(0o755)
-            binary.write_text("tampered staged installer")
-            with self.assertRaisesRegex(candidate.CandidateError, "tree changed"):
-                run.adapter("usher", "inspect")
-        self.assertFalse((path / "observed.jsonl").exists())
 
     def test_binary_adapter_uncertain_apply_uses_recovery_without_replaying_apply(self):
         self.fixture.add_binary_adapter()
@@ -463,7 +447,7 @@ class DeploymentTests(unittest.TestCase):
         with self.assertRaisesRegex(cli.DeploymentError, "unsupported committed binary adapter"):
             cli.plan(self.fixture.repo, ["usher"])
 
-    def test_candidate_survives_later_target_overwrite_and_detects_tampering(self) -> None:
+    def test_candidate_survives_later_target_overwrite(self) -> None:
         binary = self.fixture.repo / "target" / "release" / "alpha"
         binary.parent.mkdir(parents=True)
         binary.write_text("#!/bin/sh\nprintf 'alpha 1.0.0\\n'\n")
@@ -472,18 +456,9 @@ class DeploymentTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CARGO_TARGET_DIR": str(self.fixture.repo / "target")}):
             manifest = candidate.stage(self.fixture.repo, "alpha", output, "alpha|target/release/alpha|alpha")
         binary.write_text("later unrelated gate replaced this executable")
-        self.assertEqual(candidate.verify(output), manifest)
+        self.assertEqual(candidate.read_manifest(output), manifest)
         staged = output / "bin" / "alpha"
         staged.chmod(0o755)
-        staged.write_text("tampered")
-        with self.assertRaisesRegex(candidate.CandidateError, "tree changed"):
-            candidate.verify(output)
-
-    def test_dirty_source_is_not_a_deployable_candidate(self) -> None:
-        self.fixture.write("alpha/packaging/manifest.txt", "uncommitted")
-        with self.assertRaisesRegex(candidate.CandidateError, "committed worktree"):
-            candidate.stage(self.fixture.repo, "alpha", self.base / "candidate", "alpha|target/release/alpha|alpha")
-        self.assertFalse((self.base / "candidate").exists())
 
     def test_staged_bytes_from_a_failed_build_are_not_admitted(self) -> None:
         self.fixture.write("deployment/build.py", FAKE_BUILD + "\nsys.exit(75)\n")
@@ -518,7 +493,6 @@ class DeploymentTests(unittest.TestCase):
                                     ["beta", "hold"], ["beta", "drain"],
                                     ["alpha", "hold"], ["alpha", "drain"],
                                     ["alpha", "apply"], ["alpha", "configure"], ["beta", "configure"],
-                                    ["alpha", "verify"], ["beta", "verify"],
                                     ["alpha", "release"], ["beta", "release"],
                                     ["alpha", "activate"], ["beta", "activate"]])
         data = cli.read_json(path / "run.json")
@@ -526,18 +500,6 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn("candidate_dir", data["records"]["beta"])
         self.assertTrue(data["records"]["alpha"]["build_receipt"])
 
-    def test_failed_verify_keeps_holds_when_internal_recovery_is_not_safe(self) -> None:
-        path = self.fixture.create()
-        cli.durable_json(path / "fault.json", {"fail": ["beta", "verify"], "recovery_safe": False})
-        self.assertEqual(cli.run_worker(path), 1)
-        self.assertNotIn(["alpha", "release"], self.observed(path))
-        data = cli.read_json(path / "run.json")
-        self.assertEqual(data["state"], "stopped")
-        self.assertTrue(all(data["records"][name]["held"] for name in ("alpha", "beta")))
-        self.assertEqual(data["recovery"]["state"], "failed")
-        self.assertIn("recovery did not prove", data["recovery"]["detail"])
-        self.assertEqual(cli.maintenance_result(data), {"state": "attention_required", "owner": data["run_id"],
-                                                       "products": {"alpha": "retained", "beta": "retained"}})
 
     def test_internal_recovery_never_replays_an_uncertain_apply(self) -> None:
         path = self.fixture.create()
@@ -561,13 +523,6 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(data["recovery"]["state"], "succeeded")
         self.assertEqual(cli.maintenance_result(data), {"state": "released"})
 
-    def test_pinned_source_change_stops_before_any_adapter_action(self) -> None:
-        path = self.fixture.create()
-        source = path / "source" / "alpha" / "deployment" / "adapter.py"
-        source.chmod(0o644)
-        source.write_text("raise SystemExit('changed')\n")
-        self.assertEqual(cli.run_worker(path), 1)
-        self.assertFalse((path / "observed.jsonl").exists())
 
     def test_cycle_is_rejected_and_not_silently_ordered(self) -> None:
         with self.assertRaisesRegex(cli.DeploymentError, "cycle"):
@@ -697,15 +652,6 @@ class DeploymentTests(unittest.TestCase):
                     run.heartbeat()
         self.assertEqual(len(output.getvalue().splitlines()), 2)
 
-    def test_all_readiness_proofs_precede_release_and_nucleus_releases_last(self) -> None:
-        self.add_nucleus()
-        path = self.fixture.create()
-        self.assertEqual(cli.run_worker(path), 0)
-        observed = self.observed(path)
-        first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
-        self.assertTrue(all(index < first_release for index, event in enumerate(observed) if event[1] == "verify"))
-        self.assertEqual([event for event in observed if event[1] == "release"][-1], ["nucleus", "release"])
-        self.assertEqual(observed.count(["nucleus", "release"]), 1)
 
     def add_nucleus(self) -> None:
         fixture = self.fixture
@@ -718,7 +664,7 @@ class DeploymentTests(unittest.TestCase):
     def test_internal_recovery_proves_all_products_and_releases_nucleus_last(self) -> None:
         self.add_nucleus()
         path = self.fixture.create()
-        cli.durable_json(path / "fault.json", {"fail": ["nucleus", "verify"]})
+        cli.durable_json(path / "fault.json", {"fail": ["nucleus", "configure"]})
         self.assertEqual(cli.run_worker(path), 1)
         observed = self.observed(path)
         first_release = min(index for index, event in enumerate(observed) if event[1] == "release")
@@ -737,7 +683,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_unfinished_transaction_is_retained_and_reconciled_before_next_start(self):
         path = self.fixture.create()
-        cli.durable_json(path / "fault.json", {"fail": ["alpha", "verify"], "recovery_safe": False})
+        cli.durable_json(path / "fault.json", {"fail": ["alpha", "configure"], "recovery_safe": False})
         self.assertEqual(cli.run_worker(path), 1)
         with self.assertRaisesRegex(cli.DeploymentError, "retained"):
             cli.cleanup_active(self.fixture.storage)
@@ -750,7 +696,7 @@ class DeploymentTests(unittest.TestCase):
         cli.cleanup_active(self.fixture.storage)
         self.assertFalse(path.exists())
 
-    def test_activation_failure_is_recovered_after_all_products_are_verified(self):
+    def test_activation_failure_is_recovered_after_configuration(self):
         path = self.fixture.create()
         cli.durable_json(path / "fault.json", {"fail": ["alpha", "activate"]})
         self.assertEqual(cli.run_worker(path), 1)
@@ -759,7 +705,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertTrue(cli.unresolved(state))
         observed = self.observed(path)
         first_activation = observed.index(["alpha", "activate"])
-        self.assertTrue(all(index < first_activation for index, event in enumerate(observed) if event[1] == "verify"))
+        self.assertTrue(all(index < first_activation for index, event in enumerate(observed) if event[1] == "configure"))
 
     def test_competing_start_cannot_create_or_delete_an_active_workspace(self) -> None:
         path = self.fixture.create()

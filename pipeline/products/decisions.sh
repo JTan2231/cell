@@ -25,8 +25,6 @@ sh|decisions/packaging/macos/krisis
 sh|decisions/packaging/macos/krisis-observer'
 CI_PLIST_CHECKS='always|convert|decisions/packaging/macos/hooks.json'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-CI_BINARY_CHECKS='krisis|target/release/krisis|krisis
-krisis|target/release/krisis-install|krisis-install'
 RELEASE_UNITS='krisis|Krisis|package|decisions/crates/decisions/Cargo.toml|krisis-|1'
 RELEASE_COMPANION_MANIFESTS='krisis|decisions/crates/krisis-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1

@@ -1,6 +1,6 @@
 {
   "id": "emt.installation.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -51,10 +51,10 @@
     "EMT owns its configuration, admission, state, maintenance holds and installation. Clockwork owns scheduling and exact failure-halt continuation; Nucleus owns jobs; Email owns transport and credentials."
   ],
   "success": [
-    "Verify matching program/provider, valid configuration and schema, known maintenance counts and preserved or explicitly requested schedule, pause and exact halt intent. Interpret Email acceptance and product success separately."
+    "Complete program and state setup, known maintenance counts and preserved or requested schedule, pause and halt intent. Installation does not establish readiness. Interpret Email acceptance and domain success separately."
   ],
   "failure_and_recovery": [
-    "Stop on missing authority or dependencies, unknown drain, failed backup verification, unestablished hold ownership or initialized direct selector recovery. Use maintained coordinator recovery with the original receipt, backup and captured intent; preserve uncertain exchanges and mail identities."
+    "Stop on missing authority, failed setup, unknown drain, unestablished hold ownership or initialized direct selector recovery. Use coordinator recovery with original receipt, backup and intent; preserve uncertain exchanges and mail identities."
   ],
   "privacy": [
     "Correspondence and pointers remain private and retained. Nucleus and email providers keep separate copies. Logs and ordinary status omit bodies."
@@ -67,8 +67,8 @@
     },
     {
       "id": "emt.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "emt.quota-notices",
@@ -127,13 +127,13 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "emt/worker selects the exact Clockwork binding; OWNER identifies the operation hold; INCIDENT_ID selects exact halt continuation; backup digests and the migration receipt preserve recovery identity."
+        "statement": "emt/worker selects the exact Clockwork binding; OWNER identifies the operation hold; INCIDENT_ID selects exact halt continuation; backup paths and the migration receipt preserve recovery identity."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verification reads selected local installation, configuration, doctor, schedule and maintenance observations at their boundaries; receiving permission and final delivery remain not_probed by doctor."
+        "statement": "Installation performs setup without artifact-integrity, state-integrity or operational-readiness checks. Ordinary doctor observations remain separate; receiving permission and final delivery remain not_probed by doctor."
       },
       {
         "status": "unspecified",
@@ -149,11 +149,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Prepare dependencies and refresh compatible Clockwork brokers before routing. Coordinated initialized updates capture intent, hold/drain, preserve migration evidence, install matched bytes, select a disabled exact definition and restore captured intent only after verification."
+        "statement": "Prepare dependencies and refresh Clockwork brokers before routing. Coordinated initialized updates capture intent, hold/drain, preserve migration evidence, install bytes, select a disabled definition and restore captured intent after configuration."
       },
       {
         "status": "declared",
-        "statement": "Fresh valid deployment activates after verification unless explicit paused/enabled settings override. An existing absent binding stays absent unless activation is explicitly requested. Recovery reuses original backup and captured intent; direct initialized selector recovery is unsupported."
+        "statement": "Fresh deployment activates after configuration unless explicit paused/enabled settings override. An existing absent binding stays absent unless activation is requested. Recovery reuses original backup and intent; direct initialized selector recovery is unsupported."
       }
     ],
     "operational_limits": [
@@ -223,7 +223,7 @@
     "Initialize paused state, configure drained work, inspect doctor, then resume and enable only authorized intent.",
     "Inspect separate pause, schedule, holds and exact halt evidence; approve exact failure-halt continuation separately.",
     "Hold with an exact owner, drain known work, back up private state and preserve original migration evidence before release.",
-    "Verify matched publication and preserved or explicitly requested operator intent; retain unresolved holds on recovery failure."
+    "Inspect selected release metadata and preserved or explicitly requested operator intent; retain unresolved holds on recovery failure."
   ],
   "checkpoints": [
     "The selected EMT binary and provider versions match.",
@@ -235,7 +235,7 @@
     "Preserve existing pauses, disabled bindings and other maintenance owners."
   ],
   "stop_when": [
-    "Ownership, drained state, backup compatibility or dependency readiness cannot be established.",
+    "Ownership or drained state is unknown, or a setup operation fails.",
     "An initialized update attempts direct selector recovery."
   ]
 }

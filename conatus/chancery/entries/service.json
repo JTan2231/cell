@@ -1,6 +1,6 @@
 {
   "id": "conatus.service",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -23,10 +23,10 @@
     "Conatus owns installation selection, product maintenance, generated definitions and output. Clockwork owns registration, activation and incidents. Annals and Email own their domain readiness and outcomes."
   ],
   "success": [
-    "Integrity and selector observations establish the packaged release. Binding and history observations establish activation; Conatus receipts separately establish domain work."
+    "Selection metadata identifies the packaged release. Binding and history observations establish activation; Conatus receipts separately establish domain work."
   ],
   "failure_and_recovery": [
-    "Stop on conflicting selector, failed integrity, incoherent configuration or unresolved admission. Recover only an exact retained release and its own operation hold.",
+    "Stop on conflicting selectors, failed setup or unresolved admission. Recover an exact retained release and release only the operation's own hold.",
     "Clockwork scheduling incidents require explicit continuation approval. Deployment, definition switch and Conatus resume cannot clear an incident or retry failed domain work."
   ],
   "privacy": [
@@ -40,10 +40,6 @@
     {
       "label": "Inspect selection",
       "invocation": "conatus-install inspect"
-    },
-    {
-      "label": "Verify release",
-      "invocation": "conatus-install verify-release ABS_RELEASE"
     },
     {
       "label": "Recover retained release",
@@ -99,13 +95,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Packaging reports release selection and integrity independently of state. Definition receipt identifies key, release and path with registered:false and activated:false. Config exposes only persistent dependency and library selections; maintenance reports durable admission and drain."
+        "statement": "Packaging reports release selection without state-integrity, artifact-integrity, or readiness checks. Definition receipts identify key, release and path with registered:false and activated:false. Config exposes dependency and library selections; maintenance reports admission and drain."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installed program and provider are one matched immutable release, with complete bundle bytes included in identity and integrity. A definition pins that release. Selection is not readiness; activation and exit-zero process are not retention, interpretation or email delivery."
+        "statement": "Installed program and provider share an immutable release, with bundle bytes included in identity. A definition pins that release. Selection is not readiness; activation and exit-zero process are not domain success."
       }
     ],
     "identity_and_units": [
@@ -117,7 +113,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Inspect and verify describe the selected packaged release. Both bindings are independently captured and restored during deployment. Clockwork history describes process activations while Conatus domain receipts describe product work."
+        "statement": "Inspect describes selected release metadata. Both bindings are captured and restored during deployment. Clockwork history describes activations while Conatus receipts describe domain work."
       },
       {
         "status": "unspecified",

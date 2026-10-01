@@ -1,6 +1,6 @@
 {
   "id": "chancery.bundle.validate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "develop",
   "support": "supported",
@@ -88,7 +88,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Standalone validation covers the selected manifest and every indexed overview, entry, and manual at its read boundary. Unindexed objects are ignored by the reader, while release packaging validates the complete tree. External contracts are not checked by standalone validation."
+        "statement": "Standalone validation covers the selected manifest and every indexed overview, entry, and manual at its read boundary. Unindexed objects are ignored by the reader, while installation copies the complete supplied tree without validation. External contracts are not checked by standalone validation."
       }
     ],
     "access": [

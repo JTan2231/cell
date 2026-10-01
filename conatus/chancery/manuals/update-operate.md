@@ -156,8 +156,7 @@ create an open-ended retry or infer failure from runtime status alone.
    binding selections. Establish maintenance and drain when admitted work cannot
    tolerate replacement. Use shared coordinated deployment for coupled products.
 2. Select a previously validated candidate program and its matching complete
-   provider bundle. Preserve the exact candidate bytes for selected-release
-   verification after installation.
+   provider bundle.
 3. Install with the expected current selection:
 
    ```sh
@@ -167,18 +166,10 @@ create an open-ended retry or infer failure from runtime status alone.
    Use the observed `releases/HASH` instead of `absent` for upgrade. Packaging
    commands accept `--home ABS_HOME`. Installation selects programs and published
    documentation only; it initializes no runtime state or schedule.
-4. Run `conatus-install inspect`, then verify the selected release against the
-   candidate and its retained integrity manifest:
-
-   ```sh
-   conatus-install verify --binary ABS_BINARY --bundle ABS_BUNDLE
-   conatus-install verify-release ABS_RELEASE
-   ```
-
-   Stop on selector conflict or failed integrity verification. Run
-   `conatus --register-usage` after successful installation or update.
-5. Verify product config, status and dependency readiness separately before
-   restoring admission or activation.
+4. Run `conatus-install inspect` to read selection metadata. Installation performs
+   no artifact-integrity, persistent-state-integrity, or dependency-readiness checks.
+5. Run `conatus --register-usage` to register the installed commands. Product
+   config, status, and dependency diagnostics remain separate operations.
 
 Recover only to an exact retained release:
 
@@ -186,8 +177,7 @@ Recover only to an exact retained release:
 conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
 ```
 
-Verify release integrity, selected program and provider, then product state and
-bindings. Recovery does not revert the database, Annals library or Clockwork
+Inspect the selected release metadata and preserved bindings. Recovery does not revert the database, Annals library or Clockwork
 selection. Older releases can ignore want archive state; stop if that would
 violate the required active-want filtering.
 
@@ -267,7 +257,7 @@ route below acquires its own holds; do not pre-acquire a foreign hold for it.
 
    Holds survive interruption. Drain includes the prior runner lock. Stop on
    unresolved admission or a hold owned by another operation.
-3. Perform the intended attended operation. Verify selected release integrity,
+3. Perform the intended attended operation. Inspect selected release metadata,
    product configuration and the relevant dependency or domain receipts.
    After interruption, complete coherent recovery while preserving the hold.
 4. Release only `OWNER` with `conatus maintenance release OWNER`. Restore only

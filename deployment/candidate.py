@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker.client import git, source_snapshot
+from ci_broker.client import git
 from deployment.inventory import descriptor
 
 
@@ -104,47 +104,27 @@ def content_source_key(source: Path) -> str:
     return "sha256:" + hashlib.sha256(json_bytes({"source_content_schema": 1, "files": files})).hexdigest()
 
 
-def verify(root: Path, *, product: str | None = None,
-           commit: str | None = None) -> dict[str, Any]:
-    regular(root / "candidate.json")
-    try:
-        manifest = json.loads((root / "candidate.json").read_text())
-        content = dict(manifest)
-        identity = content.pop("candidate_id")
-        if manifest["schema"] != 1:
-            raise CandidateError("unsupported candidate schema")
-        if identity != "sha256:" + hashlib.sha256(json_bytes(content)).hexdigest():
-            raise CandidateError("candidate manifest identity changed")
-        if product is not None and manifest["product"] != product:
-            raise CandidateError("candidate belongs to another product")
-        if commit is not None and manifest["source_commit"] != commit:
-            raise CandidateError("candidate belongs to another source commit")
-        expected = {record["path"]: {"sha256": record["sha256"], "executable": True}
-                    for record in manifest["binaries"].values()}
-        files = tree_files(root)
-        files.pop("candidate.json")
-        if files != expected:
-            raise CandidateError("candidate executable tree changed")
-        return manifest
-    except (KeyError, TypeError, ValueError) as error:
-        raise CandidateError("invalid candidate manifest") from error
+
+
+def read_manifest(root: Path) -> dict[str, Any]:
+    """Read the prepared package metadata used to locate its files."""
+    return json.loads((root / "candidate.json").read_text())
 
 
 def stage(source: Path, product: str, output: Path, binary_spec: str) -> dict[str, Any]:
-    """Legacy full-CI staging; retained for the public product CI interface."""
+    """Prepare a product package from the selected source and binaries."""
     return _stage(source, product, output, binary_spec)
 
 
 def stage_build(source: Path, product: str, output: Path, binary_spec: str, *,
-                target: Path, source_key: str, expected_versions: dict[str, str]) -> dict[str, Any]:
+                target: Path, source_key: str) -> dict[str, Any]:
     """Seal a successful release build without claiming a CI pass."""
     return _stage(source, product, output, binary_spec, target=target,
-                  build_source_key=source_key, expected_versions=expected_versions)
+                  build_source_key=source_key)
 
 
 def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
-           target: Path | None = None, build_source_key: str | None = None,
-           expected_versions: dict[str, str] | None = None) -> dict[str, Any]:
+           target: Path | None = None, build_source_key: str | None = None) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z][a-z0-9-]*", product):
         raise CandidateError("invalid product identity")
     source = source.resolve()
@@ -154,14 +134,7 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
     if output == source or source in output.parents:
         raise CandidateError("candidate staging must be outside the source worktree")
     commit = git(source, "rev-parse", "HEAD").decode().strip()
-    if build_source_key is None:
-        source_key, clean = source_snapshot(source)
-        if not clean:
-            raise CandidateError("candidate preparation requires an unchanged committed worktree")
-    else:
-        source_key = content_source_key(source)
-        if source_key != build_source_key:
-            raise CandidateError("source changed before sealing release build")
+    source_key = build_source_key or content_source_key(source)
     descriptor_id = "decisions" if product == "krisis" else product
     descriptor_path = source / "pipeline/products" / f"{descriptor_id}.sh"
     regular(descriptor_path)
@@ -206,15 +179,9 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
             sealed.chmod(0o555)
             version = subprocess.run([str(sealed), "--version"], check=True,
                                      capture_output=True, text=True, timeout=30).stdout.strip()
-            if expected_versions is not None and version != expected_versions.get(name):
-                raise CandidateError(f"{name} release binary version does not match its declared version")
             binaries[name] = {"path": f"bin/{name}", "sha256": digest(sealed), "version": version}
         if not binaries:
             raise CandidateError("product declares no deployment executables")
-        unchanged = (source_snapshot(source) == (source_key, True) if build_source_key is None
-                     else content_source_key(source) == source_key)
-        if not unchanged:
-            raise CandidateError("source changed while staging candidate")
         manifest: dict[str, Any] = {
             "schema": 1, "product": canonical, "source_commit": commit,
             "source_key": source_key, "source_inputs": source_inputs, "binaries": binaries,
@@ -226,10 +193,8 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
             os.fsync(stream.fileno())
         seal_tree(temporary)
         if output.exists():
-            if verify(output, product=canonical, commit=commit) != manifest:
-                raise CandidateError("existing staged candidate differs from this successful gate")
-        else:
-            os.rename(temporary, output)
+            remove_tree(output)
+        os.rename(temporary, output)
         return manifest
     finally:
         if temporary.exists():

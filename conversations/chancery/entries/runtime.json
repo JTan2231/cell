@@ -1,11 +1,11 @@
 {
   "id": "conversations.runtime",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Understand Conversations runtime and installation guarantees",
-  "summary": "Select the local Codex reader, interpret readiness and diagnostic privacy, and rely on short-lived process cleanup and verified release selectors.",
+  "summary": "Select the local Codex reader, interpret readiness and diagnostic privacy, and rely on short-lived process cleanup and owned release selectors.",
   "use_when": [
     "Executable or host selection, App Server diagnostic privacy, process ownership, readiness, installation identity, or recovery guarantees must be understood."
   ],
@@ -18,16 +18,16 @@
     "Authorized installation and recovery change product and provider selectors, but start no service, import no credential, and read no transcript."
   ],
   "authority": [
-    "Conversations owns configuration, private process cleanup, and verified release publication.",
+    "Conversations owns configuration, private process cleanup, and release publication.",
     "The ChatGPT app owns its bundled Codex updates; App Server owns source availability and compatibility."
   ],
   "success": [
     "The selected executable completes the requested operation and its private launch is cleaned up.",
-    "Installation selects matching binary, installer, and bundle bytes with a verified content identity; separate doctor checks live readiness."
+    "Installation selects supplied binary, installer, and bundle bytes; separate doctor checks live readiness."
   ],
   "failure_and_recovery": [
     "A selected executable or stable identity failure stops without fallback.",
-    "Invalid or foreign selectors and tampered releases are rejected. Failed post-switch checks restore prior selectors or detach when restoration cannot be verified."
+    "Foreign public selectors and stale selections are rejected. File-operation or basic execution failures restore prior selectors when possible."
   ],
   "privacy": [
     "Host references omit the raw platform UUID; caller-owned output and inherited diagnostics can be private.",
@@ -55,13 +55,13 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "Current-user callers and local Rust consumers may rely on executable selection, host identity, diagnostics, process cleanup, readiness observations, and installation integrity."
+        "statement": "Current-user callers and local Rust consumers may rely on executable selection, host identity, diagnostics, process cleanup, readiness observations, and installation metadata."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A selected executable can launch a compatible App Server; manual installation uses validated matching artifacts and authorized product-owned selectors."
+        "statement": "A selected executable can launch a compatible App Server; manual installation uses supplied artifacts and authorized product-owned selectors."
       }
     ],
     "inputs": [
@@ -91,7 +91,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Doctor reads the invocation-time App Server metadata view; each selected release is verified against its complete manifest and component hashes."
+        "statement": "Doctor reads the invocation-time App Server metadata view; installation reads recorded metadata without checking artifact integrity."
       },
       {
         "status": "unsupported",
@@ -107,7 +107,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One private process group and its inherited App Server descendants are terminated on return or error; unrelated processes remain outside cleanup. Product-before-catalog locks serialize atomic selector publication; stale-current guards, restoration, and verified retained-release recovery preserve ownership."
+        "statement": "One private process group and its inherited App Server descendants are terminated on return or error; unrelated processes remain outside cleanup. Product-before-catalog locks serialize atomic selector publication; stale-current guards, restoration, and retained-release recovery preserve ownership."
       }
     ],
     "operational_limits": [

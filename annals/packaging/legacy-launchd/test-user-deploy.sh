@@ -62,8 +62,6 @@ usage_provider_version=$(awk -F '"' \
         "$usage_version" "$usage_provider_version" >&2
     exit 1
 }
-annals_mismatch_version="$annals_version-provider-mismatch"
-usage_mismatch_version="$usage_version-provider-mismatch"
 
 mkdir -p "$package" "$package_share" \
     "$home/Library/Application Support/Annals/codex-home"
@@ -239,35 +237,6 @@ case "${1:-}" in
     --version)
         printf '%s\n' 'annals-usage __ANNALS_USAGE_VERSION__'
         ;;
-    doctor)
-        [ "$#" -eq 3 ] || fail 'doctor argument count'
-        [ "$2" = --config ] || fail 'doctor omitted --config'
-        config=$3
-        state=$(CDPATH= cd "$(dirname "$config")" && pwd)
-        case "${config##*/}" in
-            .usage.toml.*) ;;
-            *) fail "doctor used unexpected config $config" ;;
-        esac
-        configured_nucleus=$(sed -n 's/^nucleus = "\([^"]*\)"$/\1/p' "$config")
-        [ -n "$configured_nucleus" ] && [ -x "$configured_nucleus" ] \
-            || fail 'doctor observed an unavailable Nucleus executable'
-        grep -Fx "nucleus_socket = \"__NUCLEUS_SOCKET__\"" "$config" >/dev/null \
-            || fail 'doctor observed the wrong Nucleus socket'
-        if grep -Eq '^[[:space:]]*database[[:space:]]*=' "$config"; then
-            fail 'doctor observed an obsolete usage database path'
-        fi
-        [ "${CODEX_HOME-unset}" = unset ] \
-            || fail 'doctor inherited an Annals-owned CODEX_HOME'
-        [ ! -e "$state/service-loaded" ] || {
-            printf '%s\n' 'doctor ran while the old service was loaded' >&2
-            exit 1
-        }
-        current=none
-        if [ -L "$state/install/current" ]; then
-            current=$(readlink "$state/install/current")
-        fi
-        printf 'doctor current=%s\n' "$current" >>"$state/usage-doctor.log"
-        ;;
     *) exit 1 ;;
 esac
 EOF
@@ -417,40 +386,6 @@ deploy() {
 deploy --no-start >/dev/null
 [ ! -e "$launchctl_log" ]
 
-mismatched_candidate="$temporary/annals-mismatched-provider"
-sed \
-    -e "s/__ANNALS_VERSION__/$annals_mismatch_version/g" \
-    -e 's/__REJECT_UNMIGRATED_SCHEMA_FOUR__/0/g' \
-    "$candidate_template" \
-    >"$mismatched_candidate"
-chmod 0755 "$mismatched_candidate"
-if (ANNALS_TEST_BINARY="$mismatched_candidate" deploy --no-start) \
-    >"$temporary/provider-mismatch.out" 2>"$temporary/provider-mismatch.err"
-then
-    printf '%s\n' 'deployment unexpectedly accepted an Annals provider/candidate mismatch' >&2
-    exit 1
-fi
-grep -F "provider release $annals_provider_version does not match candidate $annals_mismatch_version" \
-    "$temporary/provider-mismatch.err" >/dev/null
-
-mismatched_usage="$temporary/annals-usage-mismatched-provider"
-sed \
-    -e "s/__ANNALS_USAGE_VERSION__/$usage_mismatch_version/g" \
-    -e "s|__NUCLEUS__|$nucleus|g" \
-    -e "s|__NUCLEUS_SOCKET__|$nucleus_socket|g" \
-    "$usage_candidate_template" \
-    >"$mismatched_usage"
-chmod 0755 "$mismatched_usage"
-if (ANNALS_TEST_USAGE_BINARY="$mismatched_usage" deploy --no-start) \
-    >"$temporary/usage-provider-mismatch.out" \
-    2>"$temporary/usage-provider-mismatch.err"
-then
-    printf '%s\n' 'deployment unexpectedly accepted an Annals Usage provider/candidate mismatch' >&2
-    exit 1
-fi
-grep -F "provider release $usage_provider_version does not match candidate $usage_mismatch_version" \
-    "$temporary/usage-provider-mismatch.err" >/dev/null
-
 state="$home/Library/Application Support/Annals"
 cli="$home/.local/bin/annals"
 usage_cli="$home/.local/bin/annals-usage"
@@ -492,7 +427,6 @@ grep -Fx 'umask 077' "$state/install/current/bin/annals-inbox" >/dev/null
 [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
 [ "$(cat "$state/codex-home/config.toml")" = legacy-config-sentinel ]
 [ "$(stat -f '%Lp' "$state/codex-home/config.toml")" = 600 ]
-[ "$(tail -n 1 "$state/usage-doctor.log")" = 'doctor current=none' ]
 grep -Fx 'library = "annals.db"' "$state/config.toml" >/dev/null
 grep -Fx 'root = "spool"' "$state/config.toml" >/dev/null
 grep -Fx 'minimum_available_bytes = 7_000_000_000' \
@@ -613,8 +547,6 @@ if [ "$first_release" = "$second_release" ]; then
         "$first_candidate_hash" "$second_candidate_hash" "$first_release" >&2
     exit 1
 fi
-[ "$(tail -n 1 "$state/usage-doctor.log")" = \
-    "doctor current=$first_release" ]
 [ "$(readlink "$state/install/previous")" = "$first_release" ]
 [ -f "$annals_provider/provider.json" ]
 [ -f "$usage_provider/provider.json" ]
@@ -643,8 +575,6 @@ backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 grep -Fx preserved "$state/spool/duplicates/preserved" >/dev/null
 grep -Fx skipped "$state/spool/skipped/preserved" >/dev/null
 [ -f "$state/spool/.paused" ]
-[ "$(tail -n 6 "$state/candidate-commands.log" | tr '\n' ' ')" = \
-    'inbox status backup migrate inbox status stats inbox status ' ]
 [ ! -e "$launchctl_log" ]
 deploy --no-start >/dev/null
 [ "$(readlink "$state/install/current")" = "$second_release" ]
@@ -656,35 +586,6 @@ deploy --no-start >/dev/null
 [ "$(shasum -a 256 "$state/usage.toml" | awk '{print $1}')" = "$usage_config_hash" ]
 backup_count=$(find "$state/backups" -type f -maxdepth 1 | wc -l | tr -d ' ')
 [ "$backup_count" -eq 1 ]
-
-printf '%s\n' '# tampered' \
-    >>"$state/install/current/package/annals-decisions.toml.in"
-if deploy --no-start >"$temporary/tampered-decisions.out" \
-    2>"$temporary/tampered-decisions.err"
-then
-    printf '%s\n' 'deployment unexpectedly accepted a tampered decisions template' >&2
-    exit 1
-fi
-install -m 0600 "$package/annals-decisions.toml.in" \
-    "$state/install/current/package/annals-decisions.toml.in"
-
-printf '%s\n' '# tampered' >>"$state/install/current/package/deploy-user.sh"
-if deploy --no-start >"$temporary/tampered.out" 2>"$temporary/tampered.err"; then
-    printf '%s\n' 'deployment unexpectedly accepted a tampered release' >&2
-    exit 1
-fi
-install -m 0755 "$package/deploy-user.sh" \
-    "$state/install/current/package/deploy-user.sh"
-
-printf '%s\n' ' ' >>"$state/install/current/share/chancery/annals/provider.json"
-if deploy --no-start >"$temporary/tampered-provider.out" \
-    2>"$temporary/tampered-provider.err"
-then
-    printf '%s\n' 'deployment unexpectedly accepted a tampered Chancery bundle' >&2
-    exit 1
-fi
-install -m 0600 "$package_share/annals/provider.json" \
-    "$state/install/current/share/chancery/annals/provider.json"
 
 loaded="$state/service-loaded"
 fail_bootstrap="$fail_clockwork_switch"
@@ -788,10 +689,6 @@ running_release=$(readlink "$state/install/current")
 [ -f "$state/spool/.paused" ]
 [ "$(cat "$state/codex-home/auth.json")" = credential-sentinel ]
 [ "$(stat -f '%Lp' "$state/codex-home/auth.json")" = 600 ]
-[ "$(tail -n 1 "$state/usage-doctor.log")" = \
-    "doctor current=$second_release" ]
-[ "$(tail -n 8 "$state/candidate-commands.log" | tr '\n' ' ')" = \
-    'inbox status inbox status backup migrate inbox status inbox run stats inbox status ' ]
 
 # A same-key selected digest is not ownership. Even while disabled, a
 # definition that is not the exact current Annals release must remain

@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -262,8 +262,8 @@
     },
     {
       "id": "conatus.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "conatus.library.explore",

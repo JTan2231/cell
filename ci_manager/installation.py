@@ -156,7 +156,6 @@ def _selected_release(paths: dict[str, Path]) -> Path | None:
     if not re.fullmatch(r"releases/[0-9a-f]{64}", target):
         raise ManagerError("foreign CI manager current selector")
     release = paths["programs"] / target
-    _verify_release(release)
     return release
 
 
@@ -187,7 +186,6 @@ def _check_plist(path: Path) -> bytes | None:
         release = wrapper.parent.parent
         if arguments != _launch_arguments(release):
             raise ValueError("unexpected LaunchAgent command")
-        _verify_release(release)
     except (ValueError, TypeError, KeyError, plistlib.InvalidFileException) as error:
         raise ManagerError("foreign CI manager LaunchAgent") from error
     return raw
@@ -305,7 +303,6 @@ def _prepare_release(source: Path, python: Path) -> Path:
     private_directory(releases)
     release = releases / identity
     if release.exists() or release.is_symlink():
-        _verify_release(release)
         return release
     stage = Path(tempfile.mkdtemp(prefix=".stage-", dir=releases))
     try:
@@ -325,7 +322,6 @@ def _prepare_release(source: Path, python: Path) -> Path:
             for directory in [stage, *(path for path in stage.rglob("*") if path.is_dir())]:
                 os.chmod(directory, 0o700)
             shutil.rmtree(stage)
-    _verify_release(release)
     return release
 
 
@@ -421,7 +417,11 @@ def service(action: str) -> dict:
         raise ManagerError("CI manager service operations require macOS launchd")
     paths = _paths()
     release = _selected_release(paths)
+    if release is not None:
+        _verify_release(release)
     plist = _check_plist(paths["plist"])
+    if plist is not None:
+        _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
     if action == "status":
         return {"installed": release is not None, "release": release.name if release else None,
                 "loaded": _loaded(), "service": LABEL}
@@ -429,7 +429,11 @@ def service(action: str) -> dict:
         raise ManagerError("CI manager service is not installed")
     with lock(state_root() / "admission.lock"):
         release = _selected_release(paths)
+        if release is not None:
+            _verify_release(release)
         plist = _check_plist(paths["plist"])
+        if plist is not None:
+            _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
         if release is None or plist is None:
             raise ManagerError("CI manager service is not installed")
         store = Store(state_root())

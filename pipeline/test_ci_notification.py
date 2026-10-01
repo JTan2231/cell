@@ -21,11 +21,11 @@ class NotificationTests(unittest.TestCase):
                     **changes)
 
     def test_success_is_short_and_has_no_internal_bookkeeping(self):
-        job = self.job(installation_verified=True, deployment_result={
+        job = self.job(installation_completed=True, deployment_result={
             "state": "succeeded", "products": ["annals", "decisions"]})
         subject, body = render(job)
         self.assertEqual(subject, "Cell CI: deployed — Annals, Krisis")
-        self.assertEqual(body, "Annals, Krisis deployed successfully.\nRequired checks and deployment verification passed.")
+        self.assertEqual(body, "Annals, Krisis deployed successfully.\nRequired checks passed and installation completed.")
         for value in (job["id"], job["input_commit"], "Artifacts", "Models", "budget"):
             self.assertNotIn(value, subject + body)
 
@@ -34,7 +34,7 @@ class NotificationTests(unittest.TestCase):
             with self.subTest(deployed=deployed):
                 job = self.job(last_receipt={"selection": {"tests_skipped": True}})
                 if deployed:
-                    job.update(installation_verified=True, deployment_result={
+                    job.update(installation_completed=True, deployment_result={
                         "state": "succeeded", "products": ["annals"]})
                 subject, body = render(job)
                 self.assertIn("Tests were skipped.", body)
@@ -97,7 +97,7 @@ class NotificationTests(unittest.TestCase):
         self.assertNotIn("deployed successfully", body)
 
     def test_cleanup_failure_is_visible_in_subject(self):
-        job = self.job(installation_verified=True, deployment_result={"state": "cleanup_failed", "products": ["annals"]})
+        job = self.job(installation_completed=True, deployment_result={"state": "cleanup_failed", "products": ["annals"]})
         subject, body = render(job)
         self.assertIn("deployed; cleanup failed", subject)
         self.assertIn("deployed successfully", body)

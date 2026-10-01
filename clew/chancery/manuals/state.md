@@ -11,8 +11,6 @@ migration, schedule preparation, backup, and recovery procedures.
 clew init
 clew doctor
 clew-install inspect
-clew-install verify --binary /absolute/candidate/clew --bundle /absolute/clew/chancery
-clew-install verify-release /absolute/owned/release
 clew-install install --binary /absolute/candidate/clew --bundle /absolute/clew/chancery
 clew-install recover --release /absolute/owned/release
 ```
@@ -54,14 +52,11 @@ schema-one and schema-two ledgers.
 
 Doctor checks the local schema, SQLite integrity, and correction references. It
 returns the retained entry count without adding entries or probing Cast.
-Installation inspection describes selected files. Candidate and release
-verification check file identity and integrity. These observations establish no
-future availability or readiness.
+Installation inspection describes selected release metadata. It does not
+check artifact integrity or establish readiness.
 
-Coordinated deployment verification also checks the ledger through the selected
-program and reads Cast's complete retained snapshot. The observation applies to
-that invocation. It establishes no posting availability, application outcome, or
-future dependency availability.
+Coordinated deployment creates or migrates state and selects program files. It
+does not invoke doctor, check release integrity, or probe the Cast snapshot.
 
 ## Program and provider selection
 
@@ -69,15 +64,14 @@ A release contains `clew`, `clew-install`, the recovery installer, and the compl
 matching Chancery bundle. Its content hash identifies the immutable release;
 package version, feature contract version, and database schema are separate
 identities. Provider pages and overview participate in release identity and
-integrity checking.
+release selection.
 
 The shared `cell-install-v2` transaction atomically selects public commands and
-the Clew provider. Foreign selectors, changed release bytes, and stale expected
-selections stop publication. The installer accepts `--home ABSOLUTE_PATH` and
+the Clew provider. Foreign selectors and stale expected selections stop publication. The installer accepts `--home ABSOLUTE_PATH` and
 `--expected-current absent|releases/HASH`. Direct installation selects program
 files only. It does not initialize or migrate state.
 
-Program recovery selects a retained, verified `cell-install-v2` release and
+Program recovery selects a retained `cell-install-v2` release and
 preserves separate ledger and email state. It does not restore, delete, or rewrite
 rows, retry uncertain mail, or approve a scheduling incident. No older
 installation format or automatic schema downgrade is supported. Preserve
@@ -133,7 +127,7 @@ under the state root as `ledger-schemaN-backup-RUN_ID-UUID.sqlite3`, with mode
 earlier backup. An interrupted retry creates a new backup. It commits the new
 schema, normalized application associations, retained aliases, and exact write
 requests in one transaction. Old writers are rejected after commit. Preserve
-the backup and reported recovery evidence until deployment verification succeeds.
+the backup and reported recovery evidence until deployment completes.
 
 Migration preserves entry IDs, sequence, timestamps, supplied text, correction
 links, and retractions. Legacy aliases retain their original argument namespace
@@ -154,10 +148,8 @@ uncertain writes and provider acceptance before replay. Restoring older delivery
 history can permit duplicate mail. A ledger backup alone does not justify
 restoring older email occurrences.
 
-Only schema-three-compatible programs can operate a migrated ledger. Coordinated
-recovery checks existing ledger compatibility before reporting safe program
-recovery. Binary-only recovery must not declare an old program compatible with
-schema three. Rollback to an older program requires its matching original-schema
+Only schema-three-compatible programs can operate a migrated ledger. Program recovery does not check ledger compatibility. Select a program that
+supports the retained schema. Rollback to an older program requires its matching original-schema
 ledger backup, stopped commands and scheduling, and reconciliation of every
 post-migration entry and uncertain send. Preserve delivery state.
 

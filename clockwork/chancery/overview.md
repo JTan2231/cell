@@ -21,7 +21,7 @@ product work, deployment, continuation, or mail.
 | `clockwork.activations` | Admission, overlap, one direct child, timeout, loss proof, process history, doctor, and read-only status evidence. |
 | `clockwork.incidents` | Product failure reports, pending episodes, delayed automatic halts, immediate explicit halts, incident feed, and exact approval of future admission. |
 | `clockwork.notifications` | Consecutive service checks, basic pause alerts, transport uncertainty, EMT routing, grace, and durable delivery ownership. |
-| `clockwork.installation` | Content releases, selectors, candidate-reader validation, coordinated broker refresh, retained state, migration, rollback, and detach. |
+| `clockwork.installation` | Content releases, selectors, release metadata, coordinated broker refresh, retained state, migration, rollback, and detach. |
 
 ## Operating routes
 

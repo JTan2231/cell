@@ -1,6 +1,6 @@
 {
   "id": "weaver.lifecycle",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -49,10 +49,6 @@
     {
       "label": "Inspect installed release",
       "invocation": "weaver-install inspect"
-    },
-    {
-      "label": "Verify exact release",
-      "invocation": "weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID"
     }
   ],
   "effects": [
@@ -65,10 +61,10 @@
     "Annals owns source identity and accepted text. Nucleus owns execution, authentication, job inventory, and its separate retained state. Cell owns shared deployment coordination."
   ],
   "success": [
-    "The selected operation supplies compatible state, complete live readiness or drain evidence, or exact release integrity as required. Documentation presence or an incomplete snapshot cannot establish live readiness or successful drain."
+    "Ordinary doctor and maintenance operations report readiness and drain. Installation performs setup without artifact-integrity, state-integrity, or operational-readiness checks; its inspection reads release metadata."
   ],
   "failure_and_recovery": [
-    "Unsupported state, unavailable job inventory, foreign selectors, altered candidates, and unproved drain stop the operation. Do not edit SQLite or delete a hold.",
+    "Unsupported state, unavailable job inventory, foreign selectors and unproved drain stop the operation. Do not edit SQLite or delete a hold.",
     "The coordinator recovers its retained transaction. Before candidate publication the prior installation remains selected; after publication Weaver can finish forward with the recorded reading configuration and supported state. Unproved recovery retains the named hold."
   ],
   "privacy": [
@@ -88,8 +84,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -119,7 +115,7 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance selects an exact run owner. Release verification selects one exact immutable release directory."
+        "statement": "Maintenance selects an exact run owner. Installer inspection reads the current release selection."
       }
     ],
     "outputs": [
@@ -129,7 +125,7 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance reports maintenance.protocol_version=1, holds, drained and nonterminal_jobs. status-snapshot --json declares weaver/author as on demand and explicitly incomplete. Installer reads report selected release or integrity evidence."
+        "statement": "Maintenance reports protocol_version=1, holds, drained and nonterminal_jobs. status-snapshot declares weaver/author on demand and explicitly incomplete. Installer inspection reports selected release metadata."
       }
     ],
     "data_semantics": [
@@ -151,7 +147,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Doctor and maintenance describe the selected local state and available dependency evidence at invocation. A selected release verification checks that exact candidate. status-snapshot has incomplete readiness coverage."
+        "statement": "Doctor and maintenance describe state and dependency evidence at invocation. Installation invokes no readiness or release-integrity checks. status-snapshot has incomplete readiness coverage."
       },
       {
         "status": "unspecified",
@@ -199,7 +195,7 @@
       },
       {
         "status": "declared",
-        "statement": "The installer refuses foreign selectors, altered candidates and unsupported legacy installation formats. Keep a consistent Weaver database/configuration backup and Nucleus state/credentials under separate provider rules."
+        "statement": "The installer refuses foreign selectors and unsupported legacy installation formats. Keep a consistent Weaver database/configuration backup and Nucleus state/credentials under separate provider rules."
       },
       {
         "status": "unspecified",

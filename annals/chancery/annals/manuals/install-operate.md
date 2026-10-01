@@ -1,5 +1,10 @@
 # Install or recover Annals
 
+Installation places resources and performs setup under the documented maintenance
+boundary. It does not gate completion on persistent-state validation, artifact
+integrity audits, or runtime readiness checks. The product's ordinary diagnostics
+and runtime checks remain available separately.
+
 Use this procedure for an authorized macOS installation, update, dedicated
 decisions-library provision, retained-transaction recovery, older-installation
 migration, or packaged Linux setup. Read `annals.installation` for the release,
@@ -67,10 +72,9 @@ cd /Users/joey/rust/cell
   --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
 ```
 
-2. Let the installer stage and verify the complete release, establish
+2. Let the installer stage the release, establish
    maintenance, drain owned activation, back up each selected library, migrate
-   supported schemas, switch exact selectors/binding, and check installed
-   commands. Preserve operator pauses and pre-existing disabled schedules.
+   supported schemas, switch exact selectors/binding, and publish commands. Preserve operator pauses and pre-existing disabled schedules.
    Stop if ownership, drain, migration, or restoration is unproved.
 3. Use `ANNALS_UPDATE_WAIT_SECONDS` only for the documented inbox-lock wait
    when necessary; its default is 3,900 seconds. `--no-start` leaves scheduler
@@ -80,13 +84,12 @@ cd /Users/joey/rust/cell
    bindings disabled after activation. Omission preserves captured intent and
    a new schedule defaults enabled; recovery preserves prior intent and ignores
    the override. Preserve incident halts and operator pauses.
-5. Run the verification below. Release only the operation's maintenance and
-   pause after complete matching evidence. Do not clear Clockwork incident
+5. Release only the operation's maintenance and pause after setup completes. Do not clear Clockwork incident
    halts through deployment.
 
 ## Provision the dedicated decisions library
 
-1. Complete and verify the immutable primary content release first.
+1. Complete the primary content release first.
 2. Invoke its exact release-local installer as the current non-root user:
 
 ```sh
@@ -137,7 +140,7 @@ annals --library DATABASE --json maintenance status
    manufacture drain.
 4. Use a controlled `CELL_DEPLOYMENT_RUN_ID` only with that sole matching hold
    and exclusive drained activity. Stop on an unknown owner or incomplete
-   recovery. Follow the coordinator's apply, configure, verify, release, then
+   recovery. Follow the coordinator's apply, configure, release, then
    activate order. Configure keeps scheduling disabled; activation restores
    captured enabled intent after all affected holds are released.
 5. Release only the hold owned by this run:
@@ -171,7 +174,7 @@ Release preserves operator pauses and scheduling incident halts.
    state. A previously disabled binding stays disabled; failed proof can leave
    public selectors removed and maintenance engaged. Stop until exact journal
    recovery succeeds. Coordinated recovery uses the same outer run owner.
-5. Run verification before releasing this operation's boundary. Nucleus
+5. Complete recovery before releasing this operation's boundary. Nucleus
    credentials stay outside binary or database rollback.
 
 ## Replace a pre-version-3 library
@@ -179,11 +182,11 @@ Release preserves operator pauses and scheduling incident halts.
 1. Obtain explicit destructive authority and verify the prior-state backup,
    uncompleted-backlog import plan, and recovery plan.
 2. Run the macOS install command with `--fresh-state`. Do not add `--no-start`.
-3. Verify `rollback_generation` and `imported_backlog` in
-   `install/last-update.json`, the fresh library/spool pair, and queued count.
-   The operation moves old library/WAL/spool into `backups/generations/`,
+3. Retain the completed transaction under `backups/deployments/` for recovery.
+   The operation moves the old library/WAL/spool into its prior generation,
    preserves source bytes and lane order, and gives imported items new unstarted
    identities. Attempted processing jobs become terminal and are not rerun.
+   Installation does not compare imported backlog counts after the import.
 4. Check the fresh-state pause transition before activation: this distinct
    operation clears the operator pause while maintenance still blocks dispatch,
    then commits, removes maintenance, and wakes the worker. Retain the old

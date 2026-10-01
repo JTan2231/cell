@@ -51,27 +51,15 @@ publish a narrative, send email, or authorize an authoring retry.
    ./deploy.sh weaver --settings /absolute/weaver-settings.json
    ```
 
-   The coordinator holds and drains Weaver, selects the immutable program and
-   provider, initializes absent state or checks schema 1, and verifies database,
-   source reads, and Nucleus readiness. It releases only its own hold. Stop on
-   unsupported state, unavailable job inventory, unproved drain, altered bytes,
-   foreign selectors, or readiness failure. Do not invoke direct installer
-   `install` or `recover`; those routes are refused.
+   The coordinator holds and drains Weaver, selects the program and provider,
+   and calls the product initializer for configuration. It releases only its own
+   hold. It performs no artifact-integrity, state-integrity, Annals-readiness, or
+   Nucleus-readiness checks. Product initialization retains its ordinary rules.
+   Do not invoke direct installer `install` or `recover`; those routes are refused.
 
-6. Verify the exact installed release and readiness. If Weaver is held, use the
-   deployment run's `CELL_DEPLOYMENT_RUN_ID` only when it matches the sole hold.
-   An unheld doctor uses ordinary admission even when that variable is supplied.
-
-   ```sh
-   weaver --version
-   weaver doctor
-   weaver-install inspect
-   weaver-install verify-release /absolute/Weaver/install/releases/RELEASE_ID
-   chancery product weaver
-   chancery show weaver.narrative.write
-   chancery show weaver.lifecycle
-   chancery resolve weaver.install.operate
-   ```
+6. Read selected release metadata with `weaver-install inspect`. Use `weaver doctor`
+   separately when live state or dependency diagnostics are needed. Doctor is not
+   an installation gate. Read the installed Chancery pages for their contracts.
 
 7. Register the installed command inventory with `weaver --register-usage`.
    Confirm that the coordinator released its own holds. Preserve other owners'
@@ -143,8 +131,8 @@ publish a narrative, send email, or authorize an authoring retry.
    forward with recorded reading configuration and supported state. Keep the
    named hold if recovery cannot be proved. Do not delete holds or change
    database rows to bypass the failure.
-5. Verify release integrity, source configuration, readiness, and complete drain
-   before releasing the hold acquired for attended maintenance.
+5. Confirm complete drain before releasing the hold acquired for attended
+   maintenance. Source and readiness diagnostics remain separate operations.
 
    ```sh
    weaver maintenance release RUN_ID

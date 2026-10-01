@@ -23,6 +23,4 @@ RELEASE_COMPANION_MANIFESTS='iatreion|iatreion/crates/iatreion-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='iatreion|target/release/iatreion|iatreion
 iatreion|target/release/iatreion-install|iatreion-install'
-CI_BINARY_CHECKS='iatreion|target/release/iatreion|iatreion
-iatreion|target/release/iatreion-install|iatreion-install'
 PROVIDERS='iatreion|iatreion|iatreion/chancery|3'

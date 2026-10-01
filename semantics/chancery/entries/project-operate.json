@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -19,7 +19,8 @@
   "outcome": "A managed installation and explicit project registry whose repositories are maintained by agents interpreting post-activation documents from one Annals decisions library.",
   "effects": [
     "Authorized procedures can change project/intake state, prepare a restricted reconciliation job, or install/migrate/publish the matching product release. Required features own the detailed effect and consistency guarantees.",
-    "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state."
+    "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
@@ -27,8 +28,7 @@
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
-    "Verify the selected project or intake result in Semantics records; require green doctor and exact owned command/provider/binding selection for installation.",
-    "Preserve captured schedule intent and all unrelated pauses, incident halts, and holds."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Stop on failing prerequisites, active or unproved prior jobs, foreign artifacts, changed ownership evidence, or unproved recovery.",
@@ -47,8 +47,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.schedule.operate",
@@ -77,8 +77,8 @@
     },
     {
       "id": "semantics.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -166,7 +166,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Inputs are the intended authorized action, exact selected project/intake/installation, matching validated candidate artifacts, captured admission intent, run ID, or retained recovery transaction. Explicit legacy cutover additionally requires its captured final watermark and external gates."
+        "statement": "Inputs are the intended authorized action, exact selected project/intake/installation, supplied candidate artifacts, captured admission intent, run ID, or retained recovery transaction. Explicit legacy cutover additionally requires its captured final watermark and external gates."
       }
     ],
     "outputs": [

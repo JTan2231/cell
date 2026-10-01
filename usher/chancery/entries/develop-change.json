@@ -21,7 +21,7 @@
     "Usher owns its recognition contract and separate installation policy; Cell owns membership policy and products own their declarations."
   ],
   "success": [
-    "Synthetic recognition tests and installer ownership, integrity, and recovery tests pass. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome. Documentation identifies the evidence and installation effects."
+    "Synthetic recognition tests and installer ownership and recovery tests pass. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome. Documentation identifies the evidence and installation effects."
   ],
   "failure_and_recovery": [
     "Keep failures visible and fix their source. Do not relax membership rules or hide products to make CI pass."
@@ -68,8 +68,8 @@
     },
     {
       "id": "usher.installation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {

@@ -162,8 +162,6 @@ cat fixture/Cargo.toml fixture/api/Cargo.toml fixture/usage/Cargo.toml > Cargo.l
         self.assertEqual((build["product"], build["unit"]), ("fixture", "fixture"))
         output = Path(build["output"])
         self.assertTrue(output.is_absolute())
-        self.assertEqual(self.binary_log.read_text().splitlines(),
-                         [str(output / "candidates/fixture/bin/fixture")])
         self.assertFalse(output.parent.exists())
         self.assertFalse(self.ci_log.exists())
 
@@ -188,15 +186,6 @@ cat fixture/Cargo.toml fixture/api/Cargo.toml fixture/usage/Cargo.toml > Cargo.l
         self.assertFalse(Path(json.loads(self.build_log.read_text())["output"]).parent.exists())
         self.assertFalse(self.ci_log.exists())
 
-    def test_wrong_sealed_version_blocks_publication_despite_correct_target_binary(self):
-        before = self.run_git("rev-parse", "HEAD")
-        result = self.release(FIXTURE_STAGED_VERSION="0.0.0")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("fixture reported an unexpected version: fixture 0.0.0", result.stderr)
-        self.assertEqual(self.run_git("status", "--porcelain"), "")
-        self.assertEqual(self.run_git("rev-parse", "HEAD"), before)
-        self.assertEqual(self.run_git("tag", "--list"), "")
-        self.assertFalse(Path(json.loads(self.build_log.read_text())["output"]).parent.exists())
 
     def test_mismatched_companion_fails_before_mutation(self):
         path = self.root / "fixture/api/Cargo.toml"

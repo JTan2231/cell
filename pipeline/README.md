@@ -45,8 +45,7 @@ arguments, and direct validation flags are not supported CI entry points.
 
 New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
 to run selected tests. `--skip-tests` selects the default explicitly. The
-validator retains syntax, formatting, lint, provider, documentation, build,
-version, and candidate checks. It skips Rust tests and shared Python regression
+validator retains syntax, formatting, lint, provider, documentation and build checks. It skips Rust tests and shared Python regression
 suites. The receipt records `selection.tests_skipped`; product selection still
 controls automatic deployment.
 
@@ -59,10 +58,11 @@ parallel Rust test stage:
 python3 pipeline/nextest_tool.py install
 ```
 
-The installer selects nextest 0.9.146 from its fixed upstream macOS archive.
-It verifies the archive and executable hashes and stores the executable on the
-configured external work volume. Validation checks those bytes before admission.
-It does not download a runner during a CI gate or select a runner from `PATH`.
+The installer selects nextest 0.9.146 from its fixed upstream macOS archive and
+stores the executable on the configured external work volume. It runs `--version`
+to check basic execution. CI requires the configured executable path. It does not
+audit archive or executable bytes, download a runner during a gate, or select a
+runner from `PATH`.
 
 Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
 limit. The default is four concurrent test processes. The dispatcher records
@@ -127,8 +127,7 @@ checks, applicable provider checks, and formatting. One heavy `cell.clippy`
 gate then runs Clippy for the combined Cargo package set from selected products
 and shared Rust suites. It keeps all target checks and the strict lint rules.
 The shared test gate follows Clippy when tests are enabled. The second product
-phase runs applicable provider checks, documentation, release builds, binary
-version checks, and candidate staging. Shared infrastructure Python regression
+phase runs applicable provider checks, documentation and release builds. Shared infrastructure Python regression
 suites remain separate required checks.
 
 The Clippy command lists each selected package once and uses Cargo's combined
@@ -206,9 +205,11 @@ broker schedules execution; it does not decide relevance. Product bodies receive
 `--tests product|all|none` and their phase in the brokered command identity. The Rust
 test command records all selected products, platform products, shared Rust
 suites, and its worker limit. Its toolchain identity includes the pinned nextest
-path, version, and executable hash. An inherited flag cannot bypass admission.
-The manager validates before acceptance and deployment; release and deployment
-preparation do not rerun validation.
+path and configured version. An inherited flag cannot bypass admission.
+The manager validates source before acceptance and deployment. CI does not run
+installation persistent-state, artifact-integrity, or operational-readiness
+checks, or retain test assertions requiring those removed checks. Ordinary
+product behavior and setup operations remain in their applicable test suites.
 
 The broker captures build and test transcripts. The dispatcher reports
 selection before execution and retains the completed product and platform
@@ -227,7 +228,8 @@ products, shared suites, selection reasons, and ordered `required_gates`.
 Each required gate names its gate ID, lane, and command. The `gates` array
 contains the broker receipts for gates that ran. A required gate absent from
 that array did not complete. The dispatcher stops after the first unsuccessful
-gate and checks candidate integrity before it returns the aggregate result.
+gate and checks that the candidate source is unchanged before it returns the
+aggregate result.
 
 Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, and
 `error`. A failed gate does not by itself establish a source-code defect.
@@ -241,7 +243,7 @@ deployment handoff.
 Release and deployment use the shared release builder below. Each product
 seals its runtime executables and dedicated `PRODUCT-install`. The coordinator
 invokes that sealed installer's Rust adapter. The shared `cell-install` library
-owns immutable artifact selection. Product Rust code owns lifecycle and
+owns program publication and file replacement. Product Rust code owns lifecycle and
 recovery. Credential and scheduled-job shell frontends remain versioned assets.
 
 `deployment/build.py` requires Python 3.11 or newer. It prepares production
@@ -252,7 +254,7 @@ Release builds share a persistent target and file lock per logical Git
 repository, separate from CI. Cargo defaults to at most eight jobs.
 
 The cache identifies completed candidates by source content and build inputs.
-The builder checks executable hashes and versions before reuse. Git HEAD is
+The builder reuses cached files without installation integrity validation. Git HEAD is
 excluded, so a version-update build can be reused after those exact source bytes
 are committed. The cache records builds, not CI results. See
 [deployment](../deployment/README.md)

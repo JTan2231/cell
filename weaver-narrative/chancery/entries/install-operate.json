@@ -1,18 +1,18 @@
 {
   "id": "weaver.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Weaver",
-  "summary": "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document.",
+  "summary": "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document.",
   "use_when": [
-    "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document."
+    "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document."
   ],
   "do_not_use_when": [
     "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
   ],
-  "outcome": "Install the Weaver CLI and provider under owned maintenance, configure its Annals reader, and inspect state and dependency readiness without authoring a document.",
+  "outcome": "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document.",
   "interfaces": [
     {
       "label": "Deploy",
@@ -59,7 +59,7 @@
     "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
   ],
   "success": [
-    "Exact installed candidate integrity, readable schema 1 and Annals source, compatible Nucleus readiness, and release of run-owned holds establish installation success."
+    "Installed program/provider selection, product initialization/configuration, and release of run-owned holds establish completed setup. Installation does not establish operational readiness."
   ],
   "failure_and_recovery": [
     "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
@@ -76,13 +76,13 @@
     },
     {
       "id": "weaver.lifecycle",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "ci-manager.queue.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     }
   ],
   "does_not_authorize": [
@@ -118,13 +118,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The procedure yields exact installed release integrity, supported database/configuration, compatible source and Nucleus readiness, and release of only its own maintenance holds."
+        "statement": "The procedure selects programs and provider, configures the Annals reader, initializes state as required, and releases only its own maintenance hold."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation success is local program/provider selection and compatible configured readiness. It does not mean a narrative exists, an email was sent by Weaver, or future model access is guaranteed."
+        "statement": "Installation success means local program/provider selection and configuration. It performs no artifact-integrity, state-integrity, or dependency-readiness checks and creates no narrative or email."
       }
     ],
     "identity_and_units": [
@@ -136,7 +136,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verification describes the exact selected candidate and retained delivery outcome. Readiness is observed separately at the corresponding check; a source change or catalog entry does not establish installed readiness."
+        "statement": "Installer inspection describes release metadata. Doctor and other diagnostics remain separate; installation and catalog presence do not establish live readiness."
       },
       {
         "status": "unspecified",
@@ -152,7 +152,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The coordinator holds and drains Weaver, selects immutable program/provider bytes, initializes absent state or checks schema 1, verifies dependencies, then releases only its own hold. Recovery follows the retained coordinator transaction; unproved recovery keeps the named hold."
+        "statement": "The coordinator holds and drains Weaver, selects program/provider bytes, invokes product initialization, then releases its own hold. Ordinary initializer rules remain unchanged. Recovery follows the retained transaction."
       }
     ],
     "operational_limits": [
@@ -204,7 +204,7 @@
     "Check explicit Annals reading configuration, compatible providers, supported state and complete Bazaar prompt selection.",
     "Prepare private first-installation settings and preview the coordinator plan.",
     "Use the coordinator to hold, drain, select and configure matched program/provider bytes.",
-    "Verify the exact installed release, database, source and Nucleus readiness; register command inventory.",
+    "Inspect release metadata and register command inventory. Use doctor separately when live diagnostics are needed.",
     "For attended backup, own a hold, settle exact work, prove drain, save consistent private state, verify and release only that hold.",
     "Use retained coordinator transaction recovery after an interrupted deployment; preserve any unproved hold."
   ],

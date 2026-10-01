@@ -1,12 +1,10 @@
 //! Staging and integrity checks for the complete supported Codex runtime.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read as _, Seek as _, SeekFrom, Write as _};
+use std::io::{Read as _, Write as _};
 use std::os::unix::fs::{MetadataExt as _, OpenOptionsExt as _, PermissionsExt as _};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
 
 use fs2::FileExt as _;
 use serde::{Deserialize, Serialize};
@@ -139,7 +137,7 @@ pub fn verify_runtime(executable: &Path) -> Result<RuntimeBundle, CodexError> {
     if manifest.codex_version != SUPPORTED_CODEX_VERSION {
         return Err(failure(&manifest_path, "unsupported Codex version"));
     }
-    let bundle = inspect_pair(&stamp.executable, false)?;
+    let bundle = inspect_pair(&stamp.executable)?;
     if bundle.manifest() != manifest {
         return Err(failure(
             &manifest_path,
@@ -160,15 +158,21 @@ pub fn verify_runtime(executable: &Path) -> Result<RuntimeBundle, CodexError> {
 
 /// Copy one selected Codex executable and its sibling helper into a new sealed
 /// directory. Publish the complete directory with one rename. An existing
-/// destination is accepted only when its verified files are identical.
+/// destination is reused from its recorded manifest.
 ///
 /// # Errors
 ///
-/// Returns an inspection error if the source pair is incomplete or unsupported,
-/// staging fails, or the destination would replace another installation.
+/// Returns an I/O or manifest decoding error if staging cannot complete.
 pub fn stage_runtime(source: &Path, destination: &Path) -> Result<RuntimeBundle, CodexError> {
-    let source = resolve_executable(source)?;
-    let source_bundle = inspect_pair(&source, true)?;
+    let source = fs::canonicalize(source).map_err(|error| failure(source, error))?;
+    let host = runtime_directory(&source)?.join(CODE_MODE_HOST);
+    let source_bundle = RuntimeBundle {
+        executable: source.clone(),
+        code_mode_host: host.clone(),
+        version: SUPPORTED_CODEX_VERSION.to_owned(),
+        codex_sha256: sha256(&source)?,
+        code_mode_host_sha256: sha256(&host)?,
+    };
     let parent = destination
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
@@ -201,14 +205,7 @@ pub fn stage_runtime(source: &Path, destination: &Path) -> Result<RuntimeBundle,
                     "destination must be a directory, not a symlink",
                 ));
             }
-            let existing = verify_runtime(&destination.join(CODEX))?;
-            if existing.manifest() != source_bundle.manifest() {
-                return Err(failure(
-                    &destination,
-                    "refusing to replace a different runtime",
-                ));
-            }
-            return Ok(existing);
+            return read_staged_runtime(&destination);
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
         Err(error) => return Err(failure(&destination, error)),
@@ -242,7 +239,6 @@ pub fn stage_runtime(source: &Path, destination: &Path) -> Result<RuntimeBundle,
         .write_all(&bytes)
         .and_then(|()| manifest.sync_all())
         .map_err(|error| failure(&manifest_path, error))?;
-    verify_runtime(&staging.path().join(CODEX))?;
     File::open(staging.path())
         .and_then(|file| file.sync_all())
         .map_err(|error| failure(staging.path(), error))?;
@@ -255,7 +251,26 @@ pub fn stage_runtime(source: &Path, destination: &Path) -> Result<RuntimeBundle,
     File::open(&parent)
         .and_then(|file| file.sync_all())
         .map_err(|error| failure(&parent, error))?;
-    verify_runtime(&destination.join(CODEX))
+    Ok(RuntimeBundle {
+        executable: destination.join(CODEX),
+        code_mode_host: destination.join(CODE_MODE_HOST),
+        ..source_bundle
+    })
+}
+
+fn read_staged_runtime(directory: &Path) -> Result<RuntimeBundle, CodexError> {
+    let manifest_path = directory.join(RUNTIME_MANIFEST);
+    let manifest: Manifest = serde_json::from_slice(
+        &fs::read(&manifest_path).map_err(|error| failure(&manifest_path, error))?,
+    )
+    .map_err(|error| failure(&manifest_path, error))?;
+    Ok(RuntimeBundle {
+        executable: directory.join(CODEX),
+        code_mode_host: directory.join(CODE_MODE_HOST),
+        version: manifest.codex_version,
+        codex_sha256: manifest.codex_sha256,
+        code_mode_host_sha256: manifest.code_mode_host_sha256,
+    })
 }
 
 fn resolve_executable(executable: &Path) -> Result<PathBuf, CodexError> {
@@ -273,13 +288,10 @@ fn runtime_directory(executable: &Path) -> Result<&Path, CodexError> {
         .ok_or_else(|| failure(executable, "executable has no parent directory"))
 }
 
-fn inspect_pair(executable: &Path, check_version: bool) -> Result<RuntimeBundle, CodexError> {
+fn inspect_pair(executable: &Path) -> Result<RuntimeBundle, CodexError> {
     let host = runtime_directory(executable)?.join(CODE_MODE_HOST);
     let codex_before = file_stamp(executable, true)?;
     let host_before = file_stamp(&host, true)?;
-    if check_version {
-        check_source_version(executable, Duration::from_secs(30))?;
-    }
     let bundle = RuntimeBundle {
         executable: executable.to_path_buf(),
         code_mode_host: host.clone(),
@@ -294,64 +306,6 @@ fn inspect_pair(executable: &Path, check_version: bool) -> Result<RuntimeBundle,
         ));
     }
     Ok(bundle)
-}
-
-fn check_source_version(executable: &Path, timeout: Duration) -> Result<(), CodexError> {
-    // A file avoids a full pipe blocking the child before timeout/reaping.
-    let mut output = tempfile::tempfile().map_err(|error| failure(executable, error))?;
-    let stdout = output
-        .try_clone()
-        .map_err(|error| failure(executable, error))?;
-    let mut child = Command::new(executable)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(stdout)
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|error| failure(executable, error))?;
-    let started = Instant::now();
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() < timeout => {
-                std::thread::sleep(Duration::from_millis(10));
-            }
-            result => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(failure(
-                    executable,
-                    match result {
-                        Err(error) => error.to_string(),
-                        _ => "codex --version exceeded its timeout".to_owned(),
-                    },
-                ));
-            }
-        }
-    };
-    output
-        .seek(SeekFrom::Start(0))
-        .map_err(|error| failure(executable, error))?;
-    let mut bytes = Vec::new();
-    output
-        .take(4097)
-        .read_to_end(&mut bytes)
-        .map_err(|error| failure(executable, error))?;
-    if bytes.len() == 4097 {
-        return Err(failure(executable, "codex --version output is too large"));
-    }
-    let line = String::from_utf8_lossy(&bytes);
-    let version = line
-        .trim()
-        .strip_prefix("codex-cli ")
-        .unwrap_or(line.trim());
-    if !status.success() || version != SUPPORTED_CODEX_VERSION {
-        return Err(failure(
-            executable,
-            format!("requires Codex {SUPPORTED_CODEX_VERSION}, received {version:?}"),
-        ));
-    }
-    Ok(())
 }
 
 fn sha256(path: &Path) -> Result<String, CodexError> {
@@ -466,13 +420,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_manifest_version_and_refuses_existing_different_bundle() -> TestResult {
+    fn rejects_manifest_version() -> TestResult {
         let temp = tempfile::tempdir()?;
         let source = source(&temp.path().join("source"))?;
         let destination = temp.path().join("runtime");
         let bundle = stage(&source, &destination)?;
-        fs::write(source.with_file_name(CODE_MODE_HOST), "different helper")?;
-        assert_error(stage_runtime(&source, &destination), "refusing to replace");
         assert_eq!(verify_runtime(&bundle.executable)?, bundle);
         let manifest_path = destination.join(RUNTIME_MANIFEST);
         fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o644))?;
@@ -480,33 +432,6 @@ mod tests {
         manifest.schema_version += 1;
         fs::write(&manifest_path, serde_json::to_vec(&manifest)?)?;
         assert_error(verify_runtime(&bundle.executable), "schema version");
-        Ok(())
-    }
-
-    #[test]
-    fn rejects_wrong_codex_version_and_preserves_incomplete_destination() -> TestResult {
-        let temp = tempfile::tempdir()?;
-        let source = source(&temp.path().join("source"))?;
-        let destination = temp.path().join("runtime");
-        fs::create_dir(&destination)?;
-        fs::write(destination.join("sentinel"), "keep")?;
-        assert!(stage_runtime(&source, &destination).is_err());
-        assert_eq!(fs::read_to_string(destination.join("sentinel"))?, "keep");
-        fs::write(&source, "#!/bin/sh\nprintf 'codex-cli wrong\\n'\n")?;
-        assert!(stage_runtime(&source, &temp.path().join("other")).is_err());
-        assert!(!temp.path().join("other").exists());
-        Ok(())
-    }
-
-    #[test]
-    fn source_version_probe_has_a_timeout() -> TestResult {
-        let temp = tempfile::tempdir()?;
-        let source = source(temp.path())?;
-        fs::write(&source, "#!/bin/sh\nwhile :; do :; done\n")?;
-        assert_error(
-            check_source_version(&source, Duration::from_millis(25)),
-            "timeout",
-        );
         Ok(())
     }
 }

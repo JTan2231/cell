@@ -1,4 +1,4 @@
-//! Verified installation layout; runtime maintenance belongs to Platter.
+//! Installation layout; runtime maintenance belongs to Platter.
 
 use anyhow::{Context, Result, ensure};
 use cell_install::legacy::LegacySpec;
@@ -33,9 +33,6 @@ pub fn specification() -> Spec {
 
 /// Generate the product-owned daily policy without registering or enabling it.
 pub fn schedule_definition(home: &Path, root: &Path) -> Result<clockwork::api::Manifest> {
-    use clockwork::api::{
-        Authority, FailurePolicy, LaunchImage, Manifest, Output, OverlapPolicy, Schedule,
-    };
     let spec = specification();
     let selected =
         std::fs::canonicalize(home.join("Library/Application Support/Platter/install/current"))?;
@@ -46,6 +43,19 @@ pub fn schedule_definition(home: &Path, root: &Path) -> Result<clockwork::api::M
         std::fs::canonicalize(std::env::current_exe()?)? == executable,
         "schedule-definition requires the selected installed Platter executable"
     );
+    schedule_manifest(home, root, &selected, release)
+}
+
+fn schedule_manifest(
+    home: &Path,
+    root: &Path,
+    selected: &Path,
+    release: cell_install::transaction::ReleaseInfo,
+) -> Result<clockwork::api::Manifest> {
+    use clockwork::api::{
+        Authority, FailurePolicy, LaunchImage, Manifest, Output, OverlapPolicy, Schedule,
+    };
+    let executable = selected.join("bin/platter");
     let settings = crate::workflow::config(root)?;
     let text = |path: &Path| -> Result<String> {
         Ok(path
@@ -68,7 +78,7 @@ pub fn schedule_definition(home: &Path, root: &Path) -> Result<clockwork::api::M
         schema_version: 2,
         key: "platter/daily".into(),
         release_id: release.release_id,
-        release_root: text(&selected)?,
+        release_root: text(selected)?,
         authority: Authority::CurrentUserBackground,
         overlap: OverlapPolicy::Skip,
         failure: FailurePolicy {
@@ -107,7 +117,7 @@ pub fn main() -> std::process::ExitCode {
     match operation.as_deref() {
         None | Some("--help" | "-h") => {
             println!(
-                "platter-install {}\n\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\nadapter inspect|hold|drain|apply|verify|recover|release\n\nInstallation and recovery require the Cell deployment coordinator and its run-owned maintenance hold. Direct install/recover are unavailable.",
+                "platter-install {}\n\ninspect [--home ABS]\nadapter inspect|hold|drain|apply|recover|release\n\nInstallation and recovery require the Cell deployment coordinator and its run-owned maintenance hold. Direct install/recover are unavailable.",
                 env!("CARGO_PKG_VERSION")
             );
             std::process::ExitCode::SUCCESS
@@ -119,35 +129,12 @@ pub fn main() -> std::process::ExitCode {
             );
             std::process::ExitCode::FAILURE
         }
-        _ => cell_install::simple::main_with_lifecycle_and_maintenance(
+        _ => cell_install::simple::main_with_lifecycle(
             &specification(),
             env!("CARGO_PKG_VERSION"),
             lifecycle,
-            candidate_maintenance,
         ),
     }
-}
-
-fn candidate_maintenance(context: &cell_install::adapter::Context) -> cell_install::Result<bool> {
-    let compatible = || -> Result<bool> {
-        let root = crate::default_state_dir(&context.home)?;
-        let path = root.join(crate::store::DATABASE);
-        if !path.try_exists()? {
-            return Ok(false);
-        }
-        crate::store::regular_file(&path)?;
-        let connection = rusqlite::Connection::open_with_flags(
-            path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
-        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        ensure!(
-            matches!(version, 1..=crate::store::SCHEMA_VERSION),
-            "unsupported Platter database schema"
-        );
-        Ok(version == crate::store::SCHEMA_VERSION)
-    };
-    compatible().map_err(|error| cell_install::Error::new(error.to_string()))
 }
 
 #[derive(Default, serde::Deserialize)]
@@ -194,10 +181,6 @@ fn lifecycle_inner(
             )?;
             let version: i64 =
                 connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-            ensure!(
-                matches!(version, 1..=crate::store::SCHEMA_VERSION),
-                "unsupported Platter database schema"
-            );
             version == 1
                 || connection.query_row(
                     "SELECT EXISTS(SELECT 1 FROM settings WHERE key='config')",
@@ -218,21 +201,6 @@ fn lifecycle_inner(
                 resume.is_absolute(),
                 "Platter resume must be an absolute path"
             );
-            crate::resume::ResumeTemplate::load(resume)?;
-        }
-        if let Some(path) = &settings.projects_template {
-            ensure!(
-                path.is_absolute(),
-                "projects template path must be absolute"
-            );
-            let candidate = crate::resume::ResumeTemplate::load(path)?;
-            if initialized {
-                crate::store::Store::control(&root)?
-                    .template()?
-                    .validate_project_template_import(&candidate)?;
-            } else {
-                candidate.validate_fixed_projects()?;
-            }
         }
         return Ok(
             json!({"initialized":initialized,"schedule":ScheduleState::capture_installed(&context.home, KEY)?}),
@@ -271,7 +239,7 @@ fn lifecycle_inner(
             let backup = root
                 .join("backups")
                 .join(format!("migration-{}.sqlite", context.request.run_id));
-            cell_install::migration::run_once(
+            cell_install::migration::install_once(
                 &context.request.run_dir.join("platter-migration.json"),
                 &backup,
                 || {
@@ -322,13 +290,11 @@ fn lifecycle_inner(
                 .parent()
                 .and_then(Path::parent)
                 .context("Platter release missing")?;
-            let data = cell_install::command::json(
-                &executable,
-                &["--json".into(), "schedule-definition".into()],
-                &BTreeMap::new(),
-                std::time::Duration::from_secs(60),
-            )?;
-            let fallback = serde_json::from_value(data["data"].clone())?;
+            let spec = specification();
+            let metadata = cell_install::read_release_at(&spec.layout(), release, &|path| {
+                spec.read_legacy(path)
+            })?;
+            let fallback = schedule_manifest(&context.home, &root, release, metadata)?;
             let mut definition = state.retarget(
                 fallback,
                 release,

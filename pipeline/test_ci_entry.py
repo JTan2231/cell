@@ -211,12 +211,10 @@ else:
     def commands(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
-    def invoke(self, phase=None, group="all", stage=None):
+    def invoke(self, phase=None, group="all"):
         command = ["sh", str(self.root / "pipeline/ci.sh"), "alpha", "--tests", group]
         if phase is not None:
             command.extend(["--phase", phase])
-        if stage is not None:
-            command.extend(["--stage-candidate", stage])
         return subprocess.run(command, env=self.environment, capture_output=True, text=True)
 
     def test_pre_phase_runs_setup_and_formatting_without_clippy_tests_or_release(self):
@@ -228,16 +226,14 @@ else:
         self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
                          ["fmt"])
 
-    def test_post_phase_runs_provider_docs_release_and_seals_after_build(self):
-        stage = str(self.root.parent / "sealed candidate")
-        result = self.invoke("post", stage=stage)
+    def test_post_phase_runs_provider_docs_and_release(self):
+        result = self.invoke("post")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         commands = self.commands()
         self.assertEqual([command[0] for command in commands],
-                         ["cargo", "cargo", "cargo", "candidate.py"])
+                         ["cargo", "cargo", "cargo"])
         self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
                          ["run", "doc", "build"])
-        self.assertEqual(commands[-1][commands[-1].index("--output") + 1], stage)
 
     def test_private_full_body_retains_test_group_compatibility(self):
         result = self.invoke()
@@ -257,21 +253,7 @@ else:
                          ["fmt", "clippy", "run", "doc", "build"])
         self.assertIn("tests skipped", result.stdout)
 
-    def test_skip_tests_post_phase_can_seal_candidate_after_build(self):
-        stage = str(self.root.parent / "sealed candidate")
-        result = self.invoke("post", group="none", stage=stage)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        commands = self.commands()
-        self.assertEqual([command[0] for command in commands],
-                         ["cargo", "cargo", "cargo", "candidate.py"])
-        self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
-                         ["run", "doc", "build"])
 
-    def test_pre_phase_rejects_candidate_staging_before_running_any_checks(self):
-        result = self.invoke("pre", stage=str(self.root.parent / "candidate"))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("post-test phase", result.stderr)
-        self.assertEqual(self.commands(), [])
 
     def test_shared_checks_only_body_excludes_tests_and_legacy_body_keeps_them(self):
         script = str(self.root / "pipeline/platform.sh")
@@ -587,7 +569,7 @@ class WorkerDeploymentTests(unittest.TestCase):
         self.assertNotIn("outcome", self.job)
         self.worker.deploying(self.job)
         self.assertEqual(self.job["outcome"], "succeeded")
-        self.assertTrue(self.job["installation_verified"])
+        self.assertTrue(self.job["installation_completed"])
         self.assertEqual(self.worker.process.call_args_list[0].args[2][2], "start")
         self.assertEqual(self.worker.process.call_args_list[1].args[2][2], "reconcile")
 

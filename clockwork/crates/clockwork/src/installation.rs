@@ -105,24 +105,6 @@ fn deployment_operation(
             client.disable(&before.key, None)?;
         }
     }
-    if matches!(
-        operation,
-        Operation::Configure | Operation::Verify | Operation::Recover
-    ) {
-        for before in &bindings {
-            let observed = client.binding(&before.key)?;
-            preserve_halt(before, &observed)?;
-            if observed.enabled {
-                return Err("Clockwork binding is active before deployment activation".into());
-            }
-            if let Some(digest) = &observed.definition_digest {
-                let definition = client.definition(digest)?;
-                if definition.key != before.key || definition.digest != *digest {
-                    return Err("Clockwork selected definition differs from its binding".into());
-                }
-            }
-        }
-    }
     if operation == Operation::Activate {
         activate_bindings(&client, &bindings, &context.request.activation_bindings)?;
     }

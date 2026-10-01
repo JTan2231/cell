@@ -18,6 +18,4 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='usher|Usher|package|usher/crates/usher/Cargo.toml|usher-|1'
 RELEASE_BINARY_CHECKS='usher|target/release/usher|usher
 usher|target/release/usher-install|usher-install'
-CI_BINARY_CHECKS='usher|target/release/usher|usher
-usher|target/release/usher-install|usher-install'
 PROVIDERS='usher|usher|usher/chancery|4'

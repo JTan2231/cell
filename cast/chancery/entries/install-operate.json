@@ -1,6 +1,6 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -50,7 +50,7 @@
       "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
     },
     {
-      "label": "Recover a verified retained program",
+      "label": "Recover a retained program",
       "invocation": "cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY"
     }
   ],
@@ -72,7 +72,7 @@
     "Ownership repair returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts after one committed transaction; changed jobs/companies retain identity and gain material revisions."
   ],
   "failure_and_recovery": [
-    "Deployment refuses foreign selectors and mismatched provider/candidate versions; a failed switch restores prior Cast selectors.",
+    "Deployment refuses foreign selectors and stale expected selections; a failed switch restores prior Cast selectors.",
     "Program rollback does not restore domain state. Preserve the state directory consistently before any database recovery, and do not hand-edit database rows.",
     "Resolve missing keys or provider restrictions separately; configuration changes do not purchase credits or reset accumulated usage."
   ],
@@ -94,7 +94,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select the intended home/state, use a validated matching candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair or state recovery. Make a private consistent SQLite backup, including live sidecars when relevant, before state recovery."
+        "statement": "Select the intended home/state, use a supplied candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair or state recovery. Make a private consistent SQLite backup, including live sidecars when relevant, before state recovery."
       }
     ],
     "inputs": [
@@ -150,7 +150,7 @@
       },
       {
         "status": "declared",
-        "statement": "Stop on foreign or unverified selectors, incompatible program/state, displaced active ownership or unsupported recovery."
+        "statement": "Stop on foreign public selectors, displaced active ownership or unsupported recovery."
       }
     ],
     "compatibility_and_evolution": [
@@ -194,8 +194,8 @@
   "dependencies": [
     {
       "id": "cast.installation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.state",
@@ -221,11 +221,11 @@
   "automation": "none",
   "steps": [
     "Select the intended operator home and state directory, inspect current configuration and choose the authorized local operation.",
-    "Install a validated matching binary and bundle through a trusted tested candidate, then verify command identity and register usage.",
+    "Install a supplied binary and bundle through a trusted tested candidate, then verify command identity and register usage.",
     "Initialize missing state, inspect readiness and complete configuration, and explicitly apply only the intended complete replacement.",
     "Add or disable an exact source and verify ownership and enabled state without treating enrollment as collection success.",
     "Stop collection before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
-    "Recover only a verified canonical retained release; verify selected-state compatibility before collection and preserve a private consistent backup before state recovery."
+    "Recover a canonical retained release. Program recovery leaves discovery state unchanged. Separate data recovery preserves a private consistent backup."
   ],
   "checkpoints": [
     "The tested candidate and provider release match and all selectors belong to Cast.",
@@ -239,7 +239,7 @@
     "Read product/show/resolve after installation when Chancery is available; Cast remains useful without a reader."
   ],
   "stop_when": [
-    "A selector is foreign, candidate/provider versions differ, a retained release is unverified or an active writer would be displaced.",
+    "A public selector is foreign, an expected selection changed, or an active writer would be displaced.",
     "Proposed recovery requires unsupported row edits, destructive reset or an incompatible program/state pair without a compatible backup and recovery decision."
   ]
 }

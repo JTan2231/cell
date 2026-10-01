@@ -3,7 +3,7 @@ use super::{
     Control, Install, home, legacy, package,
     support::{
         ACTIVE, Binding, LEGACY_DAILY, LEGACY_OBSERVER, Paths, Pins, args, atomic_write, binding,
-        binding_receipt, checked, definition, directory, disable, doctor, executable, exists,
+        binding_receipt, checked, definition, directory, disable, executable, exists,
         inspect_result, owned_file, require, restore_binding, run, switch, template, text,
     },
 };
@@ -476,7 +476,7 @@ pub fn no_unfinished_transaction(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
-// Admission, held-candidate proof, and cutover share one ordered lock scope.
+// Admission, maintenance ownership, and cutover share one ordered lock scope.
 #[allow(clippy::too_many_lines)]
 pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Value> {
     let mut paths = Paths::new(home(options.home.clone())?)?;
@@ -517,16 +517,15 @@ pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Val
     let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
     let prior_hold = SavedFile::capture(&paths.hold, paths.uid, 0o600)?;
     if options.release_maintenance {
+        let current = prior
+            .current
+            .as_ref()
+            .ok_or_else(|| Error::new("maintenance release requires an installed candidate"))?;
         require(
             package::inspect(&paths)? == prior,
             "held candidate public selectors are incomplete",
         )?;
         owned_file(&paths.hooks, paths.uid, Some(0o600))?;
-        let current = prior
-            .current
-            .as_ref()
-            .ok_or_else(|| Error::new("maintenance release requires an installed candidate"))?;
-        package::matches_candidate(&paths, current, options)?;
         require(
             fs::read(&paths.hooks)? == fs::read(prepared.root.join("package/hooks.json"))?,
             "installed hooks differ from held candidate",
@@ -707,7 +706,6 @@ fn cutover(
             0o600,
         )?;
         database = Some(backup);
-        doctor(paths, &prepared.root.join("libexec/krisis"), pins)?;
         checked(
             paths,
             &prepared.root.join("libexec/krisis"),
@@ -864,7 +862,6 @@ pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
             root: package::root(&paths, &candidate_info),
             info: candidate_info,
         };
-        package::matches_candidate(&paths, &prepared.info, options)?;
         let controls: BTreeMap<String, Binding> =
             serde_json::from_value(saved["controls"].clone())?;
         let hook: SavedFile = serde_json::from_value(saved["hook"].clone())?;
@@ -923,7 +920,6 @@ pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
                     && receipt["definition_digest"] == digest,
                 "fresh Krisis recovery receipt changed",
             )?;
-            doctor(&paths, &prepared.root.join("libexec/krisis"), &pins)?;
             tx.recover(&prior, &prepared, true, |_| Ok(()))?;
             release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
             let retained = paths.state.join("backups/deployments");

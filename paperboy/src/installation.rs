@@ -101,7 +101,7 @@ fn lifecycle_inner(
             "Library/Application Support/Paperboy/paperboy-pre-migration-{}.sqlite",
             context.request.run_id
         ));
-        cell_install::migration::run_once(
+        cell_install::migration::install_once(
             &context.request.run_dir.join("paperboy-migration.json"),
             &backup,
             || {

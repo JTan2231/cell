@@ -1,6 +1,6 @@
 {
   "id": "bazaar.installation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -29,14 +29,6 @@
       "invocation": "bazaar-install inspect"
     },
     {
-      "label": "Verify the candidate",
-      "invocation": "bazaar-install verify --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE"
-    },
-    {
-      "label": "Verify a retained release",
-      "invocation": "bazaar-install verify-release ABSOLUTE_RELEASE"
-    },
-    {
       "label": "Recover retained programs",
       "invocation": "bazaar-install recover --release ABSOLUTE_RELEASE"
     }
@@ -51,7 +43,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Program installation requires an authorized matching sealed Bazaar program/provider candidate; program-only inspection or recovery does not require initialized data. Init requires an absolute private path and absent, empty, or compatible state and can create missing paths. Doctor requires initialized schema-one state."
+        "statement": "Program installation requires an authorized supplied Bazaar program/provider candidate; program-only inspection or recovery does not require initialized data. Init requires an absolute private path and absent, empty, or compatible state and can create missing paths. Doctor requires initialized schema-one state."
       }
     ],
     "data_semantics": [
@@ -99,19 +91,19 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Initialization and integrity checks select an absolute private database path. Direct installation takes matching absolute --binary and --bundle paths and optional --home and --expected-current. Recovery and verify-release take an exact owned release. Coordinated deployment selects committed local main and accepts no Bazaar settings."
+        "statement": "Initialization and integrity checks select an absolute private database path. Direct installation takes matching absolute --binary and --bundle paths and optional --home and --expected-current. Recovery takes an exact owned release. Coordinated deployment selects committed local main and accepts no Bazaar settings."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor return schema-one JSON with no string content. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. Configure initializes compatible schema-one state; verification checks program identity and SQLite integrity."
+        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor return schema-one JSON with no string content. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. Configure initializes compatible schema-one state; installation adds no separate program-integrity or SQLite-integrity gate."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verification checks selected program bytes and the default database at invocation time. Doctor checks local database identity and SQLite quick_check; it establishes no future availability or content correctness."
+        "statement": "Installation reads selectors and metadata without integrity checks. Doctor checks local database identity and SQLite quick_check; it establishes no future availability or content correctness."
       }
     ],
     "lifecycle_and_consistency": [
@@ -140,10 +132,10 @@
     "Bazaar owns its program selection and private database. The Cell coordinator owns deployment ordering."
   ],
   "success": [
-    "For a program operation, selected programs and provider match their sealed release. For a database operation, selected schema-one identity and integrity checks pass. Coordinated deployment verifies both."
+    "For a program operation, owned programs and provider selectors select the supplied release. For a database operation, selected schema-one identity and integrity checks pass. Coordinated deployment performs setup without an additional verification gate."
   ],
   "failure_and_recovery": [
-    "Refuse foreign selectors, tampered releases, stale expected selections and unsupported state. Retained-release program recovery leaves database history intact. After an interrupted initialization, repeat init only against the same empty or compatible state."
+    "Refuse foreign selectors, stale expected selections and unsupported state. Retained-release program recovery leaves database history intact. After an interrupted initialization, repeat init only against the same empty or compatible state."
   ],
   "privacy": [
     "The default database is ~/.local/share/bazaar/bazaar.sqlite3. State stays outside source and release files. Protect quiescent backups with the same private permissions."

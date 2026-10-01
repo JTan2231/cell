@@ -29,13 +29,13 @@
     "The smallest owning code and owning feature contracts, operation procedures, semantic-seed, and packaging contracts agree.",
     "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
     "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
-    "Packaging tests prove an explicit candidate Chancery reader validates the exact staged provider before any public selector mutation.",
+    "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication.",
     "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome."
   ],
   "failure_and_recovery": [
     "Do not broaden runtime input into caller-controlled argv, weaken artifact checks, infer domain success, capture product output, or add automatic product retry.",
     "Keep binding state, plist bytes, and launchd loaded state coherent through staged transition and compensation; when an incomplete projection remains attributable to Clockwork, durably attempt fail-disabled recovery, and otherwise retain and recovery-gate unattributable state without destructive mutation.",
-    "Packaging changes retain exact content identity, version/provider matching, candidate-reader validation of the exact staged provider before selector mutation, foreign-state refusal, stable selectors, and rollback without touching product bindings or runtime state."
+    "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery."
   ],
   "privacy": [
     "Fixtures must be synthetic and contain no credential, real product output, private user path, production definition, or activation history.",
@@ -76,8 +76,8 @@
     },
     {
       "id": "chancery.provider.publish",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.definitions",
@@ -106,8 +106,8 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -131,7 +131,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Inputs are the scoped request, current Clockwork source and public contracts, isolated synthetic release and state fixtures including a candidate Chancery reader, and any explicitly selected installed documentation contracts."
+        "statement": "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication."
       }
     ],
     "outputs": [
@@ -192,7 +192,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork provider-publication changes rely on Chancery's candidate-reader validation contract; packaging must invoke that reader on the exact staged provider before selector mutation.",
+        "statement": "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery.",
         "target": "chancery",
         "kind": "control",
         "contract": "chancery.provider.publish"

@@ -54,10 +54,9 @@ semantics doctor
 semantics --json doctor
 ```
 
-Doctor returns a typed check report even when a check fails. It must report
-`ok:true` with green `database`, `participation_markers`,
-`annals_decision_feed`, and `nucleus_reconciliation` checks before relying on the
-installed result. It checks SQLite schema 3, exact non-retired project markers,
+Doctor is a separate runtime diagnostic, not an installation gate. It returns
+a typed report with `database`, `participation_markers`,
+`annals_decision_feed`, and `nucleus_reconciliation` checks. It checks SQLite schema 3, exact non-retired project markers,
 the explicit Annals config and selected library, Nucleus health/capabilities,
 and both historical and new document schemas/toolsets.
 
@@ -70,7 +69,7 @@ such projects may report activation pending. Its first registration captures
 the then-current watermark.
 
 Doctor proves these observations, not that a future source will yield a revision.
-Deployment verification creates no projects, revisions, or Nucleus jobs. An
+Installation does not invoke doctor or create projects, revisions, or Nucleus jobs. An
 unavailable existing Nucleus installation is not an empty durable-job inventory.
 A completely absent installation with no Nucleus database has no jobs to drain.
 
@@ -153,13 +152,13 @@ selected definitions, and service artifacts. Existing database, WAL, shared-memo
 rollback-journal, and maintenance-receipt files must be current-user-owned regular
 files with mode `0600`, no symlink, and one hard link. A receipt requires its gate.
 
-The installer checks candidate/provider versions and a canonical content manifest.
+The installer records release metadata without candidate/provider version or
+artifact-integrity checks.
 The staged `cell-install-v2` inventory covers payload, installer, static frontend
 and worker, unrendered schedule template, and the complete provider bundle.
-Bundle bytes belong to the content-addressed release and its integrity identity.
+Bundle bytes belong to the content-addressed release.
 The provider selector follows `current` and rolls back with the product.
-Retained format-one and format-two releases use their exact read-only legacy
-verifier and preserve original bytes.
+Retained format-one and format-two release metadata remains readable.
 
 Release identity includes the unrendered template and runner. Absolute release
 paths and interpreter/runner hashes are rendered after the release identity exists.
@@ -170,11 +169,11 @@ The selected-definition check is a point-in-time observation; Clockwork supplies
 no compare-and-swap. Concurrent direct mutation of that binding is unsupported.
 
 The installer holds the worker flock, proves SQLite closed, privately backs up
-the database plus `-wal`, `-shm`, and `-journal`, then runs exact candidate doctor
-in a scrubbed environment. The old private selector remains selected and public
-work stays fenced until publication and durable commit. Candidate doctor may
-initialize or migrate state. Success publishes release, CLI, and provider
-selectors and selects the exact candidate Clockwork definition.
+the database plus `-wal`, `-shm`, and `-journal`, then initializes or migrates the
+database through the Semantics store. The old private selector remains selected
+and public work stays fenced until publication and durable commit. Setup does
+not replay the Annals feed or check Nucleus readiness. Success publishes release,
+CLI, and provider selectors and selects the candidate Clockwork definition.
 
 ## Installer marker and retained holds
 
@@ -210,10 +209,9 @@ ownership evidence. The gate prevents domain admission even when scheduler
 cleanup cannot be proved.
 
 Interrupted transactions remain in `install/.transaction.*/transaction.json`.
-Recovery verifies the complete saved database inventory and hashes before replacing
-live files. A durably committed transaction resumes forward. A prior null selection
-requires explicit `recover --forward`: the exact authenticated candidate, retained
-release, and definition are proved; scrubbed doctor runs while gated; candidate
+Recovery reads the saved database inventory before restoring the captured files. A durably committed transaction resumes forward. A prior null selection
+requires explicit `recover --forward`: the recorded candidate, retained
+release, and definition are proved; state remains gated; candidate
 selectors and binding are restored before releasing its hold. Recovery never
 chooses or repeats a legacy activation watermark.
 
@@ -246,9 +244,8 @@ never run an old binary or discard new state.
 
 ## Coordinated deployment and uninstall
 
-The compiled Cell adapter uses this product transaction. `apply` stages verified
-immutable files; `configure` performs configuration, migration, and selector
-publication with scheduling disabled; `verify` checks without domain work;
+The compiled Cell adapter uses this product transaction. `apply` stages release files; `configure` performs configuration, migration,
+and selector publication with scheduling disabled;
 `release` removes only the run's admission hold; `activate` restores captured
 intent after every affected hold is released. Existing disabled bindings remain
 disabled. Project pause and incident halts remain effective.

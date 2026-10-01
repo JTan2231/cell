@@ -17,7 +17,7 @@ clew thread 'SLA implementation'
 - [Record and read application history](chancery/manuals/application-track.md)
 - [Preview and send the daily email](chancery/manuals/digest-email.md)
 - [Private state and installation lifecycle](chancery/manuals/state.md)
-- [Install and verify Clew](chancery/manuals/install-operate.md)
+- [Install Clew](chancery/manuals/install-operate.md)
 
 Read the release publication with `chancery product clew`. Use
 `chancery show ID` for a focused contract and `chancery resolve ID` for its

@@ -2,8 +2,6 @@ use crate::{Error, FORMAT, InstallSpec, Installation, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
-use std::ffi::OsStr;
-use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::Read;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -131,16 +129,6 @@ pub(crate) fn validate_spec(spec: &InstallSpec) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn version(value: &str) -> bool {
-    let parts: Vec<_> = value.split('.').collect();
-    parts.len() == 3
-        && parts.iter().all(|part| {
-            !part.is_empty()
-                && part.bytes().all(|c| c.is_ascii_digit())
-                && (part.len() == 1 || !part.starts_with('0'))
-        })
-}
-
 pub(crate) fn directory(path: &Path) -> Result<()> {
     if !fs::symlink_metadata(path)?.is_dir() {
         return Err(Error::new("artifact directory is symbolic or invalid"));
@@ -192,102 +180,24 @@ fn visit(
     Ok(())
 }
 
-fn expected_dirs(files: impl Iterator<Item = String>) -> BTreeSet<String> {
-    let mut dirs = BTreeSet::new();
-    for file in files {
-        let mut at = Path::new(&file).parent();
-        while let Some(path) = at {
-            if path.as_os_str().is_empty() {
-                break;
-            }
-            dirs.insert(path.to_string_lossy().into_owned());
-            at = path.parent();
-        }
-    }
-    dirs
-}
-
 pub(crate) fn provider_files(
     root: &Path,
-    spec: &InstallSpec,
+    _spec: &InstallSpec,
 ) -> Result<BTreeMap<String, FileEntry>> {
-    let (files, dirs) = inventory(root)?;
-    let value: serde_json::Value = serde_json::from_slice(&fs::read(root.join("provider.json"))?)?;
-    let overview = value
-        .get("overview")
-        .map(|overview| {
-            let path = overview
-                .as_str()
-                .ok_or_else(|| Error::new("provider bundle has an unsupported inventory"))?;
-            let overview_path = Path::new(path);
-            if value
-                .get("schema_version")
-                .and_then(serde_json::Value::as_u64)
-                != Some(4)
-                || !overview_path.is_relative()
-                || overview_path.extension() != Some(OsStr::new("md"))
-                || !overview_path
-                    .components()
-                    .all(|component| matches!(component, Component::Normal(_)))
-            {
-                return Err(Error::new("provider bundle has an unsupported inventory"));
-            }
-            Ok(path)
-        })
-        .transpose()?;
-    if dirs != expected_dirs(files.keys().cloned())
-        || !files.contains_key("provider.json")
-        || !files.keys().any(|p| p.starts_with("entries/"))
-        || !files.keys().any(|p| p.starts_with("manuals/"))
-        || overview.is_some_and(|path| !files.contains_key(path))
-        || files.keys().any(|p| {
-            p != "provider.json"
-                && overview.is_none_or(|path| p != path)
-                && !(p.starts_with("entries/")
-                    && Path::new(p).extension() == Some(OsStr::new("json")))
-                && !(p.starts_with("manuals/")
-                    && Path::new(p).extension() == Some(OsStr::new("md")))
-        })
-    {
-        return Err(Error::new("provider bundle has an unsupported inventory"));
-    }
-    if value
-        .pointer("/provider/id")
-        .and_then(serde_json::Value::as_str)
-        != Some(spec.provider)
-    {
-        return Err(Error::new("provider bundle has foreign ownership"));
-    }
-    Ok(files)
+    Ok(inventory(root)?.0)
 }
 
-/// Validate and hash the complete provider inventory without running a reader.
-/// The owning source gate remains responsible for Chancery schema validation.
+/// List and hash provider files for release naming and copying.
 ///
 /// # Errors
-/// Returns an error for unsafe files, unsupported layout, malformed metadata,
-/// foreign provider identity, or inaccessible input.
+/// Returns an error when an input cannot be read.
 pub fn provider_inventory(root: &Path, spec: &InstallSpec) -> Result<BTreeMap<String, FileEntry>> {
     provider_files(root, spec)
 }
 
-pub(crate) fn provider_version(root: &Path) -> Result<String> {
-    let value: serde_json::Value = serde_json::from_slice(&fs::read(root.join("provider.json"))?)?;
-    value
-        .pointer("/provider/release")
-        .and_then(serde_json::Value::as_str)
-        .filter(|v| version(v))
-        .map(str::to_owned)
-        .ok_or_else(|| Error::new("invalid provider release version"))
-}
-
 pub(crate) fn copy_file(source: &Path, destination: &Path, mode: u32) -> Result<()> {
-    let before = digest(source)?;
     fs::copy(source, destination)?;
     fs::set_permissions(destination, fs::Permissions::from_mode(mode))?;
-    if digest(destination)? != before || digest(source)? != before {
-        return Err(Error::new("candidate changed during staging"));
-    }
     Ok(())
 }
 
@@ -314,31 +224,45 @@ pub(crate) fn write_manifest(
     Ok(manifest)
 }
 
-/// Verify a complete retained release without executing its contents.
-/// The directory's final component must be its exact content identity.
+/// Read retained release metadata without checking artifact integrity.
 ///
 /// # Errors
-/// Returns an error for unsafe ownership or paths, unknown formats, invalid
-/// manifests, unexpected files, or any content or version mismatch.
-pub fn verify_release(spec: &InstallSpec, release: &Path) -> Result<Installation> {
+/// Returns an error for inaccessible metadata, unsupported formats, or paths.
+pub fn read_release(spec: &InstallSpec, release: &Path) -> Result<Installation> {
     validate_spec(spec)?;
-    directory(release)?;
     if !release.is_absolute() || fs::canonicalize(release)? != release {
         return Err(Error::new("release path must be absolute and non-symbolic"));
     }
-    verify_tree_ownership(release, current_uid()?)?;
     let id = release
         .file_name()
         .and_then(|s| s.to_str())
         .ok_or_else(|| Error::new("invalid release path"))?;
-    if !valid_hash(id) {
-        return Err(Error::new("invalid release identity"));
-    }
-    if release.join("manifest.json").try_exists()? {
-        verify_new(spec, release, id)
+    let (version, format) = if release.join("manifest.json").try_exists()? {
+        let path = release.join("manifest.json");
+        let manifest: Manifest = serde_json::from_slice(&fs::read(&path)?)?;
+        if manifest.format != FORMAT {
+            return Err(Error::new("unsupported release format"));
+        }
+        let version = manifest
+            .versions
+            .get(spec.commands[0])
+            .cloned()
+            .unwrap_or_default();
+        (version, manifest.format)
     } else {
-        verify_legacy(spec, release, id)
-    }
+        let path = release.join("manifest.txt");
+        let manifest = crate::legacy::manifest(&path)?;
+        (
+            manifest.get("version").cloned().unwrap_or_default(),
+            "legacy-usher-v1".to_owned(),
+        )
+    };
+    Ok(Installation {
+        current: format!("releases/{id}"),
+        release_id: id.to_owned(),
+        version,
+        format,
+    })
 }
 
 pub(crate) fn verify_tree_ownership(path: &Path, uid: u32) -> Result<()> {
@@ -356,116 +280,4 @@ pub(crate) fn verify_tree_ownership(path: &Path, uid: u32) -> Result<()> {
         regular(path)?;
     }
     Ok(())
-}
-
-fn verify_new(spec: &InstallSpec, release: &Path, id: &str) -> Result<Installation> {
-    let manifest_path = release.join("manifest.json");
-    regular(&manifest_path)?;
-    let bytes = fs::read(&manifest_path)?;
-    let manifest: Manifest = serde_json::from_slice(&bytes)?;
-    if serde_json::to_vec(&manifest)? != bytes
-        || manifest.format != FORMAT
-        || manifest.product != spec.product
-        || manifest.provider != spec.provider
-        || manifest.release_id != id
-        || identity(&manifest)? != id
-        || manifest
-            .versions
-            .keys()
-            .map(String::as_str)
-            .collect::<BTreeSet<_>>()
-            != spec.commands.iter().copied().collect()
-        || manifest.versions.values().any(|v| !version(v))
-    {
-        return Err(Error::new("release manifest identity or format is invalid"));
-    }
-    let (mut files, dirs) = inventory(release)?;
-    files.remove("manifest.json");
-    if files != manifest.files || dirs != expected_dirs(manifest.files.keys().cloned()) {
-        return Err(Error::new("release inventory differs from its manifest"));
-    }
-    let prefix = format!("share/chancery/{}/", spec.provider);
-    let allowed: BTreeSet<_> = spec
-        .commands
-        .iter()
-        .map(|name| format!("bin/{name}"))
-        .chain(["package/install".to_owned()])
-        .collect();
-    if manifest
-        .files
-        .keys()
-        .any(|p| !allowed.contains(p) && !p.starts_with(&prefix))
-        || allowed
-            .iter()
-            .any(|p| manifest.files.get(p).is_none_or(|f| f.mode != 0o755))
-        || manifest
-            .files
-            .iter()
-            .any(|(p, f)| p.starts_with(&prefix) && f.mode != 0o444)
-    {
-        return Err(Error::new("release has an unsupported artifact layout"));
-    }
-    let bundle = release.join(format!("share/chancery/{}", spec.provider));
-    provider_files(&bundle, spec)?;
-    let version = provider_version(&bundle)?;
-    if manifest.versions.get(spec.commands[0]) != Some(&version) {
-        return Err(Error::new("provider and program version disagree"));
-    }
-    Ok(Installation {
-        current: format!("releases/{id}"),
-        release_id: id.to_owned(),
-        version,
-        format: FORMAT.to_owned(),
-        manifest_sha256: digest(&manifest_path)?,
-    })
-}
-
-fn verify_legacy(spec: &InstallSpec, release: &Path, id: &str) -> Result<Installation> {
-    // Only the migrated Usher selector-only layout is a supported predecessor.
-    if spec.product != "usher"
-        || spec.provider != "usher"
-        || spec.commands.first() != Some(&"usher")
-    {
-        return Err(Error::new("unsupported legacy release format"));
-    }
-    let (files, dirs) = inventory(release)?;
-    let bundle = release.join("share/chancery/usher");
-    let provider = provider_files(&bundle, spec)?;
-    let mut expected: BTreeSet<String> = ["bin/usher", "package/deploy-user.sh", "manifest.txt"]
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-    expected.extend(provider.keys().map(|p| format!("share/chancery/usher/{p}")));
-    if files.keys().cloned().collect::<BTreeSet<_>>() != expected
-        || dirs != expected_dirs(expected.into_iter())
-        || files["bin/usher"].mode & 0o111 == 0
-        || files["package/deploy-user.sh"].mode & 0o111 == 0
-    {
-        return Err(Error::new("legacy release has an unsupported inventory"));
-    }
-    let mut bundle_bytes = String::new();
-    for (path, entry) in provider {
-        let _ = write!(bundle_bytes, "path=./{path}\n{}  ./{path}\n", entry.sha256);
-    }
-    let bundle_hash = hash_bytes(bundle_bytes.as_bytes());
-    let binary_hash = &files["bin/usher"].sha256;
-    let installer_hash = &files["package/deploy-user.sh"].sha256;
-    let computed =
-        hash_bytes(format!("{binary_hash}\n{installer_hash}\n{bundle_hash}\n").as_bytes());
-    let version = provider_version(&bundle)?;
-    let expected_manifest = format!(
-        "format=1\nproduct=usher\nrelease_id={id}\nversion={version}\nbinary_sha256={binary_hash}\ndeployer_sha256={installer_hash}\nchancery_sha256={bundle_hash}\n"
-    );
-    if computed != id || fs::read(release.join("manifest.txt"))? != expected_manifest.as_bytes() {
-        return Err(Error::new(
-            "legacy release manifest or content identity is invalid",
-        ));
-    }
-    Ok(Installation {
-        current: format!("releases/{id}"),
-        release_id: id.to_owned(),
-        version,
-        format: "legacy-usher-v1".to_owned(),
-        manifest_sha256: files["manifest.txt"].sha256.clone(),
-    })
 }

@@ -1,6 +1,6 @@
 {
   "id": "nucleus.execution.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -22,7 +22,7 @@
     "Job submission creates one durable Nucleus job and may invoke Codex and consume account allowance; an accepted job remains queued with a pending attempt while all eight global execution slots are occupied.",
     "Cancellation records intent for one exact job attempt; authentication login changes the Nucleus-owned credential.",
     "Graceful shutdown first requests cancellation; on startup every attempt still durably nonterminal is marked lost, while uninstall removes installed programs but retains state and logs.",
-    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment readiness uses health and creates no synthetic jobs. Startup transactionally retires terminal history belonging to the removed built-in deployment probe, identified by its reserved requester, fixed label, and deterministic job ID; dependent or unfinished records block retirement.",
+    "Run-owned deployment holds survive process exit; new work is refused while admitted work can settle. Deployment performs setup without calling health or creating synthetic jobs. Startup transactionally retires terminal history belonging to the removed built-in deployment probe, identified by its reserved requester, fixed label, and deterministic job ID; dependent or unfinished records block retirement.",
     "Codex weekly quota is an expected admission pause. Pending requester work is retained without a Clockwork abend; EMT sends one durable condition notice directly through Email without a Nucleus job. Existing deadlines, failure halts and operator pauses remain independent."
   ],
   "authority": [
@@ -251,7 +251,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently. The adapter requires Codex 0.154.0-alpha.6.2 with a complete runtime sealed by nucleus-install stage-harness. The runtime contains codex, its matching codex-code-mode-host, and nucleus-runtime.json with their SHA-256 identities. Installation, health and admission reject missing, nonexecutable or changed files. Every selected upgrade requires the staged runtime tested by the Nucleus CI gate at ~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/codex. It retains a configured runtime only when both file identities match that pair; otherwise it selects the staged path. Deployment captures and rechecks file identities and retains the prior harness path for recovery. Staging does not change service selection or credentials."
+        "statement": "Public invocation protocol version, store schema, adapter version, exact Codex compatibility, immutable schema and toolset identity, capability contract version, and provider release evolve independently. The adapter requires Codex 0.154.0-alpha.6.2 with a complete runtime sealed by nucleus-install stage-harness. The runtime contains codex, its matching codex-code-mode-host, and nucleus-runtime.json with their SHA-256 identities. Normal health and admission reject missing, nonexecutable or changed files. Installation does not run those checks. A selected upgrade uses the staged runtime unless settings supply codex_bin; an affected-only deployment preserves the LaunchAgent path. Staging does not change service selection or credentials."
       },
       {
         "status": "declared",
@@ -311,8 +311,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ]
 }
