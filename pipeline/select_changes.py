@@ -21,6 +21,7 @@ from platform_inputs import (
 
 RUST_EXECUTOR_INPUTS = frozenset((
     "pipeline/parallel_tests.py", "pipeline/nextest_tool.py", "pipeline/clippy.sh",
+    "pipeline/autofix.py",
 ))
 
 
@@ -252,6 +253,7 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
         parser.add_argument("--base", metavar="COMMIT", help="compare against this full commit hash")
         parser.add_argument("--candidate", metavar="COMMIT", help="require this clean committed HEAD")
         parser.add_argument("--json", action="store_true", help="emit one aggregate JSON receipt")
+        parser.add_argument("--autofix-patch", metavar="PATH", help=argparse.SUPPRESS)
     parser.add_argument("products", nargs="*", metavar="PRODUCT")
     args = parser.parse_intermixed_args(arguments)
     if direct:
@@ -262,6 +264,8 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
         parser.error("--all cannot be combined with product arguments")
     if not direct and bool(args.base) != bool(args.candidate):
         parser.error("--base and --candidate are required together")
+    if getattr(args, "autofix_patch", None) and not (args.json and args.base and args.candidate):
+        parser.error("--autofix-patch requires committed-range JSON validation")
     return args
 
 
@@ -437,6 +441,8 @@ def broker(root: Path, gate: str, lane: str, body: list[str], *, verbose: bool,
            capture_receipt: bool = False) -> dict | None:
     command = [sys.executable, str(root / "ci_broker/client.py"), "run", "--quiet-result",
                "--env", "CHANCERY_USAGE_DISABLED=1"]
+    if environment.get("CELL_CI_AUTOFIX_PATCH"):
+        command.extend(["--env", "CELL_CI_AUTOFIX_PATCH=" + environment["CELL_CI_AUTOFIX_PATCH"]])
     if verbose:
         command.append("--verbose")
     if receipt or capture_receipt:
@@ -607,6 +613,15 @@ def run_json(root: Path, arguments: list[str]) -> int:
         check_plan(root, selection)
         environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
                        "PYTHONDONTWRITEBYTECODE": "1"}
+        # Only the installed manager opts into this private repair boundary.
+        environment.pop("CELL_CI_AUTOFIX_PATCH", None)
+        patch_path = None
+        if options.autofix_patch:
+            patch_path = Path(options.autofix_patch)
+            if not patch_path.is_absolute() or patch_path.resolve().is_relative_to(root.resolve()):
+                raise SelectionError("autofix patch must be outside the candidate worktree")
+            patch_path.unlink(missing_ok=True)
+            environment["CELL_CI_AUTOFIX_PATCH"] = str(patch_path)
         phase = "broker"
         result["state"] = "passed"
         code = 0
@@ -615,6 +630,13 @@ def run_json(root: Path, arguments: list[str]) -> int:
             receipt = broker(root, gate, lane, body, verbose=selection.verbose,
                              environment=environment, capture_receipt=True)
             result["gates"].append(receipt)
+            if (gate == "cell.clippy" and receipt["state"] in {"passed", "failed"}
+                    and patch_path is not None and patch_path.is_file() and patch_path.stat().st_size):
+                # This is a proposal, never a successful validation of changed source.
+                result["state"] = "autofix"
+                result["autofix_patch"] = str(patch_path)
+                code = 0
+                break
             if receipt["state"] != "passed":
                 result["state"] = receipt["state"]
                 result["failure"] = {
@@ -662,6 +684,7 @@ def run(root: Path, arguments: list[str], direct: str | None = None) -> int:
     check_plan(root, selection)
     environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": selection.source,
                    "PYTHONDONTWRITEBYTECODE": "1"}
+    environment.pop("CELL_CI_AUTOFIX_PATCH", None)
     for gate, lane, body in gates:
         broker(root, gate, lane, body, verbose=selection.verbose, environment=environment)
     check_plan(root, selection)
@@ -691,6 +714,7 @@ def run_shared(root: Path, arguments: list[str]) -> None:
     expected_status = status_key(before)
     environment = {**os.environ, "CELL_CI_EXPECTED_SOURCE_KEY": expected_source,
                    "PYTHONDONTWRITEBYTECODE": "1"}
+    environment.pop("CELL_CI_AUTOFIX_PATCH", None)
     check(root, expected_source, expected_status)
     gates = [shared_check_gate(root, suite) for suite in suites if suite != "catalog"]
     shared_rust = [suite for suite in suites if suite in RUST_SHARED_SUITES]

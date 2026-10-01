@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -83,7 +84,7 @@ class Worker:
     def step(self, job: dict) -> None:
         workspace.root()
         # Cancellation drains a running child. It does not erase its effect evidence.
-        if job["cancel_requested"] and job["phase"] in {"integrating", "repair_prepare", "applying", "accepting"}:
+        if job["cancel_requested"] and job["phase"] in {"integrating", "repair_prepare", "applying", "autofixing", "accepting"}:
             self.finish(job, "cancelled", "Cancelled before the next external operation.")
             return
         operation = getattr(self, job["phase"], None)
@@ -149,6 +150,10 @@ class Worker:
                    "--candidate", candidate, "--json"]
         if job.get("skip_tests", False):
             command.append("--skip-tests")
+        patch_path = self.directory(job) / f"validation-{ordinal}.autofix.patch"
+        supports_autofix = (worktree / "pipeline/autofix.py").is_file()
+        if supports_autofix:
+            command.extend(["--autofix-patch", str(patch_path)])
         result, output, diagnostic = self.process(job, f"validation-{ordinal}", command, worktree)
         if self.store.job(job["id"])["cancel_requested"]:
             self.finish(job, "cancelled", "Cancelled after the current validation drained.")
@@ -162,10 +167,20 @@ class Worker:
             raise ManagerError("validator receipt does not identify the requested candidate")
         tests_skipped = (receipt.get("selection") or {}).get("tests_skipped", False)
         if (type(tests_skipped) is not bool
-                or (receipt.get("state") == "passed"
+                or (receipt.get("state") in {"passed", "autofix"}
                     and tests_skipped != job.get("skip_tests", False))):
             raise ManagerError("validator receipt does not match the requested test policy")
         git.clean_candidate(worktree, candidate)
+        mechanical = None
+        if receipt.get("state") == "autofix":
+            if (not supports_autofix or result["exit_code"] != 0
+                    or receipt.get("autofix_patch") != str(patch_path)):
+                raise ManagerError("validator returned unexpected autofix evidence")
+            raw = patch_path.read_bytes()
+            if not raw:
+                raise ManagerError("validator returned an empty autofix patch")
+            mechanical = {"patch": str(patch_path), "stamp": int(time.time()),
+                          "patch_digest": hashlib.sha256(raw).hexdigest()}
         retained = self.directory(job) / f"validation-{ordinal}.json"
         atomic_json(retained, receipt)
         # Broker retention is independent. Copy the failed gate transcript now.
@@ -178,10 +193,13 @@ class Worker:
         diagnostic_path = self.directory(job) / f"validation-{ordinal}.log"
         atomic_bytes(diagnostic_path, bytes(diagnostics))
         job["validations"].append({"candidate": candidate, "receipt": str(retained),
-                                    "diagnostics": str(diagnostic_path), "state": receipt.get("state")})
+                                    "diagnostics": str(diagnostic_path), "state": receipt.get("state"),
+                                    **(mechanical or {})})
         job["last_receipt"] = receipt
         if self.store.job(job["id"])["cancel_requested"]:
             self.finish(job, "cancelled", "Cancelled after the current validation drained.")
+        elif mechanical:
+            self.save(job, "autofixing")
         elif receipt.get("state") == "passed" and result["exit_code"] == 0:
             self.save(job, "preparing" if "signing_policy" in job else "accepting")
         elif receipt.get("state") == "failed":
@@ -189,6 +207,30 @@ class Worker:
         else:
             self.finish(job, "failed", f"Validation execution requires recovery: {receipt.get('state')}",
                         unresolved=receipt.get("state") in {"lost", "stale"})
+
+    def autofixing(self, job: dict) -> None:
+        self.assert_signing_policy(job)
+        validation = job["validations"][-1]
+        parent = validation["candidate"]
+        if validation.get("state") != "autofix" or parent != job["candidate_commit"]:
+            raise ManagerError("autofix evidence does not identify the current candidate")
+        raw = Path(validation["patch"]).read_bytes()
+        if not raw or hashlib.sha256(raw).hexdigest() != validation["patch_digest"]:
+            raise ManagerError("retained autofix patch changed")
+        tree = git.patch_tree(self.repository, parent, raw, self.directory(job) / "autofix.index")
+        candidate = git.commit_tree(self.repository, tree, [parent], job["id"], validation["stamp"],
+                                    f"Apply mechanical CI fixes {len(job['validations'])}")
+        if candidate == parent or tree == git.value(self.repository, "rev-parse", parent + "^{tree}"):
+            raise ManagerError("autofix patch made no source changes")
+        recorded = validation.get("candidate_after_fixes")
+        if recorded is not None and recorded != candidate:
+            raise ManagerError("retained autofix candidate differs from its patch")
+        validation["candidate_after_fixes"] = candidate
+        self.save(job)
+        git.advance(self.repository, git.private_ref(job["id"], "candidate"), parent, candidate)
+        git.ensure_worktree(self.repository, self.worktree(job), candidate)
+        job["candidate_commit"] = candidate
+        self.save(job, "checking")
 
     def repair_prepare(self, job: dict) -> None:
         self.assert_signing_policy(job)

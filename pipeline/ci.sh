@@ -82,6 +82,10 @@ EOF
 }
 
 ci_fmt() {
+    if [ -n "${CELL_CI_AUTOFIX_PATCH:-}" ]; then
+        printf '%s\n' '==> rustfmt will apply with the shared lint fixes'
+        return
+    fi
     printf '%s\n' '==> rustfmt'
     set -- cargo fmt --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
     while IFS= read -r cargo_package; do

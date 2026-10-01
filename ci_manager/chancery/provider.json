@@ -3,11 +3,11 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.6.0"
+    "release": "0.6.1"
   },
   "promise_scope": {
     "authoritative_for": [
-      "The CI manager owns admission, FIFO order, one active delivery job, retained candidate and repair history, bounded remediation policy, acceptance-ref advancement, deployment correlation, and outcome notification state for its configured Cell repository.",
+      "The CI manager owns admission, FIFO order, one active delivery job, retained candidate and repair history, deterministic fix application, bounded model remediation policy, acceptance-ref advancement, deployment correlation, and outcome notification state for its configured Cell repository.",
       "The CI manager owns its private journal, installed worker lifecycle, operator pause, and owner-qualified Nucleus requester maintenance holds.",
       "Cell owns explicit current-user macOS signing selection, frozen CI signing policy, and trusted production preparation before source acceptance. macOS Keychain owns the selected private key and key-use authorization."
     ],
@@ -33,18 +33,20 @@
       "Signing selection is one private host configuration outside source and caches. New macOS jobs require its exact certificate and usable private key. Routine CI, repair, installation, and cache reuse do not change it; only explicit signing setup or configuration does."
     ],
     "shared_privacy_and_retention": [
-      "The private journal retains input and candidate identities, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
+      "The private journal retains input and candidate identities, deterministic fix patches and candidate commits, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
       "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. New outcome emails disclose product and check names, failed test names, and short outcome diagnostics to Email's fixed personal recipient and mail providers. They omit job and commit IDs, model names, repair budgets, and local artifact paths. Previously frozen messages remain unchanged.",
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them.",
       "Signing configuration and job snapshots retain public certificate selection, namespace, Keychain path, and policy digests. The private key stays in Keychain. Initial setup retains an encrypted recovery export and its private password in a mode-0700 host backup directory, with mode-0600 files; there is no upload or automatic deletion."
     ],
     "compatibility_and_retirement": [
-      "Manager release 0.6.0 uses journal schema 1, queue contract 8, signing contract 1, and signing policy schema 1. New jobs freeze test, refund, and signing policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
+      "Manager release 0.6.1 uses journal schema 1, queue contract 8, signing contract 1, and signing policy schema 1. New jobs freeze test, refund, and signing policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
+      "The manager enables deterministic fixes only when the committed candidate contains pipeline/autofix.py. Older candidates retain check-only validation. The optional validator mode and retained fix history are additive; existing frozen model, test and signing policies do not change.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [
       "Production requires a configured external APFS volume with ownership enabled and macOS filesystem write confinement for CI and compiler bodies. The fixed volume UUID and mount path have no internal fallback. Source Git metadata, installed programs, configuration and live provider state remain host-owned.",
       "Only one delivery job and one repair loop may be active. The manager invokes the internal validator through the shared broker; root and product ci.sh wrappers support only manager commands.",
+      "The validator captures MachineApplicable suggestions from the existing strict Clippy invocation and runs the formatter once for the selected Cargo packages. It prepares a patch in a temporary tracked snapshot, without changing the committed candidate. The manager applies that patch to a private index, records a private candidate and revalidates against the same job base. This path invokes no model and consumes no model repair point; unresolved lint failures still use bounded model repair.",
       "New jobs default to three unrefunded gpt-5.6-terra medium repair attempts, then one unrefunded gpt-5.6-sol high attempt, with a 600-second execution timeout per invocation. Git acceptance and a recorded private candidate refund the attempt before later validation. Failed attempts remain charged for the whole job. This limits unrefunded points, not total invocations, runtime, or cost; no separate total-invocation ceiling applies.",
       "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",

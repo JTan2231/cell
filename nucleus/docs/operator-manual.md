@@ -550,6 +550,16 @@ uses a guarded ref update. Deployment selects that exact accepted candidate,
 with a stable caller request ID and a retained operation receipt. Development
 changes made after submission do not change the job.
 
+For candidates with `pipeline/autofix.py`, the installed manager requests
+deterministic fixes during validation. The validator uses the existing Clippy
+diagnostics and one formatter pass to prepare a retained patch without changing
+the committed candidate. The manager applies it to a private index, records a
+private candidate and revalidates against the same base. This path invokes no
+Nucleus model and consumes no model repair point. Remaining failures use the
+bounded model path. Older candidates retain check-only validation. Enable the
+new manager release through the paused, drained replacement procedure below;
+changing the checkout does not replace the worker.
+
 Only one delivery lifecycle is active. The manager does not hold a CI broker
 slot while it waits for a model, deployment, or email. Individual gates still
 use the existing broker. A surviving model or deployment remains associated

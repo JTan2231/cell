@@ -165,10 +165,17 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.6.0 uses queue contract 8 and retains journal
+arguments. Manager release 0.6.1 uses queue contract 8 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
+
+The manager enables the optional `--autofix-patch` validator mode only when the
+committed candidate contains `pipeline/autofix.py`. Older candidates retain
+check-only validation. The new mode and retained fix history use schema 1 and
+do not change frozen model, test or signing policies. Install the matching
+manager and provider through the paused, drained procedure above before using
+this mode. An edit to the checkout does not replace the installed worker.
 
 New jobs retain `signing_policy` and `signing_policy_digest` at submission.
 Retained jobs without those fields keep their earlier acceptance path. Manager
@@ -273,6 +280,29 @@ matching successful validation and required production preparation. A changed
 accepted ref stops promotion. Accepted
 source and installed source are separate: a later deployment failure does not
 erase an already accepted commit.
+
+## Apply deterministic fixes
+
+For a candidate that supports this mode, the validator captures suggestions
+from the existing strict Clippy invocation. It applies complete, nonconflicting
+`MachineApplicable` suggestion groups for tracked files to a temporary snapshot.
+It omits other suggestions, incomplete groups and conflicting groups. It then
+runs the formatter once for the selected Cargo packages instead of separate
+check-only formatting steps. The committed candidate stays clean throughout
+brokered checks.
+
+If these operations change the snapshot, the validator retains one raw Git
+patch in the job directory and returns aggregate state `autofix`. It stops
+before tests and later product stages. This result is not a validation pass.
+The manager records phase `autofixing`, retains the patch evidence, applies the
+patch to a private parent index and records a private child candidate commit.
+
+The next validation recomputes selection against the same captured base and
+runs the required gates for the corrected candidate. Remaining failures use
+the existing bounded model path. Deterministic fixes invoke no model and
+consume no model repair point. Required revalidation still uses compiler and
+gate resources. A recorded fix does not prove semantic correctness or completed
+test coverage.
 
 ## Apply bounded model proposals
 

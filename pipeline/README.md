@@ -145,6 +145,24 @@ product requests that behavior; any lint or compiler failure still fails the
 gate. Clippy runs when tests are skipped. The receipt records its selected
 products and shared suites in the gate command and records its timing separately.
 
+The installed manager can request `--autofix-patch ABSOLUTE_PATH` when the
+committed candidate contains `pipeline/autofix.py`. In this mode, product and
+shared check bodies skip their separate check-only formatting steps. The
+existing strict Clippy invocation emits JSON diagnostics for the helper; it
+does not add a discovery pass. The helper applies complete, nonconflicting
+`MachineApplicable` suggestion groups for tracked files in a temporary snapshot.
+It omits other suggestions, incomplete groups and conflicting groups, then runs
+the formatter once for the selected Cargo packages. It leaves the committed
+candidate unchanged throughout the brokered checks.
+
+If the snapshot changes, the helper writes one raw Git patch to the requested
+path. The dispatcher returns `autofix` before tests and later product stages.
+The manager retains and applies this patch through a private index, records a
+private child candidate, and validates it against the same base. Source
+selection is recomputed for that candidate. This path invokes no model and
+consumes no model repair point. Residual failures enter the ordinary model
+repair path after revalidation. Older candidates keep check-only behavior.
+
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or
 shared suite. The run uses no automatic retries and continues after test
@@ -243,8 +261,10 @@ contains the broker receipts for gates that ran. A required gate absent from
 that array did not complete. The dispatcher stops after the first unsuccessful
 gate and checks HEAD and Git status before it returns the aggregate result.
 
-Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, and
-`error`. A failed gate does not by itself establish a source-code defect.
+Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, `autofix`,
+and `error`. `autofix` identifies a retained deterministic patch and incomplete
+validation; it does not establish a pass. A failed gate does not by itself
+establish a source-code defect.
 The `failure` object records its kind, message, gate, and execution ID when
 available. Planning, configuration, or invalid broker receipts produce `error`
 with exit code 78. Other states retain the broker's exit-code rules. Missing

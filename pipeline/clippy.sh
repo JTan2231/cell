@@ -63,6 +63,9 @@ for clippy_package in $clippy_packages; do
     set -- "$@" --package "$clippy_package"
 done
 set -- "$@" --all-targets --locked
+if [ -n "${CELL_CI_AUTOFIX_PATCH:-}" ]; then
+    set -- "$@" --message-format=json
+fi
 if [ "$clippy_keep_going" = 1 ]; then
     set -- "$@" --keep-going
 fi
@@ -76,4 +79,8 @@ set -- "$@" -- \
     -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented \
     -D clippy::unwrap_used -D clippy::expect_used
 printf '%s\n' '==> clippy for selected Rust packages'
+if [ -n "${CELL_CI_AUTOFIX_PATCH:-}" ]; then
+    exec python3 "$PIPELINE_ROOT/pipeline/autofix.py" --root "$PIPELINE_ROOT" \
+        --patch "$CELL_CI_AUTOFIX_PATCH" -- "$@"
+fi
 exec "$@"
