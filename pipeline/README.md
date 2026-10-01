@@ -116,9 +116,15 @@ heavy gate. The plan identifies each allowed package, target kind, and target
 name. Nextest runs all ordinary, non-ignored tests in these targets through one
 parallel scheduler. It does not select individual test functions by relevance.
 Library targets that mix product and lifecycle behavior remain complete targets.
-Compilation can include other targets from the selected packages; execution
-uses the exact allowed target filter. Shared dependencies use Cargo's combined
-feature selection.
+The Cargo command selects library and named targets from this plan. It does not
+use `--all-targets`. Cargo can still compile prerequisite binaries and targets
+with matching names in other selected packages. Execution uses the exact allowed
+target filter. Shared dependencies use Cargo's combined feature selection.
+
+Development and test builds retain line-table debug information for workspace
+packages. Dependency builds omit debug information. Panic backtraces retain
+workspace file and line locations. Full debugger inspection requires an override
+of these profile settings. Release profile settings are unchanged.
 
 Product checks run in two phases. The first phase runs shell and packaging
 checks, applicable provider checks, and formatting. One heavy `cell.clippy`
@@ -129,8 +135,10 @@ phase runs applicable provider checks, documentation and release builds. Shared 
 suites remain separate required checks.
 
 The Clippy command lists each selected package once and uses Cargo's combined
-dependency feature selection. It does not prove each product's isolated feature
-configuration. It uses offline mode if any selected product requires offline
+dependency feature selection. `CARGO_BUILD_WARNINGS=deny` rejects warnings without
+the cache invalidation from `-D warnings`. The remaining strict lint flags stay
+enabled. It does not prove each product's isolated feature configuration.
+It uses offline mode if any selected product requires offline
 Cargo access, as the shared test gate does. Missing cached dependencies then
 fail without a download. It keeps going after compiler errors if any selected
 product requests that behavior; any lint or compiler failure still fails the

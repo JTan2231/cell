@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cargo_tests import run_tests
-from parallel_tests import TestPlan, filterset, make_plan, run_plan
+from parallel_tests import TestPlan, cargo_target_args, filterset, make_plan, run_plan
 
 
 def target(name, kind="test", test=True, doctest=False):
@@ -53,6 +53,50 @@ class SelectionTests(unittest.TestCase):
             ("alpha", "test", "maintenance"),
         })
 
+    def test_product_cargo_selectors_exclude_lifecycle_and_disabled_targets(self):
+        plan = make_plan(self.workspace, self.configs, ["alpha"], [], [])
+        self.assertEqual(cargo_target_args(plan), [
+            "--lib", "--bin", "alpha", "--test", "ordinary",
+            "--example", "sample", "--bench", "timing",
+        ])
+
+    def test_library_and_proc_macro_share_one_library_selector(self):
+        plan = make_plan(self.workspace, self.configs, ["alpha", "beta"], [], [])
+        arguments = cargo_target_args(plan)
+        self.assertEqual(arguments.count("--lib"), 1)
+        self.assertNotIn("alpha_lib", arguments)
+        self.assertNotIn("beta", arguments)
+        self.assertIn("(package(=beta) & kind(=proc-macro) & binary(=beta))", filterset(plan))
+
+    def test_platform_cargo_selectors_do_not_add_library_tests(self):
+        plan = make_plan(self.workspace, self.configs, [], ["alpha"], [])
+        self.assertEqual(cargo_target_args(plan), [
+            "--bin", "alpha-install", "--test", "install", "--test", "maintenance",
+        ])
+
+    def test_named_selectors_deduplicate_across_packages_but_filter_keeps_identity(self):
+        plan = make_plan(self.workspace, self.configs, ["alpha", "beta"], ["alpha"], [])
+        arguments = cargo_target_args(plan)
+        self.assertEqual(arguments.count("ordinary"), 1)
+        self.assertEqual(arguments.count("install"), 1)
+        expression = filterset(plan)
+        self.assertIn("(package(=alpha) & kind(=test) & binary(=install))", expression)
+        self.assertNotIn("(package(=beta) & kind(=test) & binary(=install))", expression)
+
+    def test_target_kinds_with_same_name_keep_separate_selectors_and_filters(self):
+        plan = TestPlan(targets={
+            ("alpha", "bin", "same"): {"product:alpha"},
+            ("beta", "test", "same"): {"product:beta"},
+            ("alpha", "example", "same"): {"product:alpha"},
+            ("beta", "bench", "same"): {"product:beta"},
+        })
+        self.assertEqual(cargo_target_args(plan), [
+            "--bin", "same", "--test", "same", "--example", "same", "--bench", "same",
+        ])
+        for package_name, kind, name in plan.targets:
+            self.assertIn(
+                f"(package(={package_name}) & kind(={kind}) & binary(={name}))", filterset(plan))
+
     def test_shared_suite_is_explicit_and_deduplicated(self):
         plan = make_plan(self.workspace, self.configs, ["alpha", "alpha"], ["alpha"],
                          ["install", "install", "prompts"])
@@ -84,6 +128,7 @@ class SelectionTests(unittest.TestCase):
         config = {"docs": {"packages": ["docs"], "offline": False}}
         plan = make_plan(workspace, config, ["docs"], [], [])
         self.assertEqual(plan.targets, {})
+        self.assertEqual(cargo_target_args(plan), [])
         args = Namespace(packages=["docs"], group="product", no_fail_fast=False)
         with patch("subprocess.run") as run:
             self.assertEqual(run_plan(Path("/cell"), plan, Path("/nextest"), 4), 0)

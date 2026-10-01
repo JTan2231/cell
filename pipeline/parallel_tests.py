@@ -115,6 +115,19 @@ def filterset(plan: TestPlan) -> str:
     ) or "none()"
 
 
+def cargo_target_args(plan: TestPlan) -> list[str]:
+    arguments = []
+    if any(kind in ("lib", "proc-macro") for _, kind, _ in plan.targets):
+        arguments.append("--lib")
+    # Cargo applies named selectors across all selected packages. The exact
+    # nextest filter still excludes incidental targets with the same name.
+    for kind in ("bin", "test", "example", "bench"):
+        for name in sorted({name for _, target_kind, name in plan.targets
+                            if target_kind == kind}):
+            arguments.extend([f"--{kind}", name])
+    return arguments
+
+
 def report_failures(path: Path) -> None:
     if not path.is_file():
         return  # Compilation or discovery can fail before nextest writes JUnit.
@@ -149,7 +162,7 @@ def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) 
             )
             user_config.write_text("")
             command = [
-                str(nextest_path), "nextest", "run", *common, "--all-targets",
+                str(nextest_path), "nextest", "run", *common, *cargo_target_args(plan),
                 "--config-file", str(config), "--user-config-file", str(user_config),
                 "--profile", "default", "--ignore-default-filter", "--filterset", filterset(plan),
                 "--no-fail-fast", "--retries", "0", "--test-threads", str(test_threads),

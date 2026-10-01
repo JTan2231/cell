@@ -34,6 +34,12 @@ members = [
 ]
 resolver = "3"
 
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
 [workspace.package]
 # The six Nucleus crates share this release version. Annals, Annals Usage,
 # Chancery, Email, Conversations, Krisis, Semantics,
