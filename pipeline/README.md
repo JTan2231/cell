@@ -181,10 +181,11 @@ are enabled, this includes product and platform tests. This validates the common
 executors across their complete target inventory. Test-only and documentation
 edits do not select this expansion.
 
-The validator binds selection and every gate to one source candidate. It
-rejects source, Git status, or HEAD changes during planning or execution as
-stale. The manager's fixed base controls product, platform, and new-product
-selection.
+The validator binds selection and every gate to one candidate commit. It
+checks HEAD and Git status during planning and after execution. A changed
+commit or a dirty committed candidate is stale. CI does not hash source files
+or run source-check commands for individual gates. The manager's fixed base
+controls product, platform, and new-product selection.
 
 The plan names that baseline and reports platform run/skip reasons. Usher reads
 the descriptors' literal assignments without executing them. It checks each
@@ -220,16 +221,16 @@ log path. The transcript identifies the failed stage. See
 The manager requests one aggregate JSON receipt on stdout. Progress and
 diagnostics remain on stderr. The receipt uses `schema_version: 1` and contains
 `state`, `base_commit`, `candidate_commit`, `observed_head`, `source_key`,
-`selection`, `gates`, and `failure`. Fields that could not be established are
-null. The base and candidate fields name the manager's exact committed range.
+`selection`, `gates`, and `failure`. The `source_key` field contains the full
+candidate commit ID. Fields that could not be established are null. The base
+and candidate fields name the manager's exact committed range.
 
 The selection records its change mode, coverage mode, product tests, platform
 products, shared suites, selection reasons, and ordered `required_gates`.
 Each required gate names its gate ID, lane, and command. The `gates` array
 contains the broker receipts for gates that ran. A required gate absent from
 that array did not complete. The dispatcher stops after the first unsuccessful
-gate and checks that the candidate source is unchanged before it returns the
-aggregate result.
+gate and checks HEAD and Git status before it returns the aggregate result.
 
 Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, and
 `error`. A failed gate does not by itself establish a source-code defect.
@@ -253,10 +254,10 @@ packages and binaries. The builder then seals product candidates in parallel.
 Release builds share a persistent target and file lock per logical Git
 repository, separate from CI. Cargo defaults to at most eight jobs.
 
-The cache identifies completed candidates by source content and build inputs.
-The builder reuses cached files without installation integrity validation. Git HEAD is
-excluded, so a version-update build can be reused after those exact source bytes
-are committed. The cache records builds, not CI results. See
+The cache identifies clean builds by the full Git commit ID and build inputs.
+Uncommitted builds get a fresh identity and do not reuse cache entries. The
+builder does not hash source files. It reuses cached files without installation
+integrity validation. The cache records builds, not CI results. See
 [deployment](../deployment/README.md)
 for invocation, candidate identity, and cache retention.
 

@@ -80,7 +80,7 @@ args = parser.parse_args()
 root = args.source_root
 sys.path.insert(0, str(root))
 from deployment import candidate
-source_key = candidate.content_source_key(root)
+source_key = candidate.source_identity(root)
 records = {}
 for name in args.product:
     binary = root / "target" / "release" / name
@@ -484,6 +484,22 @@ class DeploymentTests(unittest.TestCase):
             self.assertTrue(all(file.stat().st_mode & 0o777 == 0o600 for file in (path / "steps").iterdir()))
         finally:
             os.umask(previous_umask)
+
+    def test_preparation_keeps_the_builders_source_identity(self) -> None:
+        self.fixture.write("deployment/build.py", FAKE_BUILD.replace(
+            "source_key = candidate.source_identity(root)",
+            'root.joinpath("alpha/packaging/manifest.txt").write_text("dirty preparation\\n")\n'
+            "source_key = candidate.source_identity(root)"))
+        self.fixture.commit()
+        path = self.fixture.create()
+        self.assertEqual(cli.run_worker(path), 0)
+        result = cli.read_json(path / "preparation/result.json")
+        run = cli.read_json(path / "run.json")
+        self.assertTrue(result["source_key"].startswith("dirty:"))
+        self.assertEqual(run["source_key"], result["source_key"])
+        for record in run["records"].values():
+            if record.get("prepared"):
+                self.assertEqual(record["build_receipt"]["source_key"], result["source_key"])
 
     def test_all_maintenance_holds_precede_draining_or_cutover(self) -> None:
         path = self.fixture.create()

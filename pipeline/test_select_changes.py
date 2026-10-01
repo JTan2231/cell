@@ -107,16 +107,14 @@ shift
 exec python3 "$ROOT/fixture_gate.py" "shared-$suite" "$@"
 ''', executable=True)
 
-        # Root infrastructure gates use this adapter. Only source hashing calls
-        # the real client; fake gate bodies never enter the production broker.
+        # Fake gate bodies never enter the production broker. The dispatcher
+        # reads commit identity directly from Git.
         self.write("ci_broker/client.py", f"""import json
 import os
 import subprocess
 import sys
 
-if sys.argv[1] == "source-key":
-    command = [sys.executable, {str(SOURCE / 'ci_broker/client.py')!r}, *sys.argv[1:]]
-elif sys.argv[1] == "run":
+if sys.argv[1] == "run":
     command = sys.argv[sys.argv.index("--") + 1:]
 else:
     raise SystemExit("unexpected fixture broker command")
@@ -304,22 +302,22 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertTrue(result.stderr)
         self.assertEqual(self.gates(), [])
 
-    def test_snapshot_check_accepts_unchanged_checkout(self):
+    def test_git_state_check_accepts_unchanged_checkout(self):
         tokens, _ = self.plan()
         self.assert_passed(self.helper("check", tokens[2], tokens[3]))
 
-    def test_snapshot_check_rejects_source_change(self):
+    def test_git_state_check_rejects_dirty_checkout(self):
         tokens, _ = self.plan()
         self.write("beta/tracked.txt", "changed after planning\n")
         result = self.helper("check", tokens[2], tokens[3])
         self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
 
-    def test_snapshot_check_rejects_index_only_change(self):
+    def test_git_state_check_rejects_index_only_change(self):
         self.write("alpha/tracked.txt", "already dirty source\n")
         tokens, _ = self.plan()
         self.git("add", "alpha/tracked.txt")
         later, _ = self.plan()
-        self.assertEqual(tokens[2], later[2], "staging alone should not change source bytes")
+        self.assertEqual(tokens[2], later[2], "staging alone should not change the commit")
         result = self.helper("check", tokens[2], tokens[3])
         self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
 
@@ -342,7 +340,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertIn("--product", gates[4]["args"])
         self.assertIn("beta", gates[4]["args"])
         self.assertNotIn("--platform-product", gates[4]["args"])
-        self.assertTrue(gates[-1]["source"].startswith("sha256:"))
+        self.assertEqual(gates[-1]["source"], self.git("rev-parse", "HEAD").strip())
 
     def test_explicit_alias_uses_descriptor_directory(self):
         result = self.ci("decisions")

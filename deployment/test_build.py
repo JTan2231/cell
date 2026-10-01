@@ -133,17 +133,15 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn("--workspace", command)
         self.assertEqual(command[command.index("--jobs") + 1], "3")
         self.assertFalse(result["cache_hit"])
+        self.assertEqual(result["source_key"], self.git("rev-parse", "HEAD"))
         for product in ("alpha", "beta"):
             manifest = candidate.read_manifest(self.base / "output" / "candidates" / product)
             self.assertEqual(manifest["source_key"], result["source_key"])
-            directory = "beta-source" if product == "beta" else product
-            self.assertIn(f"{directory}/chancery/provider.json", manifest["source_inputs"])
+            self.assertNotIn("source_inputs", manifest)
         self.assertEqual(json.loads((self.base / "output/result.json").read_text()), result)
 
-    def test_dirty_version_source_reuses_after_commit_and_new_worktree(self) -> None:
-        self.write("source.txt", "release edits before commit\n")
+    def test_clean_commit_reuses_build_in_another_worktree(self) -> None:
         first = self.prepare("before")
-        self.commit()
         worktree = self.base / "worktree"
         self.git("worktree", "add", "--detach", str(worktree), "HEAD")
         second = build.prepare(worktree, ["alpha"], self.base / "after")
@@ -151,7 +149,32 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(first["source_key"], second["source_key"])
         self.assertEqual(len(self.calls()), 1)
         manifest = candidate.read_manifest(self.base / "after/candidates/alpha")
-        self.assertNotEqual(first["candidates"]["alpha"]["candidate_id"], manifest["candidate_id"])
+        self.assertEqual(first["candidates"]["alpha"]["candidate_id"], manifest["candidate_id"])
+
+    def test_dirty_builds_do_not_reuse_cache(self) -> None:
+        clean = self.prepare("clean")
+        self.write("source.txt", "release edits before commit\n")
+        first = self.prepare("dirty-first")
+        second = self.prepare("dirty-second")
+        self.assertFalse(first["cache_hit"])
+        self.assertFalse(second["cache_hit"])
+        self.assertTrue(first["source_key"].startswith("dirty:"))
+        self.assertNotEqual(clean["source_key"], first["source_key"])
+        self.assertNotEqual(first["source_key"], second["source_key"])
+        self.commit()
+        committed = self.prepare("committed")
+        self.assertFalse(committed["cache_hit"])
+        self.assertEqual(committed["source_key"], self.git("rev-parse", "HEAD"))
+        self.assertEqual(len(self.calls()), 4)
+
+    def test_new_commit_does_not_reuse_previous_build(self) -> None:
+        first = self.prepare("first")
+        self.write("source.txt", "committed source change\n")
+        self.commit()
+        second = self.prepare("second")
+        self.assertFalse(second["cache_hit"])
+        self.assertNotEqual(first["source_key"], second["source_key"])
+        self.assertEqual(len(self.calls()), 2)
 
     def test_unit_build_excludes_other_product_binaries(self) -> None:
         self.prepare("one-unit", unit="alpha-helper")
@@ -174,7 +197,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(environment["RUSTFLAGS"], build.hashlib.sha256(b"-C opt-level=2").hexdigest())
         self.assertNotIn("-C opt-level=2", json.dumps(manifest))
 
-    def test_source_content_and_unit_selection_are_in_identity(self) -> None:
+    def test_unit_selection_and_untracked_source_use_separate_builds(self) -> None:
         self.prepare("all")
         self.prepare("one", unit="alpha")
         self.write("untracked.txt", "untracked source also matters\n")

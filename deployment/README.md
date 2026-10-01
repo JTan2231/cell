@@ -127,15 +127,17 @@ and binaries, then seals independent product candidates in parallel. It keeps
 a persistent target and file lock per logical Git repository, separate from
 the CI broker and target. Cargo defaults to the logical CPU count capped at
 eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
-bundles persist in a cache keyed by source content and build inputs. Preparation
+bundles persist in a cache keyed by the clean Git commit and build inputs. Preparation
 reuses that cache without auditing the stored files.
 
-Source bytes and build inputs determine build identity. Git HEAD does not.
-Publication can therefore build updated versions and reuse those artifacts
-after the same bytes are committed. A schema-one candidate records executable
-hashes and versions, plus packaging and adapter source hashes. Source paths
-follow the product descriptor's `PRODUCT_DIR`. Deployment records the selected commit and retains a separate build receipt. It deploys sealed executable copies without
-reading a later Cargo target. Build records do not record CI success.
+The full Git commit ID identifies clean source. Each preparation of dirty source
+gets a new identity and builds a fresh cache entry. A build from uncommitted
+version edits is not reused after commit. Preparation does not hash source files.
+
+A schema-one candidate records the source identity, selected commit, and
+executable hashes and versions. Deployment retains a separate build receipt.
+It deploys sealed executable copies without reading a later Cargo target.
+Build records do not record CI success.
 
 The same builder can prepare candidates without publication or installation:
 

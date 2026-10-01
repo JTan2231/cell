@@ -164,7 +164,7 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         raise BuildError("release cache must be an absolute non-symbolic directory")
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     (cache / "entries").mkdir(mode=0o700, exist_ok=True)
-    source_key = candidate.content_source_key(source)
+    source_key = candidate.source_identity(source)
     environment, configuration = build_configuration(source, cache)
     metadata = json.loads(tool_output(source, environment, "cargo", "metadata", "--format-version", "1",
                                       "--no-deps", "--locked", "--manifest-path", str(source / "Cargo.toml")))

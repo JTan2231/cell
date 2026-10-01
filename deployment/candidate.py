@@ -15,12 +15,13 @@ import subprocess
 import sys
 import tempfile
 from typing import Any
+import uuid
 
 sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker.client import git
+from ci_broker.client import git, repository_is_clean, source_commit
 from deployment.inventory import descriptor
 
 
@@ -88,20 +89,11 @@ def remove_tree(root: Path) -> None:
     shutil.rmtree(root)
 
 
-def content_source_key(source: Path) -> str:
-    """Identify source bytes across a release's version-edit/commit boundary.
-
-    Git metadata is deliberately excluded. A new deployment still records its
-    exact commit, but committing unchanged build inputs does not force a build.
-    """
-    paths = git(source, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
-    files = {}
-    for raw in sorted(set(paths.split(b"\x00")) - {b""}):
-        relative = os.fsdecode(raw)
-        path = source / relative
-        regular(path)
-        files[relative] = {"sha256": digest(path), "executable": bool(path.stat().st_mode & stat.S_IXUSR)}
-    return "sha256:" + hashlib.sha256(json_bytes({"source_content_schema": 1, "files": files})).hexdigest()
+def source_identity(source: Path) -> str:
+    """Use the commit for clean source and a fresh identity for dirty builds."""
+    if repository_is_clean(source):
+        return source_commit(source)
+    return "dirty:" + uuid.uuid4().hex
 
 
 
@@ -134,7 +126,7 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
     if output == source or source in output.parents:
         raise CandidateError("candidate staging must be outside the source worktree")
     commit = git(source, "rev-parse", "HEAD").decode().strip()
-    source_key = build_source_key or content_source_key(source)
+    source_key = build_source_key or source_identity(source)
     descriptor_id = "decisions" if product == "krisis" else product
     descriptor_path = source / "pipeline/products" / f"{descriptor_id}.sh"
     regular(descriptor_path)
@@ -143,15 +135,6 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
     if values.get("PRODUCT_ID") != descriptor_id or not re.fullmatch(r"[a-z][a-z0-9-]*", product_dir):
         raise CandidateError("invalid product directory declaration")
     canonical = "krisis" if product == "decisions" else product
-    source_inputs: dict[str, str] = {}
-    tracked = git(source, "ls-files", "-z").split(b"\x00")
-    prefixes = (f"{product_dir}/packaging/", f"{product_dir}/chancery",
-                f"{product_dir}/provider/", f"{product_dir}/deployment/", "deployment/")
-    for raw in tracked:
-        path = os.fsdecode(raw)
-        if path and path.startswith(prefixes):
-            regular(source / path)
-            source_inputs[path] = digest(source / path)
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=".candidate-", dir=output.parent))
     try:
@@ -184,7 +167,7 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
             raise CandidateError("product declares no deployment executables")
         manifest: dict[str, Any] = {
             "schema": 1, "product": canonical, "source_commit": commit,
-            "source_key": source_key, "source_inputs": source_inputs, "binaries": binaries,
+            "source_key": source_key, "binaries": binaries,
         }
         manifest["candidate_id"] = "sha256:" + hashlib.sha256(json_bytes(manifest)).hexdigest()
         with (temporary / "candidate.json").open("xb") as stream:
