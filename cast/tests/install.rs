@@ -22,7 +22,7 @@ impl Fixture {
         let mut binaries = serde_json::Map::new();
         for (name, original) in [
             ("cast", self.binary.as_path()),
-            ("cast-install", Path::new(installer())),
+            ("cast-install", self.installer.as_path()),
         ] {
             let target = candidate_dir.join("bin").join(name);
             fs::copy(original, &target).unwrap();
@@ -68,7 +68,7 @@ impl Fixture {
     }
 
     fn adapter(&self, operation: &str, request: &Value) -> Value {
-        let mut child = Command::new(installer())
+        let mut child = Command::new(&self.installer)
             .args(["adapter", operation])
             .env("HOME", &self.home)
             .env_remove("CAST_STATE_DIR")
@@ -97,7 +97,8 @@ impl Fixture {
 #[test]
 fn configure_initializes_real_cast_and_applies_settings() {
     let fixture = Fixture::new();
-    fs::copy(env!("CARGO_BIN_EXE_cast"), &fixture.binary).unwrap();
+    signing_fixture::copy_signed("cast", "cast", env!("CARGO_BIN_EXE_cast"), &fixture.binary)
+        .unwrap();
     let state = fixture.home.join("discovery");
     let config_file = fixture.home.join("configuration.json");
     let mut config = cast::models::Config::default();

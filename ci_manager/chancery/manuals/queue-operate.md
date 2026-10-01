@@ -86,6 +86,22 @@ Bazaar prompt selection `cell.prompts.ci-manager`. It pins versions of
 records fail; the worker does not create Bazaar state or use a source fallback.
 Deployment and Email retain their own setup and readiness requirements.
 
+New macOS submissions also require a configured, usable signing certificate.
+Read `chancery show ci-manager.signing.operate` for setup, explicit identity
+changes, and recovery. Configure signing while admission is paused, all active
+and queued jobs are settled, and deployment and release operations are settled.
+An older installed manager has no signing command. Use this source package
+before installing the new manager:
+
+```sh
+python3 ci_manager/client.py signing create-local
+./ci.sh install
+cell-ci signing status
+```
+
+Manager installation preserves signing configuration. It does not create,
+renew, select, or replace a certificate.
+
 Installation selects manager files and the matching `ci-manager` Chancery
 provider and configures a macOS user service. The installed worker is separate
 from the changing development checkout. A source edit alone does not replace
@@ -126,6 +142,11 @@ execution, or deployment. The exact retained validation supervisor request and
 matching result must prove that the validation process exited. A missing result,
 process disappearance, or an arbitrary blocked job does not qualify.
 
+The proof can use a completed validation already recorded in job history. Its
+candidate and receipt path must match the current job. Any newer validation
+artifacts prevent fallback to an older result. Missing or mismatched terminal
+evidence does not permit replacement.
+
 The installer verifies these conditions before stopping its owned service and
 again under the worker lock. It replaces program and provider bytes while
 preserving the job and its evidence. Installation does not complete the job,
@@ -142,10 +163,15 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.5.3 uses queue contract 7 and retains journal
+arguments. Manager release 0.6.0 uses queue contract 8 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
+
+New jobs retain `signing_policy` and `signing_policy_digest` at submission.
+Retained jobs without those fields keep their earlier acceptance path. Manager
+replacement does not attach a current signing policy to old jobs. Settle that
+work before initial signing adoption or identity rotation.
 
 ## Submit a committed input
 
@@ -164,7 +190,7 @@ explicitly, or `--run-tests` to run the selected product and platform tests.
 The job freezes this choice. Existing jobs without the choice still run tests.
 The request key includes this choice; do not reuse it with a different test policy.
 Skipping tests retains structure, recognition, syntax, provider, formatting,
-lint, documentation and build checks. It skips Rust tests
+lint, documentation, build and production signing checks. It skips Rust tests
 and shared Python regression suites. Receipts and outcome emails state when
 tests were skipped. Product selection still controls
 automatic deployment. A passing result with skipped tests supplies no test evidence.
@@ -176,6 +202,11 @@ Submission resolves and pins the input commit, freezes its policy and selected
 deployment request, and returns a durable job ID. Caller exit does not abandon
 an admitted job. Reuse the same request key for an uncertain submission of the
 same payload; do not reuse it for changed input or deployment choices.
+
+Submission reads the fixed host signing configuration and checks certificate
+and private-key usability before pinning a new job. A missing or unusable
+identity rejects admission. A retry with the same request key returns the
+original job and signing snapshot. It does not adopt later configuration.
 
 Submission authorizes the defined bounded patch loop, private candidate commits,
 advancement of `refs/ci/accepted`, the selected exact-source deployment, and the
@@ -215,8 +246,29 @@ candidate, source identity, required gate scope, and completed gate receipts.
 Selective CI remains selective. A pass does not establish that every repository
 test ran or that an automated patch is semantically correct in all cases.
 
+For new jobs, passing validation enters a host-controlled `preparing` phase.
+The installed manager prepares production candidates for the union of checked
+products and explicitly requested deployment products. Its pinned build and
+signing modules compile under the external-workspace confinement, then sign
+and verify staged native executables outside the compiler body. Candidate
+source does not supply the host signing implementation.
+
+The manager retains a `production_receipt` with the exact source commit,
+signing-policy digest, product scope, and signed candidate identities. Before
+acceptance, it checks that receipt, rechecks the candidates' final hashes and
+signatures, and checks that the host policy still matches the frozen selection.
+This phase is required when tests are skipped. It does not add unselected
+products to ordinary selective CI.
+
+Signing configuration or signature failure stops before acceptance and pauses
+the queue. It does not select a model repair, another certificate, or an unsigned
+fallback. Repair receives no signing configuration writer or private-key material
+from the manager. Restore the selected identity through its signing procedure;
+submit a new job after a terminal failure.
+
 The manager advances accepted with an expected-old-value check only after
-matching successful validation. A changed accepted ref stops promotion. Accepted
+matching successful validation and required production preparation. A changed
+accepted ref stops promotion. Accepted
 source and installed source are separate: a later deployment failure does not
 erase an already accepted commit.
 
@@ -325,6 +377,13 @@ admission and sends no outcome email. Inspect an active failure before resuming.
 
 Recovery reconciles the recorded operation through its owning provider. It does
 not blindly repeat a merge, patch, model invocation, deployment, or email.
+
+A cancelled validation with matching terminal supervisor evidence can finish
+cancellation even when its aggregate result is already recorded. This preserves
+the validation history and starts no new validator. A completed stale validation
+is not retried by recovery. Cancel and recover that job, then resume a queued
+descendant or submit the intended commit again for fresh validation.
+
 Unknown model execution, a lost Nucleus attempt, missing child completion
 evidence, and unresolved deployment maintenance remain blocking conditions.
 Process disappearance and elapsed time do not establish successful completion.
@@ -371,6 +430,9 @@ hold.
 
 The manager freezes a deployment request ID, exact accepted source commit and
 selected products. It reads that operation before starting or reconciling it.
+New jobs pass the retained signing policy to deployment. The coordinator checks
+the selected policy before admission and publication; it does not reload a
+different signer for a partially completed operation.
 The coordinator owns installation, maintenance release, and recovery. Matching
 source and operation identity, completed installation outcome and released
 maintenance establish the manager's deployment success. Cleanup failure can
@@ -431,6 +493,12 @@ The manager retains exact model requests and final patch responses, candidate
 identities, CI logs and receipts, deployment correlations, and notification
 payloads and receipts. It provides no automatic pruning. Protect these files as
 private source and operational data. Provider retention remains separate.
+
+Signing configuration is a separate private host file at
+`~/Library/Application Support/Cell/signing.json`. It stays outside Git,
+worktrees, release caches, and the external work volume. The Keychain owns the
+private key. Job records retain public certificate selection and policy,
+not private-key bytes. Read `ci-manager.signing.operate` for the recovery export.
 
 Admission verifies the mounted volume's identity, ownership and write access.
 New work requires at least 2 GiB free. CI bodies and release compiler processes

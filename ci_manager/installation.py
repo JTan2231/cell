@@ -19,6 +19,7 @@ import time
 import uuid
 
 from ci_manager.storage import ManagerError, Store, home, lock, private_directory, state_root
+from ci_manager.process import validation_exited
 
 
 LABEL = "dev.cell.ci-manager"
@@ -239,32 +240,7 @@ def _cancelled_validation_exited(store: Store, job: dict) -> bool:
             or job.get("acceptance_intent") or job.get("deployment_request")
             or job.get("deployment_result") or store.get("recovery_request")):
         return False
-    directory = store.root / "jobs" / job["id"]
-    worktree = directory / "worktree"
-    name = f"validation-{len(job.get('validations', []))}"
-    request_path = directory / f"{name}.request.json"
-    try:
-        request = json.loads(request_path.read_text())
-        result = json.loads((directory / f"{name}.result.json").read_text())
-        if not isinstance(request, dict) or not isinstance(result, dict):
-            return False
-        command = request["command"]
-        expected = [str(worktree / "pipeline/select_changes.py"), "run",
-                    "--base", job["base_commit"],
-                    "--candidate", job["candidate_commit"], "--json"]
-        if job.get("skip_tests", False):
-            expected.append("--skip-tests")
-        return (isinstance(command, list) and len(command) == len(expected) + 1
-                and isinstance(command[0], str) and Path(command[0]).is_absolute()
-                and command[1:] == expected
-                and request["cwd"] == str(worktree)
-                and all(request[key] == str(directory / f"{name}.{suffix}")
-                        for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
-                                            ("started", "started.json"), ("result", "result.json")))
-                and result["request"] == str(request_path)
-                and type(result.get("exit_code")) is int)
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
+    return validation_exited(store.root / "jobs" / job["id"], job)
 
 
 def _require_idle(store: Store, *, allow_cancelled_validation: bool = False) -> None:
@@ -289,6 +265,21 @@ def _prepare_release(source: Path, python: Path) -> Path:
         if not path.is_file():
             continue
         name = (Path("ci_manager") / relative).as_posix()
+        content = path.read_bytes()
+        mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
+        contents[name] = content
+        records[name] = {"sha256": _digest(content), "mode": mode}
+    # Host preparation uses pinned code from this manager release. Candidate
+    # worktrees supply data and compiler inputs, never the signing implementation.
+    shared_modules = (
+        "deployment/__init__.py", "deployment/signing.py", "deployment/build.py",
+        "deployment/candidate.py", "deployment/inventory.py", "ci_broker/__init__.py",
+        "ci_broker/client.py", "ci_broker/broker.py",
+    )
+    for name in shared_modules:
+        path = source.parent / name
+        if path.is_symlink() or not path.is_file():
+            raise ManagerError(f"CI manager host preparation module is missing or symbolic: {name}")
         content = path.read_bytes()
         mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
         contents[name] = content

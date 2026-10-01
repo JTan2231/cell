@@ -9,6 +9,9 @@ use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+#[path = "../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 struct Fixture {
     _temporary: tempfile::TempDir,
     root: PathBuf,
@@ -85,7 +88,13 @@ impl Fixture {
         self.candidate_dir = self.root.join(format!("candidate-{revision}"));
         fs::create_dir_all(self.candidate_dir.join("bin")).unwrap();
         let installer = self.candidate_dir.join("bin/platter-install");
-        fs::copy(env!("CARGO_BIN_EXE_platter-install"), installer).unwrap();
+        signing_fixture::copy_signed(
+            "platter",
+            "platter-install",
+            env!("CARGO_BIN_EXE_platter-install"),
+            installer,
+        )
+        .unwrap();
         let program = self.candidate_dir.join("bin/platter");
         fs::write(
             &program,
@@ -430,7 +439,7 @@ fn direct_mutation_cannot_bypass_maintenance() {
             .contains("no predecessor release format")
     );
     for operation in ["install", "recover"] {
-        let output = Command::new(env!("CARGO_BIN_EXE_platter-install"))
+        let output = Command::new(fixture.candidate_dir.join("bin/platter-install"))
             .arg(operation)
             .env_clear()
             .env("HOME", &fixture.home)

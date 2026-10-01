@@ -198,6 +198,13 @@ check gates format those libraries. Their lint checks join the shared Clippy
 gate, and their tests run in the parallel Rust gate. They are infrastructure,
 with no separate product identity or release unit.
 
+On macOS, native installer test fixtures use the configured Cell certificate.
+The shared signing fixture helper copies each native fixture into temporary
+external storage, then signs and verifies that copy with its permanent product
+identifier. Tests do not change Cargo outputs, signing selection, Keychain
+contents, or installed releases. Script fixtures keep their existing behavior.
+These tests require the same usable configured key as production preparation.
+
 The internal dispatcher in `select_changes.py` requests broker admission for
 each product phase, shared check suite, shared Clippy stage, and parallel Rust
 test stage. The
@@ -206,8 +213,12 @@ broker schedules execution; it does not decide relevance. Product bodies receive
 test command records all selected products, platform products, shared Rust
 suites, and its worker limit. Its toolchain identity includes the pinned nextest
 path and configured version. An inherited flag cannot bypass admission.
-The manager validates source before acceptance and deployment. CI does not run
-installation persistent-state, artifact-integrity, or operational-readiness
+The manager validates source before acceptance and deployment. New jobs also
+freeze the host signing policy and prepare signed production candidates through
+the installed manager's shared builder before source acceptance. This step runs
+when tests are skipped. A signing configuration failure stops acceptance without
+model repair. Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md).
+CI does not run installation persistent-state, general artifact-integrity, or operational-readiness
 checks, or retain test assertions requiring those removed checks. Ordinary
 product behavior and setup operations remain in their applicable test suites.
 
@@ -254,7 +265,8 @@ Release builds share a persistent target and file lock per logical Git
 repository, separate from CI. Cargo defaults to at most eight jobs.
 
 The cache identifies completed candidates by source content and build inputs.
-The builder reuses cached files without installation integrity validation. Git HEAD is
+The builder includes the selected signing policy in cache identity and verifies
+cached production signatures and hashes before reuse. Git HEAD is
 excluded, so a version-update build can be reused after those exact source bytes
 are committed. The cache records builds, not CI results. See
 [deployment](../deployment/README.md)

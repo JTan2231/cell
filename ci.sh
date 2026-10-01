@@ -13,6 +13,7 @@ Usage: ./ci.sh submit COMMIT [--skip-tests | --run-tests] [--repo PATH] [--reque
        ./ci.sh maintenance ACTION [--owner OWNER] | service ACTION
        ./ci.sh init --repo PATH --accepted-baseline COMMIT | install
        ./ci.sh storage configure --volume PATH | storage status
+       ./ci.sh signing status | create-local | configure OPTIONS
 
 CI runs through the installed cell-ci manager. Commit changes, then submit the
 commit for integration, validation, bounded repair, deployment, and outcome email.
@@ -28,7 +29,7 @@ case "${1:-}" in
     init|install|storage)
         exec python3 "$ROOT/ci_manager/client.py" "$@"
         ;;
-    submit|status|wait|pause|resume|cancel|recover|maintenance|service|--version)
+    submit|status|wait|pause|resume|cancel|recover|maintenance|service|signing|--version)
         exec "$HOME/.local/bin/cell-ci" "$@"
         ;;
     *)

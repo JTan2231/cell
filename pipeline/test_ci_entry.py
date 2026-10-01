@@ -391,6 +391,38 @@ class CancelledValidationRecoveryTests(unittest.TestCase):
             stack.enter_context(mock.patch.object(installation, name, value))
         return patches
 
+    def record_stale_validation(self):
+        self.job["skip_tests"] = True
+        self.request["command"].append("--skip-tests")
+        self.request_path.write_text(json.dumps(self.request))
+        self.result["exit_code"] = 75
+        self.result_path.write_text(json.dumps(self.result))
+        receipt_path = self.directory / "validation-0.json"
+        diagnostic_path = self.directory / "validation-0.log"
+        receipt = {
+            "schema_version": 1, "base_commit": self.job["base_commit"],
+            "candidate_commit": self.job["candidate_commit"], "state": "stale",
+            "failure": {"gate": "platter.post", "kind": "gate_stale",
+                        "message": "source check failed: TimeoutExpired"},
+            "selection": {"tests_skipped": True}, "gates": [],
+        }
+        receipt_path.write_text(json.dumps(receipt))
+        diagnostic_path.write_text("ci.sh: green\nsource check failed: TimeoutExpired\n")
+        Path(self.request["stdout"]).write_text(json.dumps(receipt))
+        self.job["validations"] = [{
+            "candidate": self.job["candidate_commit"], "receipt": str(receipt_path),
+            "diagnostics": str(diagnostic_path), "state": "stale",
+        }]
+        self.job["last_receipt"] = receipt
+        self.store.save(self.job)
+
+    def recover_blocked(self):
+        worker = Worker.__new__(Worker)
+        worker.store, worker.root, worker.repository = self.store, self.store.root, self.root
+        self.store.set("recovery_request", self.job["id"])
+        worker.blocked(self.job)
+        return worker
+
     def test_install_preserves_blocked_job_and_takes_worker_lock(self):
         before = self.store.job(self.job["id"])
         patches = self.installer()
@@ -405,6 +437,17 @@ class CancelledValidationRecoveryTests(unittest.TestCase):
         self.assertTrue(installation.install()["installed"])
         self.assertEqual(self.store.job(self.job["id"]), before)
         self.assertTrue(self.store.get("paused"))
+
+    def test_install_accepts_recorded_stale_validation_without_changing_evidence(self):
+        self.record_stale_validation()
+        before = self.store.job(self.job["id"])
+        artifacts = {path: path.read_bytes() for path in self.directory.iterdir()}
+        self.installer()
+        self.assertTrue(installation.install()["installed"])
+        self.assertEqual(self.store.job(self.job["id"]), before)
+        self.assertTrue(self.store.get("paused"))
+        for path, content in artifacts.items():
+            self.assertEqual(path.read_bytes(), content)
 
     def test_install_rechecks_after_service_stop(self):
         patches = self.installer()
@@ -494,6 +537,110 @@ class CancelledValidationRecoveryTests(unittest.TestCase):
         self.assertTrue(self.store.get("paused"))
         for path, content in artifacts.items():
             self.assertEqual(path.read_bytes(), content)
+
+    def test_recovery_cancels_recorded_stale_validation_without_next_validation(self):
+        self.record_stale_validation()
+        validations = json.loads(json.dumps(self.job["validations"]))
+        receipt = json.loads(json.dumps(self.job["last_receipt"]))
+        artifacts = {path: path.read_bytes() for path in self.directory.iterdir()}
+        with mock.patch("ci_manager.manager.git.ensure_worktree") as ensure_worktree, \
+                mock.patch("ci_manager.manager.subprocess.run") as run, \
+                mock.patch.object(Worker, "process") as process, \
+                mock.patch("ci_manager.manager.send_email", return_value={"accepted": True}) as email:
+            worker = self.recover_blocked()
+            self.assertEqual(self.job["phase"], "notifying")
+            self.assertEqual(self.job["outcome"], "cancelled")
+            self.assertFalse(self.job["unresolved"])
+            self.assertEqual(self.job["outcome_generation"], 2)
+            self.assertEqual(self.job["notification"]["state"], "pending")
+            self.assertEqual(self.job["notification"]["key"],
+                             f"cell-ci/{self.job['id']}/outcome/2")
+            worker.notifying(self.job)
+            worker.notifying(self.job)
+        ensure_worktree.assert_not_called()
+        run.assert_not_called()
+        process.assert_not_called()
+        email.assert_called_once()
+        self.assertEqual(self.store.job(self.job["id"])["phase"], "cancelled")
+        self.assertEqual(self.job["validations"], validations)
+        self.assertEqual(self.job["last_receipt"], receipt)
+        self.assertTrue(self.store.get("paused"))
+        self.assertFalse(list(self.directory.glob("validation-1.*")))
+        for path, content in artifacts.items():
+            self.assertEqual(path.read_bytes(), content)
+
+    def test_recorded_stale_validation_without_cancellation_stays_blocked(self):
+        self.record_stale_validation()
+        self.job["cancel_requested"] = False
+        self.store.db.execute("UPDATE jobs SET cancel_requested=0")
+        self.store.save(self.job)
+        with self.assertRaises(ManagerError):
+            installation._require_idle(self.store, allow_cancelled_validation=True)
+        with mock.patch.object(Worker, "process") as process:
+            self.recover_blocked()
+        process.assert_not_called()
+        self.assertEqual(self.job["phase"], "blocked")
+        self.assertTrue(self.job["unresolved"])
+        self.assertEqual(self.job["notification"], {"state": "accepted"})
+
+    def test_newer_validation_without_completion_blocks_old_recorded_result(self):
+        self.record_stale_validation()
+        request = self.request | {
+            key: str(self.directory / f"validation-1.{suffix}") for key, suffix in
+            (("stdout", "stdout"), ("stderr", "stderr"),
+             ("started", "started.json"), ("result", "result.json"))
+        }
+        for suffix in ("request.json", "json", "log"):
+            with self.subTest(suffix=suffix):
+                artifact = self.directory / f"validation-1.{suffix}"
+                artifact.write_text(json.dumps(request))
+                with self.assertRaises(ManagerError):
+                    installation._require_idle(self.store, allow_cancelled_validation=True)
+                with mock.patch.object(Worker, "process") as process:
+                    self.recover_blocked()
+                process.assert_not_called()
+                self.assertEqual(self.job["phase"], "blocked")
+                self.assertTrue(self.job["unresolved"])
+                self.assertEqual(self.job["notification"], {"state": "accepted"})
+                artifact.unlink()
+
+    def test_recorded_stale_cancellation_requires_matching_completion_evidence(self):
+        self.record_stale_validation()
+        original = json.loads(json.dumps(self.job))
+        variants = (
+            ("missing result", None, None, None),
+            ("missing request", None, self.result, None),
+            ("other result request", None, self.result | {"request": "other-request.json"}, None),
+            ("other command candidate", self.request | {"command":
+                self.request["command"][:6] + ["d" * 40, "--json", "--skip-tests"]},
+                self.result, None),
+            ("other recorded candidate", None, self.result,
+                {"candidate": "d" * 40}),
+            ("other receipt path", None, self.result,
+                {"receipt": str(self.directory / "other-validation.json")}),
+        )
+        for name, request, result, validation in variants:
+            with self.subTest(name=name):
+                self.job = json.loads(json.dumps(original))
+                if name == "missing request":
+                    self.request_path.unlink(missing_ok=True)
+                else:
+                    self.request_path.write_text(json.dumps(request or self.request))
+                if result is None:
+                    self.result_path.unlink(missing_ok=True)
+                else:
+                    self.result_path.write_text(json.dumps(result))
+                if validation:
+                    self.job["validations"][-1].update(validation)
+                self.store.save(self.job)
+                with self.assertRaises(ManagerError):
+                    installation._require_idle(self.store, allow_cancelled_validation=True)
+                with mock.patch.object(Worker, "process") as process:
+                    self.recover_blocked()
+                process.assert_not_called()
+                self.assertEqual(self.job["phase"], "blocked")
+                self.assertTrue(self.job["unresolved"])
+                self.assertEqual(self.job["notification"], {"state": "accepted"})
 
     def test_cancellation_does_not_hide_missing_terminal_evidence(self):
         self.result_path.unlink()

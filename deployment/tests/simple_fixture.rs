@@ -6,10 +6,14 @@ use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
+#[path = "../signing_fixture.rs"]
+mod signing_fixture;
+
 struct Fixture {
     _temp: tempfile::TempDir,
     home: PathBuf,
     binary: PathBuf,
+    installer: PathBuf,
     spec: Spec,
 }
 
@@ -26,11 +30,21 @@ impl Fixture {
         fs::create_dir(&home).unwrap();
         fs::set_permissions(&home, fs::Permissions::from_mode(0o700)).unwrap();
         let binary = root.join("payload");
+        let spec = specification();
+        let installer_copy = root.join(format!("{}-install", spec.product));
+        signing_fixture::copy_signed(
+            spec.product,
+            &format!("{}-install", spec.product),
+            installer(),
+            &installer_copy,
+        )
+        .unwrap();
         let value = Self {
             _temp: temp,
             home,
             binary,
-            spec: specification(),
+            installer: installer_copy,
+            spec,
         };
         value.payload("first", false);
         value
@@ -47,7 +61,7 @@ impl Fixture {
         );
     }
     fn run(&self, operation: &str, extra: &[&str]) -> Output {
-        let mut command = Command::new(installer());
+        let mut command = Command::new(&self.installer);
         command
             .env("HOME", &self.home)
             .arg(operation)

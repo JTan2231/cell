@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -19,7 +20,7 @@ from unittest import mock
 
 sys.dont_write_bytecode = True
 
-from deployment import candidate, cli
+from deployment import candidate, cli, signing
 from deployment.inventory import descriptor
 
 
@@ -76,6 +77,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--source-root", type=pathlib.Path)
 parser.add_argument("--output", type=pathlib.Path)
 parser.add_argument("--product", action="append")
+parser.add_argument("--signing-policy-file")
 args = parser.parse_args()
 root = args.source_root
 sys.path.insert(0, str(root))
@@ -125,6 +127,16 @@ class Fixture:
         # The pinned cleanup subprocess never touches actual installations in
         # this disposable fixture, including when run_worker is called directly.
         self.write("deployment/cleanup.py", "print('{}')\n")
+        self.write("deployment/signing.py", '''import hashlib,json
+def load_policy(): return None
+def validate_policy(value): return value
+def policy_digest(value): return hashlib.sha256((json.dumps(value,sort_keys=True,separators=(",",":"))+"\\n").encode()).hexdigest()
+def assert_current(value): pass
+def preflight(value): pass
+def identifier(value,product,key): return None
+def sign(*args): pass
+def verify(*args): pass
+''')
         self.write("deployment/build.py", FAKE_BUILD)
         # Quality-gate admission is simulated in this isolated repository. It
         # never invokes the production broker, Cargo, or a real product body.
@@ -180,7 +192,11 @@ class Fixture:
 class DeploymentTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.base = Path(self.temporary.name)
+        self.base = Path(self.temporary.name).resolve()
+        for name in ("load_policy", "assert_current", "preflight"):
+            patch = mock.patch.object(signing, name, return_value=None)
+            patch.start()
+            self.addCleanup(patch.stop)
         storage_patch = mock.patch.object(cli.workspace, "root", return_value=self.base)
         storage_patch.start()
         self.addCleanup(storage_patch.stop)
@@ -200,6 +216,112 @@ class DeploymentTests(unittest.TestCase):
 
     def observed(self, path: Path) -> list[list[str]]:
         return [json.loads(line) for line in (path / "observed.jsonl").read_text().splitlines()]
+
+    def retain_correlated(self, *, policy=None, legacy=False, phase="terminal"):
+        commit = self.fixture.git("rev-parse", "HEAD")
+        request = cli.canonical_request(self.fixture.repo, ["alpha"], commit, {}, policy)
+        if legacy:
+            request.pop("signing_policy")
+            request.pop("signing_policy_digest")
+        identity = "fixture:retained"
+        result = {"schema": 1, "state": "succeeded", "request_id": identity,
+                  "source_commit": commit, "products": ["alpha"], "exit_code": 0}
+        record = {"schema": 1, "request_id": identity, "request": request,
+                  "request_hash": hashlib.sha256(candidate.json_bytes(request)).hexdigest(),
+                  "run_id": "a" * 32, "products": ["alpha"], "phase": phase,
+                  "result": result}
+        cli.save_operation(self.fixture.storage, record)
+        return identity, commit, record
+
+    def test_correlated_replay_preserves_legacy_or_signed_request_without_current_key(self):
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        for legacy, retained_policy in ((True, None), (False, policy)):
+            with self.subTest(legacy=legacy):
+                identity, commit, record = self.retain_correlated(policy=retained_policy, legacy=legacy)
+                with mock.patch.object(signing, "load_policy", side_effect=signing.SigningError("missing config")) as load, \
+                        mock.patch.object(signing, "assert_current", side_effect=signing.SigningError("changed policy")) as current, \
+                        mock.patch.object(cli, "create_run") as create:
+                    result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                                       request_id=identity, selected_commit=commit)
+                self.assertTrue(result["replayed"])
+                self.assertEqual(result["operation_state"], "terminal")
+                self.assertEqual(cli.read_operation(self.fixture.storage, identity)["request"], record["request"])
+                load.assert_not_called()
+                current.assert_not_called()
+                create.assert_not_called()
+
+    def test_correlated_replay_accepts_same_explicit_snapshot_and_rejects_changed_signer(self):
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        identity, commit, _ = self.retain_correlated(policy=policy)
+        with mock.patch.object(signing, "assert_current", side_effect=signing.SigningError("changed host policy")) as current:
+            result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                               request_id=identity, selected_commit=commit, signing_policy=policy)
+            changed = {"schema": 1, "macos": {**policy["macos"], "certificate_sha1": "b" * 40}}
+            with self.assertRaisesRegex(cli.DeploymentError, "different deployment request"):
+                cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                          request_id=identity, selected_commit=commit, signing_policy=changed)
+        self.assertTrue(result["replayed"])
+        current.assert_not_called()
+
+    def test_correlated_legacy_replay_cannot_acquire_an_explicit_new_signer(self):
+        identity, commit, _ = self.retain_correlated(legacy=True)
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        with self.assertRaisesRegex(cli.DeploymentError, "different deployment request"):
+            cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                      request_id=identity, selected_commit=commit, signing_policy=policy)
+
+    def test_correlated_busy_replay_does_not_probe_signing_or_admit_work(self):
+        identity, commit, _ = self.retain_correlated(legacy=True, phase="running")
+        with mock.patch.object(cli, "deployment_lock", side_effect=cli.DeploymentBusy("busy")), \
+                mock.patch.object(signing, "load_policy", side_effect=signing.SigningError("missing")) as load, \
+                mock.patch.object(cli, "create_run") as create:
+            result = cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                               request_id=identity, selected_commit=commit)
+        self.assertTrue(result["replayed"])
+        self.assertEqual(result["exit_code"], 75)
+        load.assert_not_called()
+        create.assert_not_called()
+
+    def test_correlated_new_admission_requires_current_signing_policy(self):
+        commit = self.fixture.git("rev-parse", "HEAD")
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        with mock.patch.object(cli, "create_run") as create:
+            with mock.patch.object(signing, "load_policy", side_effect=signing.SigningError("missing config")), \
+                    self.assertRaisesRegex(signing.SigningError, "missing config"):
+                cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                          request_id="fixture:new", selected_commit=commit)
+            with mock.patch.object(signing, "assert_current", side_effect=signing.SigningError("drifted policy")), \
+                    self.assertRaisesRegex(signing.SigningError, "drifted policy"):
+                cli.start(self.fixture.repo, ["alpha"], self.fixture.storage,
+                          request_id="fixture:new", selected_commit=commit, signing_policy=policy)
+        self.assertIsNone(cli.read_operation(self.fixture.storage, "fixture:new"))
+        create.assert_not_called()
+
+    def test_private_policy_file_allows_terminal_replay_after_host_policy_changes(self):
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        identity, commit, _ = self.retain_correlated(policy=policy)
+        policy_path = self.base / "frozen-policy.json"
+        policy_path.write_text(json.dumps(policy))
+        with mock.patch.object(cli.sys, "platform", "darwin"), \
+                mock.patch.object(cli, "state_root", return_value=self.fixture.storage), \
+                mock.patch.object(cli.ci_client, "repository_root", return_value=self.fixture.repo), \
+                mock.patch.object(signing, "assert_current", side_effect=signing.SigningError("changed policy")) as current, \
+                contextlib.redirect_stdout(io.StringIO()) as output:
+            code = cli.main(["start", "alpha", "--request-id", identity, "--source-commit", commit,
+                             "--signing-policy-file", str(policy_path)])
+        self.assertEqual(code, 0, output.getvalue())
+        self.assertEqual(json.loads(output.getvalue())["operation_state"], "terminal")
+        current.assert_not_called()
 
     def test_plan_uses_main_and_ignores_uncommitted_adapter_or_manifest_edits(self) -> None:
         expected = self.fixture.git("rev-parse", "HEAD")
@@ -399,6 +521,44 @@ class DeploymentTests(unittest.TestCase):
                 run.adapter("usher", "inspect")
         self.assertFalse((path / "observed.jsonl").exists())
 
+    def test_signed_prior_bundle_cannot_replace_the_retained_candidate(self):
+        path = self.fixture.create()
+        run = cli.Run(path, -1)
+        policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                          "keychain": "/example/login.keychain-db",
+                                          "identifier_namespace": "local.cell"}}
+        run.data.update(signing_policy=policy, source_key="sha256:selected-source")
+        directory = path / "preparation/candidates/alpha"
+        run.record("alpha").update(prepared=True, candidate_dir=str(directory),
+                                   candidate_id="sha256:selected-candidate")
+        selected = {"candidate_id": "sha256:selected-candidate", "product": "alpha",
+                    "source_commit": run.data["source_commit"], "source_key": run.data["source_key"]}
+        variants = ({"candidate_id": "sha256:prior-candidate", "source_commit": "b" * 40},
+                    {"source_commit": "b" * 40}, {"source_key": "sha256:prior-source"},
+                    {"product": "beta"})
+        with mock.patch.object(candidate, "read_manifest", side_effect=AssertionError("must use verified metadata")), \
+                mock.patch.object(run, "command") as command:
+            for changed in variants:
+                with self.subTest(changed=changed), mock.patch.object(
+                        candidate, "verify_signatures", return_value=selected | changed) as verify:
+                    with self.assertRaisesRegex(cli.DeploymentError, "retained deployment selection"):
+                        run.adapter("alpha", "apply")
+                    verify.assert_called_once_with(directory, policy)
+            command.assert_not_called()
+        self.assertEqual(run.record("alpha")["candidate_id"], selected["candidate_id"])
+
+    def test_preparation_rejects_verified_candidate_from_another_source(self):
+        path = self.fixture.create()
+        with cli.deployment_lock(self.fixture.storage) as lock_fd:
+            run = cli.Run(path, lock_fd)
+            def other_source(directory, policy):
+                return candidate.verify(directory) | {"source_commit": "b" * 40}
+            with mock.patch.object(candidate, "verify_signatures", side_effect=other_source), \
+                    self.assertRaisesRegex(cli.DeploymentError, "prepared source selection"):
+                run.prepare()
+        self.assertFalse(run.record("alpha").get("prepared"))
+        self.assertFalse((path / "observed.jsonl").exists())
+
     def test_affected_binary_installer_is_prepared_without_selecting_upgrade(self):
         self.fixture.add_binary_adapter(name="nucleus")
         self.fixture.add_binary_adapter(name="requester", affected=("nucleus",))
@@ -566,7 +726,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse((path / "held-beta").exists())
 
     def foreground(self, *, verbose=False):
-        script = ("from pathlib import Path\nfrom deployment import cli\n"
+        script = (f"import sys\nsys.path.insert(0, {str(self.fixture.repo)!r})\n"
+                  "from pathlib import Path\nfrom deployment import cli\n"
                   f"cli.workspace.root=lambda: Path({str(self.base)!r})\n"
                   f"result=cli.start(Path({str(self.fixture.repo)!r}), ['alpha'], "
                   f"Path({str(self.fixture.storage)!r}), verbose={verbose!r})\n"

@@ -12,6 +12,9 @@ use std::sync::{
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
+#[path = "../../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 struct Deployment {
     home: PathBuf,
     request: Value,
@@ -56,7 +59,7 @@ impl Deployment {
             (format!("{}-install", product()), installer()),
         ] {
             let target = candidate_dir.join("bin").join(&name);
-            fs::copy(path, &target)?;
+            signing_fixture::copy_signed(product(), &name, path, &target)?;
             binaries.insert(name.clone(), json!({"path":format!("bin/{name}"),"sha256":cell_install::file_digest(&target)?,"version":format!("{name} {}",env!("CARGO_PKG_VERSION"))}));
         }
         let original_source = source_root()?;
@@ -125,14 +128,18 @@ impl Deployment {
     }
 
     fn invoke(&self, operation: &str) -> TestResult<(bool, Value)> {
-        let mut child = Command::new(installer())
-            .args(["adapter", operation])
-            .env("HOME", &self.home)
-            .env("NUCLEUS_SOCKET", &self.socket)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        let mut child = Command::new(
+            self.home
+                .join("candidate/bin")
+                .join(format!("{}-install", product())),
+        )
+        .args(["adapter", operation])
+        .env("HOME", &self.home)
+        .env("NUCLEUS_SOCKET", &self.socket)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
         child
             .stdin
             .take()

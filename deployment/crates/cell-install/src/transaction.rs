@@ -446,6 +446,8 @@ pub fn prepare_release(
             std::process::id()
         ))
         .tempdir_in(root.join("releases"))?;
+    let mut signing = crate::signing::Verifier::default();
+    let installer_source = plan.files.get("package/install").map(|file| &file.source);
     for (path, file) in &plan.files {
         relative(Path::new(path))?;
         if path == "manifest.json"
@@ -458,7 +460,20 @@ pub fn prepare_release(
         if let Some(parent) = Path::new(path).parent() {
             fs::create_dir_all(stage.path().join(parent))?;
         }
+        let key = crate::signing::artifact_key(
+            &layout.product,
+            path,
+            installer_source == Some(&file.source),
+        );
+        // Text assets need no signing identity. Resolve the key only for native files.
+        crate::signing::verify_source(&mut signing, &layout.product, &key, &file.source)?;
         copy_file(&file.source, &stage.path().join(path), file.mode)?;
+        crate::signing::verify_source(
+            &mut signing,
+            &layout.product,
+            &key,
+            &stage.path().join(path),
+        )?;
     }
     let (files, dirs) = inventory(stage.path())?;
     for dir in dirs {
@@ -499,6 +514,7 @@ pub fn prepare_release(
         }
         Err(e) => return Err(e.into()),
     }
+    crate::signing::verify_files(&layout.product, &destination, &manifest.files)?;
 
     Ok(PreparedRelease {
         root: destination,
@@ -718,7 +734,7 @@ impl InstallTransaction<'_> {
                 .ok_or_else(|| Error::new("suspension path is not a captured public entry"))? =
                 CapturedEntry::Absent;
         }
-        self.change(expected, &after, || Ok(()))
+        self.change(expected, &after, true, || Ok(()))
     }
 
     /// Detach all owned public and release selectors; retain releases and runtime state.
@@ -733,7 +749,7 @@ impl InstallTransaction<'_> {
         for value in after.entries.values_mut() {
             *value = CapturedEntry::Absent;
         }
-        self.change(expected, &after, || Ok(()))
+        self.change(expected, &after, true, || Ok(()))
     }
 
     /// Publish while holding the catalog lock, then run the caller lifecycle step.
@@ -756,8 +772,16 @@ impl InstallTransaction<'_> {
         }
         let _catalog = self.catalog()?;
         self.recheck(expected)?;
+        crate::signing::verify_files(&self.layout.product, &prepared.root, &prepared.info.files)?;
         let after = self.publication(expected, &prepared.info);
-        self.change(expected, &after, || verify(&prepared.info))
+        self.change(expected, &after, false, || {
+            crate::signing::verify_files(
+                &self.layout.product,
+                &prepared.root,
+                &prepared.info.files,
+            )?;
+            verify(&prepared.info)
+        })
     }
 
     fn publication(&self, expected: &InstallSnapshot, info: &ReleaseInfo) -> InstallSnapshot {
@@ -819,7 +843,7 @@ impl InstallTransaction<'_> {
             }
         }
         let selected = if select_candidate { &target } else { prior };
-        self.change(&actual, selected, || {
+        self.change(&actual, selected, !select_candidate, || {
             if let Some(info) = &selected.current {
                 verify(info)?;
             }
@@ -827,7 +851,9 @@ impl InstallTransaction<'_> {
         })
     }
 
-    /// Restore a prior file selection only after the product proves lifecycle compatibility.
+    /// Restore the exact captured prior file selection after the product proves
+    /// lifecycle compatibility. Recorded prior hashes permit its historical
+    /// signer; ordinary retained-release publication requires the current signer.
     /// # Errors
     /// Refuses changed selections or unproved prior bytes and reports restoration uncertainty.
     pub fn restore(
@@ -837,7 +863,7 @@ impl InstallTransaction<'_> {
     ) -> Result<()> {
         let _catalog = self.catalog()?;
         self.recheck(&receipt.after)?;
-        self.change(&receipt.after, &receipt.before, || {
+        self.change(&receipt.after, &receipt.before, true, || {
             if let Some(prior) = &receipt.before.current {
                 verify(prior)?;
             }
@@ -850,17 +876,20 @@ impl InstallTransaction<'_> {
         &self,
         before: &InstallSnapshot,
         after: &InstallSnapshot,
+        recorded_recovery: bool,
         verify: impl FnOnce() -> Result<()>,
     ) -> Result<SelectionReceipt> {
+        self.verify_selection(after, recorded_recovery)?;
         self.clean_scratch(before, after)?;
         let result = self
-            .write_view(after)
+            .write_view(after, recorded_recovery)
             .and_then(|()| self.recheck(after))
             .and_then(|()| verify());
         if let Err(mut error) = result {
             error.disposition = if self.attributable(before, after).is_ok()
+                && self.verify_selection(before, true).is_ok()
                 && self
-                    .write_view(before)
+                    .write_view(before, true)
                     .and_then(|()| self.recheck(before))
                     .is_ok()
             {
@@ -874,6 +903,20 @@ impl InstallTransaction<'_> {
             before: before.clone(),
             after: after.clone(),
         })
+    }
+
+    fn verify_selection(&self, selection: &InstallSnapshot, recorded_recovery: bool) -> Result<()> {
+        if let Some(current) = &selection.current {
+            let root = install_root(&self.layout, &self.home)
+                .join("releases")
+                .join(&current.release_id);
+            if recorded_recovery {
+                crate::signing::verify_recorded_files(&root, &current.files)?;
+            } else {
+                crate::signing::verify_files(&self.layout.product, &root, &current.files)?;
+            }
+        }
+        Ok(())
     }
 
     fn clean_scratch(&self, before: &InstallSnapshot, after: &InstallSnapshot) -> Result<()> {
@@ -922,7 +965,7 @@ impl InstallTransaction<'_> {
         Ok(())
     }
 
-    fn write_view(&self, target: &InstallSnapshot) -> Result<()> {
+    fn write_view(&self, target: &InstallSnapshot, recorded_recovery: bool) -> Result<()> {
         let root = install_root(&self.layout, &self.home);
         ensure_path(
             &self.home,
@@ -965,7 +1008,47 @@ impl InstallTransaction<'_> {
                                 .ok_or_else(|| Error::new("missing public parent"))?,
                         )?;
                     let file = temporary.path().join("copy");
+                    let installer = selected.files.get("package/install");
+                    let artifact = selected.files.get(&entry.artifact);
+                    let key = crate::signing::artifact_key(
+                        &self.layout.product,
+                        &entry.artifact,
+                        installer
+                            .zip(artifact)
+                            .is_some_and(|(installer, artifact)| {
+                                installer.sha256 == artifact.sha256
+                            }),
+                    );
+                    let mut signing = crate::signing::Verifier::default();
+                    if recorded_recovery {
+                        crate::signing::verify_recorded_file(
+                            &source,
+                            artifact
+                                .ok_or_else(|| Error::new("missing recorded public artifact"))?,
+                        )?;
+                    } else {
+                        crate::signing::verify_source(
+                            &mut signing,
+                            &self.layout.product,
+                            &key,
+                            &source,
+                        )?;
+                    }
                     copy_file(&source, &file, entry.mode)?;
+                    if recorded_recovery {
+                        crate::signing::verify_recorded_file(
+                            &file,
+                            artifact
+                                .ok_or_else(|| Error::new("missing recorded public artifact"))?,
+                        )?;
+                    } else {
+                        crate::signing::verify_source(
+                            &mut signing,
+                            &self.layout.product,
+                            &key,
+                            &file,
+                        )?;
+                    }
                     fs::rename(&file, &destination)?;
                 }
             }

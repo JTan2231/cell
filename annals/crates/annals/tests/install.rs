@@ -8,6 +8,9 @@ use std::process::{Command, Output};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[path = "../../../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 fn executable(path: &Path, source: &str) -> Result {
     fs::write(path, source)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
@@ -18,6 +21,8 @@ struct Fixture {
     root: tempfile::TempDir,
     home: PathBuf,
     product: PathBuf,
+    binary: PathBuf,
+    installer: PathBuf,
     usage: PathBuf,
     clockwork: PathBuf,
     launchctl: PathBuf,
@@ -31,6 +36,15 @@ impl Fixture {
         let product = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .canonicalize()?;
+        let binary = root.path().join("annals");
+        let installer = root.path().join("annals-install");
+        signing_fixture::copy_signed("annals", "annals", env!("CARGO_BIN_EXE_annals"), &binary)?;
+        signing_fixture::copy_signed(
+            "annals",
+            "annals-install",
+            env!("CARGO_BIN_EXE_annals-install"),
+            &installer,
+        )?;
         let usage = root.path().join("annals-usage");
         let provider: Value = serde_json::from_slice(&fs::read(
             product.join("chancery/annals-usage/provider.json"),
@@ -79,6 +93,8 @@ path.write_text(json.dumps(state));print(json.dumps({'ok':True,'data':data}))
             root,
             home,
             product,
+            binary,
+            installer,
             usage,
             clockwork,
             launchctl,
@@ -86,7 +102,7 @@ path.write_text(json.dumps(state));print(json.dumps({'ok':True,'data':data}))
     }
 
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_annals-install"));
+        let mut command = Command::new(&self.installer);
         command
             .env("HOME", &self.home)
             .env_remove("CELL_DEPLOYMENT_RUN_ID")
@@ -100,7 +116,7 @@ path.write_text(json.dumps(state));print(json.dumps({'ok':True,'data':data}))
         Ok(self
             .command()
             .args(["install", "--binary"])
-            .arg(env!("CARGO_BIN_EXE_annals"))
+            .arg(&self.binary)
             .arg("--usage-binary")
             .arg(&self.usage)
             .arg("--bundle")

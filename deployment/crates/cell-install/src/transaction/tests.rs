@@ -11,6 +11,216 @@ fn no_legacy(_: &Path) -> Result<ReleaseInfo> {
     Err(Error::new("legacy release not supported in this fixture"))
 }
 
+fn native_plan(fixture: &Fixture) -> Result<ReleasePlan> {
+    let installer = fixture.inputs.join("native-installer");
+    fs::write(&installer, [0xcf, 0xfa, 0xed, 0xfe, 1, 2, 3, 4])?;
+    Ok(ReleasePlan {
+        files: [
+            "bin/fixture",
+            "bin/copied",
+            "bin/fixture-install",
+            "package/install",
+        ]
+        .into_iter()
+        .map(|path| {
+            (
+                path.to_owned(),
+                SourceFile {
+                    source: installer.clone(),
+                    mode: 0o555,
+                },
+            )
+        })
+        .collect(),
+        versions: BTreeMap::from([("fixture".to_owned(), "1.2.3".to_owned())]),
+        providers: BTreeMap::new(),
+    })
+}
+
+#[test]
+fn native_identity_failure_stops_preparation_and_preserves_supplied_bytes() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let plan = native_plan(&fixture)?;
+    let source = plan.files["package/install"].source.clone();
+    let before = fs::read(&source)?;
+    let result = crate::signing::with_verifier(
+        |_, _, _| Err(Error::new("wrong signing certificate")),
+        || prepare_release(&fixture.layout, &fixture.home, &plan),
+    );
+    assert!(result.is_err());
+    assert_eq!(fs::read(&source)?, before);
+    assert!(
+        inspect_installation(&fixture.layout, &fixture.home, &no_legacy)?
+            .current
+            .is_none()
+    );
+    assert_eq!(
+        fs::read_dir(install_root(&fixture.layout, &fixture.home).join("releases"))?.count(),
+        0
+    );
+
+    let result = crate::signing::with_verifier(
+        move |_, key, path| {
+            assert_eq!(key, "fixture-install");
+            if path == source {
+                Ok(())
+            } else {
+                Err(Error::new("copied signature invalid"))
+            }
+        },
+        || prepare_release(&fixture.layout, &fixture.home, &plan),
+    );
+    assert!(result.is_err());
+    assert_eq!(
+        fs::read_dir(install_root(&fixture.layout, &fixture.home).join("releases"))?.count(),
+        0
+    );
+    Ok(())
+}
+
+#[test]
+fn native_installer_aliases_and_public_copies_keep_the_signed_identity() -> Result<()> {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let fixture = Fixture::new()?;
+    let plan = native_plan(&fixture)?;
+    let expected_bytes = fs::read(&plan.files["package/install"].source)?;
+    let copied = Rc::new(Cell::new(0));
+    let observed_copies = Rc::clone(&copied);
+    crate::signing::with_verifier(
+        move |product, key, path| {
+            assert_eq!(product, "fixture");
+            assert_eq!(key, "fixture-install");
+            assert_eq!(fs::read(path)?, expected_bytes);
+            if path.file_name().is_some_and(|name| name == "copy") {
+                observed_copies.set(observed_copies.get() + 1);
+            }
+            Ok(())
+        },
+        || {
+            let prepared = prepare_release(&fixture.layout, &fixture.home, &plan)?;
+            let before = inspect_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+            let mut transaction = lock_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+            transaction.publish(&prepared, &before, |_| Ok(()))?;
+            assert_eq!(
+                fs::read(fixture.home.join(".local/bin/copied"))?,
+                fs::read(&plan.files["package/install"].source)?
+            );
+            Ok(())
+        },
+    )?;
+    assert_eq!(copied.get(), 1);
+    Ok(())
+}
+
+#[test]
+fn native_cached_release_is_checked_before_publication() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let plan = native_plan(&fixture)?;
+    let prepared = crate::signing::with_verifier(
+        |_, _, _| Ok(()),
+        || prepare_release(&fixture.layout, &fixture.home, &plan),
+    )?;
+    let before = inspect_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+    let mut transaction = lock_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+    let result = crate::signing::with_verifier(
+        |_, _, _| Err(Error::new("cached signature invalid")),
+        || transaction.publish(&prepared, &before, |_| Ok(())),
+    );
+    assert!(result.is_err());
+    transaction.recheck(&before)?;
+    assert!(fs::symlink_metadata(fixture.home.join(".local/bin/fixture")).is_err());
+    Ok(())
+}
+
+#[test]
+fn native_recovery_restores_recorded_prior_bytes_without_selecting_a_new_signer() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let plan = native_plan(&fixture)?;
+    let first = crate::signing::with_verifier(
+        |_, _, _| Ok(()),
+        || prepare_release(&fixture.layout, &fixture.home, &plan),
+    )?;
+    let empty = inspect_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+    let mut transaction = lock_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+    let installed = crate::signing::with_verifier(
+        |_, _, _| Ok(()),
+        || transaction.publish(&first, &empty, |_| Ok(())),
+    )?;
+    let original_bytes = fs::read(first.root.join("bin/copied"))?;
+    fs::write(
+        &plan.files["package/install"].source,
+        [0xcf, 0xfa, 0xed, 0xfe, 5, 6, 7, 8],
+    )?;
+    drop(transaction);
+    let second = crate::signing::with_verifier(
+        |_, _, _| Ok(()),
+        || prepare_release(&fixture.layout, &fixture.home, &plan),
+    )?;
+    let mut transaction = lock_installation(&fixture.layout, &fixture.home, &no_legacy)?;
+    let first_root = first.root.clone();
+    crate::signing::with_verifier(
+        move |_, _, path| {
+            if path.starts_with(&first_root) {
+                Err(Error::new("prior release has the old signer"))
+            } else {
+                Ok(())
+            }
+        },
+        || {
+            let failed = transaction
+                .publish(&second, &installed.after, |_| {
+                    Err(Error::new("lifecycle failed"))
+                })
+                .err()
+                .ok_or_else(|| Error::new("publication unexpectedly succeeded"))?;
+            assert_eq!(failed.disposition, Disposition::Restored);
+            transaction.recheck(&installed.after)?;
+            assert_eq!(
+                fs::read(fixture.home.join(".local/bin/copied"))?,
+                original_bytes
+            );
+
+            let receipt = transaction.publish(&second, &installed.after, |_| Ok(()))?;
+            assert!(
+                transaction
+                    .publish(&first, &receipt.after, |_| Ok(()))
+                    .is_err()
+            );
+            transaction.recheck(&receipt.after)?;
+            transaction.restore(&receipt, |_| Ok(()))?;
+            transaction.recheck(&installed.after)?;
+            transaction.publish(&second, &installed.after, |_| Ok(()))?;
+            transaction.recover(&installed.after, &second, false, |_| Ok(()))?;
+            transaction.recheck(&installed.after)?;
+            assert_eq!(
+                fs::read(fixture.home.join(".local/bin/copied"))?,
+                original_bytes
+            );
+
+            let receipt = transaction.publish(&second, &installed.after, |_| Ok(()))?;
+            fs::set_permissions(
+                first.root.join("bin/copied"),
+                fs::Permissions::from_mode(0o755),
+            )?;
+            fs::write(
+                first.root.join("bin/copied"),
+                [0xcf, 0xfa, 0xed, 0xfe, 0, 0, 0, 0],
+            )?;
+            assert!(transaction.restore(&receipt, |_| Ok(())).is_err());
+            transaction.recheck(&receipt.after)?;
+            assert!(
+                transaction
+                    .recover(&installed.after, &second, false, |_| Ok(()))
+                    .is_err()
+            );
+            Ok(())
+        },
+    )?;
+    Ok(())
+}
+
 impl Fixture {
     fn new() -> Result<Self> {
         let temporary = tempfile::tempdir()?;

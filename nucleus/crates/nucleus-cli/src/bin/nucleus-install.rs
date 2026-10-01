@@ -324,7 +324,8 @@ fn plan(args: &InstallArgs, home: &Path) -> Result<ReleasePlan> {
     {
         return Err(Error::new("Codex import home must be absolute"));
     }
-    for path in [&args.binary, &args.daemon] {
+    for (key, path) in [("nucleus", &args.binary), ("nucleusd", &args.daemon)] {
+        cell_install::signing::verify_native("nucleus", key, path)?;
         call(path, &strings(&["--version"]), home, None, 30)?;
         call(path, &strings(&["--help"]), home, None, 30)?;
     }

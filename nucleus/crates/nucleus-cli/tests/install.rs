@@ -7,6 +7,9 @@ use std::process::{Command, Output};
 
 type Result<T = ()> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[path = "../../../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 fn executable(path: &Path, text: &str) -> Result {
     fs::write(path, text)?;
     fs::set_permissions(path, fs::Permissions::from_mode(0o755))?;
@@ -20,6 +23,7 @@ struct Fixture {
     daemon: PathBuf,
     codex: PathBuf,
     provider: PathBuf,
+    installer: PathBuf,
 }
 
 impl Fixture {
@@ -27,6 +31,13 @@ impl Fixture {
         let root = tempfile::tempdir()?;
         let home = root.path().canonicalize()?.join("Operator Home");
         fs::create_dir(&home)?;
+        let installer = root.path().join("nucleus-install");
+        signing_fixture::copy_signed(
+            "nucleus",
+            "nucleus-install",
+            env!("CARGO_BIN_EXE_nucleus-install"),
+            &installer,
+        )?;
         let binary = root.path().join("nucleus");
         executable(
             &binary,
@@ -85,6 +96,7 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
             daemon,
             codex,
             provider,
+            installer,
         })
     }
 
@@ -93,7 +105,7 @@ cp "$4" "$HOME/.local/libexec/nucleusd"
     }
 
     fn run(&self, operation: &str) -> Result<Output> {
-        Ok(Command::new(env!("CARGO_BIN_EXE_nucleus-install"))
+        Ok(Command::new(&self.installer)
             .args([operation, "--binary"])
             .arg(&self.binary)
             .arg("--daemon")

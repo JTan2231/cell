@@ -69,6 +69,30 @@ impl Fixture {
 }
 
 #[test]
+fn native_source_is_rejected_before_version_execution_or_publication() -> Result<()> {
+    let fixture = Fixture::new("0.3.0")?;
+    let source = &fixture.input.binaries["usher"];
+    let bytes = [0xcf, 0xfa, 0xed, 0xfe, 1, 2, 3, 4];
+    fs::write(source, bytes)?;
+    let result = crate::signing::with_verifier(
+        |product, key, _| {
+            assert_eq!(product, "usher");
+            assert_eq!(key, "usher");
+            Err(Error::new("wrong signing identity before execution"))
+        },
+        || fixture.installed(),
+    );
+    let error = result
+        .err()
+        .ok_or_else(|| Error::new("native input unexpectedly installed"))?;
+    assert_eq!(error.message, "wrong signing identity before execution");
+    assert_eq!(fs::read(source)?, bytes);
+    assert!(inspect(&SPEC, &fixture.home)?.is_none());
+    assert!(fs::symlink_metadata(fixture.home.join(".local/bin/usher")).is_err());
+    Ok(())
+}
+
+#[test]
 fn install_redeploy_and_publish_provider() -> Result<()> {
     let f = Fixture::new("0.3.0")?;
     assert_eq!(inspect(&SPEC, &f.home)?, None);

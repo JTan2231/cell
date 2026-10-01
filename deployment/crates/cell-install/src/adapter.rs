@@ -74,6 +74,8 @@ pub struct DependencyCandidate {
 
 #[derive(Deserialize)]
 struct Candidate {
+    #[serde(default)]
+    product: Option<String>,
     binaries: BTreeMap<String, Binary>,
 }
 
@@ -195,6 +197,11 @@ impl Context {
             .get(product)
             .ok_or_else(|| Error::new("dependency candidate command is missing"))?;
         let path = supplied.candidate_dir.join(relative(&binary.path)?);
+        crate::signing::verify_native(
+            manifest.product.as_deref().unwrap_or(product),
+            product,
+            &path,
+        )?;
         Ok(path)
     }
 
@@ -263,10 +270,13 @@ impl Context {
     /// # Errors
     /// Returns an error if that executable is absent from the candidate.
     pub fn binary(&self, name: &str) -> Result<PathBuf> {
-        self.binaries
+        let path = self
+            .binaries
             .get(name)
             .cloned()
-            .ok_or_else(|| Error::new("required candidate executable is absent"))
+            .ok_or_else(|| Error::new("required candidate executable is absent"))?;
+        crate::signing::verify_native(&self.request.product, name, &path)?;
+        Ok(path)
     }
 
     /// Read the captured inspection result.

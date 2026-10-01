@@ -276,9 +276,12 @@ impl Drop for Lock {
 }
 
 fn command(program: &Path, argument: &str, home: &Path) -> Result<String> {
-    regular(program)?;
+    // Installed commands use owned public selectors; supplied sources were
+    // checked as literal regular files before reaching this helper.
+    let program = fs::canonicalize(program)?;
+    regular(&program)?;
     let output = tempfile::tempfile()?;
-    let mut child = Command::new(program)
+    let mut child = Command::new(&program)
         .arg(argument)
         .env("HOME", home)
         .stdin(Stdio::null())
@@ -342,6 +345,7 @@ fn versions(
         ));
     }
     let mut versions = BTreeMap::new();
+    let mut signing = crate::signing::Verifier::default();
     for name in spec.commands {
         let path = &input.binaries[*name];
         if !path.is_absolute() || regular(path)?.mode() & 0o111 == 0 {
@@ -349,6 +353,7 @@ fn versions(
                 "candidate must be an absolute executable regular file",
             ));
         }
+        signing.verify(spec.product, name, path)?;
         let result = command(path, "--version", home)?;
         let value = result.strip_prefix(&format!("{name} ")).unwrap_or(&result);
         versions.insert((*name).to_owned(), value.to_owned());
@@ -359,6 +364,11 @@ fn versions(
             "recovery installer must be an absolute executable regular file",
         ));
     }
+    signing.verify(
+        spec.product,
+        &format!("{}-install", spec.product),
+        &input.installer,
+    )?;
     Ok(versions)
 }
 
@@ -378,10 +388,17 @@ fn stage(
     let root = stage.path();
     fs::create_dir(root.join("bin"))?;
     fs::create_dir(root.join("package"))?;
+    let mut signing = crate::signing::Verifier::default();
     for (name, source) in &input.binaries {
         copy_file(source, &root.join("bin").join(name), 0o755)?;
+        signing.verify(spec.product, name, &root.join("bin").join(name))?;
     }
     copy_file(&input.installer, &root.join("package/install"), 0o755)?;
+    signing.verify(
+        spec.product,
+        &format!("{}-install", spec.product),
+        &root.join("package/install"),
+    )?;
     let bundle = root.join(format!("share/chancery/{}", spec.provider));
     fs::create_dir_all(bundle.join("entries"))?;
     fs::create_dir(bundle.join("manuals"))?;
@@ -564,11 +581,58 @@ fn smoke(spec: &InstallSpec, paths: &Paths, release: &Installation) -> Result<()
     Ok(())
 }
 
+fn release_files(
+    spec: &InstallSpec,
+    paths: &Paths,
+    release: &Installation,
+) -> Result<BTreeMap<String, crate::FileEntry>> {
+    let root = paths.install.join(&release.current);
+    if release.format == FORMAT {
+        let manifest: crate::Manifest =
+            serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
+        if manifest.release_id != release.release_id
+            || crate::artifact::identity(&manifest)? != release.release_id
+        {
+            return Err(Error::new("recorded signing release identity changed"));
+        }
+        Ok(manifest.files)
+    } else {
+        let manifest = crate::legacy::manifest(&root.join("manifest.txt"))?;
+        let sha256 = manifest
+            .get("binary_sha256")
+            .filter(|hash| valid_hash(hash))
+            .ok_or_else(|| Error::new("legacy signing recovery digest missing"))?;
+        Ok(BTreeMap::from([(
+            format!("bin/{}", spec.commands[0]),
+            crate::FileEntry {
+                sha256: sha256.clone(),
+                mode: 0o755,
+            },
+        )]))
+    }
+}
+
+fn verify_signing(
+    spec: &InstallSpec,
+    paths: &Paths,
+    release: &Installation,
+    recorded_recovery: bool,
+) -> Result<()> {
+    let root = paths.install.join(&release.current);
+    let files = release_files(spec, paths, release)?;
+    if recorded_recovery {
+        crate::signing::verify_recorded_files(&root, &files)
+    } else {
+        crate::signing::verify_files(spec.product, &root, &files)
+    }
+}
+
 fn publish(
     spec: &InstallSpec,
     paths: &Paths,
     target: &Installation,
     before: &View,
+    recorded_recovery: bool,
     check: impl FnOnce() -> Result<()>,
 ) -> Result<Installation> {
     let _catalog = Lock::acquire(paths.catalog.join(".catalog-update-lock"), paths.uid)?;
@@ -578,6 +642,15 @@ fn publish(
             "stale deployment: selectors changed before publication",
         ));
     }
+    verify_signing(spec, paths, target, recorded_recovery)?;
+    let recorded_prior = before[&paths.install.join("current")]
+        .as_ref()
+        .map(|selected| -> Result<_> {
+            let root = paths.install.join(selected);
+            let release = read_release(spec, &root)?;
+            Ok((root, release_files(spec, paths, &release)?))
+        })
+        .transpose()?;
     let mut after = before.clone();
     if before[&paths.install.join("current")] != Some(PathBuf::from(&target.current)) {
         after.insert(
@@ -614,6 +687,7 @@ fn publish(
                 "installed release differs from the prepared candidate",
             ));
         }
+        verify_signing(spec, paths, target, recorded_recovery)?;
         smoke(spec, paths, target)?;
         check()?;
         Ok(installed)
@@ -621,7 +695,7 @@ fn publish(
     match result {
         Ok(installed) => Ok(installed),
         Err(mut error) => {
-            error.disposition = compensate(paths, before, &after);
+            error.disposition = compensate(paths, before, &after, recorded_prior.as_ref());
             if error.disposition == Disposition::Restored && inspect_with(spec, paths).is_err() {
                 error.disposition = Disposition::Uncertain;
             }
@@ -630,7 +704,17 @@ fn publish(
     }
 }
 
-fn compensate(paths: &Paths, before: &View, after: &View) -> Disposition {
+fn compensate(
+    paths: &Paths,
+    before: &View,
+    after: &View,
+    recorded_prior: Option<&(PathBuf, BTreeMap<String, crate::FileEntry>)>,
+) -> Disposition {
+    if recorded_prior
+        .is_some_and(|(root, files)| crate::signing::verify_recorded_files(root, files).is_err())
+    {
+        return Disposition::Uncertain;
+    }
     let Ok(actual) = view(paths) else {
         return Disposition::Uncertain;
     };
@@ -714,7 +798,7 @@ pub fn install(
         Err(e) => return Err(e.into()),
     }
     let prepared = read_release(spec, &destination)?;
-    publish(spec, &paths, &prepared, &before, || Ok(()))
+    publish(spec, &paths, &prepared, &before, false, || Ok(()))
 }
 
 /// Restore one retained program release. The caller owns any
@@ -742,7 +826,7 @@ pub fn restore(
         return Err(Error::new("stale recovery: inspected installation changed"));
     }
     let target = read_release(spec, &paths.install.join(target_selector))?;
-    publish(spec, &paths, &target, &before, || Ok(()))
+    publish(spec, &paths, &target, &before, false, || Ok(()))
 }
 
 /// Repair an interrupted selector-only publication using the captured prior
@@ -770,7 +854,7 @@ pub fn recover_installation(
         ));
     }
     if let Some(selected) = observed {
-        let result = publish(spec, &paths, &selected, &before, || Ok(()))?;
+        let result = publish(spec, &paths, &selected, &before, true, || Ok(()))?;
         return Ok(Some(result));
     }
     if prior.is_some() || before[&paths.install.join("previous")].is_some() {

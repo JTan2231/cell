@@ -523,6 +523,15 @@ New submissions skip tests by default and retain other checks. Use
 retain their frozen test policy. Validation receipts and outcome emails state
 when tests were skipped.
 
+New macOS jobs freeze the persistent host signing policy and require verified
+native production candidates before source acceptance, including when tests are
+skipped. Builds, repair, installation and cache reuse preserve the selected
+certificate and stable product identifiers. Configure or rotate signing only
+with paused, settled CI and settled deployment and release operations. Read
+`chancery show ci-manager.signing.operate` for setup, exact certificate selection,
+key recovery and coverage; Python and standalone scripts retain their existing
+runtime identities. Jobs without a signing snapshot keep their earlier path.
+
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
 a new commit before validation. Every validation compares the same accepted

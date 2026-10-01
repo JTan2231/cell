@@ -181,6 +181,7 @@ pub(super) fn legacy(root: &Path) -> Result<ReleaseInfo> {
 }
 
 fn version(binary: &Path, name: &str, home: &Path) -> Result<String> {
+    cell_install::signing::verify_native("annals", name, binary)?;
     let output = cell_install::command::checked(
         binary,
         &["--version".into()],

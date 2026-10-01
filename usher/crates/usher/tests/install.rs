@@ -13,6 +13,9 @@ use tempfile::TempDir;
 
 type TestResult = Result<(), Box<dyn Error>>;
 
+#[path = "../../../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 struct Fixture {
     _temporary: TempDir,
     root: PathBuf,
@@ -49,8 +52,13 @@ impl Fixture {
         )?;
         let binary = candidate.join("bin/usher");
         let installer = candidate.join("bin/usher-install");
-        fs::copy(env!("CARGO_BIN_EXE_usher"), &binary)?;
-        fs::copy(env!("CARGO_BIN_EXE_usher-install"), &installer)?;
+        signing_fixture::copy_signed("usher", "usher", env!("CARGO_BIN_EXE_usher"), &binary)?;
+        signing_fixture::copy_signed(
+            "usher",
+            "usher-install",
+            env!("CARGO_BIN_EXE_usher-install"),
+            &installer,
+        )?;
         Ok(Self {
             _temporary: temporary,
             root,

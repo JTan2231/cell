@@ -47,7 +47,17 @@ else:
 class BuildTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.base = Path(self.temporary.name)
+        self.base = Path(self.temporary.name).resolve()
+        self.signing = {}
+        for name in ("load_policy", "assert_current", "preflight", "identifier", "policy_digest", "sign", "verify"):
+            patch = mock.patch.object(build.signing, name)
+            self.signing[name] = patch.start()
+            self.addCleanup(patch.stop)
+        self.signing["load_policy"].return_value = None
+        self.signing["policy_digest"].side_effect = lambda policy: build.hashlib.sha256(candidate.json_bytes(policy)).hexdigest()
+        self.signing["identifier"].side_effect = lambda policy, product, key: f"local.cell.{product}.{key}"
+        self.policy = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
+                                              "keychain": "/fixture/signing.keychain-db", "identifier_namespace": "local.cell"}}
         storage_patch = mock.patch.object(build.workspace, "root", return_value=self.base)
         storage_patch.start()
         self.addCleanup(storage_patch.stop)
@@ -180,6 +190,177 @@ class BuildTests(unittest.TestCase):
         self.write("untracked.txt", "untracked source also matters\n")
         self.prepare("new-source", unit="alpha")
         self.assertEqual(len(self.calls()), 3)
+
+    def enable_signing(self) -> None:
+        self.signing["load_policy"].return_value = self.policy
+
+        def sign(path, policy, product, key):
+            with path.open("a") as stream:
+                stream.write("# signed " + policy["macos"]["certificate_sha1"] + "\n")
+
+        self.signing["sign"].side_effect = sign
+
+    def test_signing_covers_every_declared_binary_without_changing_cargo_outputs(self) -> None:
+        self.enable_signing()
+        result = self.prepare("signed", ["alpha", "beta"])
+        self.assertEqual(self.signing["sign"].call_count, 3)
+        self.signing["preflight"].assert_called_once_with(self.policy)
+        self.assertEqual(result["signing_policy"], self.policy)
+        for call in self.signing["sign"].call_args_list:
+            path, policy, product, key = call.args
+            self.assertNotIn(self.cache / "target", path.parents)
+            self.assertEqual(policy, self.policy)
+            self.assertEqual(path.name, key)
+            unsigned = self.cache / "target/fixture-host/release" / key
+            self.assertNotIn("# signed", unsigned.read_text())
+            manifest = candidate.read_manifest(self.base / "signed/candidates" / product)
+            record = manifest["binaries"][key]
+            self.assertEqual(record["code_identifier"], f"local.cell.{product}.{key}")
+            self.assertEqual(record["sha256"], candidate.digest(self.base / "signed/candidates" / product / record["path"]))
+            self.assertEqual(manifest["signing_policy"], self.policy)
+            self.assertEqual(manifest["signing_policy_digest"], result["signing_policy_digest"])
+
+    def test_signed_cache_reuse_verifies_binaries_without_resigning(self) -> None:
+        self.enable_signing()
+        self.prepare("first-signed")
+        before = self.signing["verify"].call_count
+        second = self.prepare("second-signed")
+        self.assertTrue(second["cache_hit"])
+        self.assertEqual(len(self.calls()), 1)
+        self.assertEqual(self.signing["sign"].call_count, 2)
+        calls = self.signing["verify"].call_args_list[before:]
+        cached = Path(second["cache_entry"]) / "binaries/release"
+        self.assertEqual({call.args[0].name for call in calls if cached in call.args[0].parents},
+                         {"alpha", "alpha-helper"})
+        self.assertTrue(any(".candidate-" in str(call.args[0]) for call in calls))
+
+    def test_changed_signing_identity_has_a_separate_cache_and_candidate(self) -> None:
+        self.enable_signing()
+        first = self.prepare("first-identity")
+        self.policy = {"schema": 1, "macos": {**self.policy["macos"], "certificate_sha1": "b" * 40}}
+        self.signing["load_policy"].return_value = self.policy
+        second = self.prepare("second-identity")
+        self.assertFalse(second["cache_hit"])
+        self.assertNotEqual(first["build_key"], second["build_key"])
+        self.assertNotEqual(first["candidates"]["alpha"]["candidate_id"], second["candidates"]["alpha"]["candidate_id"])
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_preflight_and_frozen_policy_failure_stop_before_build(self) -> None:
+        self.enable_signing()
+        for operation in ("assert_current", "preflight"):
+            with self.subTest(operation=operation):
+                self.signing[operation].side_effect = RuntimeError("signing is unavailable")
+                with self.assertRaisesRegex(RuntimeError, "signing is unavailable"):
+                    build.prepare(self.source, ["alpha"], self.base / operation, signing_policy=self.policy)
+                self.signing[operation].side_effect = None
+        self.assertEqual(self.calls(), [])
+
+    def test_signed_cache_tampering_fails_before_assembly(self) -> None:
+        self.enable_signing()
+        first = self.prepare("sealed-cache")
+        path = Path(first["cache_entry"]) / "binaries/release/alpha"
+        path.chmod(0o755)
+        path.write_text(path.read_text() + "# changed\n")
+        with self.assertRaisesRegex(build.BuildError, "release cache executable changed"):
+            self.prepare("changed-cache")
+        self.assertFalse((self.base / "changed-cache").exists())
+        self.assertEqual(len(self.calls()), 1)
+
+    def test_nonobject_cache_metadata_fails_before_assembly(self) -> None:
+        first = self.prepare("cache-object")
+        path = Path(first["cache_entry"]) / "manifest.json"
+        path.chmod(0o600)
+        path.write_text("[]\n")
+        with self.assertRaisesRegex(build.BuildError, "cache metadata"):
+            self.prepare("bad-cache-object")
+        self.assertFalse((self.base / "bad-cache-object").exists())
+
+    def test_direct_staging_signs_only_the_copy_and_verifies_it(self) -> None:
+        self.prepare("unsigned-fixture")
+        self.enable_signing()
+        target = self.cache / "target/fixture-host"
+        before = candidate.digest(target / "release/alpha")
+        output = self.base / "direct-candidate"
+        with mock.patch.dict(os.environ, {"CARGO_TARGET_DIR": str(target)}):
+            manifest = candidate.stage(self.source, "alpha", output, "alpha|target/release/alpha|alpha",
+                                       signing_policy=self.policy)
+        self.assertEqual(candidate.digest(target / "release/alpha"), before)
+        self.assertEqual(self.signing["sign"].call_count, 1)
+        self.assertEqual(self.signing["sign"].call_args.args[0].name, "alpha")
+        self.assertEqual(candidate.verify(output, signing_policy=self.policy), manifest)
+
+    def test_candidate_verification_requires_the_external_policy_and_unchanged_bytes(self) -> None:
+        self.enable_signing()
+        self.prepare("verified")
+        root = self.base / "verified/candidates/alpha"
+        candidate.verify_signatures(root, self.policy)
+        other = {"schema": 1, "macos": {**self.policy["macos"], "certificate_sha1": "b" * 40}}
+        with self.assertRaisesRegex(candidate.CandidateError, "signing policy does not match"):
+            candidate.verify(root, signing_policy=other)
+        path = root / "bin/alpha"
+        path.chmod(0o755)
+        path.write_text(path.read_text() + "# changed\n")
+        with self.assertRaisesRegex(candidate.CandidateError, "executable changed"):
+            candidate.verify(root, signing_policy=self.policy)
+
+    def test_nonobject_candidate_metadata_is_a_reportable_failure(self) -> None:
+        self.enable_signing()
+        self.prepare("candidate-object")
+        root = self.base / "candidate-object/candidates/alpha"
+        path = root / "candidate.json"
+        path.chmod(0o600)
+        path.write_text("null\n")
+        with self.assertRaisesRegex(candidate.CandidateError, "metadata must be an object"):
+            candidate.verify(root, signing_policy=self.policy)
+
+    def test_signed_build_staging_refuses_an_unverifiable_cache_binary(self) -> None:
+        first = self.prepare("unsigned-cache")
+        self.enable_signing()
+        self.signing["verify"].side_effect = RuntimeError("wrong certificate")
+        with self.assertRaisesRegex(RuntimeError, "wrong certificate"):
+            candidate.stage_build(self.source, "alpha", self.base / "bad-signed-copy",
+                                  "alpha|target/release/alpha|alpha",
+                                  target=Path(first["cache_entry"]) / "binaries", source_key=first["source_key"],
+                                  signing_policy=self.policy)
+        self.signing["sign"].assert_not_called()
+        self.assertFalse((self.base / "bad-signed-copy").exists())
+
+    def run_main_with_policy(self, value):
+        path = self.base / "frozen-signing.json"
+        path.write_text(json.dumps(value))
+        arguments = ["cell-build", "--source-root", str(self.source), "--product", "alpha",
+                     "--output", str(self.base / "cli-output"), "--signing-policy-file", str(path)]
+        with mock.patch.object(sys, "argv", arguments), mock.patch("builtins.print"), \
+                mock.patch.object(build, "prepare", return_value={"state": "built"}) as prepare:
+            status = build.main()
+        return status, prepare
+
+    def test_cli_preserves_and_validates_frozen_signing_policy(self) -> None:
+        value = {"schema": 1, "macos": {**self.policy["macos"], "certificate_sha1": "A" * 40}}
+        status, prepare = self.run_main_with_policy(value)
+        self.assertEqual(status, 0)
+        self.signing["assert_current"].assert_called_once_with(self.policy)
+        prepare.assert_called_once_with(self.source, ["alpha"], self.base / "cli-output", None,
+                                        signing_policy=self.policy)
+
+    def test_cli_policy_drift_stops_before_preparation(self) -> None:
+        self.signing["assert_current"].side_effect = RuntimeError("policy changed after admission")
+        status, prepare = self.run_main_with_policy(self.policy)
+        self.assertEqual(status, 1)
+        prepare.assert_not_called()
+
+    def test_cli_rejects_missing_mac_policy(self) -> None:
+        with mock.patch.object(sys, "platform", "darwin"):
+            status, prepare = self.run_main_with_policy(None)
+        self.assertEqual(status, 1)
+        prepare.assert_not_called()
+
+    def test_cli_allows_explicit_unsigned_nonmac_fixture_policy(self) -> None:
+        with mock.patch.object(sys, "platform", "linux"):
+            status, prepare = self.run_main_with_policy(None)
+        self.assertEqual(status, 0)
+        self.signing["assert_current"].assert_called_once_with(None)
+        self.assertIsNone(prepare.call_args.kwargs["signing_policy"])
 
 
 if __name__ == "__main__":

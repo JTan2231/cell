@@ -16,6 +16,47 @@ if __package__ in (None, ""):
 from ci_manager.storage import atomic_json
 
 
+def validation_exited(directory: Path, job: dict) -> bool:
+    """Prove the current validator exited, including an already recorded result."""
+    validations = job.get("validations", [])
+    ordinal = len(validations)
+    name = f"validation-{ordinal}"
+    if not any((directory / f"{name}.{suffix}").exists()
+               for suffix in ("request.json", "result.json", "started.json", "stdout", "stderr",
+                              "json", "log")):
+        if not validations:
+            return False
+        ordinal -= 1
+        name = f"validation-{ordinal}"
+        if (validations[-1].get("candidate") != job["candidate_commit"]
+                or validations[-1].get("receipt") != str(directory / f"{name}.json")):
+            return False
+    worktree = directory / "worktree"
+    request_path = directory / f"{name}.request.json"
+    try:
+        request = json.loads(request_path.read_text())
+        result = json.loads((directory / f"{name}.result.json").read_text())
+        if not isinstance(request, dict) or not isinstance(result, dict):
+            return False
+        command = request["command"]
+        expected = [str(worktree / "pipeline/select_changes.py"), "run",
+                    "--base", job["base_commit"],
+                    "--candidate", job["candidate_commit"], "--json"]
+        if job.get("skip_tests", False):
+            expected.append("--skip-tests")
+        return (isinstance(command, list) and len(command) == len(expected) + 1
+                and isinstance(command[0], str) and Path(command[0]).is_absolute()
+                and command[1:] == expected
+                and request["cwd"] == str(worktree)
+                and all(request[key] == str(directory / f"{name}.{suffix}")
+                        for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
+                                            ("started", "started.json"), ("result", "result.json")))
+                and result["request"] == str(request_path)
+                and type(result.get("exit_code")) is int)
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
 def main() -> int:
     request_path, descriptor = Path(sys.argv[1]), int(sys.argv[2])
     request = json.loads(request_path.read_text())

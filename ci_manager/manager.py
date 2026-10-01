@@ -14,6 +14,7 @@ from ci_manager import VERSION
 from ci_manager import workspace
 from ci_manager import git_ops as git
 from ci_manager.budget import repair_budget
+from ci_manager.process import validation_exited
 from ci_manager.notification import render
 from ci_manager.integrations import (
     DeferredError, IntegrationError, NucleusClient, TransportError,
@@ -22,6 +23,7 @@ from ci_manager.integrations import (
 from ci_manager.storage import (
     ManagerError, Store, TERMINAL, atomic_bytes, atomic_json, lock, private_directory,
 )
+from deployment import candidate as production_candidate, signing
 
 
 class Worker:
@@ -136,6 +138,7 @@ class Worker:
         return self.process(job, name, command, cwd)
 
     def checking(self, job: dict) -> None:
+        self.assert_signing_policy(job)
         candidate = job["candidate_commit"]
         worktree = self.worktree(job)
         # Recovery materializes a previously committed candidate before checking.
@@ -180,7 +183,7 @@ class Worker:
         if self.store.job(job["id"])["cancel_requested"]:
             self.finish(job, "cancelled", "Cancelled after the current validation drained.")
         elif receipt.get("state") == "passed" and result["exit_code"] == 0:
-            self.save(job, "accepting")
+            self.save(job, "preparing" if "signing_policy" in job else "accepting")
         elif receipt.get("state") == "failed":
             self.save(job, "repair_prepare")
         else:
@@ -188,6 +191,7 @@ class Worker:
                         unresolved=receipt.get("state") in {"lost", "stale"})
 
     def repair_prepare(self, job: dict) -> None:
+        self.assert_signing_policy(job)
         policy = job["policy"]
         used = repair_budget(job)["used"]
         if used >= policy["luna_attempts"] + policy["terra_attempts"]:
@@ -309,11 +313,115 @@ class Worker:
         git.ensure_worktree(self.repository, self.worktree(job), candidate)
         self.save(job, "checking")
 
+    def assert_signing_policy(self, job: dict) -> None:
+        if "signing_policy" not in job:
+            return  # Retained jobs do not acquire a new admission policy.
+        policy = job["signing_policy"]
+        if signing.policy_digest(policy) != job.get("signing_policy_digest"):
+            raise signing.SigningError("retained signing policy digest does not match its snapshot")
+        signing.assert_current(policy)
+
+    def signing_policy_file(self, job: dict) -> Path:
+        path = self.directory(job) / "signing-policy.json"
+        if path.exists():
+            if json.loads(path.read_text()) != job["signing_policy"]:
+                raise signing.SigningError("retained signing policy file differs from the job snapshot")
+        else:
+            atomic_json(path, job["signing_policy"])
+        return path
+
+    def production_products(self, job: dict) -> list[str]:
+        selection = job["last_receipt"]["selection"]
+        return sorted(set(selection["product_tests"] + selection["platform_products"]
+                          + (job["deploy_products"] or [])))
+
+    def preparing(self, job: dict) -> None:
+        ordinal = len(job["validations"]) - 1
+        if (self.store.job(job["id"])["cancel_requested"]
+                and not (self.directory(job) / f"production-{ordinal}.request.json").exists()):
+            self.finish(job, "cancelled", "Cancelled before production preparation.")
+            return
+        self.assert_signing_policy(job)
+        policy = job["signing_policy"]
+        signing.preflight(policy)
+        candidate = job["candidate_commit"]
+        products = self.production_products(job)
+        if products:
+            output_directory = self.directory(job) / f"production-{ordinal}"
+            command = [sys.executable, "-I", "-B", str(Path(__file__).with_name("production.py")),
+                       "--source-root", str(self.worktree(job)), "--output", str(output_directory),
+                       "--signing-policy-file", str(self.signing_policy_file(job))]
+            for product in products:
+                command.extend(("--product", product))
+            result, output, _ = self.process(job, f"production-{ordinal}", command,
+                                             self.worktree(job))
+            try:
+                receipt = json.loads(output)
+            except (ValueError, UnicodeError) as exception:
+                raise ManagerError("production preparation returned no JSON receipt") from exception
+            if not isinstance(receipt, dict) or receipt.get("schema_version") != 1:
+                raise ManagerError("production preparation returned an incompatible receipt")
+            atomic_json(self.directory(job) / f"production-{ordinal}.json", receipt)
+            job["production_receipt"] = receipt
+            if self.store.job(job["id"])["cancel_requested"]:
+                self.finish(job, "cancelled", "Cancelled after production preparation drained.")
+                return
+            if receipt.get("state") != "passed" or result["exit_code"] != 0:
+                if receipt.get("failure_kind") == "signing_configuration":
+                    job["configuration_error"] = {"kind": "signing_configuration",
+                                                  "message": receipt.get("message")}
+                self.finish(job, "failed", "Production preparation stopped before acceptance: "
+                            + receipt.get("message", "no successful signing receipt"))
+                return
+        else:
+            receipt = {"schema_version": 1, "state": "passed", "source_commit": candidate,
+                       "signing_policy_digest": job["signing_policy_digest"], "products": [],
+                       "preparation": {"candidates": {}}}
+        job["production_receipt"] = receipt
+        self.verify_production(job)
+        if self.store.job(job["id"])["cancel_requested"]:
+            self.finish(job, "cancelled", "Cancelled after production preparation drained.")
+        else:
+            self.save(job, "accepting")
+
+    def verify_production(self, job: dict) -> None:
+        self.assert_signing_policy(job)
+        receipt = job.get("production_receipt")
+        products = sorted({"krisis" if name == "decisions" else name
+                           for name in self.production_products(job)})
+        if (not isinstance(receipt, dict) or receipt.get("schema_version") != 1
+                or receipt.get("state") != "passed"
+                or receipt.get("source_commit") != job["candidate_commit"]
+                or receipt.get("signing_policy_digest") != job["signing_policy_digest"]
+                or receipt.get("products") != products):
+            raise ManagerError("acceptance has no matching successful production signing receipt")
+        preparation = receipt.get("preparation")
+        if (not isinstance(preparation, dict)
+                or not isinstance(preparation.get("candidates"), dict)
+                or sorted(preparation["candidates"]) != products):
+            raise ManagerError("production signing receipt does not cover its product selection")
+        for product, record in preparation["candidates"].items():
+            if (not isinstance(record, dict) or not isinstance(record.get("candidate_dir"), str)
+                    or not isinstance(record.get("candidate_id"), str)):
+                raise ManagerError("production signing receipt has an invalid candidate record")
+            path = Path(record["candidate_dir"])
+            expected = self.directory(job) / f"production-{len(job['validations']) - 1}" / "candidates" / product
+            if path != expected:
+                raise ManagerError("production signing receipt names a candidate outside its preparation")
+            manifest = production_candidate.verify(path, signing_policy=job["signing_policy"])
+            if (manifest.get("source_commit") != job["candidate_commit"]
+                    or manifest.get("source_key") != preparation.get("source_key")
+                    or manifest.get("product") != product
+                    or manifest.get("candidate_id") != record["candidate_id"]):
+                raise ManagerError("production signing receipt has a mismatched candidate")
+
     def accepting(self, job: dict) -> None:
         receipt = job["last_receipt"]
         candidate, base = job["candidate_commit"], job["base_commit"]
         if receipt["state"] != "passed" or receipt["candidate_commit"] != candidate:
             raise ManagerError("acceptance has no matching successful validation")
+        if "signing_policy" in job:
+            self.verify_production(job)
         git.clean_candidate(self.worktree(job), candidate)
         job["acceptance_intent"] = {"old": base, "new": candidate}
         self.save(job)
@@ -333,6 +441,8 @@ class Worker:
                 "--request-id", request["request_id"]]
         if command == "start":
             args += ["--source-commit", request["source_commit"], *request["products"]]
+            if "signing_policy" in job:
+                args += ["--signing-policy-file", str(self.signing_policy_file(job))]
         return args
 
     def deployment_read(self, job: dict, action: str) -> dict:
@@ -481,11 +591,20 @@ class Worker:
             ordinal = len(job.get("validations", []))
             if (self.directory(job) / f"validation-{ordinal}.result.json").is_file():
                 next_phase = "checking"
+            elif job["cancel_requested"] and validation_exited(self.directory(job), job):
+                next_phase = "cancelled"
+        elif phase == "preparing":
+            ordinal = len(job.get("validations", [])) - 1
+            if (self.directory(job) / f"production-{ordinal}.result.json").is_file():
+                next_phase = "preparing"
         if next_phase:
             job["outcome_generation"] = job.get("outcome_generation", 1) + 1
             for key in ("notification", "notification_blocked", "outcome", "outcome_message", "unresolved"):
                 job.pop(key, None)
-            self.save(job, next_phase)
+            if next_phase == "cancelled":
+                self.finish(job, "cancelled", "Cancelled after the current validation drained.")
+            else:
+                self.save(job, next_phase)
         else:
             job.setdefault("last_error", "Recovery has no authoritative new outcome; the job remains blocked.")
             self.save(job)
@@ -496,6 +615,11 @@ class Worker:
             if job is not None:
                 try:
                     self.step(job)
+                except signing.SigningError as exception:
+                    job["configuration_error"] = {"kind": "signing_configuration", "message": str(exception)}
+                    self.finish(job, "failed", f"Signing configuration stopped CI: {exception}")
+                except production_candidate.CandidateError as exception:
+                    self.finish(job, "failed", f"Production candidate verification stopped CI: {exception}")
                 except (ManagerError, IntegrationError, OSError, ValueError, subprocess.SubprocessError) as exception:
                     if job["phase"] in {"notifying", "blocked"}:
                         job["last_error"] = str(exception)
@@ -503,5 +627,5 @@ class Worker:
                         self.save(job, "blocked")
                     else:
                         self.finish(job, "failed", str(exception),
-                                    unresolved=bool(job.get("model_unresolved")) or job["phase"] in {"checking", "deploying"})
+                                    unresolved=bool(job.get("model_unresolved")) or job["phase"] in {"checking", "preparing", "deploying"})
             time.sleep(2)

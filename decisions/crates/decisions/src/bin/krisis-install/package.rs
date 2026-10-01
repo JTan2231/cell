@@ -226,6 +226,7 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
 }
 
 pub fn prepare(paths: &Paths, options: &Install) -> Result<PreparedRelease> {
+    cell_install::signing::verify_native("krisis", "krisis", &options.binary)?;
     super::support::checked(
         paths,
         &options.binary,
@@ -237,6 +238,7 @@ pub fn prepare(paths: &Paths, options: &Install) -> Result<PreparedRelease> {
 }
 
 pub fn stage(paths: &Paths, binary: &Path, source_root: &Path) -> Result<PreparedRelease> {
+    cell_install::signing::verify_native("krisis", "krisis", binary)?;
     super::support::checked(
         paths,
         binary,

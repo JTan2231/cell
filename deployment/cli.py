@@ -30,7 +30,7 @@ if __package__ in (None, ""):
 
 from ci_broker import client as ci_client
 from ci_broker.broker import MINIMAL_ENVIRONMENT, process_token
-from deployment import candidate
+from deployment import candidate, signing
 from deployment.inventory import descriptor
 from ci_manager import workspace
 
@@ -427,10 +427,14 @@ def archive_source(root: Path, revision: str, destination: Path) -> None:
 def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
                *, verbose: bool = False, settings: dict[str, Any] | None = None,
                selected_commit: str | None = None, chosen_plan: dict[str, Any] | None = None,
-               request_id: str | None = None, run_id: str | None = None) -> Path:
+               request_id: str | None = None, run_id: str | None = None,
+               signing_policy: dict[str, Any] | None = None) -> Path:
     if sys.version_info < (3, 11):
         raise DeploymentError("deployment requires Python 3.11 or newer")
     chosen = chosen_plan if chosen_plan is not None else plan(root, requested, selected_commit)
+    policy = signing.load_policy() if signing_policy is None else signing.validate_policy(signing_policy)
+    signing.assert_current(policy)
+    signing.preflight(policy)
     if set(settings or {}) - chosen["catalog"].keys():
         raise DeploymentError("settings name a product outside the committed inventory")
     storage = storage or state_root()
@@ -448,7 +452,8 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
             "python": str(Path(sys.executable).resolve()), "records": {}, "events": [],
             "active_operation": None, "affected": [], "mutation_started": False,
             "apply_started": False, "verbose": verbose, "diagnostics": [], "settings": settings or {},
-            "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"}}
+            "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"},
+            "signing_policy": policy, "signing_policy_digest": signing.policy_digest(policy)}
     if request_id is not None:
         data["request_id"] = request_id
     durable_json(run / "run.json", data)
@@ -536,7 +541,9 @@ def result_from_data(data: dict[str, Any]) -> dict[str, Any]:
               "recovery": data.get("recovery", {"state": "not_needed"}),
               "maintenance": maintenance_result(data), "build": data.get("build"),
               "cleanup": dict(data.get("cleanup", {"releases": "not_started", "workspace": "pending"})),
-              "diagnostics": data.get("diagnostics", [])}
+              "diagnostics": data.get("diagnostics", []),
+              "signing_policy_digest": data.get("signing_policy_digest"),
+              "signing_policy": data.get("signing_policy")}
     if data.get("request_id"):
         result["request_id"] = data["request_id"]
     return result
@@ -839,7 +846,16 @@ class Run:
         directory = None
         if record.get("candidate_dir"):
             directory = Path(record["candidate_dir"])
-            manifest = candidate.read_manifest(directory)
+            if "signing_policy" in self.data:
+                manifest = candidate.verify_signatures(directory, self.data["signing_policy"])
+                canonical_product = "krisis" if product == "decisions" else product
+                if (manifest.get("candidate_id") != record.get("candidate_id")
+                        or manifest.get("source_commit") != self.data["source_commit"]
+                        or manifest.get("source_key") != self.data.get("source_key")
+                        or manifest.get("product") != canonical_product):
+                    raise DeploymentError("verified candidate differs from the retained deployment selection")
+            else:
+                manifest = candidate.read_manifest(directory)
         return directory, manifest
 
     def sealed_adapter(self, product: str, directory: Path | None,
@@ -854,6 +870,8 @@ class Run:
         return directory / "bin" / binary
 
     def adapter(self, product: str, operation: str) -> dict[str, Any]:
+        if operation in ("apply", "configure", "release", "activate") and "signing_policy" in self.data:
+            signing.assert_current(self.data["signing_policy"])
         item = self.data["catalog"].get(product)
         if item is None or item["metadata"] is None:
             raise DeploymentError(f"required product lacks a committed deployment adapter: {product}")
@@ -944,6 +962,10 @@ class Run:
         self.data["prepared_products"] = sorted(prepared_products)
         command = [self.data["python"], str(self.worktree / "deployment" / "build.py"),
                    "--source-root", str(self.worktree), "--output", str(preparation)]
+        if "signing_policy" in self.data:
+            policy_path = self.path / "signing-policy.json"
+            durable_json(policy_path, self.data["signing_policy"])
+            command.extend(["--signing-policy-file", str(policy_path)])
         for product in self.data["prepared_products"]:
             command.extend(["--product", product])
         returncode, _ = self.command("cell", "release-build", command, cwd=self.worktree)
@@ -956,7 +978,15 @@ class Run:
         for product in self.data["prepared_products"]:
             record = self.record(product)
             output = preparation / "candidates" / product
-            manifest = candidate.read_manifest(output)
+            if "signing_policy" in self.data:
+                manifest = candidate.verify_signatures(output, self.data["signing_policy"])
+                canonical_product = "krisis" if product == "decisions" else product
+                if (manifest.get("source_commit") != self.data["source_commit"]
+                        or manifest.get("source_key") != source_key
+                        or manifest.get("product") != canonical_product):
+                    raise DeploymentError("verified candidate differs from the prepared source selection")
+            else:
+                manifest = candidate.read_manifest(output)
             receipt = {"state": "built", "product": product, "source_key": source_key,
                        "candidate_id": manifest["candidate_id"]}
             record.update(prepared=True, candidate_dir=str(output), candidate_id=manifest["candidate_id"], build_receipt=receipt)
@@ -1249,7 +1279,7 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
 
 
 def canonical_request(root: Path, products: Sequence[str], selected_commit: str | None,
-                      settings: dict[str, Any] | None) -> dict[str, Any]:
+                      settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     if selected_commit is None:
         raise DeploymentError("a caller-correlated deployment requires --source-commit")
     revision = source_commit(root, selected_commit)
@@ -1258,7 +1288,8 @@ def canonical_request(root: Path, products: Sequence[str], selected_commit: str 
         raise DeploymentError("settings name a product outside the selected inventory")
     return {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
             "source_commit": revision, "products": sorted(requested_products(inventory, products)),
-            "settings": settings or {}}
+            "settings": settings or {}, "signing_policy": signing_policy,
+            "signing_policy_digest": signing.policy_digest(signing_policy)}
 
 
 def blocked_result(request_id: str, detail: str, *, blocker: str | None = None) -> dict[str, Any]:
@@ -1315,16 +1346,19 @@ def finish_correlated(storage: Path, request_id: str) -> dict[str, Any]:
 
 def start_correlated(root: Path, products: Sequence[str], storage: Path, *, request_id: str,
                      selected_commit: str | None, verbose: bool,
-                     settings: dict[str, Any] | None) -> dict[str, Any]:
+                     settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     operation_path(storage, request_id)
-    request = canonical_request(root, products, selected_commit, settings)
+    if signing_policy is not None:
+        signing_policy = signing.validate_policy(signing_policy)
+    explicit_policy = signing_policy is not None
+    request = canonical_request(root, products, selected_commit, settings, signing_policy)
     admitted = False
     result = None
     try:
         with deployment_lock(storage) as lock_fd:
             existing = read_operation(storage, request_id)
             if existing is not None:
-                if existing["request"] != request:
+                if not matching_request(existing["request"], request, explicit_policy=explicit_policy):
                     raise DeploymentError("request ID already belongs to a different deployment request")
                 result = operation_status(storage, request_id, running=False)
                 result["replayed"] = True
@@ -1335,6 +1369,10 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
             if active.exists() or active.is_symlink():
                 blocker = read_json(active / "run.json").get("run_id") if (active / "run.json").exists() else None
                 return blocked_result(request_id, "reconcile the previous deployment before admitting another", blocker=blocker)
+            policy = signing.load_policy() if signing_policy is None else signing_policy
+            signing.assert_current(policy)
+            signing.preflight(policy)
+            request.update(signing_policy=policy, signing_policy_digest=signing.policy_digest(policy))
             chosen = plan(root, request["products"], request["source_commit"])
             record = {"schema": SCHEMA, "request_id": request_id, "request": request,
                       "request_hash": hashlib.sha256(candidate.json_bytes(request)).hexdigest(),
@@ -1343,14 +1381,15 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
             save_operation(storage, record)
             admitted = True
             path = create_run(root, products, storage, verbose=verbose, settings=settings,
-                              chosen_plan=chosen, request_id=request_id, run_id=record["run_id"])
+                              chosen_plan=chosen, request_id=request_id, run_id=record["run_id"],
+                              signing_policy=policy)
             record["phase"] = "running"
             save_operation(storage, record)
             result = launch(path, lock_fd)
     except DeploymentBusy:
         existing = read_operation(storage, request_id)
         if existing is not None:
-            if existing["request"] != request:
+            if not matching_request(existing["request"], request, explicit_policy=explicit_policy):
                 raise DeploymentError("request ID already belongs to a different deployment request")
             result = operation_status(storage, request_id)
             result["replayed"] = True
@@ -1368,6 +1407,15 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
                 result["exit_code"] = 75
     assert result is not None
     return result
+
+
+def matching_request(retained: dict[str, Any], requested: dict[str, Any], *, explicit_policy: bool) -> bool:
+    """A replay without signer input keeps the admitted operation's selection."""
+    if explicit_policy:
+        return retained == requested
+    signing_fields = {"signing_policy", "signing_policy_digest"}
+    return ({key: value for key, value in retained.items() if key not in signing_fields}
+            == {key: value for key, value in requested.items() if key not in signing_fields})
 
 
 def reconcile_request(storage: Path, request_id: str) -> dict[str, Any]:
@@ -1402,11 +1450,15 @@ def reconcile_request(storage: Path, request_id: str) -> dict[str, Any]:
 
 def start(root: Path, products: Sequence[str], storage: Path | None = None,
           *, verbose: bool = False, settings: dict[str, Any] | None = None,
-          selected_commit: str | None = None, request_id: str | None = None) -> dict[str, Any]:
+          selected_commit: str | None = None, request_id: str | None = None,
+          signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     storage = storage or state_root()
     if request_id is not None:
         return start_correlated(root, products, storage, request_id=request_id,
-                                selected_commit=selected_commit, verbose=verbose, settings=settings)
+                                selected_commit=selected_commit, verbose=verbose, settings=settings,
+                                signing_policy=signing_policy)
+    policy = signing.load_policy() if signing_policy is None else signing.validate_policy(signing_policy)
+    signing.assert_current(policy)
     admitted = False
     result = None
     try:
@@ -1415,7 +1467,7 @@ def start(root: Path, products: Sequence[str], storage: Path | None = None,
             reconcile_active(storage, lock_fd)
             cleanup_active(storage)
             path = create_run(root, products, storage, verbose=verbose, settings=settings,
-                              selected_commit=selected_commit)
+                              selected_commit=selected_commit, signing_policy=policy)
             result = launch(path, lock_fd)
     finally:
         if admitted:
@@ -1483,6 +1535,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         command.add_argument("--source-commit", help="complete lowercase commit ID; defaults to local main")
         if name == "start":
             command.add_argument("--request-id", help="durable caller identity; requires --source-commit")
+            command.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
     for name in ("status", "reconcile"):
         command = commands.add_parser(name)
         command.add_argument("--request-id", required=True, help="exact admitted caller identity")
@@ -1507,8 +1560,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise DeploymentError("live deployment is supported only for the current macOS user")
             root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
             settings = setup_settings(parsed.settings)
+            policy = None
+            if parsed.signing_policy_file is not None:
+                policy = signing.validate_policy(read_json(parsed.signing_policy_file))
             result = start(root, parsed.products, verbose=parsed.verbose, settings=settings,
-                           selected_commit=parsed.source_commit, request_id=parsed.request_id)
+                           selected_commit=parsed.source_commit, request_id=parsed.request_id,
+                           signing_policy=policy)
         print_result(result)
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:

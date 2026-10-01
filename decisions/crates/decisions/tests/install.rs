@@ -9,10 +9,14 @@ use std::os::unix::fs::{PermissionsExt as _, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
+#[path = "../../../../deployment/signing_fixture.rs"]
+mod signing_fixture;
+
 struct Fixture {
     _temporary: tempfile::TempDir,
     root: PathBuf,
     home: PathBuf,
+    installer: PathBuf,
 }
 
 fn write(path: &Path, bytes: impl AsRef<[u8]>, mode: u32) {
@@ -26,6 +30,14 @@ impl Fixture {
         let root = fs::canonicalize(temporary.path()).unwrap();
         let home = root.join("Home");
         fs::create_dir(&home).unwrap();
+        let installer = root.join("krisis-install");
+        signing_fixture::copy_signed(
+            "krisis",
+            "krisis-install",
+            env!("CARGO_BIN_EXE_krisis-install"),
+            &installer,
+        )
+        .unwrap();
         fs::create_dir(root.join("definitions")).unwrap();
         fs::create_dir(root.join("bindings")).unwrap();
         write(
@@ -60,10 +72,11 @@ esac
             _temporary: temporary,
             root,
             home,
+            installer,
         }
     }
     fn command(&self) -> Command {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_krisis-install"));
+        let mut command = Command::new(&self.installer);
         command
             .env("HOME", &self.home)
             .env("KRISIS_TEST_SECRET", "must not reach payload");
@@ -193,7 +206,7 @@ fn prepare_cutover_release_and_uninstall_preserve_owned_state() {
     assert_eq!(manifest["format"], "cell-install-v2");
     assert_eq!(
         fs::read(release.join("package/install")).unwrap(),
-        fs::read(env!("CARGO_BIN_EXE_krisis-install")).unwrap()
+        fs::read(&fixture.installer).unwrap()
     );
     for _ in 0..2 {
         Fixture::success(&fixture.install(&["--release-maintenance"]));
@@ -328,10 +341,7 @@ fn adapter_fixture() -> (Fixture, serde_json::Value) {
     let mut binaries = serde_json::Map::new();
     for (name, executable) in [
         ("krisis", fixture.root.join("krisis")),
-        (
-            "krisis-install",
-            PathBuf::from(env!("CARGO_BIN_EXE_krisis-install")),
-        ),
+        ("krisis-install", fixture.installer.clone()),
     ] {
         let bytes = fs::read(executable).unwrap();
         let path = format!("bin/{name}");

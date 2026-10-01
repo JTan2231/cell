@@ -21,6 +21,7 @@ from ci_manager import VERSION
 from ci_manager import workspace
 from ci_manager import git_ops as git
 from ci_manager.storage import ManagerError, Store, TERMINAL, lock, state_root
+from deployment import signing
 
 
 def positive(value: str) -> int:
@@ -80,13 +81,19 @@ def submit(store: Store, args) -> dict:
                     or job.get("skip_tests", False) != skip_tests):
                 raise ManagerError("submission request ID belongs to different inputs")
             return job
+        # Signing is host configuration. Freeze it before admitting a new job;
+        # a retry keeps the original job even if the host config later changes.
+        signing_policy = signing.load_policy()
+        signing.preflight(signing_policy)
         identity = uuid.uuid4().hex
         # Pin before acknowledgement. An interrupted, unacknowledged orphan pin
         # is harmless and cannot be mistaken for an admitted queue item.
         git.git(root, "update-ref", git.private_ref(identity, "input"), revision, "0" * len(revision))
         now = time.time()
         data = {"input_commit": revision, "deploy_products": products, "skip_tests": skip_tests,
-                "policy": {**config["policy"], "refund_accepted_patches": True}, "submission_key": request_key}
+                "policy": {**config["policy"], "refund_accepted_patches": True}, "submission_key": request_key,
+                "signing_policy": signing_policy,
+                "signing_policy_digest": signing.policy_digest(signing_policy)}
         store.db.execute("INSERT INTO jobs(id,submission_key,phase,created,updated,data) VALUES (?,?,'queued',?,?,?)",
                          (identity, request_key, now, now, json.dumps(data)))
         return store.job(identity)
@@ -159,8 +166,12 @@ def main(argv: list[str] | None = None) -> int:
     storage = commands.add_parser("storage")
     storage.add_argument("action", choices=("configure", "status"))
     storage.add_argument("--volume", type=Path)
+    signing_command = commands.add_parser("signing", help="inspect or explicitly configure macOS signing")
+    signing_command.add_argument("arguments", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
+        if args.command == "signing":
+            return signing.run_cli(args.arguments)
         if args.command == "storage":
             if args.action == "configure":
                 if args.volume is None:
@@ -225,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                     time.sleep(1)
         print(json.dumps(result, sort_keys=True, indent=2))
         return 0
-    except (ManagerError, OSError, ValueError, subprocess.SubprocessError) as exception:
+    except (ManagerError, signing.SigningError, OSError, ValueError, subprocess.SubprocessError) as exception:
         print(json.dumps({"state": "error", "message": str(exception)}))
         return 1
 

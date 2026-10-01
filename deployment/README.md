@@ -127,8 +127,9 @@ and binaries, then seals independent product candidates in parallel. It keeps
 a persistent target and file lock per logical Git repository, separate from
 the CI broker and target. Cargo defaults to the logical CPU count capped at
 eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
-bundles persist in a cache keyed by source content and build inputs. Preparation
-reuses that cache without auditing the stored files.
+bundles persist in a cache keyed by source content, build inputs, and the frozen
+macOS signing policy. Preparation verifies cached native signatures and hashes
+before reuse.
 
 Source bytes and build inputs determine build identity. Git HEAD does not.
 Publication can therefore build updated versions and reuse those artifacts
@@ -136,6 +137,29 @@ after the same bytes are committed. A schema-one candidate records executable
 hashes and versions, plus packaging and adapter source hashes. Source paths
 follow the product descriptor's `PRODUCT_DIR`. Deployment records the selected commit and retains a separate build receipt. It deploys sealed executable copies without
 reading a later Cargo target. Build records do not record CI success.
+
+### macOS signing
+
+Cell uses one current-user signing policy outside the repository. The shared
+builder signs staged native runtime and installer executables before it computes
+candidate hashes. Each executable keeps a permanent code identifier under the
+configured namespace and its canonical product descriptor. Independent release
+units do not change that product namespace. Compiler outputs remain unchanged.
+
+Deployment captures the policy at admission and refuses policy changes before
+publication or activation. Product publication verifies the expected certificate
+and identifier and preserves signed bytes. Signature checks are new publication
+requirements; they do not establish product readiness or grant macOS permissions.
+Shell and Python assets remain release resources with their existing interpreters.
+
+Native installer integration tests sign copied fixtures through
+`deployment/signing_fixture.py` under the configured policy. This fixture
+preparation uses the existing key and does not create or select an identity.
+It changes temporary fixture copies, then verifies them before installer use.
+
+Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md) for explicit
+identity setup, Keychain access, recovery exports, and full-inventory rotation.
+Signing setup never occurs during an ordinary build, upgrade, or repair.
 
 The same builder can prepare candidates without publication or installation:
 
@@ -166,8 +190,9 @@ All candidates are prepared before maintenance begins. The coordinator then:
    last. Activation follows release of all holds.
 
 Installers perform resource setup, program selection, configuration, and required
-state initialization or migration. They do not run persistent-state integrity,
-artifact integrity, or operational readiness validation. Product diagnostics and
+state initialization or migration. They verify configured macOS signatures on
+native production code. They do not run persistent-state integrity or operational
+readiness validation. Product diagnostics and
 checks used during ordinary application work remain separate. CI does not assert
 the removed installation validation behavior.
 
