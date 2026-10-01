@@ -542,6 +542,15 @@ with paused, settled CI and settled deployment and release operations. Read
 key recovery and coverage; Python and standalone scripts retain their existing
 runtime identities. Jobs without a signing snapshot keep their earlier path.
 
+Production candidates and installed releases use opaque UUID identities. Cell
+compares normalized signing-policy objects directly and lets Cargo manage build
+reuse. Build preparation, installation, and program rollback compute no custom
+artifact hashes. macOS verifies native code signatures and certificate identity.
+Existing hash-named releases remain readable; their recorded hashes are ignored.
+Clockwork runtime launch pins and product data-migration checks retain their
+separate protocols. New release formats require a current trusted installer for
+recovery; older installers cannot read them.
+
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
 a new commit before validation. Every validation compares the same accepted

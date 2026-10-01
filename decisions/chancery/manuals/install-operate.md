@@ -14,7 +14,7 @@ the observer does not discover another Codex installation at runtime.
 Interactive source-reading commands must receive that same path through
 `CONVERSATIONS_CODEX` because the installed command does not inherit
 Clockwork's observer environment; doctor and process also require the complete
-explicit Annals configuration. The default operation prepares a content-addressed release and Clockwork definition while retaining the
+explicit Annals configuration. The default operation prepares a immutable release and Clockwork definition while retaining the
 maintenance gate; it does not select or activate them. After the outer cutover
 has separately proved its Annals and semantic prerequisites, `--final-cutover`
 performs writer shutdown, quiescence, migration, baseline activation, selector/hook publication, and schedule handoff. Clockwork process state
@@ -97,7 +97,7 @@ baseline under maintenance. Runtime doctor remains available separately.
 
 The package builds both `krisis` and `krisis-install`. New releases retain the
 exact Rust helper at `bin/krisis-install` and `package/install`, with a complete
-`cell-install-v2` artifact manifest. Static frontend and observer scripts remain
+`cell-install-v3` artifact manifest. Static frontend and observer scripts remain
 release data. The shared Rust library copies artifacts and owns selector transactions; Krisis owns hook, database, admission, and scheduler lifecycle.
 `krisis-install inspect` checks the selected installation. Retained
 `package/install install` uses its sibling package data and explicit exact
@@ -119,7 +119,7 @@ preparation to retain its authenticated gate through external verification.
 Repeat the same inputs with `--release-maintenance` to release that gate after
 proving the exact current command, providers, hook, receipt, enabled observer,
 and retired legacy schedules. `--home` selects an absolute operator home;
-`--expected-current absent|releases/HASH` optionally refuses a changed selector.
+`--expected-current absent|releases/ID` optionally refuses a changed selector.
 The marker and receipt are distinct from the coordinator's named CLI hold.
 
 ## Inspect worker operation

@@ -68,7 +68,7 @@
     {
       "id": "annals.installation",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.work.retain",

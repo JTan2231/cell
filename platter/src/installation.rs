@@ -56,6 +56,11 @@ fn schedule_manifest(
         Authority, FailurePolicy, LaunchImage, Manifest, Output, OverlapPolicy, Schedule,
     };
     let executable = selected.join("bin/platter");
+    release
+        .files
+        .get("bin/platter")
+        .context("release has no Platter executable")?;
+    let executable_hash = cell_install::file_digest(&executable)?;
     let settings = crate::workflow::config(root)?;
     let text = |path: &Path| -> Result<String> {
         Ok(path
@@ -95,12 +100,7 @@ fn schedule_manifest(
         },
         launch: LaunchImage::Direct {
             program: text(&executable)?,
-            sha256: release
-                .files
-                .get("bin/platter")
-                .context("release has no Platter executable")?
-                .sha256
-                .clone(),
+            sha256: executable_hash,
         },
         environment,
         output: Output {

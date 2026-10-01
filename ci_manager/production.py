@@ -32,6 +32,8 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
         raise candidate.CandidateError("production preparation has an incompatible receipt")
     if result.get("source_key") != commit:
         raise candidate.CandidateError("production preparation has another source identity")
+    if result.get("signing_policy") != policy:
+        raise candidate.CandidateError("production preparation has another signing policy")
     canonical_products = sorted({"krisis" if product == "decisions" else product for product in products})
     if (not isinstance(result.get("candidates"), dict)
             or sorted(result["candidates"]) != canonical_products):
@@ -52,7 +54,7 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
     return {"schema_version": 1, "state": "passed", "source_commit": commit,
-            "signing_policy_digest": signing.policy_digest(policy), "products": canonical_products,
+            "signing_policy": policy, "products": canonical_products,
             "preparation": result}
 
 

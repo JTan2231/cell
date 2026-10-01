@@ -78,7 +78,7 @@
     {
       "id": "semantics.service",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     }
   ],
   "session_surfaces": [

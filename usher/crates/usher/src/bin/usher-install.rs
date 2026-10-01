@@ -68,7 +68,7 @@ struct CandidateArgs {
     bundle: PathBuf,
     #[command(flatten)]
     home: HomeArgs,
-    /// Require absent or `releases/<sha256>`; omission snapshots before locking.
+    /// Require absent or `releases/<ID>`; omission snapshots before locking.
     #[arg(long)]
     expected_current: Option<String>,
 }

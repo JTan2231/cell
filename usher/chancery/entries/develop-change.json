@@ -1,6 +1,6 @@
 {
   "id": "usher.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -69,7 +69,7 @@
     {
       "id": "usher.installation",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -106,7 +106,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Product release version and content-addressed release identity are separate from capability contract and JSON schema versions."
+        "statement": "Product release version and immutable release identity are separate from capability contract and JSON schema versions."
       }
     ],
     "completeness_and_freshness": [

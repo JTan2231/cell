@@ -52,7 +52,7 @@ class SubmissionSigningTests(unittest.TestCase):
         self.assertEqual(len(inserts), 1)
         snapshot = json.loads(inserts[0].args[1][-1])
         self.assertEqual(snapshot["signing_policy"], POLICY)
-        self.assertEqual(snapshot["signing_policy_digest"], signing.policy_digest(POLICY))
+        self.assertNotIn("signing_policy_digest", snapshot)
         retained = {**snapshot, "id": job["id"]}
         self.store.db.execute.return_value.fetchone.return_value = retained
         self.store.decode.return_value = retained
@@ -92,7 +92,7 @@ class WorkerSigningTests(unittest.TestCase):
         self.worker.finish = mock.Mock()
         self.job = {"id": "fixture", "base_commit": "a" * 40, "candidate_commit": "b" * 40,
                     "validations": [{"state": "passed"}], "deploy_products": ["beta"],
-                    "signing_policy": POLICY, "signing_policy_digest": signing.policy_digest(POLICY),
+                    "signing_policy": POLICY,
                     "last_receipt": {"state": "passed", "candidate_commit": "b" * 40,
                                      "selection": {"product_tests": ["alpha"], "platform_products": []}}}
         stack = ExitStack()
@@ -105,15 +105,15 @@ class WorkerSigningTests(unittest.TestCase):
 
     def receipt(self):
         records = {product: {"candidate_dir": str(self.directory / "production-0/candidates" / product),
-                             "candidate_id": f"sha256:{product}"} for product in ("alpha", "beta")}
+                             "candidate_id": f"candidate:{product}"} for product in ("alpha", "beta")}
         return {"schema_version": 1, "state": "passed", "source_commit": self.job["candidate_commit"],
-                "signing_policy_digest": self.job["signing_policy_digest"], "products": ["alpha", "beta"],
+                "signing_policy": POLICY, "products": ["alpha", "beta"],
                 "preparation": {"source_key": self.job["candidate_commit"], "candidates": records}}
 
     def manifest(self, path, *, signing_policy):
         self.assertEqual(signing_policy, POLICY)
         return {"source_commit": self.job["candidate_commit"], "source_key": self.job["candidate_commit"],
-                "product": path.name, "candidate_id": f"sha256:{path.name}"}
+                "product": path.name, "candidate_id": f"candidate:{path.name}"}
 
     def test_prepare_covers_checked_and_explicit_products_with_installed_host_code(self):
         self.worker.process.return_value = ({"exit_code": 0}, json.dumps(self.receipt()).encode(), b"")
@@ -174,7 +174,7 @@ class WorkerSigningTests(unittest.TestCase):
     def test_missing_malformed_or_mismatched_receipts_cannot_advance_accepted(self):
         valid = self.receipt()
         variants = (None, [], valid | {"source_commit": "c" * 40},
-                    valid | {"signing_policy_digest": "other-policy"}, valid | {"products": ["alpha"]},
+                    valid | {"signing_policy": {}}, valid | {"products": ["alpha"]},
                     valid | {"preparation": []}, valid | {"preparation": {"candidates": []}})
         with mock.patch("ci_manager.manager.git.advance") as advance, mock.patch(
                 "ci_manager.manager.production_candidate.verify") as verify:
@@ -207,11 +207,10 @@ class WorkerSigningTests(unittest.TestCase):
         self.worker.assert_signing_policy(legacy)
         self.current.assert_not_called()
 
-    def test_retained_snapshot_digest_must_match_before_policy_use(self):
-        self.job["signing_policy_digest"] = "another-digest"
-        with self.assertRaisesRegex(signing.SigningError, "snapshot"):
-            self.worker.assert_signing_policy(self.job)
-        self.current.assert_not_called()
+    def test_legacy_policy_digest_is_ignored_when_policy_matches(self):
+        self.job["signing_policy_digest"] = "obsolete-digest"
+        self.worker.assert_signing_policy(self.job)
+        self.current.assert_called_once_with(POLICY)
 
     def test_deployment_carries_only_the_frozen_signing_policy(self):
         self.job["deployment_request"] = {"request_id": "deployment", "source_commit": "b" * 40,
@@ -227,11 +226,11 @@ class ProductionHelperTests(unittest.TestCase):
         self.source = Path("/evidence/source")
         self.output = Path("/evidence/output")
         self.commit = "b" * 40
-        self.result = {"schema": 1, "state": "built", "source_key": self.commit,
+        self.result = {"schema": 1, "state": "built", "source_key": self.commit, "signing_policy": POLICY,
                        "candidates": {"alpha": {"candidate_dir": str(self.output / "candidates/alpha"),
-                                                 "candidate_id": "sha256:alpha"}}}
+                                                 "candidate_id": "candidate:alpha"}}}
         self.manifest = {"source_commit": self.commit, "source_key": self.commit, "product": "alpha",
-                         "candidate_id": "sha256:alpha"}
+                         "candidate_id": "candidate:alpha"}
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(signing, "assert_current"))
@@ -248,7 +247,7 @@ class ProductionHelperTests(unittest.TestCase):
         self.build.assert_called_once_with(self.source, ["alpha"], self.output, signing_policy=POLICY)
         self.verify.assert_called_once_with(self.output / "candidates/alpha", signing_policy=POLICY)
         self.assertEqual(self.clean.call_args_list, [mock.call(self.source, self.commit)] * 2)
-        self.assertEqual(receipt["signing_policy_digest"], signing.policy_digest(POLICY))
+        self.assertEqual(receipt["signing_policy"], POLICY)
         self.assertEqual(receipt["source_commit"], self.commit)
 
     def test_retained_preparation_rechecks_signature_without_rebuild(self):
@@ -284,7 +283,7 @@ class ProductionHelperTests(unittest.TestCase):
     def test_other_source_location_or_malformed_scope_is_rejected(self):
         variants = ({"source_key": "c" * 40}, {"candidates": []},
                     {"candidates": {"alpha": {"candidate_dir": "/other/candidate",
-                                              "candidate_id": "sha256:alpha"}}})
+                                              "candidate_id": "candidate:alpha"}}})
         for changed in variants:
             with self.subTest(changed=changed):
                 self.build.return_value = self.result | changed

@@ -282,14 +282,13 @@ recovery. Credential and scheduled-job shell frontends remain versioned assets.
 executables without tests, formatting, Clippy, documentation builds, or
 generator CI. One release-profile Cargo invocation builds the selected
 packages and binaries. The builder then seals product candidates in parallel.
-Release builds share a persistent target and file lock per logical Git
-repository, separate from CI. Cargo defaults to at most eight jobs.
+Release builds share a persistent target and file lock, separate from CI.
+Cargo defaults to at most eight jobs.
 
-The cache identifies clean builds by the full Git commit ID, build inputs, and
-the selected signing policy. Uncommitted builds get a fresh identity and do not
-reuse cache entries. The builder does not hash source files. It verifies cached
-production signatures and executable hashes before reuse. The cache records
-builds, not CI results. See
+Cargo owns compilation reuse and freshness. Cell copies its compiler outputs,
+signs native executables, and records source identity with opaque candidate IDs.
+Cell computes no artifact, policy, configuration, or build-cache hashes. Native
+signature verification remains required before source acceptance. See
 [deployment](../deployment/README.md)
 for invocation, candidate identity, and cache retention.
 

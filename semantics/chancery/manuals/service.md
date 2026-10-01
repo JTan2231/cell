@@ -1,6 +1,6 @@
 # Semantics service and installation guarantees
 
-Semantics installs one content-addressed release for the current macOS user.
+Semantics installs one immutable release for the current macOS user.
 It owns the public command selectors, its Chancery provider selector, private
 SQLite state, and the exact runner definition bound as `semantics/worker`.
 Clockwork owns activation, process history, and scheduling incidents. A successful
@@ -158,9 +158,9 @@ files with mode `0600`, no symlink, and one hard link. A receipt requires its ga
 
 The installer records release metadata without candidate/provider version or
 artifact-integrity checks.
-The staged `cell-install-v2` inventory covers payload, installer, static frontend
+The staged `cell-install-v3` inventory covers payload, installer, static frontend
 and worker, unrendered schedule template, and the complete provider bundle.
-Bundle bytes belong to the content-addressed release.
+Bundle bytes belong to the immutable release.
 The provider selector follows `current` and rolls back with the product.
 Retained format-one and format-two release metadata remains readable.
 

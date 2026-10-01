@@ -166,7 +166,11 @@ pub(super) fn selected_release(
         .pointer("/data/manifest/release_id")
         .and_then(Value::as_str)
         .ok_or_else(|| Error::new("selected Annals definition has no release"))?;
-    checked_hash(id)?;
+    if !cell_install::valid_release_id(id) {
+        return Err(Error::new(
+            "selected Annals definition has an invalid release identity",
+        ));
+    }
     let root = install_root(home).join("releases").join(id);
     if value.pointer("/data/manifest/release_root") != Some(&json!(root)) {
         return Err(Error::new(

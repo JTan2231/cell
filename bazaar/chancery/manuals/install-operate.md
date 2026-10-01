@@ -66,7 +66,7 @@ bazaar-install install --binary /absolute/candidate/bazaar --bundle /absolute/ba
 bazaar-install inspect
 ```
 
-Use `--home ABSOLUTE_PATH` and `--expected-current absent|releases/HASH` when
+Use `--home ABSOLUTE_PATH` and `--expected-current absent|releases/ID` when
 an explicit installation home or guarded selection is required. Direct
 installation selects programs only. Initialize state separately when creation
 is intended; do not treat successful program selection as database readiness.

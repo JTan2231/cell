@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from contextlib import ExitStack, contextmanager
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,7 +23,7 @@ from ci_manager.process import validation_exited
 
 LABEL = "dev.cell.ci-manager"
 PROVIDER = "ci-manager"
-FORMAT = 1
+FORMAT = 2
 STOP_LOCK_TIMEOUT = 10.0
 
 
@@ -45,10 +44,6 @@ def _paths() -> dict[str, Path]:
 
 def _json(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-
-
-def _digest(value: bytes) -> str:
-    return hashlib.sha256(value).hexdigest()
 
 
 def _owned_directory(path: Path) -> None:
@@ -110,18 +105,25 @@ def _launcher(python: str, release: Path) -> bytes:
 def _verify_release(release: Path) -> dict:
     if release.is_symlink() or release.parent != program_root() / "releases":
         raise ManagerError("CI manager release is outside its owned release directory")
-    if not re.fullmatch(r"[0-9a-f]{64}", release.name):
+    if not re.fullmatch(r"(?:[0-9a-f]{32}|[0-9a-f]{64})", release.name):
         raise ManagerError("invalid CI manager release identity")
     try:
         manifest = json.loads((release / "manifest.json").read_bytes())
         recipe = manifest["recipe"]
         files = recipe["files"]
-        if (recipe["schema_version"] != FORMAT or recipe["product"] != "cell-ci"
+        version = recipe["schema_version"]
+        if (version not in {1, FORMAT} or recipe["product"] != "cell-ci"
                 or recipe["program_root"] != str(program_root())
                 or recipe["entry"] != "ci_manager/client.py"
-                or _digest(_json(recipe)) != release.name or not isinstance(files, dict)
+                or len(release.name) != (64 if version == 1 else 32)
+                or not isinstance(files, dict)
                 or not Path(recipe["python"]).is_absolute()):
             raise ValueError("invalid release recipe")
+        for relative, record in files.items():
+            path = Path(relative)
+            if (path.is_absolute() or ".." in path.parts or path.as_posix() != relative
+                    or not isinstance(record, dict) or record.get("mode") not in {0o444, 0o555}):
+                raise ValueError("invalid release inventory")
         expected = set(files) | {"manifest.json", "bin/cell-ci"}
         observed = set()
         for path in release.rglob("*"):
@@ -134,12 +136,10 @@ def _verify_release(release: Path) -> dict:
                     raise ValueError("foreign release content")
                 if relative in files:
                     record = files[relative]
-                    if (_digest(path.read_bytes()) != record["sha256"]
-                            or stat.S_IMODE(path.stat().st_mode) != record["mode"]):
+                    if stat.S_IMODE(path.stat().st_mode) != record["mode"]:
                         raise ValueError("changed release content")
         wrapper = _launcher(recipe["python"], release)
         if (observed != expected or (release / "bin/cell-ci").read_bytes() != wrapper
-                or manifest["wrapper_sha256"] != _digest(wrapper)
                 or stat.S_IMODE((release / "bin/cell-ci").stat().st_mode) != 0o555):
             raise ValueError("changed release inventory")
         return manifest
@@ -154,7 +154,7 @@ def _selected_release(paths: dict[str, Path]) -> Path | None:
     if not current.is_symlink():
         raise ManagerError("foreign CI manager current selector")
     target = os.readlink(current)
-    if not re.fullmatch(r"releases/[0-9a-f]{64}", target):
+    if not re.fullmatch(r"releases/(?:[0-9a-f]{32}|[0-9a-f]{64})", target):
         raise ManagerError("foreign CI manager current selector")
     release = paths["programs"] / target
     return release
@@ -268,7 +268,7 @@ def _prepare_release(source: Path, python: Path) -> Path:
         content = path.read_bytes()
         mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
         contents[name] = content
-        records[name] = {"sha256": _digest(content), "mode": mode}
+        records[name] = {"mode": mode}
     # Host preparation uses pinned code from this manager release. Candidate
     # worktrees supply data and compiler inputs, never the signing implementation.
     shared_modules = (
@@ -283,26 +283,25 @@ def _prepare_release(source: Path, python: Path) -> Path:
         content = path.read_bytes()
         mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
         contents[name] = content
-        records[name] = {"sha256": _digest(content), "mode": mode}
+        records[name] = {"mode": mode}
     recipe = {
         "schema_version": FORMAT, "product": "cell-ci", "entry": "ci_manager/client.py",
         "program_root": str(program_root()), "python": str(python), "files": records,
     }
-    identity = _digest(_json(recipe))
+    identity = uuid.uuid4().hex
     releases = program_root() / "releases"
     private_directory(program_root())
     private_directory(releases)
     release = releases / identity
     if release.exists() or release.is_symlink():
-        return release
+        raise ManagerError("CI manager release identity already exists")
     stage = Path(tempfile.mkdtemp(prefix=".stage-", dir=releases))
     try:
         for name, content in contents.items():
             _write_file(stage / name, content, records[name]["mode"])
         wrapper = _launcher(str(python), release)
         _write_file(stage / "bin/cell-ci", wrapper, 0o555)
-        _write_file(stage / "manifest.json",
-                    _json({"recipe": recipe, "wrapper_sha256": _digest(wrapper)}), 0o444)
+        _write_file(stage / "manifest.json", _json({"recipe": recipe}), 0o444)
         for directory in sorted((path for path in stage.rglob("*") if path.is_dir()), reverse=True):
             os.chmod(directory, 0o555)
         os.chmod(stage, 0o555)

@@ -655,7 +655,7 @@ fn main_inner(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "{}-install {version}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nClockwork uninstall detaches only owned selectors.",
+            "{}-install {version}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nClockwork uninstall detaches only owned selectors.",
             spec.product
         );
         return ExitCode::SUCCESS;

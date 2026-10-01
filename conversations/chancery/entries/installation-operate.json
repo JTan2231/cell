@@ -1,6 +1,6 @@
 {
   "id": "conversations.installation.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -33,7 +33,7 @@
     {
       "id": "conversations.runtime",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -95,7 +95,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release hashes name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
+        "statement": "Opaque UUID release IDs name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [

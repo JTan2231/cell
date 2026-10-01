@@ -244,10 +244,12 @@ fn definition(home: &Path, root: &Path) -> Result<Manifest> {
     let release_root = home
         .join("Library/Application Support/Clew/install/releases")
         .join(&release.release_id);
-    let binary = release
+    release
         .files
         .get("bin/clew")
         .context("selected release has no Clew program")?;
+    let binary = release_root.join("bin/clew");
+    let binary_hash = cell_install::file_digest(&binary)?;
     let logs = root.join("logs");
     if !logs.exists() {
         fs::DirBuilder::new().mode(0o700).create(&logs)?;
@@ -265,7 +267,7 @@ fn definition(home: &Path, root: &Path) -> Result<Manifest> {
         "failure":{"on_abend":"halt-until-approved"},"timeout_seconds":180,
         "arguments":["--state-dir",root,"email","send","--scheduled"],"cwd":root,
         "schedule":{"kind":"local-calendar","hour":9,"minute":0,"run_at_load":false},
-        "launch":{"kind":"direct","program":release_root.join("bin/clew"),"sha256":binary.sha256},
+        "launch":{"kind":"direct","program":binary,"sha256":binary_hash},
         "environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin"},
         "output":{"stdout":logs.join("daily-email.out.log"),"stderr":logs.join("daily-email.err.log")}
     }))?)

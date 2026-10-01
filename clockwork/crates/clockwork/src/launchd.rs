@@ -1225,71 +1225,30 @@ fn verify_installed_binary(layout: &Layout, binary: &Path) -> Result<()> {
     let release_id = release_root
         .file_name()
         .and_then(|value| value.to_str())
-        .filter(|value| {
-            value.len() == 64
-                && value
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        })
         .ok_or_else(|| {
             Error::new(
                 "clockwork_binary_uninstalled",
-                "installed Clockwork release directory has no content identity",
+                "installed Clockwork release directory has no release identity",
             )
         })?;
-    if release_root.join("manifest.json").exists() {
-        let spec = clockwork::installation::specification();
-        let release =
-            cell_install::transaction::verify_release_at(&spec.layout(), release_root, &|root| {
-                spec.legacy(root)
-            })
-            .map_err(|_| {
-                Error::new(
-                    "clockwork_binary_tampered",
-                    "Clockwork immutable release verification failed",
-                )
-            })?;
-        let actual = bytes_sha256(&fs::read(binary).context(
-            "clockwork_binary_unavailable",
-            "hash installed Clockwork executable",
-        )?);
-        if release.release_id != release_id
-            || release
-                .files
-                .get("bin/clockwork")
-                .map(|file| file.sha256.as_str())
-                != Some(actual.as_str())
-        {
-            return Err(Error::new(
+    let spec = clockwork::installation::specification();
+    let release =
+        cell_install::transaction::verify_release_at(&spec.layout(), release_root, &|root| {
+            spec.legacy(root)
+        })
+        .map_err(|_| {
+            Error::new(
                 "clockwork_binary_tampered",
-                "Clockwork executable differs from its release",
-            ));
-        }
-        return Ok(());
-    }
-    let manifest_path = release_root.join("manifest.txt");
-    let manifest = fs::read_to_string(&manifest_path).context(
-        "clockwork_binary_unavailable",
-        format!("read {}", manifest_path.display()),
-    )?;
-    let manifest_release = manifest
-        .lines()
-        .find_map(|line| line.strip_prefix("release_id="));
-    let expected_binary = manifest
-        .lines()
-        .find_map(|line| line.strip_prefix("binary_sha256="));
-    let actual_binary = bytes_sha256(&fs::read(binary).context(
-        "clockwork_binary_unavailable",
-        "hash installed Clockwork executable",
-    )?);
-    if manifest.lines().nth(1) != Some("product=clockwork")
-        || manifest_release != Some(release_id)
-        || expected_binary.is_none()
-        || expected_binary != Some(actual_binary.as_str())
+                "Clockwork installed release verification failed",
+            )
+        })?;
+    if release.release_id != release_id
+        || binary != release_root.join("bin/clockwork")
+        || !release.files.contains_key("bin/clockwork")
     {
         return Err(Error::new(
             "clockwork_binary_tampered",
-            "Clockwork executable does not match its installed release manifest",
+            "Clockwork executable does not match its installed release inventory",
         ));
     }
     Ok(())

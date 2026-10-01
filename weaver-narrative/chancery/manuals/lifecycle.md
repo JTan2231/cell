@@ -82,7 +82,7 @@ application directory are named Weaver. The Cell source and active Semantics
 project are `weaver-narrative`. The predecessor `weaver` project is permanently
 retired; its workflow records are not imported or replaced.
 
-The maintained installer uses the shared Cell content-addressed file transaction
+The maintained installer uses the shared Cell immutable file transaction
 and adapter. Public binary and Chancery selectors follow the selected release.
 It refuses foreign selectors and unsupported legacy installation formats. Direct installer `install` and `recover` are refused;
 use the Cell coordinator. Read-only inspection remains available. Uninstall detaches owned selectors and retains private state.

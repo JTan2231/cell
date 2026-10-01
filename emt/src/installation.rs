@@ -87,12 +87,11 @@ fn manifest(root: &Path, release: &ReleaseInfo) -> Result<Manifest> {
     let home = require_standard_root(root)?;
     let release_root = root.join("install/releases").join(&release.release_id);
     let executable = release_root.join("bin/emt");
-    let executable_hash = release
+    release
         .files
         .get("bin/emt")
-        .ok_or_else(|| fail("installed release has no EMT executable"))?
-        .sha256
-        .clone();
+        .ok_or_else(|| fail("installed release has no EMT executable"))?;
+    let executable_hash = cell_install::file_digest(&executable)?;
     Ok(Manifest {
         schema_version: 2,
         key: WORKER_KEY.into(),
@@ -359,7 +358,7 @@ pub fn installer_main() -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "emt-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nCoordinated deployment preserves worker intent and activates after configuration.",
+            "emt-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nCoordinated deployment preserves worker intent and activates after configuration.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::SUCCESS;

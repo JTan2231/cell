@@ -49,8 +49,8 @@ Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.
 
 Immutable installation files and prior releases remain beneath
-`~/Library/Application Support/Platter/install/releases/HASH`. The
-`cell-install-v2` manifest records exact executable and provider versions,
+`~/Library/Application Support/Platter/install/releases/ID`. The
+`cell-install-v3` manifest records exact executable and provider versions,
 file modes, digests and public entry mappings. `package/install` retains the
 installer. The owned `current` selector publishes the matching
 `~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery

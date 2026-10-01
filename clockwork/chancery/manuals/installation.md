@@ -9,7 +9,7 @@ Use `clockwork.install.operate` for ordered operating procedures.
 ## Interfaces and installation inputs
 
 ```text
-<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]
+<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]
 <TRUSTED_CLOCKWORK_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY --chancery ABSOLUTE_PATH
 <TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]
 clockwork [--json] doctor
@@ -36,10 +36,10 @@ explicit absolute home option; runtime isolation is not a new production owner.
 
 ## Release identity and selector consistency
 
-The installer hashes the exact binary, Rust installer, public layout, and
-complete provider tree into one immutable release under
+The installer copies the exact binary, Rust installer, public layout, and
+complete provider tree into one immutable UUID release under
 `$HOME/Library/Application Support/Clockwork/install/releases`. Its
-`cell-install-v2` manifest is `manifest.json`. The retained installer appears
+`cell-install-v3` manifest is `manifest.json`. The retained installer appears
 at `bin/clockwork-install` and `package/install`. The installer reads retained release metadata when selecting an existing
 installation or recovering a retained release.
 
@@ -57,10 +57,10 @@ One atomic current selector connects both public views:
   -> .../Clockwork/install/current/share/chancery/clockwork
 ```
 
-An update retains owned selector boundaries and release metadata. Identical
-installation is idempotent. A changed candidate preserves a valid prior
+An update retains owned selector boundaries and release metadata. Each new
+preparation has a UUID. Publication preserves a valid prior
 selection as `previous` and atomically replaces `current`. Optional
-`--expected-current` enforces the caller's captured absent or `releases/HASH`
+`--expected-current` enforces the caller's captured absent or `releases/ID`
 expectation. Foreign public paths and selectors outside the owned installation remain
 unsupported.
 
@@ -73,7 +73,7 @@ selectors supply recovery evidence; replacing a foreign path is unsupported.
 After commit, recovery reads metadata and selects an owned retained release.
 Select the retained installer explicitly. Program rollback changes program/provider
 selection but leaves product bindings and generated plists unchanged. Each
-plist pins an exact content-addressed broker; releases cannot be pruned while
+plist pins an exact immutable broker; releases cannot be pruned while
 any plist or running activation may refer to them.
 
 ## Coordinated broker refresh

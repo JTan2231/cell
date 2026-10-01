@@ -398,7 +398,7 @@ impl State<'_> {
             .ok_or_else(|| failure("invalid migration release selector"))?;
         let release_id = selected
             .strip_prefix("releases/")
-            .filter(|v| valid_hash(v))
+            .filter(|v| cell_install::valid_release_id(v))
             .ok_or_else(|| failure("invalid migration release identity"))?;
         let release = self.target.join("install").join(selected);
         dir(&release, self.uid)?;
@@ -426,7 +426,7 @@ impl State<'_> {
                 "migration handoff differs from the complete release-owned Clockwork definition",
             ));
         }
-        Ok(json!({"release_id":release_id,"handoff_sha256":hash(&path)?}))
+        Ok(json!({"release_id":release_id}))
     }
     fn child_transactions(&self) -> Result<Vec<PathBuf>> {
         let install = self.target.join("install");
@@ -571,7 +571,11 @@ impl State<'_> {
         let recorded = self.transaction.join("handoff.json");
         if exists(&recorded) {
             file(&recorded, self.invoking_uid, Some(0o600))?;
-            if serde_json::from_slice::<Value>(&fs::read(&recorded)?)? != proof {
+            let mut retained: Value = serde_json::from_slice(&fs::read(&recorded)?)?;
+            if let Some(fields) = retained.as_object_mut() {
+                fields.remove("handoff_sha256");
+            }
+            if retained != proof {
                 return Err(failure("committed migration handoff changed"));
             }
         } else {
@@ -644,16 +648,9 @@ impl State<'_> {
             self.exact_daemon()?;
             fs::remove_file(&self.daemon)?;
         }
-        for (name, path) in [
-            ("frontend-sha256", &self.frontend),
-            ("payload-sha256", &self.payload),
-        ] {
+        for path in [&self.frontend, &self.payload] {
             if exists(path) {
                 file(path, self.invoking_uid, None)?;
-                let proof = self.transaction.join(name);
-                if exists(&proof) && hash(path)? != self.record(name)? {
-                    return Err(failure("legacy program changed during migration"));
-                }
                 fs::remove_file(path)?;
             }
         }
@@ -961,8 +958,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
             "had-install",
             u8::from(exists(&state.legacy.join("install"))).to_string(),
         ),
-        ("frontend-sha256", hash(&state.frontend)?),
-        ("payload-sha256", hash(&state.payload)?),
     ] {
         state.owner_write(
             &state.transaction.join(name),

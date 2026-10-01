@@ -359,8 +359,6 @@ class Worker:
         if "signing_policy" not in job:
             return  # Retained jobs do not acquire a new admission policy.
         policy = job["signing_policy"]
-        if signing.policy_digest(policy) != job.get("signing_policy_digest"):
-            raise signing.SigningError("retained signing policy digest does not match its snapshot")
         signing.assert_current(policy)
 
     def signing_policy_file(self, job: dict) -> Path:
@@ -417,7 +415,7 @@ class Worker:
                 return
         else:
             receipt = {"schema_version": 1, "state": "passed", "source_commit": candidate,
-                       "signing_policy_digest": job["signing_policy_digest"], "products": [],
+                       "signing_policy": policy, "products": [],
                        "preparation": {"candidates": {}}}
         job["production_receipt"] = receipt
         self.verify_production(job)
@@ -434,7 +432,6 @@ class Worker:
         if (not isinstance(receipt, dict) or receipt.get("schema_version") != 1
                 or receipt.get("state") != "passed"
                 or receipt.get("source_commit") != job["candidate_commit"]
-                or receipt.get("signing_policy_digest") != job["signing_policy_digest"]
                 or receipt.get("products") != products):
             raise ManagerError("acceptance has no matching successful production signing receipt")
         preparation = receipt.get("preparation")
@@ -442,6 +439,11 @@ class Worker:
                 or not isinstance(preparation.get("candidates"), dict)
                 or sorted(preparation["candidates"]) != products):
             raise ManagerError("production signing receipt does not cover its product selection")
+        # Older receipts retain the policy inside preparation. Empty legacy
+        # preparations have no code to verify and require only the job policy.
+        receipt_policy = receipt.get("signing_policy", preparation.get("signing_policy"))
+        if (products or "signing_policy" in receipt) and receipt_policy != job["signing_policy"]:
+            raise ManagerError("production signing receipt has another signing policy")
         for product, record in preparation["candidates"].items():
             if (not isinstance(record, dict) or not isinstance(record.get("candidate_dir"), str)
                     or not isinstance(record.get("candidate_id"), str)):

@@ -249,7 +249,7 @@ Use `doctor` to locate an excluded provider or unavailable dependency, validate
 the owning source bundle, and repair or redeploy that product. Read its live
 operating interface when readiness matters. An unknown entry returns
 `entry_not_found`; an unknown or excluded provider returns `provider_not_found`.
-Do not repair content-addressed installed documents in place. Read
+Do not repair immutable installed documents in place. Read
 `chancery show chancery.provider.publish` for publication and
 `chancery show chancery.installation.operate` for reader recovery.
 

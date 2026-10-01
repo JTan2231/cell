@@ -142,10 +142,12 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     let release_root = home
         .join("Library/Application Support/Conatus/install/releases")
         .join(&release.release_id);
-    let binary = release
+    release
         .files
         .get("bin/conatus")
         .context("selected release has no Conatus program")?;
+    let binary = release_root.join("bin/conatus");
+    let binary_hash = cell_install::file_digest(&binary)?;
     let logs = state_dir.join("logs");
     if !logs.exists() {
         DirBuilder::new().mode(0o700).create(&logs)?;
@@ -190,8 +192,8 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
         timeout_seconds: args.daily_email.then_some(180),
         launch: Launch {
             kind: "direct",
-            program: release_root.join("bin/conatus"),
-            sha256: binary.sha256.clone(),
+            program: binary,
+            sha256: binary_hash,
         },
         environment: BTreeMap::from([
             (

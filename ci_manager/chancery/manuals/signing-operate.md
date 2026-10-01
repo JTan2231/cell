@@ -24,7 +24,7 @@ It changes no signing configuration or product selection. A Keychain or macOS
 authorization prompt can require the current user.
 
 Success prints the selected fingerprint, namespace, Keychain, and readiness.
-Add `--json` to receive `policy`, `policy_digest`, and `ready: true` as JSON:
+Add `--json` to receive `policy` and `ready: true` as JSON:
 
 ```sh
 cell-ci signing status --json
@@ -90,7 +90,7 @@ exits. Cell retains the certificate and private key in Keychain. It retains no
 certificate or private-key export in the host filesystem.
 
 Success prints the selected fingerprint, namespace, and Keychain. Add `--json`
-to receive the selected `policy` and `policy_digest`. A failure can leave an
+to receive the selected `policy`. A failure can leave an
 imported certificate without configuration. Use `configure` to select that
 existing identity after its key is usable. Do not delete it to rerun creation.
 
@@ -113,8 +113,7 @@ signer overrides are unsupported.
 
 Configuration checks the selected identity before atomically writing
 `~/Library/Application Support/Cell/signing.json`. Success prints the selected
-fingerprint, namespace, and Keychain. Add `--json` to receive `policy` and
-`policy_digest`. Failure preserves prior configuration. The supported format is:
+fingerprint, namespace, and Keychain. Add `--json` to receive `policy`. Failure preserves prior configuration. The supported format is:
 
 ```json
 {
@@ -129,7 +128,7 @@ fingerprint, namespace, and Keychain. Add `--json` to receive `policy` and
 ```
 
 The fingerprint selects the certificate, not the executable-content hash
-algorithm. The policy digest is SHA-256 of normalized canonical policy JSON.
+algorithm. Cell compares normalized policy objects directly.
 The configuration contains no private-key bytes or password.
 
 Changing the fingerprint explicitly selects another certificate. Changing the
@@ -138,7 +137,7 @@ Keychain path locates the same selected certificate in another Keychain.
 
 ## Apply and verify the policy
 
-New macOS jobs freeze the policy and digest at submission. A reused request key
+New macOS jobs freeze the policy at submission. A reused request key
 keeps its original snapshot. Retained jobs without a signing snapshot keep
 their earlier path; installation does not invent one for them.
 
@@ -149,12 +148,12 @@ paths, Git commits, and release directories do not enter this identifier.
 
 The designated requirement pins that identifier and the exact leaf certificate.
 Cell signs staged native code, verifies it against the selected requirement,
-then hashes and seals the signed bytes. It uses no network timestamp and applies
+then seals the signed bytes. It uses no network timestamp and applies
 no new entitlements or Hardened Runtime options. Products that require additional
 signing inputs need an explicit policy extension.
 
-The production cache includes signing inputs. Cache reuse verifies stored
-artifact hashes and signatures. CI retains a production receipt and verifies
+Cargo owns compilation reuse in the shared target directory. Cell signs fresh
+staged copies and verifies native signatures; it retains no extra artifact cache. CI retains a production receipt and verifies
 signed candidates before accepted-ref advancement, including jobs that skip
 tests. Deployment and release preparation apply the same configured policy.
 Policy changes detected after admission stop publication.
@@ -164,7 +163,7 @@ installer executables declared in the product inventory. Standalone scripts,
 the Python CI manager, test executables, compiler scratch output, and third-party
 runtimes do not receive a Cell-native process identity through this policy.
 Scripts and other package assets remain covered by their product release
-manifests and hashes. Signing does not combine products' permission boundaries.
+manifests and owned file paths. Signing does not combine products' permission boundaries.
 
 Missing keys, expired certificates, locked Keychains, wrong signers, or failed
 verification stop the operation. There is no unsigned, ad hoc, alternate-name,
@@ -197,3 +196,15 @@ retro-signing, private-key escrow, or completion-time guarantee is supplied.
 The ten-year certificate lifetime is a creation setting, not a perpetual
 usability promise. The current-user authority boundary does not isolate the key
 from arbitrary hostile code already running with that user's authority.
+
+Production candidates use opaque UUID IDs. Installed manager and product releases
+also use opaque UUID directory names. Retained hash-named releases remain
+readable without recomputing their hashes. Native `codesign` verification
+remains required; scripts and documentation receive no content-hash check.
+
+New publication requires the configured certificate and code identifier.
+Program rollback verifies a retained native signature against its recorded code
+identifier and permits its historical signer. Earlier releases without that
+metadata use their native identity when present. Unsigned or ad hoc predecessors
+remain recoverable through the legacy recovery path. This compatibility rule
+does not admit unsigned or ad hoc new native releases.

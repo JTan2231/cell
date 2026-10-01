@@ -1,6 +1,6 @@
 {
   "id": "conversations.runtime",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -85,7 +85,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Default macOS host identity is an opaque truncated platform-UUID hash. Product releases use content-addressed HASH identities; release, entry, Codex, and protocol versions are distinct."
+        "statement": "Default macOS host identity is an opaque truncated platform-UUID hash. Product releases use opaque UUID identities; release, entry, Codex, and protocol versions are distinct."
       }
     ],
     "completeness_and_freshness": [
@@ -123,7 +123,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "cell-install-v2 identity covers binary, installer, public layout, and complete bundle. Recovery also supports the previous shell format; provider publication never establishes App Server support."
+        "statement": "cell-install-v3 identity covers binary, installer, public layout, and complete bundle. Recovery also supports the previous shell format; provider publication never establishes App Server support."
       },
       {
         "status": "unspecified",

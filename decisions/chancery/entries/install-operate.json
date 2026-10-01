@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 10,
+  "contract_version": 11,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -19,7 +19,7 @@
   "effects": [
     "The package builds and seals krisis and krisis-install; the latter is also retained as package/install and implements the schema-one coordinator adapter. Static runtime frontend and observer scripts remain exact release data.",
     "The Cell product adapter composes preparation and explicit final cutover under run-owned CLI admission, preserves the write-once baseline and prior schedule enabled booleans, and retains existing product-owned installer and recovery boundaries.",
-    "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
+    "Default preparation stages a immutable release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
     "Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
     "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion.",
     "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
@@ -184,7 +184,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected database and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."
+        "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."
       },
       {
         "status": "declared",
@@ -202,11 +202,11 @@
       },
       {
         "status": "declared",
-        "statement": "Successful preparation installs and verifies one content-addressed release and definition containing the explicit Codex reader while retaining maintenance and leaving active selectors unchanged."
+        "statement": "Successful preparation installs and verifies one immutable release and definition containing the explicit Codex reader while retaining maintenance and leaving active selectors unchanged."
       },
       {
         "status": "declared",
-        "statement": "Successful explicit final cutover selects one content-addressed release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
+        "statement": "Successful explicit final cutover selects one immutable release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
       },
       {
         "status": "declared",

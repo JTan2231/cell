@@ -1,6 +1,6 @@
 {
   "id": "emt.service",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -175,7 +175,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only EMT schema one is accepted. The matched cell-install-v2 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
+        "statement": "Only EMT schema one is accepted. The matched cell-install-v3 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
       },
       {
         "status": "unspecified",

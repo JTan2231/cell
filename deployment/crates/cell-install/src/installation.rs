@@ -1,10 +1,8 @@
 use crate::artifact::{
-    copy_file, current_uid, inventory, provider_files, regular, valid_hash, validate_spec,
-    write_manifest,
+    copy_file, current_uid, inventory, provider_files, regular, simple_format, valid_release_id,
+    validate_spec, write_manifest,
 };
-use crate::{
-    Disposition, Error, FORMAT, InstallSpec, Installation, ReleaseInput, Result, read_release,
-};
+use crate::{Disposition, Error, InstallSpec, Installation, ReleaseInput, Result, read_release};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
@@ -135,7 +133,7 @@ fn release_selector(value: &Path) -> Result<&str> {
         .to_str()
         .ok_or_else(|| Error::new("invalid installed selection"))?;
     match value.strip_prefix("releases/") {
-        Some(id) if valid_hash(id) => Ok(value),
+        Some(id) if valid_release_id(id) => Ok(value),
         _ => Err(Error::new("invalid installed selection")),
     }
 }
@@ -145,7 +143,7 @@ fn desired_public(spec: &InstallSpec, paths: &Paths, release: &Installation) -> 
         .public
         .iter()
         .map(|(path, target)| {
-            let legacy_extra = release.format != FORMAT
+            let legacy_extra = !simple_format(&release.format)
                 && spec
                     .commands
                     .iter()
@@ -568,7 +566,7 @@ fn validate_scratch_tree(
 }
 
 fn smoke(spec: &InstallSpec, paths: &Paths, release: &Installation) -> Result<()> {
-    let commands = if release.format == FORMAT {
+    let commands = if simple_format(&release.format) {
         spec.commands
     } else {
         &spec.commands[..1]
@@ -582,33 +580,25 @@ fn smoke(spec: &InstallSpec, paths: &Paths, release: &Installation) -> Result<()
 }
 
 fn release_files(
-    spec: &InstallSpec,
     paths: &Paths,
     release: &Installation,
 ) -> Result<BTreeMap<String, crate::FileEntry>> {
     let root = paths.install.join(&release.current);
-    if release.format == FORMAT {
+    if simple_format(&release.format) {
         let manifest: crate::Manifest =
             serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-        if manifest.release_id != release.release_id
-            || crate::artifact::identity(&manifest)? != release.release_id
-        {
+        if manifest.release_id != release.release_id {
             return Err(Error::new("recorded signing release identity changed"));
+        }
+        let (mut files, _) = inventory(&root)?;
+        files.remove("manifest.json");
+        if !crate::artifact::inventory_matches(&files, &manifest.files) {
+            return Err(Error::new("release inventory or modes changed"));
         }
         Ok(manifest.files)
     } else {
-        let manifest = crate::legacy::manifest(&root.join("manifest.txt"))?;
-        let sha256 = manifest
-            .get("binary_sha256")
-            .filter(|hash| valid_hash(hash))
-            .ok_or_else(|| Error::new("legacy signing recovery digest missing"))?;
-        Ok(BTreeMap::from([(
-            format!("bin/{}", spec.commands[0]),
-            crate::FileEntry {
-                sha256: sha256.clone(),
-                mode: 0o755,
-            },
-        )]))
+        crate::legacy::manifest(&root.join("manifest.txt"))?;
+        Ok(inventory(&root)?.0)
     }
 }
 
@@ -619,9 +609,9 @@ fn verify_signing(
     recorded_recovery: bool,
 ) -> Result<()> {
     let root = paths.install.join(&release.current);
-    let files = release_files(spec, paths, release)?;
+    let files = release_files(paths, release)?;
     if recorded_recovery {
-        crate::signing::verify_recorded_files(&root, &files)
+        crate::signing::verify_recorded_files(spec.product, &root, &files)
     } else {
         crate::signing::verify_files(spec.product, &root, &files)
     }
@@ -648,7 +638,7 @@ fn publish(
         .map(|selected| -> Result<_> {
             let root = paths.install.join(selected);
             let release = read_release(spec, &root)?;
-            Ok((root, release_files(spec, paths, &release)?))
+            Ok((root, release_files(paths, &release)?))
         })
         .transpose()?;
     let mut after = before.clone();
@@ -710,9 +700,9 @@ fn compensate(
     after: &View,
     recorded_prior: Option<&(PathBuf, BTreeMap<String, crate::FileEntry>)>,
 ) -> Disposition {
-    if recorded_prior
-        .is_some_and(|(root, files)| crate::signing::verify_recorded_files(root, files).is_err())
-    {
+    if recorded_prior.is_some_and(|(root, files)| {
+        crate::signing::verify_recorded_files(paths.product, root, files).is_err()
+    }) {
         return Disposition::Uncertain;
     }
     let Ok(actual) = view(paths) else {

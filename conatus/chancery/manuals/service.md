@@ -10,13 +10,13 @@ schedule registration and activation are separate effects.
 ```sh
 conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
 conatus-install inspect
-conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
+conatus-install recover --release ABS_RELEASE --expected-current releases/ID
 ```
 
 Packaging commands accept `--home ABS_HOME`. The default installation root is
 `~/Library/Application Support/Conatus/install`. Install stages a
-content-addressed executable release and its matching Chancery bundle, then
-selects that candidate. Upgrade uses the observed `releases/HASH` in place of
+immutable executable release and its matching Chancery bundle, then
+selects that candidate. Upgrade uses the observed `releases/ID` in place of
 `absent`. The complete provider bundle includes the overview, indexed entries
 and complete manuals; its bytes participate in release identity.
 The provider selector follows the product's selected release.

@@ -50,7 +50,7 @@ fields. The version-two shape is:
 ```toml
 schema_version = 2
 key = "annals/inbox"
-release_id = "64 lowercase hexadecimal characters"
+release_id = "01234567-89ab-7cde-8fab-0123456789ab"
 release_root = "/absolute/immutable/release/root"
 authority = "current-user-background"
 overlap = "skip"
@@ -117,7 +117,8 @@ Both supported manifest schemas bound interval and optional timeout values to
 be omitted.
 
 Definition registration requires an absolute non-symbolic `release_root` and a
-caller-supplied exact 64-lowercase-hex product `release_id`, resolves every
+caller-supplied exact product `release_id` (canonical UUID or retained
+64-lowercase-hex release ID), resolves every
 product program or script beneath that root, and verifies artifact digests,
 ownership, and permissions before writing a definition row. Opening Clockwork
 may first create its private state directories and empty schema-two store.

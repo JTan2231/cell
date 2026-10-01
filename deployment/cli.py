@@ -43,6 +43,7 @@ NAME = re.compile(r"[a-z][a-z0-9-]*")
 RUN_ID = re.compile(r"[0-9a-f]{32}")
 REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}")
 COMMIT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+RELEASE_ID = re.compile(r"(?:[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
 MAX_REPLY = 1024 * 1024
 MAX_DETAIL = 1024
 MAX_DIAGNOSTICS = 4096
@@ -260,10 +261,10 @@ def installed_version(name: str, metadata: dict[str, Any]) -> str | None:
     install = home / "Library/Application Support" / metadata["application"] / "install"
     try:
         root = (install / "current").resolve(strict=True)
-        if root.parent != install / "releases" or not re.fullmatch(r"[0-9a-f]{64}", root.name):
+        if root.parent != install / "releases" or not RELEASE_ID.fullmatch(root.name):
             return None
         manifest = read_json(root / "manifest.json")
-        if manifest.get("format") != "cell-install-v2" or manifest.get("product") != name:
+        if manifest.get("format") not in {"cell-install-v2", "cell-install-v3"} or manifest.get("product") != name:
             return None
         version = manifest.get("versions", {}).get(name)
         version_tuple(version)
@@ -453,7 +454,7 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
             "active_operation": None, "affected": [], "mutation_started": False,
             "apply_started": False, "verbose": verbose, "diagnostics": [], "settings": settings or {},
             "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"},
-            "signing_policy": policy, "signing_policy_digest": signing.policy_digest(policy)}
+            "signing_policy": policy}
     if request_id is not None:
         data["request_id"] = request_id
     durable_json(run / "run.json", data)
@@ -542,7 +543,6 @@ def result_from_data(data: dict[str, Any]) -> dict[str, Any]:
               "maintenance": maintenance_result(data), "build": data.get("build"),
               "cleanup": dict(data.get("cleanup", {"releases": "not_started", "workspace": "pending"})),
               "diagnostics": data.get("diagnostics", []),
-              "signing_policy_digest": data.get("signing_policy_digest"),
               "signing_policy": data.get("signing_policy")}
     if data.get("request_id"):
         result["request_id"] = data["request_id"]
@@ -973,7 +973,7 @@ class Run:
             raise DeploymentError("release build did not complete")
         source_key = result["source_key"]
         self.data["source_key"] = source_key
-        self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
+        self.data["build"] = {key: result[key] for key in ("elapsed_seconds", "build_seconds", "queue_seconds") if key in result}
         for product in self.data["prepared_products"]:
             record = self.record(product)
             output = preparation / "candidates" / product
@@ -1287,8 +1287,7 @@ def canonical_request(root: Path, products: Sequence[str], selected_commit: str 
         raise DeploymentError("settings name a product outside the selected inventory")
     return {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
             "source_commit": revision, "products": sorted(requested_products(inventory, products)),
-            "settings": settings or {}, "signing_policy": signing_policy,
-            "signing_policy_digest": signing.policy_digest(signing_policy)}
+            "settings": settings or {}, "signing_policy": signing_policy}
 
 
 def blocked_result(request_id: str, detail: str, *, blocker: str | None = None) -> dict[str, Any]:
@@ -1371,7 +1370,7 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
             policy = signing.load_policy() if signing_policy is None else signing_policy
             signing.assert_current(policy)
             signing.preflight(policy)
-            request.update(signing_policy=policy, signing_policy_digest=signing.policy_digest(policy))
+            request.update(signing_policy=policy)
             chosen = plan(root, request["products"], request["source_commit"])
             record = {"schema": SCHEMA, "request_id": request_id, "request": request,
                       "request_hash": hashlib.sha256(candidate.json_bytes(request)).hexdigest(),
@@ -1410,9 +1409,9 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
 
 def matching_request(retained: dict[str, Any], requested: dict[str, Any], *, explicit_policy: bool) -> bool:
     """A replay without signer input keeps the admitted operation's selection."""
-    if explicit_policy:
-        return retained == requested
-    signing_fields = {"signing_policy", "signing_policy_digest"}
+    signing_fields = {"signing_policy_digest"}
+    if not explicit_policy:
+        signing_fields.add("signing_policy")
     return ({key: value for key, value in retained.items() if key not in signing_fields}
             == {key: value for key, value in requested.items() if key not in signing_fields})
 

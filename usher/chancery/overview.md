@@ -39,7 +39,7 @@ collision checks. The optional Rust operational projection supplies Iatreion
 with declared status units without invoking their commands.
 
 `usher-install` publishes the recognition binary, installer, recovery
-executable, and this provider bundle as one content-addressed release.
+executable, and this provider bundle as one immutable release.
 The public commands and Chancery provider follow the same atomic selection.
 Recovery changes that installation selection, not the declarations it reads.
 

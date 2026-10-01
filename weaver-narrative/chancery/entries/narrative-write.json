@@ -86,7 +86,7 @@
     {
       "id": "weaver.lifecycle",
       "min_contract": 3,
-      "max_contract_exclusive": 4
+      "max_contract_exclusive": 5
     }
   ],
   "does_not_authorize": [

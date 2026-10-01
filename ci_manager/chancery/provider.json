@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.6.1"
+    "release": "0.7.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -36,10 +36,10 @@
       "The private journal retains input and candidate identities, deterministic fix patches and candidate commits, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
       "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. New outcome emails disclose product and check names, failed test names, and short outcome diagnostics to Email's fixed personal recipient and mail providers. They omit job and commit IDs, model names, repair budgets, and local artifact paths. Previously frozen messages remain unchanged.",
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them.",
-      "Signing configuration and job snapshots retain public certificate selection, namespace, Keychain path, and policy digests. The private key stays in Keychain. Initial setup retains an encrypted recovery export and its private password in a mode-0700 host backup directory, with mode-0600 files; there is no upload or automatic deletion."
+      "Signing configuration and job snapshots retain public certificate selection, namespace and Keychain path. The private key stays in Keychain. Initial setup retains an encrypted recovery export and its private password in a mode-0700 host backup directory, with mode-0600 files; there is no upload or automatic deletion."
     ],
     "compatibility_and_retirement": [
-      "Manager release 0.6.1 uses journal schema 1, queue contract 8, signing contract 1, and signing policy schema 1. New jobs freeze test, refund, and signing policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
+      "Manager release 0.7.0 uses journal schema 1, queue contract 9, signing contract 2, and signing policy schema 1. New jobs freeze test, refund, and signing policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
       "The manager enables deterministic fixes only when the committed candidate contains pipeline/autofix.py. Older candidates retain check-only validation. The optional validator mode and retained fix history are additive; existing frozen model, test and signing policies do not change.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],

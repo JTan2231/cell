@@ -114,7 +114,7 @@ Installation normally requires paused admission and no active job. Service stop
 always requires both conditions. Installation has only the exception for
 cancelled validation described below.
 Installation keeps the queue paused and loads the service. It pins a
-content-addressed release under `~/.local/share/cell-ci/releases/` and selects
+immutable release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
 selectors or LaunchAgent files and attempts to restore the prior selection if
 installation fails. A failed restoration leaves an explicit recovery error.
@@ -165,7 +165,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.6.1 uses queue contract 8 and retains journal
+arguments. Manager release 0.7.0 uses queue contract 9 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
@@ -177,7 +177,7 @@ do not change frozen model, test or signing policies. Install the matching
 manager and provider through the paused, drained procedure above before using
 this mode. An edit to the checkout does not replace the installed worker.
 
-New jobs retain `signing_policy` and `signing_policy_digest` at submission.
+New jobs retain `signing_policy` at submission.
 Retained jobs without those fields keep their earlier acceptance path. Manager
 replacement does not attach a current signing policy to old jobs. Settle that
 work before initial signing adoption or identity rotation.
@@ -263,9 +263,8 @@ and verify staged native executables outside the compiler body. Candidate
 source does not supply the host signing implementation.
 
 The manager retains a `production_receipt` with the exact source commit,
-signing-policy digest, product scope, and signed candidate identities. Before
-acceptance, it checks that receipt, rechecks the candidates' final hashes and
-signatures, and checks that the host policy still matches the frozen selection.
+signing-policy object, product scope, and signed candidate identities. Before
+acceptance, it checks that receipt, rechecks the candidates' native signatures and declared inventory, and checks that the host policy still matches the frozen selection.
 This phase is required when tests are skipped. It does not add unselected
 products to ordinary selective CI.
 
@@ -548,3 +547,8 @@ names, and short outcome diagnostics to Resend and the fixed recipient's mail
 provider. The manager does not copy Nucleus credentials or load Email's
 credential. Read-only inspection and
 catalog discovery do not authorize these disclosures or start a job.
+
+Production candidates use opaque UUID IDs. Installed manager and product releases
+also use opaque UUID directory names. Retained hash-named releases remain
+readable without recomputing their hashes. Native `codesign` verification
+remains required; scripts and documentation receive no content-hash check.

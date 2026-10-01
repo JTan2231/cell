@@ -1,13 +1,13 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 11,
+  "contract_version": 12,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Annals",
   "summary": "Install, update, verify, hold, or recover the user-owned Annals deployment and physically separate decisions library, including run-owned CLI admission and guarded Clockwork handoff. The manual also preserves packaged Linux setup and maintenance.",
   "use_when": [
-    "The user-owned macOS Annals and Annals Usage binaries, configuration, content-addressed release, Clockwork binding, library, or spool must be installed, updated, or recovered.",
+    "The user-owned macOS Annals and Annals Usage binaries, configuration, immutable release, Clockwork binding, library, or spool must be installed, updated, or recovered.",
     "The dedicated Annals decisions library and independent `annals/decisions-inbox` binding must be provisioned, updated, maintenance-held, or recovered.",
     "The documented packaged Linux systemd installation or maintenance route must be performed."
   ],
@@ -19,7 +19,7 @@
   "outcome": "A verified complete installed Annals release or dedicated decisions-library generation with its exact independent Clockwork binding, matching configuration, library/spool identity, Nucleus selector, and rollback state.",
   "effects": [
     "The Cell product adapter composes the primary deployer with the exact installed release's dedicated decisions provisioner, establishes per-library run-owned admission, preserves operator pauses and prior schedule enabled booleans, and retains Annals' existing migration and recovery boundaries.",
-    "Stages and atomically selects a complete content-addressed release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
+    "Stages and atomically selects a complete immutable release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
     "Registers an immutable Clockwork definition for `annals/inbox`. Before disabling or replacing a prior selection, verifies that its digest resolves to the complete current Annals release definition. Establishes maintenance, migrates the library, and atomically switches the binding after the release is ready.",
     "During legacy system migration, the child deployer returns an inert rendered definition under maintenance; the outer migration durably commits the permanent user-state root before it registers or selects that definition.",
     "Removes or restores a legacy LaunchDaemon or LaunchAgent only when its complete plist, owner, and mode match the exact Annals rendering; migration also proves the system service absent before removing its files or clearing maintenance, and additional launchd keys are foreign.",
@@ -101,7 +101,7 @@
     {
       "id": "annals.installation",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.work.integrate",
@@ -168,7 +168,7 @@
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning requires a complete cell-install-v2 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a recorded Annals content release field for field."
+        "statement": "Decisions provisioning requires a complete cell-install-v3 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a recorded Annals content release field for field."
       },
       {
         "status": "declared",
@@ -200,7 +200,7 @@
       },
       {
         "status": "declared",
-        "statement": "Success selects a complete cell-install-v2 content-addressed release. It contains both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles, and a strict file inventory. The installer verifies configuration and a compatible library/spool generation before selecting the exact native Clockwork definition."
+        "statement": "Success selects a complete cell-install-v3 immutable release. It contains both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles, and a strict file inventory. The installer verifies configuration and a compatible library/spool generation before selecting the exact native Clockwork definition."
       },
       {
         "status": "declared",
@@ -232,7 +232,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Product versions, provider releases, content-addressed release identity, current selector, Clockwork keys `annals/inbox` and `annals/decisions-inbox`, immutable definition digests, persistent decisions library ID, library schema, and library and spool identities are distinct identities."
+        "statement": "Product versions, provider releases, immutable release identity, current selector, Clockwork keys `annals/inbox` and `annals/decisions-inbox`, immutable definition digests, persistent decisions library ID, library schema, and library and spool identities are distinct identities."
       },
       {
         "status": "declared",
@@ -268,7 +268,7 @@
       },
       {
         "status": "declared",
-        "statement": "The packaged Linux route uses explicit /etc/annals configs, /var/lib/annals and /var/spool/annals, service-account ownership, and systemd control; it does not select a macOS content-addressed release or Clockwork binding."
+        "statement": "The packaged Linux route uses explicit /etc/annals configs, /var/lib/annals and /var/spool/annals, service-account ownership, and systemd control; it does not select a macOS immutable release or Clockwork binding."
       }
     ],
     "lifecycle_and_consistency": [

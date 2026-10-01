@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -106,7 +106,7 @@
   ],
   "success": [
     "Successful admission returns a retained job identity for a pinned input; it is not successful validation or deployment.",
-    "Successful validation identifies the fixed base, exact candidate and completed required gate scope. New jobs also require a matching production receipt and verified final artifact hashes and signatures under the frozen host signing policy before accepted state advances.",
+    "Successful validation identifies the fixed base, exact candidate and completed required gate scope. New jobs also require a matching production receipt and verified native signatures and declared artifact inventory under the frozen host signing policy before accepted state advances.",
     "Deployment success requires matching coordinator evidence for the exact source and released maintenance. A no-product result is reported as no deployment required. Already-included input creates no fresh deployment.",
     "Email success means provider acceptance of the frozen notification, separately from source acceptance and installation success."
   ],
@@ -143,7 +143,7 @@
     {
       "id": "ci-manager.signing.operate",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -196,7 +196,7 @@
       },
       {
         "status": "declared",
-        "statement": "New submissions freeze skip_tests=true by default, or false with --run-tests, plus the normalized host signing_policy and SHA-256 signing_policy_digest. Missing test fields retain test execution; missing signing fields retain the legacy acceptance path. Idempotent request-key retry returns the original signing snapshot rather than adopting changed host configuration."
+        "statement": "New submissions freeze skip_tests=true by default, or false with --run-tests, plus the normalized host signing_policy. Missing test fields retain test execution; missing signing fields retain the legacy acceptance path. Idempotent request-key retry returns the original signing snapshot rather than adopting changed host configuration."
       }
     ],
     "outputs": [
@@ -210,7 +210,7 @@
       },
       {
         "status": "declared",
-        "statement": "New jobs retain production_receipt with exact source commit, signing-policy digest, product scope, preparation source/build identities, and signed candidate identities and final artifact hashes. configuration_error identifies signing selection or key-usability failures; validation and deployment receipts remain distinct."
+        "statement": "New jobs retain production_receipt with exact source commit, signing-policy object, product scope, preparation source/build identities, and signed candidate identities and declared artifact inventory. configuration_error identifies signing selection or key-usability failures; validation and deployment receipts remain distinct."
       },
       {
         "status": "declared",
@@ -242,7 +242,7 @@
       },
       {
         "status": "declared",
-        "statement": "The certificate SHA-1 fingerprint selects one signing certificate, not an executable hash algorithm. The policy digest is SHA-256 of normalized canonical policy JSON. Stable code identifiers combine the configured namespace, canonical product key, and declared executable key; source version and build path do not enter them."
+        "statement": "The certificate SHA-1 fingerprint selects one signing certificate, not an executable hash algorithm. Cell compares normalized policy objects directly. Stable code identifiers combine the configured namespace, canonical product key, and declared executable key; source version and build path do not enter them."
       }
     ],
     "completeness_and_freshness": [
@@ -292,7 +292,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation selects content-addressed program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."
+        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation selects immutable program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."
       },
       {
         "status": "declared",
@@ -324,7 +324,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.6.1 uses journal schema 1, queue contract 8, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund or test flags preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
+        "statement": "Manager release 0.7.0 uses journal schema 1, queue contract 9, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund or test flags preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
       },
       {
         "status": "declared",

@@ -1,6 +1,6 @@
 {
   "id": "weaver.lifecycle",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -141,7 +141,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Weaver uses SQLite schema 1 and maintenance protocol 1. A run ID owns one hold. Program and provider selectors identify one content-addressed release; these identities are independent of document/job identity."
+        "statement": "Weaver uses SQLite schema 1 and maintenance protocol 1. A run ID owns one hold. Program and provider selectors identify one immutable release; these identities are independent of document/job identity."
       }
     ],
     "completeness_and_freshness": [
@@ -219,7 +219,7 @@
       },
       {
         "status": "declared",
-        "statement": "The Cell coordinator owns ordered maintenance, content-addressed publication and retained transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
+        "statement": "The Cell coordinator owns ordered maintenance, immutable publication and retained transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
         "target": "cell-deployment",
         "kind": "control"
       }

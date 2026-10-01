@@ -41,7 +41,7 @@ explicitly authorized manual installation or recovery:
    ```
 
 2. Supply `--home PATH` if selecting another operator home. Supply
-   `--expected-current absent|releases/HASH` when the exact prior selection is
+   `--expected-current absent|releases/ID` when the exact prior selection is
    required.
 3. Verify the selected command versions and help output:
 
@@ -180,7 +180,7 @@ request and does not establish current posting availability.
    usage after the selection.
 4. Keep collection and any requested diagnosis separate from program recovery.
 
-The installer reads retained legacy or `cell-install-v2` metadata before
+The installer reads retained legacy or `cell-install-v3` metadata before
 selection. Use a trusted installer. Keep retained release files unchanged. A failed switch restores the prior selectors.
 
 An abruptly killed deployer can leave `.update-lock`. Confirm that no Cast
