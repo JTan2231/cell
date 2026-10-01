@@ -12,7 +12,7 @@ DEPLOY_CONFLICT_KEYS='product:weaver
 chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=weaver
-CARGO_OFFLINE=1
+CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|weaver-narrative/release.sh'
