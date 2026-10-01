@@ -71,6 +71,16 @@ pub(super) fn inspect(home: &Path, clockwork: &Path, key: &str) -> Result<Contro
     })
 }
 
+pub(super) fn launch(format: &str, runner: &Path) -> Result<Value> {
+    if cell_install::is_transaction_format(format) {
+        Ok(json!({"kind":"direct","program":runner,"sha256":cell_install::file_digest(runner)?}))
+    } else {
+        Ok(
+            json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":cell_install::file_digest(Path::new("/bin/sh"))?,"script":runner,"script_sha256":cell_install::file_digest(runner)?}),
+        )
+    }
+}
+
 pub(super) fn definition(
     home: &Path,
     key: &str,
@@ -84,11 +94,7 @@ pub(super) fn definition(
     }
     let user = String::from_utf8_lossy(&user.stdout).trim().to_owned();
     let runner = root.join("bin/annals-inbox");
-    let launch = if info.format == cell_install::TRANSACTION_FORMAT {
-        json!({"kind":"direct","program":runner,"sha256":cell_install::file_digest(&runner)?})
-    } else {
-        json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":cell_install::file_digest(Path::new("/bin/sh"))?,"script":runner,"script_sha256":cell_install::file_digest(&runner)?})
-    };
+    let launch = launch(&info.format, &runner)?;
     let manifest: clockwork::api::Manifest = serde_json::from_value(json!({
         "schema_version":2,"key":key,"release_id":info.release_id,"release_root":root,
         "failure":clockwork::api::FailurePolicy::default(),
@@ -309,4 +315,35 @@ pub(super) fn restore(
         disable(home, clockwork, key, &actual)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_native_releases_keep_direct_clockwork_launches() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let runner = temporary.path().join("annals-inbox");
+        std::fs::write(&runner, b"\xcf\xfa\xed\xfe native fixture")?;
+        let pin = cell_install::file_digest(&runner)?;
+        let direct = json!({"kind":"direct","program":runner,"sha256":pin});
+        for format in ["cell-install-v2", "cell-install-v3"] {
+            assert_eq!(launch(format, &runner)?, direct);
+        }
+
+        let interpreted = json!({"kind":"interpreted","interpreter":"/bin/sh", "interpreter_sha256":cell_install::file_digest(Path::new("/bin/sh"))?,"script":runner,"script_sha256":pin});
+        for format in ["3", "4"] {
+            assert_eq!(launch(format, &runner)?, interpreted);
+        }
+
+        std::fs::write(&runner, b"\xcf\xfa\xed\xfe changed fixture")?;
+        for format in ["cell-install-v2", "cell-install-v3"] {
+            let changed = launch(format, &runner)?;
+            assert_eq!(changed["kind"], "direct");
+            assert_eq!(changed["program"], json!(runner));
+            assert_ne!(changed["sha256"], direct["sha256"]);
+        }
+        Ok(())
+    }
 }

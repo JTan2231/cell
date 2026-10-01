@@ -377,7 +377,7 @@ fn prove_bindings(
                 .as_ref()
                 .ok_or_else(|| Error::new("observer binding has no current release"))?;
             require(
-                old.format == "legacy-4" || old.format == transaction::TRANSACTION_FORMAT,
+                old.format == "legacy-4" || cell_install::is_transaction_format(&old.format),
                 "observer binding is not owned by current release",
             )?;
             let old_pins =
@@ -1025,10 +1025,7 @@ pub fn uninstall(options: &Control) -> Result<Value> {
         .as_ref()
         .ok_or_else(|| Error::new("no retained Krisis installation"))?;
     require(
-        matches!(
-            current.format.as_str(),
-            "legacy-4" | transaction::TRANSACTION_FORMAT
-        ),
+        current.format == "legacy-4" || cell_install::is_transaction_format(&current.format),
         "legacy Decisions removal requires its retained lifecycle",
     )?;
     let pins = pins_from_receipt(&paths, &clockwork, current)?;
