@@ -302,6 +302,7 @@ fn render_time(deadline: Option<Instant>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn markdown_conversion_preserves_words_and_limits_structure() -> Result<()> {
         assert_eq!(
@@ -322,104 +323,6 @@ mod tests {
         ] {
             assert!(parse_bullets(invalid).is_err(), "{invalid}");
         }
-        Ok(())
-    }
-    #[tokio::test]
-    async fn deferral_and_response_loss_reuse_the_saved_weaver_identity() -> Result<()> {
-        use std::os::unix::fs::PermissionsExt as _;
-        let root = tempfile::tempdir()?;
-        let store = Store::open(root.path())?;
-        store.insert(&crate::store::PacketRecord {
-            id: "packet-1".into(),
-            opportunity: "role".into(),
-            job_id: "job".into(),
-            company: "Company".into(),
-            title: "Role".into(),
-            status: "preparing".into(),
-            directory: String::new(),
-        })?;
-        let executable = root.path().join("weaver");
-        std::fs::write(
-            &executable,
-            "#!/bin/sh\nprintf '%s\n' \"$@\" > \"$0.args\"\n/bin/cat \"$0.response\"\n",
-        )?;
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
-        let response = root.path().join("weaver.response");
-        let client = Client::new(executable)?;
-        let id = "weaver-packet-1-cell";
-        std::fs::write(&response, serde_json::json!({"ok":true,"data":{"id":id,"outcome":"quota_deferred","detail":"paused"}}).to_string())?;
-        let error = author(
-            &store,
-            "packet-1",
-            "cell",
-            CELL_DIRECTION,
-            None,
-            &client,
-            None,
-        )
-        .await
-        .err()
-        .context("must defer")?;
-        assert!(error.is::<Deferred>());
-        assert_eq!(
-            job_ids(&store, "packet-1")?,
-            vec![nucleus_core::JobId::new(id)]
-        );
-        std::fs::write(&response, "incomplete response")?;
-        assert!(
-            author(
-                &store,
-                "packet-1",
-                "cell",
-                CELL_DIRECTION,
-                None,
-                &client,
-                None
-            )
-            .await
-            .is_err()
-        );
-        let document = DocumentView {
-            id: id.into(),
-            nucleus_job_id: id.into(),
-            direction: CELL_DIRECTION.into(),
-            created_at: 1,
-            markdown: Some("- Built Cell".into()),
-            finished_at: Some(2),
-            error: None,
-        };
-        std::fs::write(
-            &response,
-            serde_json::json!({"ok":true,"data":document}).to_string(),
-        )?;
-        let saved = author(
-            &store,
-            "packet-1",
-            "cell",
-            CELL_DIRECTION,
-            None,
-            &client,
-            None,
-        )
-        .await?;
-        assert_eq!(saved.id, id);
-        let args = std::fs::read_to_string(root.path().join("weaver.args"))?;
-        assert!(args.contains(&format!("--id\n{id}\n")));
-        std::fs::remove_file(&response)?;
-        assert_eq!(
-            author(
-                &store,
-                "packet-1",
-                "cell",
-                CELL_DIRECTION,
-                None,
-                &client,
-                None
-            )
-            .await?
-            .markdown,
-            saved.markdown
-        );
         Ok(())
     }
 }

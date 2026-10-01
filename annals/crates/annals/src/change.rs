@@ -134,16 +134,6 @@ pub fn parse_reconciliation(document: &str) -> Result<Reconciliation, Reconcilia
     Ok(reconciliation)
 }
 
-#[cfg(test)]
-pub(crate) fn parse_reconciliation_value(
-    value: Value,
-) -> Result<Reconciliation, ReconciliationContractError> {
-    let reconciliation: Reconciliation =
-        serde_json::from_value(value).map_err(ReconciliationContractError::InvalidJson)?;
-    reconciliation.validate()?;
-    Ok(reconciliation)
-}
-
 /// Parse and validate one operation without requiring the rest of its request-local namespace.
 ///
 /// Reconciliation drafts use this boundary so one invalid operation does not prevent valid

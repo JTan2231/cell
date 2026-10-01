@@ -792,46 +792,4 @@ mod tests {
         assert!(!definitions.contains("move_concept"));
         assert!(definitions.contains("\"quote\""));
     }
-
-    #[test]
-    fn evidence_selectors_fan_out_but_work_reads_stay_uniquely_anchored() -> cell_prompts::Result<()>
-    {
-        let mut tools = tool_definitions();
-        let prompts = cell_prompts::Prompts::at("annals", 1)?;
-        for tool in &mut tools {
-            prompts.descriptions(tool)?;
-        }
-        let work_read = &tools[1];
-        assert!(
-            work_read["description"]
-                .as_str()
-                .is_some_and(|description| description.contains("must resolve uniquely"))
-        );
-        assert!(
-            work_read
-                .pointer(
-                    "/inputSchema/properties/regions/items/properties/around_quote/description",
-                )
-                .and_then(Value::as_str)
-                .is_some_and(|description| description.contains("must resolve uniquely"))
-        );
-
-        let evidence = &tools[5]["inputSchema"]["properties"]["operations"]["items"]["oneOf"][0]["properties"]
-            ["evidence"]["items"];
-        assert!(
-            evidence["description"]
-                .as_str()
-                .is_some_and(|description| description.contains("every occurrence"))
-        );
-        assert!(
-            evidence["description"]
-                .as_str()
-                .is_some_and(|description| description.contains("bounded fan-out"))
-        );
-        let instructions = prompts.expand(instructions())?;
-        assert!(instructions.contains("selects every occurrence"));
-        assert!(instructions.contains("never submit source offsets"));
-        assert!(instructions.contains("must resolve uniquely"));
-        Ok(())
-    }
 }

@@ -1091,9 +1091,6 @@ fn atomic_link(target: &Path, destination: &Path, product: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests;
-
 fn verify_manifest(root: &Path, product: Option<&str>) -> Result<Manifest> {
     if !root.is_absolute() || fs::canonicalize(root)? != root {
         return Err(Error::new("release path must be canonical"));

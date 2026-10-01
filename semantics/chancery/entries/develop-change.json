@@ -22,13 +22,13 @@
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "Internal Semantics tests pass with isolated fixtures. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
+    "Retained Semantics tests pass with synthetic in-memory values. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
     "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
   "failure_and_recovery": [
     "Do not deploy a failing candidate or change persistent bytes without a quiescent backup and tested rollback.",
-    "Use synthetic upstreams, fake Nucleus mailbox transport, fake Clockwork, fake binaries, and fake launchctl in tests.",
+    "Keep retained tests in memory; resource-dependent transport, worker, storage, and packaging fixtures are removed.",
     "Preserve the same job and requester identity across ambiguous submission or result transport."
   ],
   "privacy": [
@@ -99,12 +99,12 @@
     "Supplied new document grounding names its exact Annals library/event/document; historical account and legacy admission/review effects retain exact provenance and remain decodable.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
-    "Internal product and packaging tests are offline, use fakes, and produce body-free logs. The manager owns bounded repair, deployment, and the outcome email."
+    "Retained product tests use in-memory data and produce body-free logs. Resource-dependent packaging and transport tests are removed. The manager owns bounded repair, deployment, and the outcome email."
   ],
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",
     "Add a versioned SQLite migration and full database-plus-sidecars rollback proof for schema changes.",
-    "Scale account fixtures across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding when those boundaries change."
+    "Review account changes across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding. Retain in-memory checks where applicable."
   ],
   "stop_when": [
     "An upstream fact cannot be obtained through its published read-only contract.",

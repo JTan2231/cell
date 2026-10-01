@@ -12,7 +12,6 @@ thiserror.workspace = true
 
 [dev-dependencies]
 rusqlite = { workspace = true, features = ["hooks"] }
-tempfile.workspace = true
 
 [lints]
 workspace = true

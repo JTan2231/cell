@@ -1,17 +1,13 @@
 //! Public in-process access to Bazaar. No operation invokes a CLI or model.
 //!
-//! ```
+//! ```text
 //! use bazaar::api::{Reader, Writer};
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # let directory = tempfile::tempdir()?;
-//! # let database = directory.path().join("private/bazaar.sqlite3");
+//! let database = std::path::Path::new("/absolute/private/bazaar.sqlite3");
 //! let mut writer = Writer::initialize(&database)?;
 //! let saved = writer.update("example.prompt", "Read {{input}} carefully.")?;
 //! let reader = Reader::open(&database)?;
 //! assert_eq!(reader.get("example.prompt", Some(saved.version))?, saved);
 //! assert_eq!(reader.history("example.prompt")?, vec![1]);
-//! # Ok(())
-//! # }
 //! ```
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, params};

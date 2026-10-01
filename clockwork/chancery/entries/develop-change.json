@@ -27,8 +27,8 @@
   ],
   "success": [
     "The smallest owning code and owning feature contracts, operation procedures, semantic-seed, and packaging contracts agree.",
-    "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
-    "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
+    "Retained in-memory tests check manifest rejection, canonical identity, wire formats, and notification payloads. Review process, storage, binding, and packaging behavior without the removed resource-dependent fixtures.",
+    "A persistent-state change includes explicit migration, quiescent backup, old-state compatibility, and database-aware rollback rather than implicit deployment migration.",
     "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication.",
     "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome."
   ],
@@ -50,7 +50,7 @@
   "steps": [
     "Read Clockwork's instructions and the owning feature contracts, operation procedures, semantic-seed, and packaging contracts affected by the change.",
     "Identify whether the change alters executable meaning, product authority, persistent state, cutover consistency, process containment, privacy, recovery, or another system reliance.",
-    "Implement the smallest change with isolated synthetic releases, state roots, plists, launchd doubles, and child processes and update every affected product-owned contract.",
+    "Implement the smallest change with synthetic in-memory tests and update every affected product-owned contract.",
     "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication, deployment outside that job, Semantics, and unrelated product-binding operations require separate authority."
   ],
   "checkpoints": [
@@ -131,7 +131,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication."
+        "statement": "Inputs are the scoped request, current Clockwork source and public contracts, synthetic in-memory test data, and any explicitly selected installed documentation contracts."
       }
     ],
     "outputs": [

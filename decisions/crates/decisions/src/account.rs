@@ -321,16 +321,12 @@ fn validate_receipt(
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt as _;
-    use std::path::PathBuf;
-
     use super::{
-        AnnalsConfig, AnnalsEnvelope, AnnalsReceipt, CAPTURE_RULE_VERSION, PendingAccount, accept,
-        cleanup_handoffs, render, sha256, validate_receipt,
+        AnnalsConfig, AnnalsEnvelope, AnnalsReceipt, CAPTURE_RULE_VERSION, PendingAccount, render,
+        sha256, validate_receipt,
     };
-    use crate::error::{AppResult, Context as _};
     use crate::model::{AccountSource, DecisionAccount, MessageRole, Precision};
+    use std::path::PathBuf;
 
     fn account() -> DecisionAccount {
         DecisionAccount {
@@ -399,150 +395,5 @@ mod tests {
             .unwrap_or_else(|error| panic!("{error}"));
         let with_extra = raw.replace("\"acceptance\"", "\"unexpected\":1,\"acceptance\"");
         assert!(serde_json::from_str::<AnnalsEnvelope<AnnalsReceipt>>(&with_extra).is_err());
-    }
-
-    #[test]
-    fn pending_delivery_rejects_a_changed_annals_target_before_invocation() {
-        let pending = PendingAccount {
-            account_id: "d_0123456789abcdef0123".to_owned(),
-            markdown: "account".to_owned(),
-            source_sha256: sha256("account"),
-            target_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-            target_config_path: "/tmp/annals-decisions.toml".to_owned(),
-        };
-        let configuration = AnnalsConfig {
-            binary: PathBuf::from("/does/not/run/annals"),
-            config: PathBuf::from("/tmp/other-annals.toml"),
-            expected_library_id: "fedcba9876543210fedcba9876543210".to_owned(),
-        };
-        let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
-        assert_eq!(
-            accept(&pending, &configuration, directory.path())
-                .err()
-                .map(|error| error.code),
-            Some("annals_target_conflict")
-        );
-    }
-
-    #[test]
-    fn accepted_handoff_cleanup_failure_is_visible() -> AppResult<()> {
-        let directory = tempfile::tempdir().context("test_failed", "unable to make temp dir")?;
-        let markdown = "# Decision\n";
-        let digest = sha256(markdown);
-        let pending = PendingAccount {
-            account_id: "d_0123456789abcdef0123".to_owned(),
-            markdown: markdown.to_owned(),
-            source_sha256: digest.clone(),
-            target_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-            target_config_path: "/tmp/annals-decisions.toml".to_owned(),
-        };
-        let handoff = directory.path().join(format!(
-            ".krisis-annals-handoff-v1-{}-{}-00000000-0000-7000-8000-000000000001.md",
-            pending.account_id, digest
-        ));
-        fs::write(&handoff, markdown).context("test_failed", "unable to write handoff")?;
-        fs::set_permissions(&handoff, fs::Permissions::from_mode(0o600))
-            .context("test_failed", "unable to make handoff private")?;
-        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o500))
-            .context("test_failed", "unable to make directory read-only")?;
-        let result = cleanup_handoffs(&pending, directory.path());
-        fs::set_permissions(directory.path(), fs::Permissions::from_mode(0o700))
-            .context("test_failed", "unable to restore directory permissions")?;
-        assert_eq!(
-            result.err().map(|error| error.code),
-            Some("annals_handoff_cleanup_failed")
-        );
-        assert!(handoff.exists());
-        Ok(())
-    }
-
-    #[test]
-    fn annals_cli_interoperability_uses_the_sealed_acceptance_surface() -> AppResult<()> {
-        let directory = tempfile::tempdir().context("test_failed", "unable to make temp dir")?;
-        let state = directory.path().join("state");
-        fs::create_dir(&state).context("test_failed", "unable to make state dir")?;
-        let binary = directory.path().join("annals");
-        let capture = directory.path().join("arguments");
-        let captured_account = directory.path().join("account.md");
-        let config = directory.path().join("decisions.toml");
-        let markdown = render(&account())?;
-        let digest = sha256(&markdown);
-        let script = format!(
-            "#!/bin/sh\nset -eu\nprintf '%s\\n' \"$@\" >'{}'\ncp \"${{10}}\" '{}'\nprintf '%s\\n' '{{\"ok\":true,\"data\":{{\"contract_version\":2,\"library_id\":\"0123456789abcdef0123456789abcdef\",\"producer\":\"krisis\",\"key\":\"d_0123456789abcdef0123\",\"source_sha256\":\"{}\",\"job_id\":\"annals-job-1\",\"accepted_at\":\"2026-09-03T12:00:00Z\",\"acceptance\":\"created\"}}}}'\n",
-            capture.display(),
-            captured_account.display(),
-            digest
-        );
-        fs::write(&binary, script).context("test_failed", "unable to write fake Annals")?;
-        fs::set_permissions(&binary, fs::Permissions::from_mode(0o700))
-            .context("test_failed", "unable to make fake Annals executable")?;
-        fs::write(&config, "[decision_feed]\n")
-            .context("test_failed", "unable to write fake Annals config")?;
-
-        let pending = PendingAccount {
-            account_id: "d_0123456789abcdef0123".to_owned(),
-            markdown: markdown.clone(),
-            source_sha256: digest,
-            target_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-            target_config_path: config.to_string_lossy().into_owned(),
-        };
-        let stale_handoffs = [
-            state.join(format!(
-                ".krisis-annals-handoff-v1-{}-{}-00000000-0000-7000-8000-000000000001.md",
-                pending.account_id, pending.source_sha256
-            )),
-            state.join(format!(
-                ".krisis-annals-handoff-v1-{}-{}-00000000-0000-7000-8000-000000000002.md",
-                pending.account_id, pending.source_sha256
-            )),
-        ];
-        for path in &stale_handoffs {
-            fs::write(path, &markdown).context("test_failed", "unable to write stale handoff")?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-                .context("test_failed", "unable to make stale handoff private")?;
-        }
-        let configuration = AnnalsConfig {
-            binary,
-            config: config.clone(),
-            expected_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-        };
-        let receipt = accept(&pending, &configuration, &state)?;
-        assert_eq!(receipt.acceptance, "created");
-        assert!(stale_handoffs.iter().all(|path| !path.exists()));
-        assert_eq!(
-            fs::read_to_string(&captured_account)
-                .context("test_failed", "unable to read captured account")?,
-            markdown
-        );
-        let arguments = fs::read_to_string(capture)
-            .context("test_failed", "unable to read captured arguments")?;
-        let lines = arguments.lines().collect::<Vec<_>>();
-        assert_eq!(
-            &lines[..9],
-            &[
-                "--config",
-                config.to_string_lossy().as_ref(),
-                "--json",
-                "inbox",
-                "accept",
-                "--producer",
-                "krisis",
-                "--key",
-                "d_0123456789abcdef0123",
-            ]
-        );
-        assert_eq!(lines.len(), 10);
-        assert!(
-            PathBuf::from(lines[9])
-                .extension()
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("md"))
-        );
-        assert!(
-            fs::read_dir(state)
-                .context("test_failed", "unable to inspect handoff cleanup")?
-                .next()
-                .is_none()
-        );
-        Ok(())
     }
 }

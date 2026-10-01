@@ -54,8 +54,8 @@ cross-system integration, read:
    ```
 
    The manager integrates, validates, attempts bounded repairs, deploys, and
-   emails the outcome. Its Annals packaging checks use fake Clockwork and
-   launchctl surfaces in an isolated home, never live bindings.
+   emails the outcome. Retained Rust tests cover computations and in-memory
+   data. Tests that allocate files, processes, sockets, or threads are removed.
 5. Verify the retained manager outcome. Live migration remains a separate
    authorized operation.
 

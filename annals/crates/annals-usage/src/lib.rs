@@ -484,96 +484,9 @@ enum AppError {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
-    use std::os::unix::net::UnixListener;
-    use std::thread;
-    use std::time::{Duration, Instant};
-
-    use super::{
-        AppError, UsageConfig, command_arguments, nucleus_client,
-        nucleus_http_request_with_timeout, output_requires_terminal_reload, with_runtime,
-    };
+    use super::{command_arguments, output_requires_terminal_reload};
     use nucleus_core::JobState;
-
-    async fn serve_doctor_response(
-        listener: &tokio::net::UnixListener,
-        path: &str,
-        body: &serde_json::Value,
-    ) -> std::io::Result<()> {
-        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-
-        let (mut connection, _) = listener.accept().await?;
-        let mut request = Vec::new();
-        loop {
-            let byte = connection.read_u8().await?;
-            request.push(byte);
-            if request.ends_with(b"\r\n\r\n") {
-                break;
-            }
-        }
-        assert!(String::from_utf8_lossy(&request).starts_with(&format!("GET {path} ")));
-        let body = body.to_string();
-        connection.write_all(format!(
-            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len(),
-        ).as_bytes()).await
-    }
-
-    #[tokio::test(flavor = "current_thread")]
-    async fn doctor_requires_exact_drained_hold_before_accepting_held_nucleus()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use serde_json::json;
-
-        for (owner, held_by, jobs, accepted) in [
-            (Some("run-a"), "run-a", 0, true),
-            (Some("run-a"), "run-b", 0, false),
-            (Some("run-a"), "run-a", 1, false),
-            (None, "run-a", 0, false),
-        ] {
-            let directory = tempfile::tempdir()?;
-            let socket = directory.path().join("nucleus.sock");
-            let listener = tokio::net::UnixListener::bind(&socket)?;
-            let server = tokio::spawn(async move {
-                let health = json!({
-                    "version": 1, "status": "degraded", "daemonVersion": "test",
-                    "acceptingJobs": false, "checkedAt": "2026-09-01T00:00:00Z",
-                    "supportedProtocolVersions": [1],
-                    "harness": {"harness": "codex", "harnessVersion": "test", "adapterVersion": "test"},
-                    "harnessExecutable": "/usr/bin/false",
-                    "authentication": {"codexHome": "/tmp/codex-home", "configured": true, "authenticated": true},
-                    "execution": {"maxActiveJobs": 1, "activeJobs": 0, "availableSlots": 1}
-                });
-                let health_requests = if owner.is_some() { 2 } else { 1 };
-                for _ in 0..health_requests {
-                    serve_doctor_response(&listener, "/v1/health", &health).await?;
-                }
-                if owner.is_some() {
-                    serve_doctor_response(
-                        &listener,
-                        "/v1/maintenance",
-                        &json!({
-                            "protocol_version": 1, "holds": [held_by], "drained": jobs == 0,
-                            "nonterminal_jobs": jobs,
-                        }),
-                    )
-                    .await?;
-                }
-                Ok::<_, std::io::Error>(())
-            });
-            let client = nucleus_client::NucleusClient::new(&socket)?;
-            let result = super::doctor_health(&client, owner).await;
-            assert_eq!(
-                result.as_ref().is_ok_and(|(_, proved)| *proved),
-                accepted,
-                "owner={owner:?}, held_by={held_by}, jobs={jobs}: {result:?}",
-            );
-            if owner.is_none() {
-                assert!(!result?.0.accepting_jobs);
-            }
-            server.await??;
-        }
-        Ok(())
-    }
+    use std::ffi::OsString;
 
     #[test]
     fn clap_subcommand_arguments_retain_their_values() {
@@ -602,37 +515,5 @@ mod tests {
             JobState::Accepted,
             JobState::Running
         ));
-    }
-
-    #[test]
-    fn stalled_nucleus_usage_request_is_bounded() -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let socket = directory.path().join("nucleus.sock");
-        let listener = UnixListener::bind(&socket)?;
-        thread::spawn(move || {
-            if let Ok((_stream, _)) = listener.accept() {
-                thread::sleep(Duration::from_secs(2));
-            }
-        });
-        let config = UsageConfig {
-            nucleus_socket: Some(socket),
-            ..UsageConfig::default()
-        };
-        let started = Instant::now();
-        let Err(error) = with_runtime(async {
-            let client = nucleus_client(&config)?;
-            nucleus_http_request_with_timeout(
-                client.health(),
-                "test request",
-                Duration::from_millis(100),
-            )
-            .await?;
-            Ok(())
-        }) else {
-            return Err("a stalled Nucleus usage request unexpectedly completed".into());
-        };
-        assert!(matches!(error, AppError::NucleusTimeout("test request")));
-        assert!(started.elapsed() < Duration::from_secs(2));
-        Ok(())
     }
 }

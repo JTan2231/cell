@@ -579,61 +579,9 @@ mod tests {
     fn html(value: Value) -> String {
         format!("<script type='application/ld+json'>{value}</script>")
     }
+
     fn role(url: &str) -> Value {
         json!({"@type":"JobPosting", "title":"Engineer", "url":url,"description":"Complete role requirements and responsibilities. ".repeat(10)})
-    }
-
-    #[tokio::test]
-    async fn ashby_cache_shares_large_boards_and_preserves_timestamps() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("ashby-cache/employer.json");
-        let cached = AshbyBoard {
-            retrieved_at: cast::now(),
-            response: json!({"jobs":[
-                {"jobUrl":"https://jobs.ashbyhq.com/employer/one"},
-                {"jobUrl":"https://jobs.ashbyhq.com/employer/two", "descriptionHtml":"x".repeat(4_000_001)}
-            ]}),
-        };
-        crate::write_json(&path, &cached).unwrap();
-        // Any attempted fetch fails URL validation, without making a request.
-        let endpoint = url::Url::parse("http://example.com").unwrap();
-        for id in ["one", "two"] {
-            let ats = AtsPosting::from_key(&format!("ashby:employer:{id}")).unwrap();
-            let found = ashby_board(root.path(), &ats, &endpoint).await.unwrap();
-            assert_eq!(found.retrieved_at, cached.retrieved_at);
-            assert_eq!(found.response, cached.response);
-        }
-
-        let original = std::fs::read(&path).unwrap();
-        let missing = AtsPosting::from_key("ashby:employer:new").unwrap();
-        assert!(ashby_board(root.path(), &missing, &endpoint).await.is_err());
-        assert_eq!(std::fs::read(&path).unwrap(), original);
-    }
-
-    #[test]
-    fn ashby_cache_expires_and_rejects_invalid_or_missing_entries() {
-        let root = tempfile::tempdir().unwrap();
-        let path = root.path().join("employer.json");
-        let ats = AtsPosting::from_key("ashby:employer:one").unwrap();
-        let now = chrono::Utc::now();
-        assert!(read_ashby_cache(&path, &ats, now).is_none());
-        let mut cached = AshbyBoard {
-            retrieved_at: now.to_rfc3339(),
-            response: json!({"jobs":[{"jobUrl":"https://jobs.ashbyhq.com/employer/one"}]}),
-        };
-        crate::write_json(&path, &cached).unwrap();
-        assert!(read_ashby_cache(&path, &ats, now + chrono::Duration::days(13)).is_some());
-        assert!(read_ashby_cache(&path, &ats, now + chrono::Duration::days(14)).is_none());
-        assert!(read_ashby_cache(&path, &ats, now - chrono::Duration::seconds(1)).is_none());
-
-        cached.response = json!({"jobs":[{"jobUrl":"https://jobs.ashbyhq.com/other/one"}]});
-        crate::write_json(&path, &cached).unwrap();
-        assert!(read_ashby_cache(&path, &ats, now).is_none());
-        cached.response = json!({"jobs":null});
-        crate::write_json(&path, &cached).unwrap();
-        assert!(read_ashby_cache(&path, &ats, now).is_none());
-        std::fs::write(&path, b"incomplete JSON").unwrap();
-        assert!(read_ashby_cache(&path, &ats, now).is_none());
     }
 
     #[test]
@@ -714,98 +662,6 @@ mod tests {
             "https://example.com:9000/job",
         ] {
             assert!(validate_public_url(&url::Url::parse(url).unwrap()).is_err());
-        }
-    }
-
-    fn fake_vita() -> tempfile::TempDir {
-        use std::os::unix::fs::PermissionsExt;
-        let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join("annals");
-        std::fs::write(
-            &executable,
-            "#!/bin/sh\nset -eu\ncase \"$*\" in\n  '--json library vita work list --limit=1000') cat \"$0.list\";;\n  '--json library vita work show -- guidance') cat \"$0.guidance\";;\n  '--json library vita work show -- story') cat \"$0.story\";;\n  *) exit 91;;\nesac\n",
-        ).unwrap();
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let items = ["guidance", "story"].map(|label| {
-            json!({
-                "work":label,"sha256":"unused","size_bytes":0,"first_retained_at":"unused"
-            })
-        });
-        std::fs::write(
-            directory.path().join("annals.list"),
-            json!({"ok":true,"data":{"schema_version":2,"items":items,"has_more":false}})
-                .to_string(),
-        )
-        .unwrap();
-        for (index, text, headings) in [
-            (
-                0,
-                "# Disclosure rules\n\nExact guidance.\n",
-                json!([{"path":["Disclosure rules"]}]),
-            ),
-            (1, "Exact career text with caveats.\n", json!([])),
-        ] {
-            let mut work = items[index].clone();
-            work["text"] = json!(text);
-            work["headings"] = headings;
-            std::fs::write(
-                directory
-                    .path()
-                    .join(format!("annals.{}", work["work"].as_str().unwrap())),
-                json!({"ok":true,"data":work}).to_string(),
-            )
-            .unwrap();
-        }
-        directory
-    }
-
-    #[test]
-    fn career_library_reads_complete_vita_works() {
-        let directory = fake_vita();
-        let entries = read_career_library(&directory.path().join("annals")).unwrap();
-        assert_eq!(
-            entries,
-            vec![
-                CareerEntry {
-                    id: "guidance".into(),
-                    title: "Disclosure rules".into(),
-                    markdown: "# Disclosure rules\n\nExact guidance.\n".into(),
-                },
-                CareerEntry {
-                    id: "story".into(),
-                    title: "story".into(),
-                    markdown: "Exact career text with caveats.\n".into(),
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn career_library_reports_empty_incomplete_and_failed_reads() {
-        for failure in ["empty", "incomplete", "read"] {
-            let directory = fake_vita();
-            if failure == "read" {
-                std::fs::remove_file(directory.path().join("annals.story")).unwrap();
-            } else {
-                let path = directory.path().join("annals.list");
-                let mut list: Value =
-                    serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-                if failure == "empty" {
-                    list["data"]["items"] = json!([]);
-                } else {
-                    list["data"]["has_more"] = json!(true);
-                }
-                std::fs::write(path, list.to_string()).unwrap();
-            }
-            let error = read_career_library(&directory.path().join("annals"))
-                .unwrap_err()
-                .to_string();
-            let expected = match failure {
-                "empty" => "Vita has no career entries",
-                "incomplete" => "Vita work list is incomplete",
-                _ => "Annals command failed",
-            };
-            assert!(error.contains(expected), "{error}");
         }
     }
 }

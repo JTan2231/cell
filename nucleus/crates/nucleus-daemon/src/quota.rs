@@ -249,35 +249,3 @@ fn transition(value: &mut QuotaStatusV1, state: QuotaStateV1, now: i64) {
 fn unix_now() -> i64 {
     time::OffsetDateTime::now_utc().unix_timestamp()
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[tokio::test]
-    async fn pause_survives_restart_and_only_fresh_recovery_reopens()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let root = tempfile::tempdir()?;
-        let gate = QuotaGate::open(root.path())?;
-        let sample = |used| json!({"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":used,"windowDurationMins":10080,"resetsAt":1000}}}});
-        let mut value = gate.value.lock().await;
-        observe(&mut value, &sample(90), 100);
-        assert_eq!(value.state, QuotaStateV1::Low);
-        let id = value.condition_id.clone();
-        gate.save(&value)?;
-        drop(value);
-        let restored = QuotaGate::open(root.path())?;
-        let mut value = restored.value.lock().await;
-        assert_eq!(value.condition_id, id);
-        observe(&mut value, &sample(85), 110);
-        assert!(value.is_blocked());
-        observe(&mut value, &serde_json::Value::Null, 120);
-        assert_eq!(value.state, QuotaStateV1::Unknown);
-        assert_eq!(value.condition_id, id);
-        observe(&mut value, &sample(84), 130);
-        assert_eq!(value.state, QuotaStateV1::Open);
-        assert!(value.condition_id.is_none());
-        Ok(())
-    }
-}

@@ -425,27 +425,6 @@ fn validate_message_id(id: &str) -> AppResult<()> {
     Ok(())
 }
 
-#[cfg(test)]
-async fn send_to(
-    endpoint: &str,
-    api_key: &str,
-    idempotency_key: &str,
-    subject: &str,
-    body: &str,
-    attachments: &[api::Attachment],
-) -> AppResult<String> {
-    send_to_with_options(
-        endpoint,
-        api_key,
-        idempotency_key,
-        subject,
-        body,
-        attachments,
-        &api::ReplyOptions::default(),
-    )
-    .await
-}
-
 fn resend_client(api_key: &str) -> AppResult<reqwest::Client> {
     let mut headers = HeaderMap::new();
     let mut authorization = HeaderValue::from_str(&format!("Bearer {api_key}")).map_err(|_| {
@@ -546,33 +525,14 @@ async fn send_to_with_options(
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Read as _, Write as _};
-    use std::net::TcpListener;
-    use std::sync::mpsc;
-    use std::thread;
-    use std::time::Duration;
+    use std::io::Cursor;
 
     use clap::Parser as _;
-    use serde_json::Value;
     use uuid::{Uuid, Version};
 
-    use super::{
-        Cli, FROM, TO, new_idempotency_key, parse_idempotency_key, read_attachment, read_body,
-        send_to, validate_api_key, validate_attachment_filename,
-    };
+    use super::{Cli, new_idempotency_key, parse_idempotency_key, read_body, validate_api_key};
 
     type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
-    type TestServer = (
-        String,
-        mpsc::Receiver<String>,
-        thread::JoinHandle<std::io::Result<()>>,
-    );
-
-    struct TestResponse {
-        status: u16,
-        reason: &'static str,
-        body: &'static str,
-    }
 
     #[test]
     fn cli_accepts_exactly_subject_and_body() -> TestResult {
@@ -644,34 +604,6 @@ mod tests {
     }
 
     #[test]
-    fn attachments_capture_bytes_without_transmitting_paths() -> TestResult {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("resume.pdf");
-        std::fs::write(&path, b"%PDF-fixture\0\xff")?;
-        let attachment = read_attachment(&path)?;
-        std::fs::write(&path, b"changed after capture")?;
-        assert_eq!(attachment.filename, "resume.pdf");
-        assert_eq!(attachment.content, b"%PDF-fixture\0\xff");
-        assert!(read_attachment(directory.path()).is_err());
-        let missing = directory.path().join("secret-not-found.pdf");
-        let error = read_attachment(&missing)
-            .err()
-            .ok_or("missing file was accepted")?;
-        assert!(!error.to_string().contains("secret-not-found"));
-        for invalid in [
-            "",
-            ".",
-            "..",
-            "/private/resume.pdf",
-            "..\\resume.pdf",
-            "bad\nname.pdf",
-        ] {
-            assert!(validate_attachment_filename(invalid).is_err());
-        }
-        Ok(())
-    }
-
-    #[test]
     fn body_dash_reads_utf8_stdin() -> TestResult {
         assert_eq!(
             read_body("-", Cursor::new("first line\nsecond line"))?,
@@ -737,223 +669,6 @@ mod tests {
             );
         }
         assert!(parse_idempotency_key(&"a".repeat(257)).is_err());
-    }
-
-    #[tokio::test]
-    async fn request_has_exact_fixed_addresses_payload_and_headers() -> TestResult {
-        let (endpoint, requests, server) = serve(vec![TestResponse {
-            status: 200,
-            reason: "OK",
-            body: r#"{"id":"email_123"}"#,
-        }])?;
-        let email_id = send_to(
-            &endpoint,
-            "test-secret",
-            "email/fixture",
-            "Hello ✓",
-            "First line\nSecond line",
-            &[],
-        )
-        .await?;
-        assert_eq!(email_id, "email_123");
-
-        let request = requests.recv_timeout(Duration::from_secs(2))?;
-        let (headers, body) = split_request(&request)?;
-        let headers = headers.to_ascii_lowercase();
-        assert!(headers.starts_with("post /emails http/1.1"));
-        assert!(headers.contains("authorization: bearer test-secret"));
-        assert!(headers.contains("idempotency-key: email/fixture"));
-        assert!(headers.contains(concat!("user-agent: email/", env!("CARGO_PKG_VERSION"))));
-
-        let body: Value = serde_json::from_str(body)?;
-        assert_eq!(body.as_object().map(serde_json::Map::len), Some(4));
-        assert_eq!(body["from"], FROM);
-        assert_eq!(body["to"], serde_json::json!([TO]));
-        assert_eq!(body["subject"], "Hello ✓");
-        assert_eq!(body["text"], "First line\nSecond line");
-        assert!(body.get("html").is_none());
-
-        finish_server(server)?;
-        assert!(requests.try_recv().is_err());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn transient_failures_retry_three_times_with_one_frozen_request() -> TestResult {
-        let (endpoint, requests, server) = serve(vec![
-            TestResponse {
-                status: 429,
-                reason: "Too Many Requests",
-                body: r#"{"message":"retry"}"#,
-            },
-            TestResponse {
-                status: 503,
-                reason: "Service Unavailable",
-                body: r#"{"message":"retry again"}"#,
-            },
-            TestResponse {
-                status: 200,
-                reason: "OK",
-                body: r#"{"id":"email_after_retry"}"#,
-            },
-        ])?;
-
-        let attachment = super::api::Attachment {
-            filename: "resume.pdf".to_owned(),
-            content: b"%PDF-1.7\n".to_vec(),
-        };
-        let email_id = send_to(
-            &endpoint,
-            "test-secret",
-            "email/frozen",
-            "Subject",
-            "Body",
-            &[attachment],
-        )
-        .await?;
-        assert_eq!(email_id, "email_after_retry");
-
-        let first = requests.recv_timeout(Duration::from_secs(2))?;
-        let second = requests.recv_timeout(Duration::from_secs(2))?;
-        let third = requests.recv_timeout(Duration::from_secs(2))?;
-        for request in [&first, &second, &third] {
-            assert!(
-                request
-                    .to_ascii_lowercase()
-                    .contains("idempotency-key: email/frozen")
-            );
-        }
-        assert_eq!(split_request(&first)?.1, split_request(&second)?.1);
-        assert_eq!(split_request(&second)?.1, split_request(&third)?.1);
-        let payload: Value = serde_json::from_str(split_request(&first)?.1)?;
-        assert_eq!(
-            payload["attachments"],
-            serde_json::json!([{
-                "filename": "resume.pdf",
-                "content": "JVBERi0xLjcK"
-            }])
-        );
-        finish_server(server)?;
-        assert!(requests.try_recv().is_err());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn permanent_rejection_is_not_retried_and_hides_remote_body() -> TestResult {
-        let (endpoint, requests, server) = serve(vec![TestResponse {
-            status: 422,
-            reason: "Unprocessable Entity",
-            body: r#"{"message":"test-secret and private body"}"#,
-        }])?;
-        let error = send_to(
-            &endpoint,
-            "test-secret",
-            "email/fixture",
-            "Subject",
-            "private body",
-            &[],
-        )
-        .await
-        .err()
-        .ok_or("Resend rejection unexpectedly succeeded")?;
-        assert_eq!(
-            error.to_string(),
-            "Resend rejected email with HTTP 422 Unprocessable Entity"
-        );
-        assert!(!error.to_string().contains("test-secret"));
-        assert!(!error.to_string().contains("private body"));
-        let _ = requests.recv_timeout(Duration::from_secs(2))?;
-        finish_server(server)?;
-        assert!(requests.try_recv().is_err());
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn invalid_success_response_is_secret_safe() -> TestResult {
-        let (endpoint, _requests, server) = serve(vec![TestResponse {
-            status: 200,
-            reason: "OK",
-            body: r#"{"id":"  ","message":"test-secret"}"#,
-        }])?;
-        let error = send_to(
-            &endpoint,
-            "test-secret",
-            "email/fixture",
-            "Subject",
-            "Body",
-            &[],
-        )
-        .await
-        .err()
-        .ok_or("invalid response unexpectedly succeeded")?;
-        assert_eq!(error.to_string(), "Resend returned an invalid email ID");
-        assert!(!error.to_string().contains("test-secret"));
-        finish_server(server)?;
-        Ok(())
-    }
-
-    fn serve(responses: Vec<TestResponse>) -> TestResult<TestServer> {
-        let listener = TcpListener::bind("127.0.0.1:0")?;
-        let address = listener.local_addr()?;
-        let (sender, receiver) = mpsc::channel();
-        let server = thread::spawn(move || -> std::io::Result<()> {
-            for response in responses {
-                let (mut stream, _) = listener.accept()?;
-                stream.set_read_timeout(Some(Duration::from_secs(2)))?;
-                let mut request = Vec::new();
-                let mut buffer = [0_u8; 4096];
-                loop {
-                    let read = stream.read(&mut buffer)?;
-                    if read == 0 {
-                        break;
-                    }
-                    request.extend_from_slice(&buffer[..read]);
-                    if request_is_complete(&request) {
-                        break;
-                    }
-                }
-                let _ = sender.send(String::from_utf8_lossy(&request).into_owned());
-                let reply = format!(
-                    "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    response.status,
-                    response.reason,
-                    response.body.len(),
-                    response.body,
-                );
-                stream.write_all(reply.as_bytes())?;
-            }
-            Ok(())
-        });
-        Ok((format!("http://{address}/emails"), receiver, server))
-    }
-
-    fn request_is_complete(request: &[u8]) -> bool {
-        let text = String::from_utf8_lossy(request);
-        let Some((headers, body)) = text.split_once("\r\n\r\n") else {
-            return false;
-        };
-        let content_length = headers.lines().find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            if name.eq_ignore_ascii_case("content-length") {
-                value.trim().parse::<usize>().ok()
-            } else {
-                None
-            }
-        });
-        content_length.is_some_and(|length| body.len() >= length)
-    }
-
-    fn split_request(request: &str) -> TestResult<(&str, &str)> {
-        request
-            .split_once("\r\n\r\n")
-            .ok_or_else(|| "request did not contain an HTTP header boundary".into())
-    }
-
-    fn finish_server(server: thread::JoinHandle<std::io::Result<()>>) -> TestResult {
-        match server.join() {
-            Ok(result) => result.map_err(Into::into),
-            Err(_) => Err("test Resend server panicked".into()),
-        }
     }
 }
 

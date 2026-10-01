@@ -23,10 +23,6 @@ SHARED_SUITES = {
 }
 SHARED_PACKAGES = frozenset(SHARED_SUITES.values())
 LIBRARY_KINDS = frozenset(("lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"))
-PROMPT_CONSUMERS = frozenset((
-    "annals", "decisions", "semantics", "paperboy", "platter", "weaver", "emt",
-    "conatus", "cell-prompts",
-))
 
 
 @dataclass
@@ -148,15 +144,6 @@ def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) 
     failure = 0
     with tempfile.TemporaryDirectory(prefix="cell-parallel-tests-") as temporary:
         temporary = Path(temporary)
-        if PROMPT_CONSUMERS.intersection(selected_packages):
-            database = temporary / "private" / "bazaar.sqlite3"
-            subprocess.run([
-                "cargo", "run", *common, *(["--offline"] if plan.offline else []),
-                "--quiet", "--package", "cell-prompts", "--", str(database),
-                str(root / "prompting/seed.json"),
-            ], check=True, env=environment, cwd=root)
-            environment["CELL_BAZAAR_DATABASE"] = str(database)
-
         if plan.targets:
             config = temporary / "nextest.toml"
             user_config = temporary / "user.toml"
@@ -164,13 +151,7 @@ def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) 
             # This gate's coverage and scheduler do not depend on user/repo overrides.
             config.write_text(
                 "[store]\ndir = " + json.dumps(str(temporary / "nextest"))
-                + '\n[test-groups]\nnucleus-harness = { max-threads = 1 }\n'
-                + '[[profile.default.overrides]]\n'
-                + "filter = '(package(=nucleus-codex) & kind(=lib)) | "
-                + "(package(=nucleus-codex) & binary(=local_execution)) | "
-                + "(package(=nucleus-daemon) & binary(=http_contract))'\n"
-                + 'test-group = "nucleus-harness"\n'
-                + '[profile.default.junit]\npath = "report.xml"\n'
+                + '\n[profile.default.junit]\npath = "report.xml"\n'
             )
             user_config.write_text("")
             command = [

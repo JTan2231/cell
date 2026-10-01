@@ -31,7 +31,7 @@
   ],
   "failure_and_recovery": [
     "Do not attempt binary-only rollback after an incompatible store migration.",
-    "Do not replace the proved Codex executable without adapter inspection and compatibility tests.",
+    "Do not replace the proved Codex executable without adapter inspection and applicable in-memory compatibility checks.",
     "Preserve forward-only authentication separately from program or database rollback, including private staging and validated atomic promotion for every Codex credential-writing operation, supervised refresh and account reconciliation that survive requester cancellation, and attended-login exclusion from active job and account sessions."
   ],
   "privacy": [

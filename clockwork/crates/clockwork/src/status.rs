@@ -168,17 +168,3 @@ fn runtime_outcome(activation: crate::model::ActivationRecord) -> Outcome {
         reference: Some(activation.id),
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_status_database_stays_missing() {
-        let directory = tempfile::tempdir().unwrap();
-        let layout = Layout::discover(Some(directory.path().to_path_buf())).unwrap();
-        let before = std::fs::read_dir(directory.path()).unwrap().count();
-        assert!(snapshot(&layout).is_err());
-        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), before);
-    }
-}

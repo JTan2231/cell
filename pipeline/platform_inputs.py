@@ -44,22 +44,9 @@ PRODUCT_RUNTIME_INPUTS = {
 # A shared change selects its own suite. Only installation primitives expand
 # to consumer installation suites; ordinary shared dependencies do not.
 SHARED_INPUTS = {
-    "pipeline": ("ci.sh", "ci_manager/*", "pipeline/*.py", "pipeline/*.sh", "pipeline/products/*.sh"),
-    "broker": ("ci_broker/*.py", "ci_broker/*.sh", "ci_manager/workspace.py"),
-    "deployment": ("deploy.sh", "deployment/cli.py",
-                   "deployment/candidate.py", "deployment/__init__.py",
-                   "deployment/signing.py", "deployment/test_signing.py",
-                   "deployment/test_coordinator.py", "ci_manager/workspace.py"),
-    "build": ("Cargo.toml", "rust-toolchain.toml", ".cargo/*",
-              "deployment/build.py", "deployment/candidate.py", "deployment/__init__.py",
-              "deployment/signing.py", "deployment/test_signing.py",
-              "deployment/signing_fixture.py", "deployment/test_signing_fixture.py",
-              "deployment/test_build.py", "ci_manager/workspace.py"),
-    "cleanup": ("deployment/cleanup.py", "deployment/__init__.py", "deployment/test_cleanup.py",
-                "ci_manager/workspace.py"),
-    "install": ("deployment/crates/cell-install/*", "deployment/tests/simple_fixture.rs",
-                "deployment/signing_fixture.rs", "deployment/signing_fixture.py",
-                "deployment/test_signing_fixture.py"),
+    "pipeline": ("ci.sh", "ci_manager/*", "pipeline/*.py", "pipeline/*.sh", "pipeline/products/*.sh",
+                 "deployment/signing.py", "deployment/test_signing.py"),
+    "install": ("deployment/crates/cell-install/*",),
     "maintenance": ("deployment/crates/cell-maintenance/*",),
     "prompts": ("prompting/*",),
     "catalog": ("pipeline/integrated.sh", "*/chancery/*.json",
@@ -71,11 +58,6 @@ SHARED_INPUTS = {
 MAINTENANCE_CONSUMERS = frozenset((
     "nucleus", "annals", "decisions", "semantics",
     "platter", "paperboy", "weaver", "clew",
-))
-INSTALL_FIXTURE_CONSUMERS = frozenset((
-    "bazaar",
-    "clew",
-    "cast", "clockwork", "chancery", "email", "conversations",
 ))
 
 PLATFORM_PACKAGES = frozenset(("cell-install", "cell-maintenance"))

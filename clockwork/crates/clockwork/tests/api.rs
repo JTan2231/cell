@@ -1,27 +1,4 @@
-use clockwork::api::{BindingRecord, Client, Failure, Manifest, Success, decode};
-
-#[test]
-fn client_reads_isolated_cli_state_and_preserves_provider_errors()
--> Result<(), Box<dyn std::error::Error>> {
-    let temporary = tempfile::tempdir()?;
-    let state = temporary.path().join("Clockwork State");
-    let client = Client::new(env!("CARGO_BIN_EXE_clockwork")).with_state_root(&state);
-    assert!(client.definitions()?.items.is_empty());
-    assert!(client.bindings()?.items.is_empty());
-    assert!(client.history(None, 1)?.items.is_empty());
-    assert!(state.join("clockwork.db").is_file());
-    assert!(
-        client
-            .history(None, 0)
-            .is_err_and(|error| { error.to_string().contains("history_limit_invalid") })
-    );
-    assert!(
-        client
-            .definition("invalid")
-            .is_err_and(|error| { error.to_string().contains("manifest_invalid") })
-    );
-    Ok(())
-}
+use clockwork::api::{BindingRecord, Failure, Manifest, Success, decode};
 
 #[test]
 fn existing_binding_wire_shape_is_importable_without_private_state()

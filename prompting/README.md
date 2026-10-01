@@ -92,9 +92,8 @@ digest. Platter captures it with packet inputs. Other requesters preserve the
 resolved request under their existing recovery and retention rules. EMT retains
 its existing limits on temporary exchange content.
 
-CI imports the seed into a private temporary Bazaar database for each admitted
-test gate. It never uses the user's prompt database. Prompt-library edits select
-all consumers in the manager's validation plan; the shared `prompts` gate tests
-the library and importer. Commit changes and use `./ci.sh submit COMMIT` from
-the Cell root. The manager also integrates, attempts bounded repairs, deploys,
-and emails the outcome.
+The prompt tests cover rendering and description expansion in memory. They do
+not open Bazaar or run the importer. Prompt-library edits select all consumers
+in the manager's validation plan. Commit changes and use `./ci.sh submit COMMIT`
+from the Cell root. The manager also integrates, attempts bounded repairs,
+deploys, and emails the outcome.

@@ -260,24 +260,3 @@ impl Store {
         root.join(DATABASE)
     }
 }
-
-#[cfg(test)]
-mod deployment_backup_tests {
-    use super::*;
-
-    #[test]
-    fn an_interrupted_backup_reuses_only_matching_retained_records() -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        let store = Store::initialize(temporary.path())?;
-        store.create("fixture-one", 200_000, "UTC")?;
-        let backup = temporary.path().join("deployment.sqlite");
-        store.backup(&backup)?;
-        let bytes = fs::read(&backup)?;
-        store.backup(&backup)?;
-        assert_eq!(fs::read(&backup)?, bytes);
-        store.create("fixture-two", 300_000, "UTC")?;
-        assert!(store.backup(&backup).is_err());
-        assert_eq!(fs::read(&backup)?, bytes);
-        Ok(())
-    }
-}

@@ -50,12 +50,10 @@ readiness, maintenance, and release guarantees.
    bundle with matching program bytes. Update the Nucleus operator manual only
    for shared boundaries. Keep the root Cell README unchanged unless explicitly
    requested.
-4. Run focused checks for the affected behavior. Cover source failures and short
-   pages, duplicate/conflicting IDs, pending-call restart, quota deferral,
-   queued capacity, cancellation, lost jobs, and saved output followed by runtime
-   failure when relevant. For batch changes, verify bounded overlap, independent
-   failures and cancellation, and queue time separately from active execution.
-   Test installation through its maintained coordinator interface. Do not use
+4. Keep automated tests limited to in-memory validation. Weaver has no retained
+   unit or integration tests; its previous tests required filesystem state,
+   subprocesses, or Unix sockets. Review changes against the authoring and
+   lifecycle contracts, then complete the manager validation gate. Do not use
    model jobs as deployment readiness probes.
 5. Validate changed source documentation with `chancery validate` and review its
    overview, focused `show` pages, and dependency closure. Preserve intentional

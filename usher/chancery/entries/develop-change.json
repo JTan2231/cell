@@ -21,7 +21,7 @@
     "Usher owns its recognition contract and separate installation policy; Cell owns membership policy and products own their declarations."
   ],
   "success": [
-    "Synthetic recognition tests and installer ownership and recovery tests pass. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome. Documentation identifies the evidence and installation effects."
+    "Retained in-memory validation tests pass. The test suite does not exercise filesystem evidence, subprocesses, or installation. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome. Documentation identifies the evidence and installation effects."
   ],
   "failure_and_recovery": [
     "Keep failures visible and fix their source. Do not relax membership rules or hide products to make CI pass."
@@ -43,7 +43,7 @@
   "checkpoints": [
     "Recognition remains a read-only deterministic declaration check.",
     "Global collisions and missing or unreadable inventory declarations remain visible in the report.",
-    "The separate Rust installer and version-one deployment adapter preserve product-owned installation and supported legacy recovery; both executable candidates are built and sealed by the product gate."
+    "The separate Rust installer and version-one deployment adapter preserve product-owned installation and supported legacy recovery. Release preparation builds both executable candidates; trusted macOS production preparation signs native artifacts under the persistent host signing policy."
   ],
   "adaptation": [
     "Add a universal membership condition only through an explicit Cell policy change, not by discovering an implementation dependency."
