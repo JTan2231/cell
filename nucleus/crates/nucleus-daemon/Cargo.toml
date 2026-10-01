@@ -31,10 +31,5 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 
-[dev-dependencies]
-nucleus-client = { path = "../nucleus-client" }
-reqwest.workspace = true
-tempfile.workspace = true
-
 [lints]
 workspace = true

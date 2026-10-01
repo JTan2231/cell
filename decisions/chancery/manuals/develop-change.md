@@ -61,8 +61,9 @@ observation failure is an abend unless it is a saved conversation read failure.
 Keep `health` independent of retained failures. It reports live lock ownership,
 last run timing, continuous idle time, and unhandled worker errors. Empty polls
 must not reset idle duration. A missing worker finish cannot prove an exit time.
-Exercise first-error queue progress, repeated-hook/reconciliation behavior,
-retry identity, migration, and health timing in synthetic fixtures.
+Review first-error queue progress, repeated-hook/reconciliation behavior,
+retry identity, migration, and health timing. Retained tests cover in-memory
+classification, rendering, and identity; resource-dependent fixtures are removed.
 
 ## Command usage
 

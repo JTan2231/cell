@@ -12,7 +12,7 @@ to select products. The routine `check.sh` body checks descriptor shape,
 provider counts, shell syntax, and generated wrapper drift in the light lane.
 It does not run regression suites or invoke Cargo. The `test.sh` wrapper uses
 the same manager command path as root and product `ci.sh` wrappers. Focused
-fixture tests remain development checks, not CI submission.
+unit tests remain development checks, not CI submission.
 
 Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
 shell and packaging checks, provider bundles, independently versioned release
@@ -67,10 +67,7 @@ It does not download a runner during a CI gate or select a runner from `PATH`.
 Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
 limit. The default is four concurrent test processes. The dispatcher records
 the limit in the gate command. This limit is separate from the broker's compiler
-job limit. Tests can create additional threads or child processes. One test group
-runs Nucleus Codex library tests, `local_execution` tests, and daemon
-`http_contract` tests one at a time. Other selected tests keep the configured
-worker limit.
+job limit. All selected tests use the configured worker limit.
 
 ### Change CI while a job is active
 
@@ -102,16 +99,17 @@ changed paths, platform classification, and descriptor introductions and
 removals. Each repair is committed before validation, and the base stays fixed,
 so selection includes the submitted changes and every retained repair.
 
-There are two test groups:
+There are two target groups:
 
-- Product tests cover product commands, APIs, records, rules, and ordinary
-  persistence. Every selected product runs these tests, including library and
-  binary unit tests, ordinary integration targets, and doctests. Nucleus API
-  tests belong here too.
-- Platform tests cover installation, upgrades, packaging, maintenance,
-  recovery, and shared CI/release/deployment machinery. Cargo integration
-  targets named `install` or `maintenance`, installer binary unit tests, and
-  the `cell-install` and `cell-maintenance` packages belong here.
+- The product group selects library and command unit tests, remaining integration
+  targets, and doctests.
+- The platform group selects installer binary unit tests and the shared
+  `cell-install` and `cell-maintenance` packages. Its target convention also
+  recognizes integration targets named `install` or `maintenance`.
+
+The test suite uses in-memory inputs and has no filesystem, process, socket,
+thread, or lock fixtures. The test runners and build tools still use
+operating-system resources.
 
 `parallel_tests.py` selects Cargo targets from metadata inside one admitted
 heavy gate. The plan identifies each allowed package, target kind, and target
@@ -151,11 +149,9 @@ discovery failure does not establish completed test coverage.
 sources, packaging, migrations, schemas, maintenance modules, selected runtime
 command files, and operational descriptor edits select that product's platform
 tests. Non-version Cargo manifest edits select their owner's platform tests;
-root build inputs select the shared build suite. Shared installer changes
-select all installer consumers; its common integration fixture selects only
-the products that use that fixture. Shared maintenance changes select its
-declared consumers. Broker, pipeline,
-deployment, build, cleanup, and catalog changes select their own shared suites.
+shared installer changes select all installer consumers. Shared maintenance
+changes select its declared consumers. Pipeline and catalog changes select
+their own shared suites.
 A descriptor absent from the job base selects the new product's platform
 tests, the shared pipeline introduction checks, and integrated catalog
 validation.
@@ -171,9 +167,9 @@ that boundary. When adding or moving a platform input or target, update this
 map in the same change.
 
 Shared platform inputs can add their affected consumers. There is no general
-dependency expansion. The shared suite names are `pipeline`, `broker`,
-`deployment`, `build`, `cleanup`, `install`, `maintenance`, `prompts`, and
-`catalog`. A validation with no selected products still checks structure and
+dependency expansion. The shared suite names are `pipeline`, `install`,
+`maintenance`, `prompts`, and `catalog`. A validation with no selected products
+still checks structure and
 recognition. Its success does not establish full repository validation.
 
 Changes to the shared Clippy runner, parallel test runner, or pinned test tool
@@ -266,14 +262,8 @@ longer exists. Other hosts use a `mkdir` fallback that fails closed. On those
 hosts, confirm that no release is active before removing a stale
 `.git/cell-release-publication.lock.d`.
 
-## Prompt test state
+## Prompt tests
 
 The shared `prompts` gate checks `cell-prompts`. Changes below `prompting/`
-also select all current prompt consumers in the manager's validation plan. Each
-parallel test gate imports `prompting/seed.json` into a private temporary Bazaar
-database and retains it until execution finishes. It sets
-`CELL_BAZAAR_DATABASE` for its tests. Consumer reads can share this fixture;
-tests that change strings use separate temporary databases. Tests never use the
-live database.
-The importer runs inside the admitted heavy gate. Keep source prompt text in
-the explicit seed, not in a test-only runtime fallback.
+also select all current prompt consumers in the manager's validation plan.
+The retained tests do not open a Bazaar database or import prompt state.

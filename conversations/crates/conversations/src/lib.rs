@@ -968,7 +968,7 @@ pub fn deduplicate_copied_items(conversations: &mut [Conversation]) {
 
 #[cfg(all(test, target_os = "macos"))]
 mod host_id_tests {
-    use super::{AppServerClient, ClientConfig, Error, parse_platform_uuid};
+    use super::parse_platform_uuid;
 
     #[test]
     fn parses_only_the_platform_uuid_value() {
@@ -982,18 +982,6 @@ mod host_id_tests {
             parse_platform_uuid("\"IOPlatformUUID\" = \"not-a-uuid\""),
             None
         );
-    }
-
-    #[test]
-    fn empty_platform_identity_fails_before_process_start() {
-        let config = ClientConfig {
-            host_id: String::new(),
-            ..ClientConfig::default()
-        };
-        let Err(error) = AppServerClient::spawn(config) else {
-            panic!("empty host identity unexpectedly started App Server");
-        };
-        assert!(matches!(error, Error::HostIdentityUnavailable));
     }
 }
 

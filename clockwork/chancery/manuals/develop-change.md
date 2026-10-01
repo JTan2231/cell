@@ -32,25 +32,26 @@ success policy is introduced.
 
 ## Validate the affected promises
 
-1. Use synthetic release and state roots, launchd doubles, and child processes.
-   Fixtures contain no credential, private path, production definition, output,
-   or activation history. Diagnostics identify fields and stable IDs without
+1. Use synthetic values in the retained in-memory tests. Resource-dependent
+   release, state, launchd, and child-process fixtures are removed. Test data
+   contains no credential, private path, production definition, output, or
+   activation history. Diagnostics identify fields and stable IDs without
    echoing full environment or product output.
 2. Select checks for the changed boundary. Preserve strict manifests, immutable
    identities, direct-image containment and hashes, stable-key-only runtime
    invocation, overlap, process-group supervision, termination, timeout, and
    proof before lost recovery. Do not attest transitive execution or treat exit
    zero as domain success.
-3. Exercise binding first enable, update, idempotence, active refusal,
+3. Review binding first enable, update, idempotence, active refusal,
    bootout/bootstrap failure, compensation, journal recovery, and attributable
    fail-disabled behavior when affected. Never permit intentional dual schedules.
 4. Use a successor schema, explicit quiescent database-plus-sidecar backup,
-   migration, old-state fixture, and database-aware rollback for persistent
+   migration, old-state compatibility, and database-aware rollback for persistent
    meaning changes. Retain old definition identity and decoding. Deployment
    must not migrate storage implicitly or clear an incident.
 5. Check policy changes against nonzero exit, startup failure, signal, timeout,
    lost proof, reported failure with exit zero, overlap, re-observation after
-   approval, and halt preservation. Use only local Email doubles. Preserve
+   approval, and halt preservation. Review the Email interface. Preserve
    fixed payload, idempotency horizon, eligible checks, and non-expiring claims.
 6. Check packaging version matching, complete content identity, candidate-reader
    validation before selector mutation, installed discovery, idempotent

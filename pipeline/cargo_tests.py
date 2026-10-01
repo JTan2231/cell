@@ -5,8 +5,6 @@ import argparse
 import json
 import subprocess
 import os
-import tempfile
-from pathlib import Path
 
 from platform_inputs import PLATFORM_PACKAGES, platform_target
 
@@ -28,15 +26,7 @@ def main() -> int:
     )
     workspace = json.loads(metadata.stdout)
     packages = {package["name"]: package for package in workspace["packages"]}
-    prompt_consumers = {"annals", "decisions", "semantics", "paperboy", "platter", "weaver", "emt", "conatus", "cell-prompts"}
-    with tempfile.TemporaryDirectory(prefix="cell-prompt-tests-") as temporary:
-        environment = os.environ.copy()
-        if prompt_consumers.intersection(args.packages):
-            database = Path(temporary) / "private" / "bazaar.sqlite3"
-            root = Path(workspace["workspace_root"])
-            subprocess.run(["cargo", "run", *common, "--quiet", "--package", "cell-prompts", "--", str(database), str(root / "prompting" / "seed.json")], check=True)
-            environment["CELL_BAZAAR_DATABASE"] = str(database)
-        return run_tests(args, common, packages, environment)
+    return run_tests(args, common, packages, os.environ.copy())
 
 
 def run_tests(args, common, packages, environment) -> int:

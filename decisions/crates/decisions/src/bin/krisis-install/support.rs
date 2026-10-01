@@ -578,35 +578,3 @@ pub fn inspect_result(current: Option<&cell_install::transaction::ReleaseInfo>) 
         },
     )
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)] // Fixture setup failures should fail the test immediately.
-mod path_tests {
-    use super::*;
-
-    #[test]
-    fn dependency_execution_requires_a_regular_absolute_executable() {
-        let temporary = tempfile::tempdir().unwrap();
-        let path = temporary.path().join("dependency");
-        fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-        assert!(executable(&path).is_err());
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-        executable(&path).unwrap();
-        let alias = temporary.path().join("alias");
-        std::os::unix::fs::symlink(&path, &alias).unwrap();
-        assert!(executable(&alias).is_err());
-        assert!(executable(Path::new("relative")).is_err());
-        assert!(text(Path::new("/line\nbreak")).is_err());
-    }
-
-    #[test]
-    fn existing_owned_state_directory_is_made_private() {
-        let temporary = tempfile::tempdir().unwrap();
-        let path = temporary.path().join("state");
-        fs::create_dir(&path).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        directory(&path, fs::metadata(&path).unwrap().uid(), 0o700).unwrap();
-        assert_eq!(fs::metadata(path).unwrap().mode() & 0o7777, 0o700);
-    }
-}

@@ -17,19 +17,15 @@ repository files. Chancery owns full bundle validation. Never source
 descriptors, invoke services, query databases, or add
 an agent call to recognition.
 
-Use synthetic fixtures for missing declarations, malformed or unreadable
-inputs, unsupported formats, aliases, multiple providers, collisions and path
-boundaries. A selected product still receives global collision checks. Do not
-make CI green by filtering out incomplete products or treating unknown input as
-absence. Update CLI/JSON contracts and manuals with behavioral changes. Update
+Keep unit tests limited to in-memory validation. The suite does not exercise
+filesystem evidence, subprocesses, or installation. A selected product still
+receives global collision checks. Do not make CI green by filtering out
+incomplete products or treating unknown input as absence. Update CLI/JSON contracts and manuals with behavioral changes. Update
 Cell's operator manual when shared CI, installation, or membership facts change.
 
-Keep the separate recognition and installer interfaces distinct. Installation
-tests must prove fresh install, identical
-redeploy, upgrade, failed publication, retained-release recovery, legacy-release
-compatibility, tamper rejection, stale selection, and foreign ownership refusal.
-The product gate builds and stages both executables and validates the matching
-provider bundle.
+Keep the separate recognition and installer interfaces distinct. Preserve
+installation ownership, integrity, and recovery behavior. The product gate
+builds and stages both executables and validates the matching provider bundle.
 
 Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
 installed manager integrates, validates, attempts bounded repairs, deploys,

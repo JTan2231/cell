@@ -26,7 +26,7 @@
   "steps": [
     "Read the nested instructions, query the decisions Semantics repository, and resolve every affected installed contract.",
     "Identify authority, source, classifier, persistence, account, delivery, legacy, packaging, and privacy boundaries affected by the change.",
-    "Implement the smallest synchronized change with synthetic boundary and migration fixtures.",
+    "Implement the smallest synchronized change with synthetic in-memory tests and review affected persistence and integration boundaries.",
     "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job outcome. Release publication and destructive live migration require separate authority."
   ],
   "checkpoints": [
@@ -36,7 +36,7 @@
     "A valid result commits Nucleus correlation and receipt, complete coverage, stable IDs, deterministic account bytes and digest, and outbox state before acknowledgement.",
     "Annals acceptance uses explicit config, producer krisis, decision ID key, exact digest matching, and idempotent created/replayed receipts; a failed delivery requires explicit retry of the same document without classification.",
     "After acceptance generated prose and body may be retired, while legacy Decisions receipts and history remain decodable and legacy lifecycle reads remain read-only.",
-    "Internal product tests use isolated fixtures without live Annals acceptance or Nucleus execution. The manager owns validation, bounded repair, deployment, and the outcome email."
+    "Retained product tests use in-memory data. File, process, socket, thread, and packaging fixtures are removed. The manager owns validation, bounded repair, deployment, and the outcome email."
   ],
   "adaptation": [
     "Publish new immutable schema or toolset identities for meaning changes.",

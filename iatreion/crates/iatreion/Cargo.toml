@@ -16,8 +16,5 @@ serde_json.workspace = true
 tokio.workspace = true
 usher = { path = "../../../usher/crates/usher" }
 
-[dev-dependencies]
-tempfile.workspace = true
-
 [lints]
 workspace = true

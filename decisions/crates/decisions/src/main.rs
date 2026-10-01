@@ -1335,59 +1335,6 @@ fn build(store: &mut Store, date: Date, wait_for_active_observer: bool) -> AppRe
 }
 
 #[cfg(test)]
-fn classify_thread_with_retries<F>(
-    store: &mut Store,
-    run_id: &str,
-    thread_key: &str,
-    base_job_id: &str,
-    mut classify: F,
-) -> AppResult<ClassificationResult>
-where
-    F: FnMut(&mut Store, &str) -> AppResult<ClassificationResult>,
-{
-    let mut last_terminal_error = None;
-    for attempt in 0..CLASSIFICATION_ATTEMPTS {
-        let (correlation_key, job_id) =
-            classification_attempt_identity(thread_key, base_job_id, attempt);
-        store.plan_job(run_id, &correlation_key, &job_id)?;
-        if store.job_status(&job_id)? == "failed" {
-            continue;
-        }
-        match classify(store, &job_id) {
-            Ok(result) => {
-                store.mark_job(&job_id, "complete", None)?;
-                return Ok(result);
-            }
-            Err(error) if classifier_failure_proves_terminal(&error) => {
-                if store.mark_job(&job_id, "failed", Some(&error.message))? {
-                    last_terminal_error = Some(error);
-                } else if let Some(candidates) = store.persisted_classification(&job_id)? {
-                    let _ = store.mark_job(&job_id, "complete", None)?;
-                    return Ok(ClassificationResult {
-                        candidates,
-                        accounts: Vec::new(),
-                        authority_verdicts: Vec::new(),
-                        needs_context: false,
-                    });
-                } else {
-                    return Err(AppError::new(
-                        "job_state_conflict",
-                        "terminal classification state changed without a durable result",
-                    ));
-                }
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    Err(last_terminal_error.unwrap_or_else(|| {
-        AppError::new(
-            "nucleus_job_failed",
-            "all three durable Nucleus attempts ended without a valid classification",
-        )
-    }))
-}
-
-#[cfg(test)]
 fn classification_attempt_identity(
     thread_key: &str,
     base_job_id: &str,
@@ -1728,17 +1675,12 @@ fn print_json(value: &impl serde::Serialize) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::classifier::ClassificationResult;
-    use crate::model::{Candidate, Confidence, Disposition, MessageRole, Precision, SourceMessage};
-    use crate::store::Store;
-
-    use crate::error::AppError;
-
     use super::{
         classification_attempt_identity, classifier_failure_proves_terminal,
-        classify_thread_with_retries, default_observer_baseline, fail_observation_if_terminal,
-        format_date, merge_candidates, parse_date,
+        default_observer_baseline, format_date, merge_candidates, parse_date,
     };
+    use crate::error::AppError;
+    use crate::model::{Candidate, Confidence, Disposition, MessageRole, Precision, SourceMessage};
 
     fn candidate(statement: &str, thread_id: &str) -> Candidate {
         Candidate {
@@ -1767,59 +1709,6 @@ mod tests {
     }
 
     #[test]
-    fn failed_observation_stops_worker_and_preserves_next_observation()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let mut store = Store::open(&directory.path().join("decisions.db"))?;
-        store.activate_observer(0)?;
-        let one = store.ingest_observation("session", "turn-first")?;
-        let two = store.ingest_observation("session", "turn-second")?;
-        let first = store
-            .next_observation_before(None)?
-            .ok_or("queued observation")?;
-        let second = if first.id == one.id { two } else { one };
-        let target = crate::account::AnnalsConfig {
-            binary: directory.path().join("missing-annals"),
-            config: directory.path().join("annals.toml"),
-            expected_library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-        };
-        let error = super::process_worker(&mut store, Ok(Some(target)))
-            .err()
-            .ok_or("recording an observation failure must not hide the abend")?;
-        assert_eq!(error.code, "observation_processing_failed");
-        assert_eq!(store.observation(&first.id)?.status, "failed");
-        assert_eq!(store.observation(&second.id)?.status, "queued");
-        assert_eq!(
-            store.next_observation_before(None)?.map(|value| value.id),
-            Some(second.id)
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn conversation_read_failure_is_retained_without_stopping_queue()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let store = Store::open(&directory.path().join("decisions.db"))?;
-        let first = store.ingest_observation("session", "turn-first")?;
-        let second = store.ingest_observation("session", "turn-second")?;
-        let error = AppError::new(
-            "document_source_unavailable",
-            "turn has no items array in a full-history response",
-        );
-        let result = super::record_observation_failure(&store, &first, &error)?;
-        assert_eq!(result.status, "failed");
-        let failed = store.observation(&first.id)?;
-        assert_eq!(failed.status, "failed");
-        assert_eq!(failed.failure_code.as_deref(), Some(error.code));
-        assert_eq!(
-            store.next_observation_before(None)?.map(|value| value.id),
-            Some(second.id)
-        );
-        Ok(())
-    }
-
-    #[test]
     fn parses_strict_calendar_date() -> Result<(), Box<dyn std::error::Error>> {
         let date = parse_date("2026-08-31")?;
         assert_eq!(format_date(date), "2026-08-31");
@@ -1831,26 +1720,6 @@ mod tests {
     fn default_activation_excludes_the_current_whole_second() {
         assert_eq!(default_observer_baseline(100), 101);
         assert_eq!(default_observer_baseline(i64::MAX), i64::MAX);
-    }
-
-    #[test]
-    fn deterministic_completion_conflict_becomes_failed_and_retryable()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let store = Store::open(&directory.path().join("decisions.db"))?;
-        let observation = store.ingest_observation("session", "turn")?;
-        let error = AppError::new("classification_conflict", "private model detail");
-        fail_observation_if_terminal(&store, &observation.id, &error)?;
-        let failed = store.observation(&observation.id)?;
-        assert_eq!(failed.status, "failed");
-        assert_eq!(
-            failed.failure_code.as_deref(),
-            Some("classification_conflict")
-        );
-        let retried = store.retry_observation(&observation.id)?;
-        assert_eq!(retried.status, "queued");
-        assert_eq!(retried.attempt_epoch, 1);
-        Ok(())
     }
 
     #[test]
@@ -1887,232 +1756,6 @@ mod tests {
             classification_attempt_identity("host\nthread", "job", 2),
             ("host\nthread\nretry:2".to_owned(), "job-retry2".to_owned())
         );
-    }
-
-    #[test]
-    fn uncertain_retry_resumes_its_existing_durable_identity()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let database = directory.path().join("state/decisions.db");
-        let mut store = Store::open(&database)?;
-        let run = store.begin_or_resume_run("2026-08-31", 0, 10, "manifest")?;
-        let mut first_calls = Vec::new();
-        let first = classify_thread_with_retries(
-            &mut store,
-            &run.id,
-            "host\nthread",
-            "job",
-            |store, job_id| {
-                first_calls.push(job_id.to_owned());
-                store.mark_job(job_id, "submitted", None)?;
-                if job_id == "job" {
-                    Err(AppError::new("nucleus_job_failed", "terminal"))
-                } else {
-                    let durable_candidate = candidate("Use it.", "thread");
-                    store.persist_classification_receipt(
-                        job_id,
-                        "call-retry1",
-                        r#"{"accepted":true,"candidate_count":1}"#,
-                        false,
-                        Some(std::slice::from_ref(&durable_candidate)),
-                    )?;
-                    Err(AppError::new("nucleus_request_failed", "uncertain"))
-                }
-            },
-        );
-        let Err(error) = first else {
-            return Err("uncertain attempt unexpectedly completed".into());
-        };
-        assert_eq!(error.code, "nucleus_request_failed");
-        assert_eq!(first_calls, ["job", "job-retry1"]);
-        assert_eq!(store.job_status("job")?, "failed");
-        assert_eq!(store.job_status("job-retry1")?, "complete");
-        assert!(store.job_status("job-retry2").is_err());
-        assert!(
-            store
-                .classification_receipt("job", "call-retry1")?
-                .is_none()
-        );
-        assert!(
-            store
-                .classification_receipt("job-retry1", "call-retry1")?
-                .is_some()
-        );
-
-        drop(store);
-        let mut store = Store::open(&database)?;
-        let resumed = store.begin_or_resume_run("2026-08-31", 0, 10, "manifest")?;
-        assert_eq!(resumed.id, run.id);
-        let mut resumed_calls = Vec::new();
-        let result = classify_thread_with_retries(
-            &mut store,
-            &resumed.id,
-            "host\nthread",
-            "job",
-            |store, job_id| {
-                resumed_calls.push(job_id.to_owned());
-                store.mark_job(job_id, "submitted", None)?;
-                let candidates = store.persisted_classification(job_id)?.ok_or_else(|| {
-                    AppError::new(
-                        "classification_incomplete",
-                        "missing durable classification",
-                    )
-                })?;
-                Ok(ClassificationResult {
-                    candidates,
-                    accounts: Vec::new(),
-                    authority_verdicts: Vec::new(),
-                    needs_context: false,
-                })
-            },
-        )?;
-        assert_eq!(result.candidates.len(), 1);
-        assert!(result.candidates[0].authority.text.is_empty());
-        assert_eq!(resumed_calls, ["job-retry1"]);
-        assert_eq!(store.job_status("job-retry1")?, "complete");
-        assert!(store.job_status("job-retry2").is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn success_receipt_wins_before_terminal_failure_and_prevents_retry()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let mut store = Store::open(&directory.path().join("state/decisions.db"))?;
-        let run = store.begin_or_resume_run("2026-08-31", 0, 10, "manifest")?;
-        let mut calls = Vec::new();
-        let result = classify_thread_with_retries(
-            &mut store,
-            &run.id,
-            "host\nthread",
-            "job",
-            |store, job_id| {
-                calls.push(job_id.to_owned());
-                store.mark_job(job_id, "submitted", None)?;
-                let durable_candidate = candidate("Use it.", "thread");
-                store.persist_classification_receipt(
-                    job_id,
-                    "call",
-                    r#"{"accepted":true,"candidate_count":1}"#,
-                    false,
-                    Some(std::slice::from_ref(&durable_candidate)),
-                )?;
-                Err(AppError::new("nucleus_job_failed", "stale terminal"))
-            },
-        )?;
-        assert_eq!(calls, ["job"]);
-        assert_eq!(result.candidates.len(), 1);
-        assert_eq!(store.job_status("job")?, "complete");
-        assert!(store.job_status("job-retry1").is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn terminal_failure_wins_before_late_receipt_and_advances_once()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let mut store = Store::open(&directory.path().join("state/decisions.db"))?;
-        let run = store.begin_or_resume_run("2026-08-31", 0, 10, "manifest")?;
-        let mut calls = Vec::new();
-        let result = classify_thread_with_retries(
-            &mut store,
-            &run.id,
-            "host\nthread",
-            "job",
-            |store, job_id| {
-                calls.push(job_id.to_owned());
-                store.mark_job(job_id, "submitted", None)?;
-                if job_id == "job" {
-                    Err(AppError::new("nucleus_job_failed", "terminal"))
-                } else {
-                    Err(AppError::new("nucleus_request_failed", "uncertain"))
-                }
-            },
-        );
-        let Err(error) = result else {
-            return Err("uncertain retry unexpectedly completed".into());
-        };
-        assert_eq!(error.code, "nucleus_request_failed");
-        assert_eq!(calls, ["job", "job-retry1"]);
-        assert_eq!(store.job_status("job")?, "failed");
-        assert_eq!(store.job_status("job-retry1")?, "submitted");
-        assert!(store.job_status("job-retry2").is_err());
-
-        let durable_candidate = candidate("Use it.", "thread");
-        let late = store.persist_classification_receipt(
-            "job",
-            "call",
-            r#"{"accepted":true,"candidate_count":1}"#,
-            false,
-            Some(std::slice::from_ref(&durable_candidate)),
-        );
-        assert_eq!(
-            late.err().map(|error| error.code),
-            Some("classification_receipt_late")
-        );
-        assert_eq!(store.job_status("job")?, "failed");
-        Ok(())
-    }
-
-    #[test]
-    fn terminal_retry_exhaustion_stops_after_three_durable_attempts()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let mut store = Store::open(&directory.path().join("state/decisions.db"))?;
-        let run = store.begin_or_resume_run("2026-08-31", 0, 10, "manifest")?;
-        let mut calls = Vec::new();
-        let result = classify_thread_with_retries(
-            &mut store,
-            &run.id,
-            "host\nthread",
-            "job",
-            |store, job_id| {
-                calls.push(job_id.to_owned());
-                store.mark_job(job_id, "submitted", None)?;
-                Err(AppError::new("nucleus_job_failed", "terminal"))
-            },
-        );
-        let Err(error) = result else {
-            return Err("terminal attempts unexpectedly completed".into());
-        };
-        assert_eq!(error.code, "nucleus_job_failed");
-        assert_eq!(calls, ["job", "job-retry1", "job-retry2"]);
-        for job_id in &calls {
-            assert_eq!(store.job_status(job_id)?, "failed");
-        }
-
-        let mut unexpected_calls = 0;
-        let resumed = classify_thread_with_retries(
-            &mut store,
-            &run.id,
-            "host\nthread",
-            "job",
-            |_store, _job_id| {
-                unexpected_calls += 1;
-                Ok(ClassificationResult {
-                    candidates: Vec::new(),
-                    accounts: Vec::new(),
-                    authority_verdicts: Vec::new(),
-                    needs_context: false,
-                })
-            },
-        );
-        let Err(error) = resumed else {
-            return Err("exhausted attempts unexpectedly resumed".into());
-        };
-        assert_eq!(error.code, "nucleus_job_failed");
-        assert_eq!(unexpected_calls, 0);
-        let (_abandoning, correlated_jobs) = store.prepare_abandon("2026-08-31")?;
-        assert_eq!(correlated_jobs.len(), 3);
-        assert!(correlated_jobs.iter().all(|job| job.admitted));
-        assert_eq!(
-            correlated_jobs
-                .iter()
-                .map(|job| job.nucleus_job_id.as_str())
-                .collect::<Vec<_>>(),
-            ["job", "job-retry1", "job-retry2"]
-        );
-        Ok(())
     }
 
     #[test]

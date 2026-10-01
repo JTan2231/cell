@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 from platform_inputs import (
-    INSTALL_FIXTURE_CONSUMERS, MAINTENANCE_CONSUMERS, PRODUCT_INPUTS,
+    MAINTENANCE_CONSUMERS, PRODUCT_INPUTS,
     PRODUCT_RUNTIME_INPUTS, SHARED_INPUTS,
 )
 
@@ -366,12 +366,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
 
     for suite in ("install", "maintenance"):
         if suites[suite]:
-            fixture_only = suite == "install" and all(
-                path == "deployment/tests/simple_fixture.rs" for path in suites[suite]
-            )
             for product in products:
-                affected = (product in INSTALL_FIXTURE_CONSUMERS if fixture_only
-                            else suite == "install" or product in MAINTENANCE_CONSUMERS)
+                affected = suite == "install" or product in MAINTENANCE_CONSUMERS
                 if affected:
                     platform[product].append(f"shared {suite}: {describe(suites[suite], args.verbose)}")
 

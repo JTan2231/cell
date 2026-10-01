@@ -644,18 +644,12 @@ It refuses to overwrite a different staged runtime. See
 `chancery show nucleus.execution.operate` for the installation procedure and
 `chancery show nucleus.service` for source and recovery guarantees.
 
-Prove local tool execution during isolated predeployment validation. The
-compatibility test must observe a command's actual result through the adapter
-and exact Codex runtime. A completed turn or version check is insufficient.
-The Nucleus CI gate runs this test against the staged runtime, using a local
-mock model endpoint and temporary state. It uses no account credentials and
-creates no production jobs or emails. The test defaults to the staged runtime
-and fails if it is absent. For a direct development test, `NUCLEUS_TEST_CODEX`
-can select an explicit complete source runtime. Managed CI does not pass this
-override to the test, so validation uses the staged deployment candidate.
+Automated tests cover in-memory behavior. They do not execute the Codex runtime,
+launch a daemon, bind sockets, or create filesystem fixtures. Runtime execution
+and filesystem recovery are outside automated test coverage.
 
 Installation and live readiness check the runtime files and recorded identities
-without model calls. Every selected deployment requires the tested staged
+without model calls. Every selected deployment requires the staged
 runtime. A configured runtime remains selected only when both file identities
 match that pair. A different or incomplete installation uses the staged replacement.
 The coordinator captures the candidate identities before maintenance and

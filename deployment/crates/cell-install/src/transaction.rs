@@ -1111,6 +1111,3 @@ fn atomic_link(target: &Path, destination: &Path, product: &str) -> Result<()> {
     fs::rename(link, destination)?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;

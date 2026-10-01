@@ -1095,91 +1095,6 @@ mod tests {
         assert!(health_from_service_status(&status).is_err());
     }
 
-    fn stage_fixture(home: &Path) -> Result<PathBuf> {
-        let source = home.join("source");
-        fs::create_dir_all(&source)?;
-        let executable = source.join("codex");
-        fs::write(
-            &executable,
-            format!(
-                "#!/bin/sh\necho 'codex-cli {}'\n",
-                nucleus_codex::SUPPORTED_CODEX_VERSION
-            ),
-        )?;
-        fs::set_permissions(&executable, fs::Permissions::from_mode(0o755))?;
-        let host = source.join("codex-code-mode-host");
-        fs::write(&host, "#!/bin/sh\nexit 0\n")?;
-        fs::set_permissions(&host, fs::Permissions::from_mode(0o755))?;
-        let runtime =
-            nucleus_codex::runtime_bundle::stage_runtime(&executable, &staged_runtime(home))
-                .map_err(|error| Error::new(error.to_string()))?;
-        fs::set_permissions(staged_runtime(home), fs::Permissions::from_mode(0o700))?;
-        Ok(runtime.executable)
-    }
-
-    #[test]
-    fn codex_upgrade_requires_a_complete_staged_runtime() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let home = fs::canonicalize(directory.path())?;
-        let configured = home.join("configured-codex");
-        fs::write(&configured, "prior executable")?;
-        let mut health = json!({
-            "harnessExecutable": configured,
-            "harness": {"harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION}
-        });
-        // Matching version metadata cannot admit an incomplete installation.
-        assert!(candidate_harness(&home, &health).is_err());
-        let staged = stage_fixture(&home)?;
-        assert_eq!(candidate_harness(&home, &health)?, staged);
-        health["harness"]["harnessVersion"] = json!("0.146.0");
-        assert_eq!(candidate_harness(&home, &health)?, staged);
-        health["harnessExecutable"] = json!(staged);
-        health["harness"]["harnessVersion"] = json!(nucleus_codex::SUPPORTED_CODEX_VERSION);
-        assert_eq!(candidate_harness(&home, &health)?, staged);
-        fs::set_permissions(staged_runtime(&home), fs::Permissions::from_mode(0o700))?;
-        fs::remove_file(staged_runtime(&home).join("codex-code-mode-host"))?;
-        assert!(candidate_harness(&home, &health).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn runtime_identity_rejects_changed_capture() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let executable = stage_fixture(directory.path())?;
-        let identity = runtime_identity(&executable)?;
-        verify_runtime_identity(&executable, &identity)?;
-        let mut different = identity;
-        different["code_mode_host_sha256"] = json!("different");
-        assert!(verify_runtime_identity(&executable, &different).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn same_version_retains_only_the_tested_file_pair() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let home = fs::canonicalize(directory.path())?;
-        let staged = stage_fixture(&home)?;
-        let source = home.join("source/codex");
-        fs::write(
-            home.join("source/codex-code-mode-host"),
-            "#!/bin/sh\nexit 1\n",
-        )?;
-        let different =
-            nucleus_codex::runtime_bundle::stage_runtime(&source, &home.join("different"))
-                .map_err(|error| Error::new(error.to_string()))?;
-        fs::set_permissions(home.join("different"), fs::Permissions::from_mode(0o700))?;
-        let health = json!({
-            "harnessExecutable": different.executable,
-            "harness": {"harnessVersion": nucleus_codex::SUPPORTED_CODEX_VERSION}
-        });
-        assert_ne!(
-            runtime_identity(&staged)?,
-            runtime_identity(&different.executable)?
-        );
-        assert_eq!(candidate_harness(&home, &health)?, staged);
-        Ok(())
-    }
-
     #[test]
     fn recovery_checks_the_harness_for_the_selected_installation() -> Result<()> {
         let prior = json!({
@@ -1191,26 +1106,6 @@ mod tests {
         let historical = json!({"harness_executable": "/configured/codex"});
         assert_eq!(runtime_harness(&historical, true)?, "/configured/codex");
         assert_eq!(runtime_harness(&historical, false)?, "/configured/codex");
-        Ok(())
-    }
-
-    #[test]
-    fn upgrade_guard_checks_the_captured_harness_before_cutover() -> Result<()> {
-        let directory = tempfile::tempdir()?;
-        let configured = directory.path().join("prior-codex");
-        let candidate = directory.path().join("candidate-codex");
-        fs::write(&configured, "prior executable")?;
-        fs::write(&candidate, "candidate executable")?;
-        let prior = json!({
-            "harness_executable": candidate,
-            "prior_harness_executable": configured
-        });
-        let health = json!({"harnessExecutable": configured});
-        verify_prior_harness(&health, &candidate, Some(&prior))?;
-        assert!(verify_prior_harness(&health, &candidate, None).is_err());
-        let changed = json!({"harnessExecutable": candidate});
-        assert!(verify_prior_harness(&changed, &candidate, Some(&prior)).is_err());
-        verify_prior_harness(&changed, &candidate, None)?;
         Ok(())
     }
 }

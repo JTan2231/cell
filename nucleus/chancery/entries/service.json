@@ -176,7 +176,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. The complete Codex runtime is staged and sealed by both file hashes; selected upgrades reuse a configured runtime only when both identities match the tested staged pair."
+        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. The complete Codex runtime is staged and sealed by both file hashes; selected upgrades reuse a configured runtime only when both identities match the staged pair."
       },
       {
         "status": "declared",

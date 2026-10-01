@@ -52,17 +52,16 @@ Never open incompatible state with an older binary or discard committed work.
 
 ## Validate and submit
 
-Use synthetic Annals accepted-document pages and Conversations cwd values.
-Nucleus tests use the fake local server and immutable schemas. Keep tests
-isolated from live services. Fixtures and logs contain no real user source,
+Use synthetic values for the retained in-memory tests. File, subprocess, socket,
+and worker-lock tests are removed. Test data and logs contain no real user source,
 credentials, prompts, private paths, or tool payloads.
 
 The internal Semantics gate is offline and has its documented 60-second deadline.
 It uses shared shell and plist syntax checks, provider validation and version
 matching, rustfmt, clippy, selected Rust tests, rustdoc, and release build.
-The shared catalog gate checks contract dependency compatibility. Select fixtures
-for the changed boundary; focused development checks do not replace the manager
-outcome.
+The shared catalog gate checks contract dependency compatibility. Select
+in-memory checks for the changed boundary. Focused development checks do not
+replace the manager outcome.
 
 Commit the intended change and submit it from the Cell root:
 

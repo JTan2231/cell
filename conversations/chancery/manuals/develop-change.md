@@ -29,19 +29,17 @@ payloads. Use synthetic fixtures; no real transcript belongs in tests or bundles
 
 ## Validate the affected boundary
 
-Use synthetic fake-App-Server fixtures as appropriate for initialization,
-active and archived pagination, all-source enumeration, root/subagent and exec
-filters, state-database-only defaults, explicit refresh, turn pagination, the
-narrow legacy fallback, normalized content, stable references, and copied-item
-deduplication. Preserve complete-read failure rather than reporting partial
-normal success.
+Use synthetic in-memory values to check normalization, activity reduction,
+reference handling, and protocol error classification. The automated suite does
+not launch App Server processes or create filesystem fixtures. Runtime protocol,
+process lifecycle, installation, and rollback are outside automated test coverage.
+Preserve complete-read failure rather than reporting partial normal success.
 
-Exact-summary changes must prove canonical host matching, active and archived
-metadata lookup, and no turn reads. Process changes must prove that a wrapper's
-persistent descendant cannot outlive its private launch group and that unrelated
-processes remain outside cleanup. Packaging changes must retain content identity,
-tamper rejection, prior selectors, foreign-selector protection, and post-switch
-restoration.
+Review exact-summary changes for canonical host matching, active and archived
+metadata lookup, and no turn reads. Review process changes to preserve private
+launch-group cleanup and leave unrelated processes outside cleanup. Review
+packaging changes to preserve content identity, tamper rejection, prior selectors,
+foreign-selector protection, and post-switch restoration.
 
 Validate the complete candidate bundle with `chancery validate BUNDLE`.
 Inspect its product overview, each ordinary show page, and required resolution

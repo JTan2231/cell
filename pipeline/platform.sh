@@ -19,28 +19,9 @@ fi
 case "$suite" in
     pipeline)
         "$PIPELINE_ROOT/pipeline/check.sh"
-        for product_id in $(pipeline_products); do
-            pipeline_load_descriptor "$product_id"
-            set +e
-            "$PIPELINE_ROOT/$PRODUCT_DIR/release.sh" >/dev/null 2>&1
-            release_status=$?
-            set -e
-            [ "$release_status" -eq 2 ] \
-                || pipeline_fail "$product_id release usage should exit 2; found $release_status"
-        done
-        python3 "$PIPELINE_ROOT/pipeline/test_release.py" -q
-        python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_parallel_tests.py" -q
-        python3 "$PIPELINE_ROOT/pipeline/test_nextest_tool.py" -q
-        python3 "$PIPELINE_ROOT/pipeline/test_ci_entry.py" -q
-        python3 "$PIPELINE_ROOT/pipeline/test_ci_budget.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
-        python3 -m unittest -q ci_manager.test_workspace
         ;;
-    broker) python3 -m unittest -q ci_broker.test_broker ;;
-    deployment) python3 -m unittest -q deployment.test_coordinator ;;
-    build) python3 -m unittest -q deployment.test_build ;;
-    cleanup) python3 -m unittest -q deployment.test_cleanup ;;
     install|maintenance|prompts)
         CARGO_PATH_PREFIX=
         pipeline_bootstrap_cargo

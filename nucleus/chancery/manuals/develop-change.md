@@ -61,19 +61,19 @@ old binaries onto a database they cannot read.
 For an exact Codex upgrade, stage the complete runtime with the candidate
 installer's `stage-harness --codex /absolute/release/codex` command. Include its
 matching `codex-code-mode-host`. Inspect the version, model catalog, app-server
-schema, and every consumed semantic. Run the real local-tool compatibility test
-against the staged files in isolated validation. It uses a local mock endpoint,
-temporary state, and no production credentials. Assert the command result;
-completion alone is insufficient. Installation and live readiness verify the
-sealed file identities without model calls. Update the adapter, compatibility
-tests, and installation instructions together before deployment.
+schema, and every consumed semantic. Automated tests cover in-memory behavior;
+they do not execute the runtime or create OS resource fixtures. Installation and
+live readiness verify the sealed file identities without model calls. Update
+the adapter, applicable in-memory checks, and installation instructions together
+before deployment.
 
 For execution capacity, preserve one global ceiling of eight active attempts.
 Verify the admission, timeout, and slot-retention rules in `nucleus.jobs`.
 Capacity scheduling must not add workflow interpretation or automatic retry.
 
-An output-decoder change must exercise both supported authentication sequences
-through the daemon job-read API and retained replay after restart. Preserve
+An output-decoder change must cover both supported authentication sequences
+with in-memory records. Daemon restart and retained replay are outside automated
+test coverage. Preserve
 exact output atoms, authentication exclusions, active thread/turn correlation,
 terminal freeze, and the absence of successful output on failed attempts. A
 completed historical job may expose repaired derived output without changing
@@ -84,7 +84,7 @@ For authentication or service ownership, prevent new credential consumers and
 let active users finish before attended login. Verify private modes, one
 credential authority, concurrent account reads, serialized refresh, staged
 writes, atomic promotion, and login exclusion against `nucleus.authentication`.
-Test that elected refresh and account reconciliation finish after requester
+Preserve elected refresh and account reconciliation through requester
 cancellation. Binary or database rollback must not replace a newer credential.
 
 ## Publish feature documentation

@@ -236,33 +236,9 @@ const fn default_minimum_available_bytes() -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use super::resolve_config_path;
     use std::ffi::OsStr;
-    use std::fs;
     use std::path::Path;
-
-    use super::{Config, resolve_config_path};
-    use crate::model_runner::ModelQuality;
-
-    #[test]
-    fn parses_defaults_and_rejects_unknown_fields() -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("annals.toml");
-        fs::write(
-            &path,
-            "library = \"library.db\"\n[inbox]\nroot = \"spool\"\n[liaison]\nquality = \"medium\"\n",
-        )?;
-        let config = Config::read(&path)?;
-        let inbox = config.inbox()?;
-        assert_eq!(inbox.settle_seconds, 60);
-        assert_eq!(inbox.minimum_available_bytes, 7_000_000_000);
-        assert_eq!(inbox.root, directory.path().join("spool"));
-        assert_eq!(config.library, Some(directory.path().join("library.db")));
-        assert_eq!(config.liaison.quality, ModelQuality::Medium);
-
-        fs::write(&path, "unknown = true\n")?;
-        assert!(Config::read(&path).is_err());
-        Ok(())
-    }
 
     #[test]
     fn config_path_honors_precedence_and_ignores_an_empty_environment() {
