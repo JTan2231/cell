@@ -4,10 +4,10 @@
 # sourced by the CI, release, generator, and self-test entry points.
 
 PIPELINE_EXPECTED_PRODUCT_COUNT=18
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=108
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=109
 # Shared infrastructure providers participate in source catalog validation but
 # are not deployable product release units.
-PIPELINE_SHARED_PROVIDERS='ci-manager|ci_manager/chancery|1'
+PIPELINE_SHARED_PROVIDERS='ci-manager|ci_manager/chancery|2'
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do
