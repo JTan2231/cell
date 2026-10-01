@@ -237,6 +237,10 @@ if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
 fi
 ci_stage='rustdoc'
 ci_doc
-ci_stage='release build'
-ci_build
+if [ "$phase" = full ]; then
+    ci_stage='release build'
+    ci_build
+else
+    printf '%s\n' '==> release build handled by the shared dispatcher'
+fi
 printf '%s\n' 'ci.sh: green'

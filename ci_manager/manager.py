@@ -150,6 +150,9 @@ class Worker:
                    "--candidate", candidate, "--json"]
         if job.get("skip_tests", False):
             command.append("--skip-tests")
+        deferred = self.release_builds_deferred(job)
+        if deferred:
+            command.append("--defer-release-builds")
         patch_path = self.directory(job) / f"validation-{ordinal}.autofix.patch"
         supports_autofix = (worktree / "pipeline/autofix.py").is_file()
         if supports_autofix:
@@ -170,6 +173,10 @@ class Worker:
                 or (receipt.get("state") in {"passed", "autofix"}
                     and tests_skipped != job.get("skip_tests", False))):
             raise ManagerError("validator receipt does not match the requested test policy")
+        release_deferred = (receipt.get("selection") or {}).get("release_builds_deferred", False)
+        if (type(release_deferred) is not bool
+                or (receipt.get("state") in {"passed", "autofix"} and release_deferred != deferred)):
+            raise ManagerError("validator receipt does not match the requested release build policy")
         git.clean_candidate(worktree, candidate)
         mechanical = None
         if receipt.get("state") == "autofix":
@@ -195,6 +202,7 @@ class Worker:
         job["validations"].append({"candidate": candidate, "receipt": str(retained),
                                     "diagnostics": str(diagnostic_path), "state": receipt.get("state"),
                                     **(mechanical or {})})
+        job.pop("production_diagnostics", None)
         job["last_receipt"] = receipt
         if self.store.job(job["id"])["cancel_requested"]:
             self.finish(job, "cancelled", "Cancelled after the current validation drained.")
@@ -253,7 +261,7 @@ class Worker:
             self.save(job)
         request = make_request(job_id=identity, domain_job=job["id"], cwd=str(self.worktree(job)),
                                base=job["base_commit"], candidate=job["candidate_commit"],
-                               diagnostic_path=job["validations"][-1]["diagnostics"],
+                               diagnostic_path=job.get("production_diagnostics", job["validations"][-1]["diagnostics"]),
                                history=job["attempts"], model=model, reasoning=reasoning,
                                prompts=job["prompts"],
                                timeout_seconds=policy["model_timeout_seconds"])
@@ -375,6 +383,21 @@ class Worker:
         return sorted(set(selection["product_tests"] + selection["platform_products"]
                           + (job["deploy_products"] or [])))
 
+    def prepared_build_snapshot_file(self, job: dict) -> Path:
+        path = self.directory(job) / f"production-{len(job['validations']) - 1}.snapshot.json"
+        snapshot = job["production_receipt"]["preparation"]
+        if path.exists():
+            if json.loads(path.read_text()) != snapshot:
+                raise ManagerError("retained prepared build snapshot differs from the production receipt")
+        else:
+            atomic_json(path, snapshot)
+        return path
+
+    def release_builds_deferred(self, job: dict) -> bool:
+        return (job.get("release_builds_deferred", False) is True
+                and "signing_policy" in job
+                and (self.worktree(job) / "pipeline/release_build.py").is_file())
+
     def preparing(self, job: dict) -> None:
         ordinal = len(job["validations"]) - 1
         if (self.store.job(job["id"])["cancel_requested"]
@@ -391,9 +414,12 @@ class Worker:
             command = [sys.executable, "-I", "-B", str(Path(__file__).with_name("production.py")),
                        "--source-root", str(self.worktree(job)), "--output", str(output_directory),
                        "--signing-policy-file", str(self.signing_policy_file(job))]
+            release_check = job["last_receipt"]["selection"].get("release_builds_deferred", False)
+            if release_check:
+                command.append("--release-check")
             for product in products:
                 command.extend(("--product", product))
-            result, output, _ = self.process(job, f"production-{ordinal}", command,
+            result, output, diagnostic = self.process(job, f"production-{ordinal}", command,
                                              self.worktree(job))
             try:
                 receipt = json.loads(output)
@@ -407,6 +433,12 @@ class Worker:
                 self.finish(job, "cancelled", "Cancelled after production preparation drained.")
                 return
             if receipt.get("state") != "passed" or result["exit_code"] != 0:
+                if receipt.get("failure_kind") == "release_build" and release_check:
+                    diagnostic_path = self.directory(job) / f"production-{ordinal}.log"
+                    atomic_bytes(diagnostic_path, diagnostic[-1024 * 1024:] + b"\n" + output)
+                    job["production_diagnostics"] = str(diagnostic_path)
+                    self.save(job, "repair_prepare")
+                    return
                 if receipt.get("failure_kind") == "signing_configuration":
                     job["configuration_error"] = {"kind": "signing_configuration",
                                                   "message": receipt.get("message")}
@@ -444,6 +476,13 @@ class Worker:
         receipt_policy = receipt.get("signing_policy", preparation.get("signing_policy"))
         if (products or "signing_policy" in receipt) and receipt_policy != job["signing_policy"]:
             raise ManagerError("production signing receipt has another signing policy")
+        if products and job["last_receipt"]["selection"].get("release_builds_deferred", False):
+            if preparation.get("release_check") is not True:
+                raise ManagerError("production signing receipt has no release check evidence")
+            result_path = self.directory(job) / f"production-{len(job['validations']) - 1}" / "result.json"
+            production_candidate.regular(result_path)
+            if json.loads(result_path.read_text()) != preparation:
+                raise ManagerError("production build receipt changed after preparation")
         for product, record in preparation["candidates"].items():
             if (not isinstance(record, dict) or not isinstance(record.get("candidate_dir"), str)
                     or not isinstance(record.get("candidate_id"), str)):
@@ -487,6 +526,10 @@ class Worker:
             args += ["--source-commit", request["source_commit"], *request["products"]]
             if "signing_policy" in job:
                 args += ["--signing-policy-file", str(self.signing_policy_file(job))]
+                if job["last_receipt"]["selection"].get("release_builds_deferred", False):
+                    args += ["--prepared-build", str(self.directory(job)
+                             / f"production-{len(job['validations']) - 1}" / "result.json"),
+                             "--prepared-build-snapshot-file", str(self.prepared_build_snapshot_file(job))]
         return args
 
     def deployment_read(self, job: dict, action: str) -> dict:

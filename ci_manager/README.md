@@ -24,6 +24,12 @@ Submit a committed candidate and inspect its retained job:
 New submissions skip tests by default. Use `--run-tests` to run the selected
 tests, or `--skip-tests` to select the default explicitly. Other checks still run.
 
+For supported candidates, new jobs compile the selected release packages once
+in trusted production preparation, then sign and verify native candidates
+before acceptance. Deployment reuses those candidates and builds only additional
+products in its dependency scope. Older candidates and retained jobs keep their
+ordinary release gate.
+
 Read [queue operation](chancery/manuals/queue-operate.md) before initialization,
 installation, submission, cancellation, or recovery. It defines submission
 authority, model limits, Git patch application, deployment and email outcomes, and the

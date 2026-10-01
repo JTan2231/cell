@@ -623,7 +623,10 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let root = directory.path().canonicalize()?;
         let layout = Layout::discover(Some(root.join("clockwork")))?;
-        for identity in [uuid::Uuid::new_v4().to_string(), "a".repeat(64)] {
+        for identity in [
+            "6ce29a62-15b0-4e71-b5c0-4c5db83bb38d".to_owned(),
+            "a".repeat(64),
+        ] {
             let release = root.join(&identity);
             std::fs::create_dir(&release)?;
             let binary = release.join("worker");
