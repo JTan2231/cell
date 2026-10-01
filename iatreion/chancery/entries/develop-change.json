@@ -22,7 +22,7 @@
   "adaptation": ["Version incompatible status or report meanings instead of silently reinterpreting retained or installed outputs."],
   "stop_when": ["A proposed probe requires mutation, secrets, network access, or unsupported direct database access."],
   "does_not_authorize": ["Release publication, installation, deployment, or service operation outside the submitted manager job, or semantic state changes."],
-  "dependencies": [{"id":"usher.develop.change","min_contract":1,"max_contract_exclusive":2}],
+  "dependencies": [{"id":"usher.develop.change","min_contract":1,"max_contract_exclusive":3}],
   "manual": "manuals/develop-change.md",
   "interfaces": [{"label":"Submit CI","invocation":"./ci.sh submit COMMIT"}],
   "promise": {

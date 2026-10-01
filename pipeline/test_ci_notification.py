@@ -57,6 +57,35 @@ class NotificationTests(unittest.TestCase):
                 job = self.job(skip_tests=True, last_receipt={"selection": selection})
                 self.assertNotIn("Tests were skipped.", render(job)[1])
 
+    def test_exhausted_release_repairs_report_retained_build_failure(self):
+        job = self.job(
+            last_receipt={"state": "passed", "selection": {"product_tests": ["annals"],
+                                                           "release_builds_deferred": True}},
+            production_receipt={"state": "error", "failure_kind": "release_build",
+                                "message": "release compilation failed"},
+            production_diagnostics="/evidence/job/production-0.log",
+            attempts=[{"state": "failed"}],
+            outcome_message="The repair budget is exhausted.",
+        )
+        job.update(outcome="failed", stopped_phase="repair_prepare")
+        subject, body = render(job)
+        self.assertEqual(subject, "Cell CI: failed — release build — Annals")
+        self.assertIn("What failed: release build.\nrelease compilation failed", body)
+        self.assertIn("Automatic repair did not resolve the failure.", body)
+        self.assertIn("Nothing was deployed.", body)
+        self.assertNotIn("Required checks passed", body)
+        self.assertNotIn("CI processing", body)
+
+    def test_legacy_production_failure_keeps_existing_notification(self):
+        job = self.job(production_receipt={"state": "error", "failure_kind": "release_build",
+                                           "message": "legacy cargo build failed"},
+                       outcome_message="Production preparation stopped before acceptance.")
+        job.update(outcome="failed", stopped_phase="preparing")
+        subject, body = render(job)
+        self.assertIn("failed — CI processing", subject)
+        self.assertIn("Production preparation stopped before acceptance.", body)
+        self.assertNotIn("What failed: release build.", body)
+
     def test_failed_deployment_does_not_claim_partial_success_or_no_effects(self):
         job = self.job(accepted=True, unresolved=True, deployment_result={
             "state": "stopped", "products": ["annals", "nucleus"],

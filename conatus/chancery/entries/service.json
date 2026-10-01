@@ -1,6 +1,6 @@
 {
   "id": "conatus.service",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -15,7 +15,7 @@
   ],
   "outcome": "The selected release, maintenance or scheduled activation boundary is understood independently of domain outcomes.",
   "effects": [
-    "Installation selects a content-addressed executable and matching complete provider bundle; it initializes no state or schedule.",
+    "Installation selects a immutable executable and matching complete provider bundle; it initializes no state or schedule.",
     "Definition generation writes a new immutable definition and private logs directory without registration or activation.",
     "Maintenance holds durable admission. Coordinated deployment captures both binding intents, suspends them, configures coherent pinned state and restores captured intent after holds release."
   ],
@@ -43,7 +43,7 @@
     },
     {
       "label": "Recover retained release",
-      "invocation": "conatus-install recover --release ABS_RELEASE --expected-current releases/HASH"
+      "invocation": "conatus-install recover --release ABS_RELEASE --expected-current releases/ID"
     },
     {
       "label": "Prepare update schedule",
@@ -107,7 +107,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Default install root is ~/Library/Application Support/Conatus/install. Expected current is absent or releases/HASH. Update key conatus/update uses 300 seconds and run-at-load. Email key conatus/daily-email uses local 09:00, no run-at-load and 180-second activation limit. Both use schema-two halt-until-approved and overlap skip."
+        "statement": "Default install root is ~/Library/Application Support/Conatus/install. Expected current is absent or releases/ID. Update key conatus/update uses 300 seconds and run-at-load. Email key conatus/daily-email uses local 09:00, no run-at-load and 180-second activation limit. Both use schema-two halt-until-approved and overlap skip."
       }
     ],
     "completeness_and_freshness": [

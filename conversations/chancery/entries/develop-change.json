@@ -1,6 +1,6 @@
 {
   "id": "conversations.develop.change",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -41,8 +41,8 @@
   ],
   "dependencies": [
     {"id": "conversations.history.explore", "min_contract": 4, "max_contract_exclusive": 5},
-    {"id": "conversations.runtime", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "conversations.installation.operate", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "conversations.runtime", "min_contract": 2, "max_contract_exclusive": 4},
+    {"id": "conversations.installation.operate", "min_contract": 2, "max_contract_exclusive": 4},
     {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 4}
   ],
   "session_surfaces": [
@@ -120,7 +120,7 @@
       {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, future App Server support window, or deployment schedule is promised."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Development contract version 3 requires synthetic version-matched App Server proof, explicit public-schema compatibility, synchronized authoritative documentation, and content-addressed packaging rollback."},
+      {"status": "declared", "statement": "Development contract version 3 requires synthetic version-matched App Server proof, explicit public-schema compatibility, synchronized authoritative documentation, and immutable packaging rollback."},
       {"status": "declared", "statement": "CI submission includes the manager deployment and outcome email. Release publication and installed deployment outside that job remain separately authorized operations."},
       {"status": "unspecified", "statement": "No perpetual support window or deprecation period for Conversations, Codex CLI, or App Server versions is promised."}
     ],

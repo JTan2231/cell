@@ -1,6 +1,6 @@
 {
   "id": "semantics.service",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -38,7 +38,7 @@
     }
   ],
   "effects": [
-    "Installation writes a content-addressed release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite under proved quiescence.",
+    "Installation writes a immutable release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite under proved quiescence.",
     "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
     "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs.",
     "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."

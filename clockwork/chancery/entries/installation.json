@@ -1,6 +1,6 @@
 {
   "id": "clockwork.installation",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -24,7 +24,7 @@
     "Direct installation copies release files and prepares resource directories without opening runtime state or running doctor. It performs no artifact-integrity, version-alignment, provider-discovery, or runtime-readiness validation."
   ],
   "authority": [
-    "Clockwork's packaging owns its content-addressed releases, current and previous selectors, stable command and installer selectors, and only `providers/clockwork`.",
+    "Clockwork's packaging owns its immutable releases, current and previous selectors, stable command and installer selectors, and only `providers/clockwork`.",
     "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery.",
     "The operator owns the choice to deploy, diagnose, roll back, or detach selectors and separately owns any destructive retained-state operation.",
     "Product Rust installers own their definition and binding changes through the schedule contract; the coordinated adapter refreshes existing broker plists without changing product definitions or approving incidents."
@@ -46,7 +46,7 @@
   "interfaces": [
     {
       "label": "Deploy candidate",
-      "invocation": "<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
+      "invocation": "<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]"
     },
     {
       "label": "Recover a retained program release",
@@ -78,7 +78,7 @@
     {
       "id": "chancery.provider.publish",
       "min_contract": 5,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     }
   ],
   "promise": {
@@ -115,7 +115,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment publishes one content-addressed release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."
+        "statement": "Deployment publishes one immutable release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."
       }
     ],
     "data_semantics": [
@@ -171,7 +171,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private content-addressed program-release tree; it starts no daemon. Coordinated deployment separately refreshes existing enabled broker plists."
+        "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private immutable program-release tree; it starts no daemon. Coordinated deployment separately refreshes existing enabled broker plists."
       }
     ],
     "compatibility_and_evolution": [

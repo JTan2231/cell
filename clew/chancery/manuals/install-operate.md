@@ -52,7 +52,7 @@ successful result.
    ```
 
    Use `--home ABSOLUTE_PATH` for an explicit user home and
-   `--expected-current absent|releases/HASH` when selection must match an exact
+   `--expected-current absent|releases/ID` when selection must match an exact
    prior condition. Stop if selectors belong to another owner .
 3. Run `clew init` to create empty schema-three state or check compatible state.
    Stop for schema one or two, nonempty foreign state, or unsupported state.

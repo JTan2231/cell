@@ -23,6 +23,8 @@ from ci_manager import workspace
 
 PRODUCTS = applications(Path(__file__).resolve().parent.parent)
 HEX = re.compile(r"[0-9a-f]{64}")
+RELEASE_ID_PATTERN = r"(?:[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+RELEASE_ID = re.compile(RELEASE_ID_PATTERN)
 
 
 class CleanupError(RuntimeError):
@@ -124,7 +126,7 @@ def live_pins(home, installs, currents):
     protected = set(currents.values())
     expression = re.compile(re.escape(str(home / "Library/Application Support"))
                             + r"/(" + "|".join(PRODUCTS.values())
-                            + r")/install/(releases/[0-9a-f]{64}|current|previous)(?=/|[\s\"']|$)")
+                            + r")/install/(releases/" + RELEASE_ID_PATTERN + r"|current|previous)(?=/|[\s\"']|$)")
 
     def retain(value):
         for text in strings(value):
@@ -133,7 +135,7 @@ def live_pins(home, installs, currents):
                 path = Path(match.group(0))
                 resolved = path.resolve(strict=True)
                 require(resolved.parent == installs[match.group(1)] / "releases"
-                        and HEX.fullmatch(resolved.name), "configured release pin is unsafe")
+                        and RELEASE_ID.fullmatch(resolved.name), "configured release pin is unsafe")
                 directory(resolved)
                 protected.add(resolved)
 
@@ -300,7 +302,7 @@ def prune(home, installs, selected):
                 continue
             require(link.is_symlink(), "release selector is not owned")
             target = os.readlink(link)
-            require(re.fullmatch(r"releases/[0-9a-f]{64}", target), "release selector is invalid")
+            require(re.fullmatch("releases/" + RELEASE_ID_PATTERN, target), "release selector is invalid")
             directory(install / target)
             selectors[link] = target
             if name == "current":
@@ -311,7 +313,7 @@ def prune(home, installs, selected):
         require(application in currents, "retained installation has no current release")
         for release in (install / "releases").iterdir():
             directory(release)
-            require(HEX.fullmatch(release.name), "unrecognized release directory")
+            require(RELEASE_ID.fullmatch(release.name), "unrecognized release directory")
             releases.append(release)
             if not pruning:
                 unselected.add(release)

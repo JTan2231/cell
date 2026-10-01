@@ -1,7 +1,7 @@
 //! Explicit file installation transactions. Product lifecycle remains in the caller.
 
 use crate::artifact::{
-    copy_file, current_uid, hash_bytes, inventory, valid_hash, verify_tree_ownership,
+    copy_file, current_uid, inventory, inventory_matches, valid_release_id, verify_tree_ownership,
 };
 use crate::{Disposition, Error, FileEntry, Result};
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,11 @@ use std::io::Write;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt, symlink};
 use std::path::{Component, Path, PathBuf};
 
-pub const TRANSACTION_FORMAT: &str = "cell-install-v2";
+pub const TRANSACTION_FORMAT: &str = "cell-install-v3";
+
+fn transaction_format(value: &str) -> bool {
+    matches!(value, TRANSACTION_FORMAT | "cell-install-v2")
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -143,27 +147,7 @@ struct Manifest {
     release_id: String,
 }
 
-#[derive(Serialize)]
-struct Identity<'a> {
-    format: &'a str,
-    product: &'a str,
-    versions: &'a BTreeMap<String, String>,
-    providers: &'a BTreeMap<String, ProviderSpec>,
-    files: &'a BTreeMap<String, FileEntry>,
-    public: &'a [PublicEntry],
-}
-
 impl Manifest {
-    fn identity(&self) -> Result<String> {
-        Ok(hash_bytes(&serde_json::to_vec(&Identity {
-            format: &self.format,
-            product: &self.product,
-            versions: &self.versions,
-            providers: &self.providers,
-            files: &self.files,
-            public: &self.public,
-        })?))
-    }
     fn info(&self) -> ReleaseInfo {
         ReleaseInfo {
             release_id: self.release_id.clone(),
@@ -386,7 +370,7 @@ impl Drop for HeldLock {
 
 fn read_manifest(root: &Path) -> Result<Manifest> {
     let manifest: Manifest = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-    if manifest.format != TRANSACTION_FORMAT {
+    if !transaction_format(&manifest.format) {
         return Err(Error::new("unsupported installation format"));
     }
     validate_public(&manifest.public)?;
@@ -408,7 +392,11 @@ pub fn read_release_at(
     let result = if root.join("manifest.json").try_exists()? {
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-        if value.get("format").and_then(serde_json::Value::as_str) == Some(TRANSACTION_FORMAT) {
+        if value
+            .get("format")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(transaction_format)
+        {
             read_manifest(root)?.info()
         } else {
             legacy(root)?
@@ -475,20 +463,28 @@ pub fn prepare_release(
             &stage.path().join(path),
         )?;
     }
-    let (files, dirs) = inventory(stage.path())?;
+    let (mut files, dirs) = inventory(stage.path())?;
+    for (path, file) in &mut files {
+        let source = &plan.files[path].source;
+        let key =
+            crate::signing::artifact_key(&layout.product, path, installer_source == Some(source));
+        if let Ok(key) = key {
+            file.code_identifier =
+                signing.identifier(&layout.product, &key, &stage.path().join(path))?;
+        }
+    }
     for dir in dirs {
         fs::set_permissions(stage.path().join(dir), fs::Permissions::from_mode(0o755))?;
     }
-    let mut manifest = Manifest {
+    let manifest = Manifest {
         format: TRANSACTION_FORMAT.to_owned(),
         product: layout.product.clone(),
         versions: plan.versions.clone(),
         providers: plan.providers.clone(),
         files,
         public: layout.public.clone(),
-        release_id: String::new(),
+        release_id: uuid::Uuid::now_v7().to_string(),
     };
-    manifest.release_id = manifest.identity()?;
     fs::write(
         stage.path().join("manifest.json"),
         serde_json::to_vec(&manifest)?,
@@ -549,7 +545,7 @@ fn selected(
                 .ok_or_else(|| Error::new("invalid selection"))?;
             let id = text
                 .strip_prefix("releases/")
-                .filter(|id| valid_hash(id))
+                .filter(|id| valid_release_id(id))
                 .ok_or_else(|| Error::new("invalid selected release"))?;
             Ok(Some(read_release_at(
                 layout,
@@ -852,10 +848,10 @@ impl InstallTransaction<'_> {
     }
 
     /// Restore the exact captured prior file selection after the product proves
-    /// lifecycle compatibility. Recorded prior hashes permit its historical
+    /// lifecycle compatibility. Native code signatures permit its historical
     /// signer; ordinary retained-release publication requires the current signer.
     /// # Errors
-    /// Refuses changed selections or unproved prior bytes and reports restoration uncertainty.
+    /// Refuses changed selections or invalid prior signatures and reports restoration uncertainty.
     pub fn restore(
         &mut self,
         receipt: &SelectionReceipt,
@@ -911,7 +907,7 @@ impl InstallTransaction<'_> {
                 .join("releases")
                 .join(&current.release_id);
             if recorded_recovery {
-                crate::signing::verify_recorded_files(&root, &current.files)?;
+                crate::signing::verify_recorded_files(&self.layout.product, &root, &current.files)?;
             } else {
                 crate::signing::verify_files(&self.layout.product, &root, &current.files)?;
             }
@@ -1010,21 +1006,21 @@ impl InstallTransaction<'_> {
                     let file = temporary.path().join("copy");
                     let installer = selected.files.get("package/install");
                     let artifact = selected.files.get(&entry.artifact);
-                    let key = crate::signing::artifact_key(
+                    let artifact =
+                        artifact.ok_or_else(|| Error::new("missing recorded public artifact"))?;
+                    let key = crate::signing::recorded_key(
                         &self.layout.product,
                         &entry.artifact,
-                        installer
-                            .zip(artifact)
-                            .is_some_and(|(installer, artifact)| {
-                                installer.sha256 == artifact.sha256
-                            }),
+                        artifact,
+                        installer,
                     );
                     let mut signing = crate::signing::Verifier::default();
                     if recorded_recovery {
                         crate::signing::verify_recorded_file(
+                            &self.layout.product,
+                            &key,
                             &source,
-                            artifact
-                                .ok_or_else(|| Error::new("missing recorded public artifact"))?,
+                            artifact,
                         )?;
                     } else {
                         crate::signing::verify_source(
@@ -1037,9 +1033,10 @@ impl InstallTransaction<'_> {
                     copy_file(&source, &file, entry.mode)?;
                     if recorded_recovery {
                         crate::signing::verify_recorded_file(
+                            &self.layout.product,
+                            &key,
                             &file,
-                            artifact
-                                .ok_or_else(|| Error::new("missing recorded public artifact"))?,
+                            artifact,
                         )?;
                     } else {
                         crate::signing::verify_source(
@@ -1098,21 +1095,19 @@ fn verify_manifest(root: &Path, product: Option<&str>) -> Result<Manifest> {
     verify_tree_ownership(root, current_uid()?)?;
     let bytes = fs::read(root.join("manifest.json"))?;
     let manifest: Manifest = serde_json::from_slice(&bytes)?;
-    if manifest.format != TRANSACTION_FORMAT
+    if !transaction_format(&manifest.format)
         || product.is_some_and(|p| p != manifest.product)
-        || !valid_hash(&manifest.release_id)
+        || !valid_release_id(&manifest.release_id)
         || root.file_name().and_then(|p| p.to_str()) != Some(manifest.release_id.as_str())
-        || manifest.identity()? != manifest.release_id
-        || serde_json::to_vec(&manifest)? != bytes
     {
         return Err(Error::new(
-            "invalid release format, product, or content identity",
+            "invalid release format, product, or recorded identity",
         ));
     }
     validate_public(&manifest.public)?;
     let (mut files, dirs) = inventory(root)?;
     files.remove("manifest.json");
-    if files != manifest.files {
+    if !inventory_matches(&files, &manifest.files) {
         return Err(Error::new("release files differ from the sealed inventory"));
     }
     let mut expected_dirs = BTreeSet::new();
@@ -1180,7 +1175,11 @@ pub fn verify_release_at(
     let result = if root.join("manifest.json").try_exists()? {
         let format: serde_json::Value =
             serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-        if format.get("format").and_then(serde_json::Value::as_str) == Some(TRANSACTION_FORMAT) {
+        if format
+            .get("format")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(transaction_format)
+        {
             let manifest = verify_manifest(root, Some(&layout.product))?;
             if manifest.public != layout.public {
                 return Err(Error::new(
@@ -1195,10 +1194,58 @@ pub fn verify_release_at(
         legacy(root)?
     };
     if root.file_name().and_then(|name| name.to_str()) != Some(result.release_id.as_str())
-        || !valid_hash(&result.release_id)
+        || !valid_release_id(&result.release_id)
     {
         return Err(Error::new("legacy proof returned an invalid identity"));
     }
     validate_public(&result.public)?;
+    crate::signing::verify_recorded_files(&layout.product, root, &result.files)?;
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retained_release_keeps_inventory_checks_without_byte_hashes() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = fs::canonicalize(temporary.path())?.join("a".repeat(64));
+        fs::create_dir(&root)?;
+        fs::create_dir(root.join("bin"))?;
+        fs::write(root.join("bin/fixture"), "retained content")?;
+        fs::set_permissions(root.join("bin/fixture"), fs::Permissions::from_mode(0o555))?;
+        let manifest = Manifest {
+            format: "cell-install-v2".to_owned(),
+            product: "fixture".to_owned(),
+            versions: BTreeMap::new(),
+            providers: BTreeMap::new(),
+            files: BTreeMap::from([(
+                "bin/fixture".to_owned(),
+                FileEntry {
+                    sha256: "b".repeat(64),
+                    mode: 0o555,
+                    code_identifier: None,
+                },
+            )]),
+            public: Vec::new(),
+            release_id: "a".repeat(64),
+        };
+        fs::write(root.join("manifest.json"), serde_json::to_vec(&manifest)?)?;
+        fs::set_permissions(
+            root.join("manifest.json"),
+            fs::Permissions::from_mode(0o444),
+        )?;
+        verify_manifest(&root, Some("fixture"))?;
+        fs::set_permissions(root.join("bin/fixture"), fs::Permissions::from_mode(0o755))?;
+        fs::write(root.join("bin/fixture"), "different retained content")?;
+        fs::set_permissions(root.join("bin/fixture"), fs::Permissions::from_mode(0o555))?;
+        verify_manifest(&root, Some("fixture"))?;
+        fs::write(root.join("extra"), "unmanifested")?;
+        assert!(verify_manifest(&root, Some("fixture")).is_err());
+        fs::remove_file(root.join("extra"))?;
+        fs::set_permissions(root.join("bin/fixture"), fs::Permissions::from_mode(0o444))?;
+        assert!(verify_manifest(&root, Some("fixture")).is_err());
+        Ok(())
+    }
 }

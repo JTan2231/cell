@@ -13,7 +13,7 @@ use clockwork::api::Manifest;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::legacy::{hexadecimal, pairs};
+use super::legacy::{hexadecimal, pairs, regular};
 
 pub const ACTIVE: &str = "krisis/observer";
 pub const LEGACY_OBSERVER: &str = "decisions/observer";
@@ -44,7 +44,7 @@ pub fn executable(path: &Path) -> Result<()> {
         "installation executable must be absolute",
     )?;
     text(path)?;
-    file_digest(path)?;
+    regular(path)?;
     require(
         fs::symlink_metadata(path)?.mode() & 0o111 != 0,
         "installation executable is not executable",
@@ -491,7 +491,7 @@ pub fn binding_receipt(paths: &Paths) -> Result<BTreeMap<String, String>> {
     )?;
     let result: BTreeMap<_, _> = values.into_iter().collect();
     require(
-        hexadecimal(&result["release_id"], 64)
+        cell_install::valid_release_id(&result["release_id"])
             && hexadecimal(&result["definition_digest"], 64)
             && hexadecimal(&result["annals_library_id"], 32),
         "invalid observer ownership identity",

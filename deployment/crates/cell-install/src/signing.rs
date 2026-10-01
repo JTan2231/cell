@@ -185,6 +185,16 @@ fn native(path: &Path) -> Result<bool> {
         ))
 }
 
+fn recorded_native(path: &Path, recorded: &FileEntry) -> Result<bool> {
+    let is_native = native(path)?;
+    if recorded.code_identifier.is_some() && !is_native {
+        return Err(Error::new(
+            "recorded native artifact is no longer native code",
+        ));
+    }
+    Ok(is_native)
+}
+
 #[derive(Default)]
 pub(crate) struct Verifier {
     policy: Option<Policy>,
@@ -195,6 +205,26 @@ fn enabled() -> bool {
 }
 
 impl Verifier {
+    pub(crate) fn identifier(
+        &mut self,
+        product: &str,
+        artifact: &str,
+        path: &Path,
+    ) -> Result<Option<String>> {
+        if !enabled() || !native(path)? {
+            return Ok(None);
+        }
+        if self.policy.is_none() {
+            let uid = current_uid()?;
+            self.policy = Some(Policy::read(&operator_home(uid)?, uid)?);
+        }
+        self.policy
+            .as_ref()
+            .ok_or_else(|| Error::new("Cell signing policy is unavailable"))?
+            .identifier(product, artifact)
+            .map(Some)
+    }
+
     pub(crate) fn verify(&mut self, product: &str, artifact: &str, path: &Path) -> Result<()> {
         if !enabled() || !native(path)? {
             return Ok(());
@@ -275,28 +305,148 @@ pub(crate) fn verify_files(
     let installer = files.get("package/install");
     for (relative, file) in files {
         let path = root.join(relative);
-        if !enabled() || !native(&path)? {
+        let is_native = recorded_native(&path, file)?;
+        if !enabled() || !is_native {
             continue;
         }
-        let alias = installer.is_some_and(|installer| installer.sha256 == file.sha256);
-        verifier.verify(product, &artifact_key(product, relative, alias)?, &path)?;
+        let key = recorded_key(product, relative, file, installer)?;
+        if let Some(recorded) = &file.code_identifier
+            && verifier.identifier(product, &key, &path)?.as_ref() != Some(recorded)
+        {
+            return Err(Error::new(
+                "retained native code identifier differs from the configured policy",
+            ));
+        }
+        verifier.verify(product, &key, &path)?;
     }
     Ok(())
 }
 
-pub(crate) fn verify_recorded_file(path: &Path, recorded: &FileEntry) -> Result<()> {
-    if enabled() && crate::file_digest(path)? != recorded.sha256 {
-        return Err(Error::new("recorded recovery artifact bytes changed"));
+pub(crate) fn recorded_key(
+    product: &str,
+    relative: &str,
+    file: &FileEntry,
+    installer: Option<&FileEntry>,
+) -> Result<String> {
+    if let Some(identifier) = &file.code_identifier {
+        let key = identifier.rsplit('.').next().unwrap_or_default();
+        if !valid_component(key)
+            || !identifier.ends_with(&format!(".{product}.{key}"))
+            || !identifier.split('.').all(valid_component)
+        {
+            return Err(Error::new("invalid retained native code identifier"));
+        }
+        return Ok(key.to_owned());
+    }
+    let alias = installer
+        .is_some_and(|installer| !installer.sha256.is_empty() && installer.sha256 == file.sha256);
+    artifact_key(product, relative, alias)
+}
+
+pub(crate) fn verify_recorded_file(
+    product: &str,
+    artifact: &Result<String>,
+    path: &Path,
+    recorded: &FileEntry,
+) -> Result<()> {
+    if regular(path)?.mode() & 0o7777 != recorded.mode {
+        return Err(Error::new("recorded recovery artifact mode changed"));
+    }
+    let is_native = recorded_native(path, recorded)?;
+    if !enabled() || !is_native {
+        return Ok(());
+    }
+    let artifact = artifact
+        .as_ref()
+        .map_err(|error| Error::new(&error.message))?;
+    let identifier = if let Some(identifier) = &recorded.code_identifier {
+        Some(identifier.clone())
+    } else {
+        let output = crate::command::run(
+            Path::new("/usr/bin/codesign"),
+            &[
+                "--display".into(),
+                "--verbose=4".into(),
+                path.as_os_str().to_owned(),
+            ],
+            &BTreeMap::new(),
+            Duration::from_secs(60),
+        )?;
+        if !output.status.success() {
+            if String::from_utf8_lossy(&output.stderr).contains("code object is not signed at all")
+            {
+                return Ok(());
+            }
+            return Err(Error::new("cannot read retained native code identity"));
+        }
+        let text = String::from_utf8_lossy(&output.stderr);
+        if text.lines().any(|line| line == "Signature=adhoc") {
+            None
+        } else {
+            Some(
+                text.lines()
+                    .find_map(|line| line.strip_prefix("Identifier="))
+                    .filter(|id| {
+                        id.ends_with(&format!(".{product}.{artifact}"))
+                            && id.split('.').all(valid_component)
+                    })
+                    .ok_or_else(|| {
+                        Error::new(
+                            "retained native code identity differs from the product artifact",
+                        )
+                    })?
+                    .to_owned(),
+            )
+        }
+    };
+    let mut arguments: Vec<OsString> = vec![
+        "--verify".into(),
+        "--strict".into(),
+        "--all-architectures".into(),
+    ];
+    if let Some(identifier) = identifier {
+        arguments.extend([
+            "--test-requirement".into(),
+            format!("=identifier \"{identifier}\"").into(),
+        ]);
+    }
+    arguments.push(path.as_os_str().to_owned());
+    let output = crate::command::run(
+        Path::new("/usr/bin/codesign"),
+        &arguments,
+        &BTreeMap::new(),
+        Duration::from_secs(60),
+    )?;
+    if !output.status.success() {
+        return Err(Error::new("retained native recovery signature is invalid"));
     }
     Ok(())
 }
 
 pub(crate) fn verify_recorded_files(
+    product: &str,
     root: &Path,
     files: &BTreeMap<String, FileEntry>,
 ) -> Result<()> {
+    let (mut actual, _) = crate::artifact::inventory(root)?;
+    for metadata in ["manifest.json", "manifest.txt"] {
+        if !files.contains_key(metadata) {
+            actual.remove(metadata);
+        }
+    }
+    if !crate::artifact::inventory_matches(&actual, files) {
+        return Err(Error::new("recorded recovery inventory or modes changed"));
+    }
+    let installer = files.get("package/install");
     for (relative, recorded) in files {
-        verify_recorded_file(&root.join(relative), recorded)?;
+        let key = recorded_key(product, relative, recorded, installer);
+        let path = root.join(relative);
+        let is_native = recorded_native(&path, recorded)?;
+        if enabled() && is_native {
+            verify_recorded_file(product, &key, &path, recorded)?;
+        } else if regular(&path)?.mode() & 0o7777 != recorded.mode {
+            return Err(Error::new("recorded recovery artifact mode changed"));
+        }
     }
     Ok(())
 }
@@ -394,6 +544,53 @@ mod tests {
             "fixture-install"
         );
         assert_eq!(artifact_key("fixture", "libexec/worker", false)?, "worker");
+        let recorded = FileEntry {
+            sha256: String::new(),
+            mode: 0o555,
+            code_identifier: Some("previous.namespace.fixture.fixture-install".to_owned()),
+        };
+        assert_eq!(
+            recorded_key("fixture", "bin/frontend", &recorded, None)?,
+            "fixture-install"
+        );
+        let ordinary = FileEntry {
+            code_identifier: None,
+            ..recorded
+        };
+        assert_eq!(
+            recorded_key("fixture", "bin/frontend", &ordinary, Some(&ordinary))?,
+            "frontend"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn recorded_native_files_cannot_be_replaced_by_scripts() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        std::fs::create_dir(root.join("bin"))?;
+        let path = root.join("bin/fixture");
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n")?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555))?;
+        let recorded = FileEntry {
+            sha256: String::new(),
+            mode: 0o555,
+            code_identifier: Some("local.cell.fixture.fixture".to_owned()),
+        };
+        let files = BTreeMap::from([("bin/fixture".to_owned(), recorded.clone())]);
+        for result in [
+            verify_files("fixture", root, &files),
+            verify_recorded_file("fixture", &Ok("fixture".to_owned()), &path, &recorded),
+            verify_recorded_files("fixture", root, &files),
+        ] {
+            let error = result
+                .err()
+                .ok_or_else(|| Error::new("native replacement accepted"))?;
+            assert_eq!(
+                error.message,
+                "recorded native artifact is no longer native code"
+            );
+        }
         Ok(())
     }
 

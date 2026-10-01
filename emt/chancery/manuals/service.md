@@ -107,7 +107,7 @@ content. No future support lifetime or retention horizon is promised.
 ## Matched installation and coordinated recovery
 
 The installer stages the binary, matching installer and Chancery bundle in an
-immutable `cell-install-v2` release. Before initialization, `emt-install install`
+immutable `cell-install-v3` release. Before initialization, `emt-install install`
 accepts `--binary ABS`, `--bundle ABS`, `--home` and `--expected-current`. This
 installs bytes without initializing state, starting agents, sending mail or
 enabling a schedule. The product selector publishes the bundle with its release.

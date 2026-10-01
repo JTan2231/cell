@@ -323,6 +323,16 @@ resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 [validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
 
+For supported candidates, new CI jobs build selected release packages together
+in trusted production preparation before acceptance. Deployment verifies and
+reuses those signed candidates, then builds only additional products required by its dependency
+scope. The combined build unifies selected packages' dependency features.
+Source compilation failures use the job's bounded repair path; signing,
+verification, and other preparation failures stop the job. Older candidates and
+retained jobs keep their original release-build policy. Read the
+[queue contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
+for support detection, receipt meaning, and recovery.
+
 Selected Rust tests run through one parallel nextest stage between the selected
 products' checks before and after tests. The broker retains one compiler writer;
 the test stage has a separate configurable test-process limit. CI does not run
@@ -542,6 +552,15 @@ with paused, settled CI and settled deployment and release operations. Read
 key recovery and coverage; Python and standalone scripts retain their existing
 runtime identities. Jobs without a signing snapshot keep their earlier path.
 
+Production candidates and installed releases use opaque UUID identities. Cell
+compares normalized signing-policy objects directly and lets Cargo manage build
+reuse. Build preparation, installation, and program rollback compute no custom
+artifact hashes. macOS verifies native code signatures and certificate identity.
+Existing hash-named releases remain readable; their recorded hashes are ignored.
+Clockwork runtime launch pins and product data-migration checks retain their
+separate protocols. New release formats require a current trusted installer for
+recovery; older installers cannot read them.
+
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
 a new commit before validation. Every validation compares the same accepted
@@ -549,6 +568,16 @@ base with the current candidate and retains aggregate gate receipts. Acceptance
 uses a guarded ref update. Deployment selects that exact accepted candidate,
 with a stable caller request ID and a retained operation receipt. Development
 changes made after submission do not change the job.
+
+For candidates with `pipeline/autofix.py`, the installed manager requests
+deterministic fixes during validation. The validator uses the existing Clippy
+diagnostics and one formatter pass to prepare a retained patch without changing
+the committed candidate. The manager applies it to a private index, records a
+private candidate and revalidates against the same base. This path invokes no
+Nucleus model and consumes no model repair point. Remaining failures use the
+bounded model path. Older candidates retain check-only validation. Enable the
+new manager release through the paused, drained replacement procedure below;
+changing the checkout does not replace the worker.
 
 Only one delivery lifecycle is active. The manager does not hold a CI broker
 slot while it waits for a model, deployment, or email. Individual gates still

@@ -1,6 +1,6 @@
 //! Fixed coordinator protocol with Krisis-owned admission and configuration.
 use super::{
-    Install, lifecycle, package,
+    Install, legacy, lifecycle, package,
     support::{
         ACTIVE, Paths, Pins, args, binding, binding_receipt, checked, exists, inspect_result,
         maintenance, require, switch,
@@ -76,7 +76,7 @@ impl Adapter {
                 .map(PathBuf::from)
                 .ok_or_else(|| Error::new("Krisis codex_bin must be an absolute path"))?;
             require(path.is_absolute(), "Krisis codex_bin must be absolute")?;
-            cell_install::file_digest(&path)?;
+            legacy::regular(&path)?;
             return Ok(path);
         }
         for path in [
@@ -85,7 +85,7 @@ impl Adapter {
             self.paths.home.join(".local/bin/codex"),
         ] {
             if exists(&path)? {
-                cell_install::file_digest(&path)?;
+                legacy::regular(&path)?;
                 return Ok(path);
             }
         }
@@ -98,7 +98,7 @@ impl Adapter {
             .paths
             .home
             .join("Library/Application Support/Annals/decisions/config.toml");
-        cell_install::file_digest(&config)?;
+        legacy::regular(&config)?;
         let parsed: toml::Value = toml::from_str(&std::fs::read_to_string(&config)?)
             .map_err(|_| Error::new("Annals decisions configuration is invalid"))?;
         let library = parsed

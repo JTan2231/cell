@@ -55,7 +55,7 @@ config to Annals; it never chooses a library by fallback or `--library`.
 
 ## Prepare and final cutover
 
-Preparation is the default. It installs the content-addressed release,
+Preparation is the default. It installs the immutable release,
 registers its Clockwork definition, prepares private logs,
 and deliberately leaves the maintenance marker in place. It does not change
 the current release, command, provider, hook, database, baseline, or any
@@ -212,7 +212,7 @@ infers safe database rollback from program versions or manifest identity.
 After exact preparation, `--final-cutover --keep-maintenance` retains the
 installer gate through external verification. Repeat the same candidate and
 pins with `--release-maintenance` to prove the installed surfaces and remove
-only that authenticated gate. `--expected-current absent|releases/HASH` is an
+only that authenticated gate. `--expected-current absent|releases/ID` is an
 optional stale-selector guard. Controlled rollback keeps public commands
 suspended while schema compatibility is proved. Program rollback preserves live
 data and requires an unchanged schema. A schema change recovers forward with

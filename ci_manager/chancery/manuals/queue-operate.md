@@ -114,7 +114,7 @@ Installation normally requires paused admission and no active job. Service stop
 always requires both conditions. Installation has only the exception for
 cancelled validation described below.
 Installation keeps the queue paused and loads the service. It pins a
-content-addressed release under `~/.local/share/cell-ci/releases/` and selects
+immutable release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
 selectors or LaunchAgent files and attempts to restore the prior selection if
 installation fails. A failed restoration leaves an explicit recovery error.
@@ -165,15 +165,33 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.6.0 uses queue contract 8 and retains journal
+arguments. Manager release 0.7.0 uses queue contract 9 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
 
-New jobs retain `signing_policy` and `signing_policy_digest` at submission.
+The manager enables the optional `--autofix-patch` validator mode only when the
+committed candidate contains `pipeline/autofix.py`. Older candidates retain
+check-only validation. The new mode and retained fix history use schema 1 and
+do not change frozen model, test or signing policies. Install the matching
+manager and provider through the paused, drained procedure above before using
+this mode. An edit to the checkout does not replace the installed worker.
+
+New jobs retain `signing_policy` at submission.
 Retained jobs without those fields keep their earlier acceptance path. Manager
 replacement does not attach a current signing policy to old jobs. Settle that
 work before initial signing adoption or identity rotation.
+
+New jobs also retain `release_builds_deferred = true` at submission. For these
+jobs, the manager requires a signing snapshot and the committed
+`pipeline/release_build.py` support marker. It requests the internal
+`--defer-release-builds` validator mode and checks
+`selection.release_builds_deferred` in the aggregate receipt. The trusted
+production build supplies the release check before acceptance. Candidates without
+the marker use the ordinary release gate and additional production preparation.
+A mismatched receipt stops the job; it does not permit acceptance without a
+release check. Retained jobs without the field keep their ordinary release gate
+and earlier production-preparation failure policy.
 
 ## Submit a committed input
 
@@ -255,10 +273,27 @@ signing modules compile under the external-workspace confinement, then sign
 and verify staged native executables outside the compiler body. Candidate
 source does not supply the host signing implementation.
 
+For deferred release checks, one Cargo invocation builds every selected product's
+declared package with its default library and binary targets. It uses the locked
+dependencies, denies build warnings, and uses offline mode when a selected
+product requires it. Batching unifies dependency features across the selected
+packages. It therefore checks their combined feature selection rather than each
+product's separate selection.
+
+A source compilation failure in a deferred release check enters the job's
+ordinary bounded repair path. The manager retains the compiler diagnostics and
+validates any repaired candidate against the fixed base before another production
+preparation. Signing, signature verification, and other preparation failures
+remain terminal and pause the queue. Retained jobs without deferred release
+checks do not acquire this repair path.
+
 The manager retains a `production_receipt` with the exact source commit,
-signing-policy digest, product scope, and signed candidate identities. Before
-acceptance, it checks that receipt, rechecks the candidates' final hashes and
-signatures, and checks that the host policy still matches the frozen selection.
+signing-policy object, product scope, and signed candidate identities. Before
+acceptance, it checks that receipt, rechecks the candidates' native signatures and declared inventory, and checks that the host policy still matches the frozen selection.
+For deferred release checks, the trusted helper retains the preparation result
+object. The manager compares the saved result with that object before acceptance
+and carries its admitted snapshot into deployment. No custom receipt hash is
+computed.
 This phase is required when tests are skipped. It does not add unselected
 products to ordinary selective CI.
 
@@ -273,6 +308,29 @@ matching successful validation and required production preparation. A changed
 accepted ref stops promotion. Accepted
 source and installed source are separate: a later deployment failure does not
 erase an already accepted commit.
+
+## Apply deterministic fixes
+
+For a candidate that supports this mode, the validator captures suggestions
+from the existing strict Clippy invocation. It applies complete, nonconflicting
+`MachineApplicable` suggestion groups for tracked files to a temporary snapshot.
+It omits other suggestions, incomplete groups and conflicting groups. It then
+runs the formatter once for the selected Cargo packages instead of separate
+check-only formatting steps. The committed candidate stays clean throughout
+brokered checks.
+
+If these operations change the snapshot, the validator retains one raw Git
+patch in the job directory and returns aggregate state `autofix`. It stops
+before tests and later product stages. This result is not a validation pass.
+The manager records phase `autofixing`, retains the patch evidence, applies the
+patch to a private parent index and records a private child candidate commit.
+
+The next validation recomputes selection against the same captured base and
+runs the required gates for the corrected candidate. Remaining failures use
+the existing bounded model path. Deterministic fixes invoke no model and
+consume no model repair point. Required revalidation still uses compiler and
+gate resources. A recorded fix does not prove semantic correctness or completed
+test coverage.
 
 ## Apply bounded model proposals
 
@@ -435,6 +493,16 @@ selected products. It reads that operation before starting or reconciling it.
 New jobs pass the retained signing policy to deployment. The coordinator checks
 the selected policy before admission and publication; it does not reload a
 different signer for a partially completed operation.
+
+For a passing deferred production preparation, the manager supplies its
+`result.json` through `--prepared-build` and its retained preparation object
+through `--prepared-build-snapshot-file`. The coordinator rejects a changed
+result object before admission and retains the path and snapshot for its operation
+and builder. It verifies the exact source, product scope, candidate identities,
+native signatures, and frozen signing policy before copying the signed candidates
+into its operation. It compiles only products added by its deployment dependency
+scope. Reuse does not turn a build receipt into test evidence, and missing or
+changed supplied artifacts stop the operation.
 The coordinator owns installation, maintenance release, and recovery. Matching
 source and operation identity, completed installation outcome and released
 maintenance establish the manager's deployment success. Cleanup failure can
@@ -518,3 +586,8 @@ names, and short outcome diagnostics to Resend and the fixed recipient's mail
 provider. The manager does not copy Nucleus credentials or load Email's
 credential. Read-only inspection and
 catalog discovery do not authorize these disclosures or start a job.
+
+Production candidates use opaque UUID IDs. Installed manager and product releases
+also use opaque UUID directory names. Retained hash-named releases remain
+readable without recomputing their hashes. Native `codesign` verification
+remains required; scripts and documentation receive no content-hash check.

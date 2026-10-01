@@ -24,7 +24,7 @@ status, contact an employer, send mail, or enable scheduled activation.
 | Ledger | `~/.local/share/clew/ledger.sqlite3` |
 | Email occurrences | `~/.local/share/clew/email.sqlite3` |
 | Deployment maintenance | `~/.local/share/clew/deployment-maintenance/` |
-| Immutable releases | `~/Library/Application Support/Clew/install/releases/HASH` |
+| Immutable releases | `~/Library/Application Support/Clew/install/releases/ID` |
 | Public commands | `~/.local/bin/clew`, `~/.local/bin/clew-install` |
 | Provider selector | `~/Library/Application Support/Chancery/providers/clew` |
 
@@ -66,17 +66,17 @@ does not invoke doctor, check release integrity, or probe the Cast snapshot.
 ## Program and provider selection
 
 A release contains `clew`, `clew-install`, the recovery installer, and the complete
-matching Chancery bundle. Its content hash identifies the immutable release;
+matching Chancery bundle. An opaque UUID identifies the immutable release;
 package version, feature contract version, and database schema are separate
 identities. Provider pages and overview participate in release identity and
 release selection.
 
-The shared `cell-install-v2` transaction atomically selects public commands and
+The shared `cell-install-v3` transaction atomically selects public commands and
 the Clew provider. Foreign selectors and stale expected selections stop publication. The installer accepts `--home ABSOLUTE_PATH` and
-`--expected-current absent|releases/HASH`. Direct installation selects program
+`--expected-current absent|releases/ID`. Direct installation selects program
 files only. It does not initialize or migrate state.
 
-Program recovery selects a retained `cell-install-v2` release and
+Program recovery selects a retained `cell-install-v3` release and
 preserves separate ledger and email state. It does not restore, delete, or rewrite
 rows, retry uncertain mail, or approve a scheduling incident. No older
 installation format or automatic schema downgrade is supported. Preserve

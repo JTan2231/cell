@@ -1,6 +1,6 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -134,7 +134,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Installed identity is the content-addressed release manifest with exact executable/provider versions, modes, digests, and entry mappings. Migration retains packet/run IDs, requests, dates, send keys, subject/body, attachment name/order/bytes, and acceptance/uncertainty."
+        "statement": "Installed identity is the immutable release manifest with exact executable/provider versions, modes, native code identifiers, and entry mappings. Migration retains packet/run IDs, requests, dates, send keys, subject/body, attachment name/order/bytes, and acceptance/uncertainty."
       }
     ],
     "completeness_and_freshness": [

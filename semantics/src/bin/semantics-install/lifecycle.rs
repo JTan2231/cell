@@ -218,7 +218,10 @@ fn current(paths: &Paths) -> Result<Option<String>> {
     read_link(&paths.install.join("current"))?
         .map(|path| {
             let value = path.to_str().ok_or("invalid current selector")?;
-            if !value.strip_prefix("releases/").is_some_and(valid_hash) {
+            if !value
+                .strip_prefix("releases/")
+                .is_some_and(cell_install::valid_release_id)
+            {
                 return fail("invalid Semantics current selector");
             }
             read_release(&paths.install.join(&path))?;

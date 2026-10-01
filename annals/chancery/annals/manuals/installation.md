@@ -3,7 +3,7 @@
 Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it.
 
 The user-owned macOS deployment installs Annals and Annals Usage together,
-plus configuration, content-addressed releases, and the scheduled inbox
+plus configuration, immutable releases, and the scheduled inbox
 Clockwork binding `annals/inbox`. Nucleus remains a separately installed
 execution and credential service; Clockwork remains a separately installed
 activation and process-history service.
@@ -22,7 +22,7 @@ its separate admission and binding authority.
 
 ## Release selection and recovery
 
-The deployer stages a content-addressed release without artifact or dependency
+The deployer stages a immutable release without artifact or dependency
 readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
 and exact Clockwork definition digest, and publishes the installed commands.
@@ -222,7 +222,7 @@ uncommitted transaction for rollback and discarded after successful commit. Its
 current configuration and live diagnostic semantics belong to
 `annals-usage.execution.operate`.
 
-The current strict `cell-install-v2` file inventory seals both programs,
+The current strict `cell-install-v3` file inventory seals both programs,
 the exact installer, native frontend and runner roles, and both provider bundles.
 Provider Markdown, entry JSON, and the schema-4 product overview are release
 bytes. A documentation change follows the same selection and rollback as the

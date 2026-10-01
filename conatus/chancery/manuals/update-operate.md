@@ -165,7 +165,7 @@ create an open-ended retry or infer failure from runtime status alone.
    conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
    ```
 
-   Use the observed `releases/HASH` instead of `absent` for upgrade. Packaging
+   Use the observed `releases/ID` instead of `absent` for upgrade. Packaging
    commands accept `--home ABS_HOME`. Installation selects programs and published
    documentation only; it initializes no runtime state or schedule.
 4. Run `conatus-install inspect` to read selection metadata. Installation performs
@@ -176,7 +176,7 @@ create an open-ended retry or infer failure from runtime status alone.
 Recover only to an exact retained release:
 
 ```sh
-conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
+conatus-install recover --release ABS_RELEASE --expected-current releases/ID
 ```
 
 Inspect the selected release metadata and preserved bindings. Recovery does not revert the database, Annals library or Clockwork

@@ -77,7 +77,7 @@ participate in installed discovery.
 ## 4. Couple documentation to the product release
 
 Stage the exact bundle as `share/chancery/PROVIDER_ID` under the owning
-content-addressed release. Include its bytes in the release identity and
+immutable release. Retain its files in the release inventory and
 integrity manifest. Follow the required `chancery.bundle.validate` publication
 guarantees and the product's own installation contract. The product installer
 owns exactly its selector under:

@@ -3,11 +3,11 @@
 The installer copies the supplied programs and provider bundle into a retained
 release and selects their owned public paths together. It creates required
 installation directories and uses product and catalog locks with atomic selector
-updates. `--expected-current absent|releases/HASH` guards the selected release.
+updates. `--expected-current absent|releases/ID` guards the selected release.
 Foreign public selectors are refused. File-operation or basic execution failures
 restore the prior selectors when possible.
 
-Release hashes name the staged files. Installation and recovery do not compare
+Opaque UUID release IDs name the staged files. Installation and recovery do not compare
 artifact hashes, component versions, or retained file inventories. They do not
 run database integrity checks, dependency probes, or readiness checks. Basic
 `--help` and `--version` execution checks remain. Inspection reads recorded
@@ -15,7 +15,7 @@ installation metadata and selectors; it is not an integrity result.
 
 The default installation root is
 `~/Library/Application Support/Conversations/install`. Releases are retained beneath
-`releases/HASH`; `current` selects the program and provider together and `previous`
+`releases/ID`; `current` selects the program and provider together and `previous`
 retains the superseded selection. Public commands are `~/.local/bin/conversations` and
 `~/.local/bin/conversations-install`. The provider selector is
 `~/Library/Application Support/Chancery/providers/conversations`.

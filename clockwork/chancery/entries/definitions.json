@@ -1,6 +1,6 @@
 {
   "id": "clockwork.definitions",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -97,7 +97,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Keys contain two at-most-63-byte lowercase components mapped to org.clockwork.owner.name. Release/artifact/definition identities are 64-lowercase-hex digests. Intervals and optional timeouts use 1 through 31,536,000 whole seconds; local-calendar uses hour 0 through 23 and minute 0 through 59."
+        "statement": "Keys contain two at-most-63-byte lowercase components mapped to org.clockwork.owner.name. Release IDs are canonical UUIDs or retained 64-lowercase-hex IDs. Artifact and definition identities remain 64-lowercase-hex digests. Intervals and optional timeouts use 1 through 31,536,000 whole seconds; local-calendar uses hour 0 through 23 and minute 0 through 59."
       }
     ],
     "completeness_and_freshness": [

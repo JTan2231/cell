@@ -1,6 +1,6 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -67,7 +67,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable releases; package version, provider contract and database schema are separate identities."
+        "statement": "Opaque UUIDs identify immutable releases; package version, provider contract and database schema are separate identities."
       }
     ],
     "completeness_and_freshness": [
@@ -97,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 releases, ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
       }
     ],
     "reliances": [
@@ -140,7 +140,7 @@
     {
       "id": "clew.state",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "clew.application.track",

@@ -110,7 +110,7 @@ The HTTP surfaces are GET `/v1/maintenance` and POST
 `{"run_id":"OWNER"}` and returns maintenance status. The typed client owns
 these request/response types.
 
-The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
+The macOS deployer accepts `--expected-current absent|releases/ID` and checks
 it under the product update lock before selector mutation. With
 `CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained
 hold and retains an exclusive activity guard through replacement. The existing guarded database/credential rollback rules remain.
@@ -126,7 +126,7 @@ and shared schemas remain unchanged. This is not a general pruning API.
 
 The Rust `nucleus-install` executable packages the CLI, daemon, installer, and
 Chancery bundle. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
-command selects a `cell-install-v2` package and invokes the Nucleus service
+command selects a `cell-install-v3` package and invokes the Nucleus service
 installer. Public CLI and daemon copies remain service-owned. `inspect` reads
 release metadata. There are no installer `verify` or `verify-release` commands.
 

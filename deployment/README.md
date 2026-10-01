@@ -75,6 +75,13 @@ settings. Settings identity uses the JSON values, not the settings file path.
 The admitted deployment plan records its expanded product set. Presentation
 flags do not change request identity.
 
+Optional `--prepared-build ABSOLUTE_RESULT_JSON` supplies candidates from an
+earlier build of the same commit under the captured signing policy. Admission
+retains the result file's absolute path and parsed result object as request inputs. Keep that
+file and its candidates available until preparation finishes. A replay with a
+changed path or result object stops. `--prepared-build-snapshot-file` can supply
+an already retained result object; admission compares it directly before reuse.
+
 An exact replay returns the existing operation. Reuse of the same ID with a
 different request stops. A terminal replay does not run installation again.
 An active or interrupted replay does not start another worker. A different
@@ -105,8 +112,9 @@ pruning. Keep them with deployment state. Their absence is not proof
 that an operation never ran if storage was removed or restored incompletely.
 
 CI owns its validation receipt and checks the exact source commit before this
-handoff. Deployment does not determine CI coverage or turn a caller ID into
-permission to deploy.
+handoff. Production preparation and acceptance check the candidate executable
+set against the product descriptor at that commit. Deployment does not determine
+CI coverage or turn a caller ID into permission to deploy.
 
 The coordinator and release builder use Python. Product installation and
 deployment adapters are Rust executables backed by `cell-install`; retained
@@ -118,33 +126,39 @@ Each run creates a detached worktree at the selected commit. It calls the shared
 release builder once for selected products, the maintenance closure, and retained
 dependencies. Preparing an inspector does not select its product for upgrade.
 
+When `--prepared-build` supplies a matching candidate, preparation verifies its
+source, product, executable scope, identity, and native signatures. It
+copies and seals the bundle in the deployment workspace before maintenance.
+It builds only missing products in one Cargo invocation. An invalid supplied
+candidate stops preparation; it does not trigger a replacement build.
+
 Complete the relevant CI checks during development. Deployment does not run CI
 or require a CI receipt. Preparation builds production binaries and packages the selected files. Tests, formatting, Clippy, documentation
 builds, recognition gates, and generator CI remain development checks.
 
 The builder uses one release-profile Cargo invocation for the selected packages
 and binaries, then seals independent product candidates in parallel. It keeps
-a persistent target and file lock per logical Git repository, separate from
+a persistent target and file lock for release builds, separate from
 the CI broker and target. Cargo defaults to the logical CPU count capped at
-eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
-bundles persist in a cache keyed by the clean Git commit, build inputs, and the
-frozen macOS signing policy. Preparation verifies cached native signatures and
-hashes before reuse.
+eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Cargo owns build
+freshness and compilation reuse. Each preparation copies compiler outputs into
+new product bundles and signs those copies. Cell stores no additional hashed
+build-entry cache. The lock covers compilation and copying.
 
 The full Git commit ID identifies clean source. Each preparation of dirty source
-gets a new identity and builds a fresh cache entry. A build from uncommitted
-version edits is not reused after commit. Preparation does not hash source files.
+gets a new identity. Cargo decides which compiler outputs need rebuilding.
+Preparation does not hash source files or build configuration.
 
 A schema-one candidate records the source identity, selected commit, and
-executable hashes and versions. Deployment retains a separate build receipt.
+an opaque UUID candidate ID and executable versions. Deployment retains a separate build receipt.
 It deploys sealed executable copies without reading a later Cargo target.
 Build records do not record CI success.
 
 ### macOS signing
 
 Cell uses one current-user signing policy outside the repository. The shared
-builder signs staged native runtime and installer executables before it computes
-candidate hashes. Each executable keeps a permanent code identifier under the
+builder signs staged native runtime and installer executables. Each executable
+keeps a permanent code identifier under the
 configured namespace and its canonical product descriptor. Independent release
 units do not change that product namespace. Compiler outputs remain unchanged.
 
@@ -268,9 +282,8 @@ No caller-supplied run ID or separate recovery command is required. A failed
 recovery retains evidence and holds. Original failure and recovery excerpts
 share the final diagnostic budget.
 
-Completed build bundles and
-the release Cargo target live outside that workspace and survive cleanup. The
-default cache is `releases/REPOSITORY_HASH` inside the external workspace,
+The release Cargo target lives outside the deployment workspace and survives
+cleanup. The default cache is `releases` inside the external workspace,
 shared by linked worktrees. `CELL_RELEASE_CACHE_DIR` can select another location
 inside that workspace. Explicit build outputs must also remain there.
 Compiler processes cannot write outside the external workspace. See
@@ -347,8 +360,8 @@ no caller-supplied command or workflow body. Standard input is one JSON object:
 
 `candidate_dir` and `candidate` identify a sealed candidate for selected and
 affected products. Binaries reside at `candidate_dir/bin/COMMAND`; the manifest
-records each path, SHA-256 and version plus exact packaging/provider source
-hashes. The adapter executes `PRODUCT-install adapter OP` from the candidate,
+records each path, version and permanent native code identifier. It retains the
+source commit and opaque candidate ID. The adapter executes `PRODUCT-install adapter OP` from the candidate,
 reads its package metadata and refuses `apply` for an affected-only
 product. A declared `maintenance_products` closure makes these executables
 available before inspection and before any hold.
@@ -386,7 +399,7 @@ boundary.
 
 ## Release publication policy
 
-Deployment uses committed versions and content identities. Product `release.sh`
+Deployment uses committed versions and opaque release identities. Product `release.sh`
 separately owns Git publication: its lock, version policy, build, commit, tag,
 and atomic push. The coordinator does not treat an installed version as a Git
 tag or impose a release cadence. Release and deployment share build artifacts.
@@ -402,13 +415,18 @@ Product installers use the shared `cell-install` library for file transactions.
 Each installer owns its product policy and version-one coordinator adapter.
 The library has no separate product identity or release publication.
 
-Usher retains the `cell-install-v1` format. See
+Usher publishes the `cell-install-simple-v2` format. See
 [Usher installation](../usher/chancery/manuals/install-operate.md) for its
 commands and supported legacy recovery. Other products use
-`cell-install-v2`. Its manifest records exact file digests and modes, independent
-executable/provider versions, public entry mappings and a stable content identity.
+`cell-install-v3`. Its manifest records file paths and modes, permanent native
+code identifiers, independent executable/provider versions, public entry mappings
+and an opaque UUID release identity. Installation and rollback compute no custom
+artifact hashes. Native signatures remain verified by macOS `codesign`.
 The immutable tree retains `package/install` for supported recovery. Legacy
-formats are read through the owning product's metadata reader.
+formats are read through the owning product's metadata reader. Existing
+hash-named releases remain selectable without recomputing their recorded hashes.
+New installers can read these earlier formats; old installers cannot read the
+new formats. Script and documentation bytes receive no content-hash check.
 
 Conversations, Chancery, Email, Cast, Clockwork and Platter use the common
 program-selection entry point. Their product specifications supply the layout,

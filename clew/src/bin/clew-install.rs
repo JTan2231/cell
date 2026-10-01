@@ -22,7 +22,7 @@ fn main() -> std::process::ExitCode {
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "clew-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nschedule-definition --state-dir ABS --output ABS [--home ABS]\n\nProgram installation does not initialize state or activate schedules.",
+            "clew-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nschedule-definition --state-dir ABS --output ABS [--home ABS]\n\nProgram installation does not initialize state or activate schedules.",
             env!("CARGO_PKG_VERSION")
         );
         return std::process::ExitCode::SUCCESS;

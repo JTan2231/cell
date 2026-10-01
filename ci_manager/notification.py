@@ -94,6 +94,7 @@ def render(job: dict) -> tuple[str, str]:
         lines = ["CI was cancelled."]
     else:
         failure = receipt.get("failure") or {}
+        production = job.get("production_receipt") or {}
         gate = failure.get("gate")
         failed_checks = [check_name(item["gate"]) for item in receipt.get("gates", [])
                          if item.get("state") != "passed" and item.get("gate")]
@@ -106,6 +107,10 @@ def render(job: dict) -> tuple[str, str]:
         elif phase in {"repair_wait", "applying"}:
             failed = "automatic repair"
             reason = detail(job.get("outcome_message"), job)
+        elif (phase == "repair_prepare" and job.get("production_diagnostics")
+              and production.get("failure_kind") == "release_build"):
+            failed = "release build"
+            reason = detail(production.get("message"), job) or "The release build failed; no specific cause was reported."
         elif gate or failed_checks:
             failed = check_name(gate) if gate else ", ".join(failed_checks)
             reason = validation_reason(job, failure)

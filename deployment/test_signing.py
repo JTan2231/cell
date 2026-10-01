@@ -22,7 +22,7 @@ class SigningTests(unittest.TestCase):
     def test_fingerprint_normalization_preserves_the_permanent_identifier(self):
         uppercase = {"schema": 1, "macos": {**self.policy["macos"], "certificate_sha1": "A" * 40}}
         self.assertEqual(signing.validate_policy(uppercase), self.policy)
-        self.assertEqual(signing.policy_digest(uppercase), signing.policy_digest(self.policy))
+        self.assertEqual(signing.validate_policy(uppercase), signing.validate_policy(self.policy))
         self.assertEqual(signing.identifier(self.policy, "annals", "annals-usage"), "local.cell.annals.annals-usage")
         self.assertEqual(signing.identifier(self.policy, "krisis", "krisis-install"), "local.cell.krisis.krisis-install")
 
@@ -90,7 +90,7 @@ class SigningTests(unittest.TestCase):
             status = json.loads(output.call_args.args[0])
             self.assertTrue(status["ready"])
             self.assertEqual(status["policy"], self.policy)
-            self.assertEqual(status["policy_digest"], signing.policy_digest(self.policy))
+            self.assertNotIn("policy_digest", status)
 
 
 if __name__ == "__main__":

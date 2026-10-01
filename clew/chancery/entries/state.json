@@ -1,6 +1,6 @@
 {
   "id": "clew.state",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -105,7 +105,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable cell-install-v2 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
+        "statement": "Opaque UUIDs identify immutable cell-install-v3 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
       }
     ],
     "completeness_and_freshness": [
@@ -143,7 +143,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 program releases, ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
       },
       {
         "status": "unspecified",

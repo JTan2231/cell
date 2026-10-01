@@ -82,6 +82,10 @@ EOF
 }
 
 ci_fmt() {
+    if [ -n "${CELL_CI_AUTOFIX_PATCH:-}" ]; then
+        printf '%s\n' '==> rustfmt will apply with the shared lint fixes'
+        return
+    fi
     printf '%s\n' '==> rustfmt'
     set -- cargo fmt --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
     while IFS= read -r cargo_package; do
@@ -233,6 +237,10 @@ if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
 fi
 ci_stage='rustdoc'
 ci_doc
-ci_stage='release build'
-ci_build
+if [ "$phase" = full ]; then
+    ci_stage='release build'
+    ci_build
+else
+    printf '%s\n' '==> release build handled by the shared dispatcher'
+fi
 printf '%s\n' 'ci.sh: green'

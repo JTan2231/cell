@@ -1,6 +1,6 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -19,7 +19,7 @@
   "interfaces": [
     {
       "label": "Install the tested candidate",
-      "invocation": "<TESTED_CAST_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
+      "invocation": "<TESTED_CAST_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]"
     },
     {
       "label": "Initialize state",
@@ -55,7 +55,7 @@
     }
   ],
   "effects": [
-    "Deployment stages a content-addressed wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
+    "Deployment stages a immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
     "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
@@ -195,7 +195,7 @@
     {
       "id": "cast.installation",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.state",
