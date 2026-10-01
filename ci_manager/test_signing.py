@@ -237,7 +237,7 @@ class ProductionHelperTests(unittest.TestCase):
         stack.enter_context(mock.patch.object(signing, "assert_current"))
         stack.enter_context(mock.patch.object(signing, "preflight"))
         stack.enter_context(mock.patch.object(production, "source_commit", return_value=self.commit))
-        stack.enter_context(mock.patch.object(production.candidate, "content_source_key", return_value=self.commit))
+        self.clean = stack.enter_context(mock.patch.object(production.git_ops, "clean_candidate"))
         self.exists = stack.enter_context(mock.patch.object(Path, "exists", return_value=False))
         stack.enter_context(mock.patch.object(Path, "read_text", return_value=json.dumps(self.result)))
         self.build = stack.enter_context(mock.patch.object(production.build, "prepare", return_value=self.result))
@@ -247,6 +247,7 @@ class ProductionHelperTests(unittest.TestCase):
         receipt = production.prepare(self.source, ["alpha"], self.output, POLICY)
         self.build.assert_called_once_with(self.source, ["alpha"], self.output, signing_policy=POLICY)
         self.verify.assert_called_once_with(self.output / "candidates/alpha", signing_policy=POLICY)
+        self.assertEqual(self.clean.call_args_list, [mock.call(self.source, self.commit)] * 2)
         self.assertEqual(receipt["signing_policy_digest"], signing.policy_digest(POLICY))
         self.assertEqual(receipt["source_commit"], self.commit)
 
@@ -258,6 +259,27 @@ class ProductionHelperTests(unittest.TestCase):
         self.verify.side_effect = signing.SigningError("retained executable has wrong certificate")
         with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
             production.prepare(self.source, ["alpha"], self.output, POLICY)
+
+    def test_initial_dirty_or_changed_head_stops_before_production_build(self):
+        self.clean.side_effect = ManagerError("candidate worktree changed")
+        with self.assertRaisesRegex(ManagerError, "worktree changed"):
+            production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.build.assert_not_called()
+        self.verify.assert_not_called()
+
+    def test_dirty_or_changed_head_after_preparation_cannot_produce_success(self):
+        self.clean.side_effect = [None, ManagerError("candidate worktree changed")]
+        with self.assertRaisesRegex(ManagerError, "worktree changed"):
+            production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.verify.assert_called_once()
+        self.assertEqual(self.clean.call_args_list, [mock.call(self.source, self.commit)] * 2)
+
+    def test_verified_candidate_must_have_the_frozen_commit_and_source_key(self):
+        for changed in ({"source_commit": "c" * 40}, {"source_key": "dirty:fresh-build"}):
+            with self.subTest(changed=changed):
+                self.verify.return_value = self.manifest | changed
+                with self.assertRaisesRegex(production.candidate.CandidateError, "does not match"):
+                    production.prepare(self.source, ["alpha"], self.output, POLICY)
 
     def test_other_source_location_or_malformed_scope_is_rejected(self):
         variants = ({"source_key": "c" * 40}, {"candidates": []},

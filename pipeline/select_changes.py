@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from fnmatch import fnmatchcase
-import hashlib
 import json
 import os
 from pathlib import Path, PurePosixPath
@@ -52,17 +51,11 @@ def git_status(root: Path) -> bytes:
 
 
 def status_key(status: bytes) -> str:
-    return "sha256:" + hashlib.sha256(status).hexdigest()
+    return "status:" + status.hex()
 
 
 def source_key(root: Path) -> str:
-    value = output([
-        sys.executable, str(root / "ci_broker/client.py"), "source-key",
-        "--repo-root", str(root),
-    ]).decode("ascii").strip()
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
-        raise SelectionError("invalid source key from CI broker client")
-    return value
+    return output(["git", "-C", str(root), "rev-parse", "--verify", "HEAD"]).decode("ascii").strip()
 
 
 def inventory(root: Path) -> dict[str, tuple[str, list[str]]]:
@@ -159,12 +152,9 @@ def committed_paths(root: Path, base: str, candidate: str) -> set[str]:
 
 
 def check(root: Path, expected_source: str, expected_status: str) -> None:
-    before = git_status(root)
-    observed_source = source_key(root)
-    after = git_status(root)
-    if (before != after or status_key(after) != expected_status
-            or observed_source != expected_source):
-        raise StaleSelection("source or Git status changed during root CI; results are stale")
+    if (source_key(root) != expected_source
+            or status_key(git_status(root)) != expected_status):
+        raise StaleSelection("HEAD or Git status changed during root CI; results are stale")
 
 
 def describe(paths: list[str], verbose: bool) -> str:
@@ -288,7 +278,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
             raise StaleSelection("HEAD does not match the requested candidate commit")
         if before:
             raise StaleSelection("committed-range validation requires a clean worktree and index")
-    expected_source = source_key(root)
+    expected_source = head
     products = inventory(root)
     changes = committed_paths(root, base, head) if committed else changed_paths(before)
     reasons: dict[str, list[str]] = {product: [] for product in products}
@@ -389,8 +379,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
             if product in MAINTENANCE_CONSUMERS:
                 suites["maintenance"].append(f"platform coverage for {product}")
 
-    # The broker source key omits index state. Check exact status as well so
-    # staging-only status changes cannot invalidate selection without detection.
+    # The commit identifies the source. Check Git status separately to detect
+    # worktree or index changes during validation.
     expected_status = status_key(before)
     check(root, expected_source, expected_status)
     if output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip() != head:
@@ -434,7 +424,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
 
 def plan(root: Path, arguments: list[str]) -> None:
     selection = make_plan(root, arguments)
-    # Every token is a fixed mode, hash, count, or validated product ID.
+    # Every token is a fixed mode, commit, encoded status, count, or product ID.
     # The shell caller can split this output without evaluating shell code.
     print(selection.mode, "verbose" if selection.verbose else "quiet", selection.source,
           selection.status, len(selection.products), *selection.selected)
@@ -580,8 +570,6 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
 
 def check_plan(root: Path, selection: Plan) -> None:
     check(root, selection.source, selection.status)
-    if output(["git", "-C", str(root), "rev-parse", "HEAD"]).decode().strip() != selection.head:
-        raise StaleSelection("HEAD changed during CI; results are stale")
 
 
 def run_json(root: Path, arguments: list[str]) -> int:

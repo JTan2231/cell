@@ -14,9 +14,12 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from deployment import build, candidate, signing
+from ci_manager import git_ops
 
 
 def prepare(source: Path, products: list[str], output: Path, policy: dict | None) -> dict:
+    commit = source_commit(source)
+    git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
     signing.preflight(policy)
     # A surviving successful preparation is reusable only after independently
@@ -27,7 +30,7 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
         result = build.prepare(source, products, output, signing_policy=policy)
     if not isinstance(result, dict) or result.get("schema") != 1 or result.get("state") != "built":
         raise candidate.CandidateError("production preparation has an incompatible receipt")
-    if result.get("source_key") != candidate.content_source_key(source):
+    if result.get("source_key") != commit:
         raise candidate.CandidateError("production preparation has another source identity")
     canonical_products = sorted({"krisis" if product == "decisions" else product for product in products})
     if (not isinstance(result.get("candidates"), dict)
@@ -41,19 +44,19 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
         if path != output / "candidates" / product:
             raise candidate.CandidateError("production candidate is outside its preparation")
         manifest = candidate.verify(path, signing_policy=policy)
-        if (manifest.get("source_commit") != source_commit(source)
+        if (manifest.get("source_commit") != commit
                 or manifest.get("source_key") != result["source_key"]
                 or manifest.get("candidate_id") != record.get("candidate_id")
                 or manifest.get("product") != product):
             raise candidate.CandidateError("production candidate does not match its preparation")
+    git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
-    return {"schema_version": 1, "state": "passed", "source_commit": source_commit(source),
+    return {"schema_version": 1, "state": "passed", "source_commit": commit,
             "signing_policy_digest": signing.policy_digest(policy), "products": canonical_products,
             "preparation": result}
 
 
 def source_commit(source: Path) -> str:
-    from ci_manager import git_ops
     return git_ops.commit(source, "HEAD")
 
 

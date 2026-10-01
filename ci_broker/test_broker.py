@@ -33,13 +33,6 @@ class BrokerCliTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def base(self, lane: str = "heavy") -> list[str]:
-        source_check = json.dumps(
-            [
-                sys.executable,
-                "-c",
-                "from pathlib import Path; print(Path('source-key').read_text().strip())",
-            ]
-        )
         return [
             sys.executable,
             str(BROKER),
@@ -70,8 +63,6 @@ class BrokerCliTests(unittest.TestCase):
             "minimal",
             "--cwd",
             str(self.worktree),
-            "--source-check-json",
-            source_check,
             "--verbose-receipt",
         ]
 
@@ -187,8 +178,7 @@ class BrokerCliTests(unittest.TestCase):
         def command(cwd: Path) -> list[str]:
             values = self.base()
             values[values.index(str(self.worktree))] = str(cwd)
-            source_option = values.index("--source-check-json")
-            values[source_option:source_option] = [
+            values += [
                 "--identity-root",
                 str(self.worktree),
             ]
@@ -225,13 +215,11 @@ class BrokerCliTests(unittest.TestCase):
             toolchain_key="toolchain-v1",
             environment_key="environment-v1",
             command_key="command-v1",
-            source_check_key="source-check-v1",
             lane="heavy",
         )
         invocation = broker.Invocation(
             cwd=self.worktree,
             command=(sys.executable, "-c", "pass"),
-            source_check=(sys.executable, "-c", "print('source-1')"),
             environment=dict(os.environ),
             share_clean_candidate=False,
             attribution_json="{}",
@@ -252,7 +240,7 @@ class BrokerCliTests(unittest.TestCase):
         self.assertTrue(scoped._try_claim(follower, "heavy"))
         scoped.cancel_request(follower)
 
-    def test_changed_source_is_stale_not_green(self) -> None:
+    def test_body_result_does_not_depend_on_source_contents(self) -> None:
         body = [
             sys.executable,
             "-c",
@@ -266,9 +254,11 @@ class BrokerCliTests(unittest.TestCase):
             timeout=5,
         )
         receipt = self.parse_receipt(completed)
-        self.assertEqual(completed.returncode, 75, completed.stderr)
-        self.assertEqual(receipt["state"], "stale")
-        self.assertEqual(receipt["execution_state"], "stale")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(receipt["state"], "passed")
+        self.assertEqual(receipt["execution_state"], "passed")
+        self.assertEqual(receipt["source_key"], "source-1")
+        self.assertEqual(self.source.read_text(encoding="utf-8"), "source-2\n")
 
     def test_runner_crash_recovers_to_lost_and_stops_body(self) -> None:
         body_pid = self.root / "body-pid"
@@ -485,13 +475,18 @@ class RepositoryClientTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def test_snapshot_is_exact_and_only_clean_snapshot_is_shareable(self) -> None:
-        clean_key, clean = client.source_snapshot(self.root)
-        self.assertTrue(clean)
+    def test_source_identity_is_the_committed_head(self) -> None:
+        commit = client.git(self.root, "rev-parse", "HEAD").decode().strip()
+        self.assertEqual(client.source_commit(self.root), commit)
+        self.assertTrue(client.repository_is_clean(self.root))
         (self.root / "source.txt").write_text("two\n", encoding="utf-8")
-        dirty_key, dirty_clean = client.source_snapshot(self.root)
-        self.assertFalse(dirty_clean)
-        self.assertNotEqual(clean_key, dirty_key)
+        (self.root / "untracked.txt").write_text("untracked\n", encoding="utf-8")
+        self.assertEqual(client.source_commit(self.root), commit)
+        self.assertFalse(client.repository_is_clean(self.root))
+        subprocess.run(("git", "-C", str(self.root), "add", "."), check=True)
+        subprocess.run(("git", "-C", str(self.root), "commit", "-qm", "changed"), check=True)
+        self.assertNotEqual(client.source_commit(self.root), commit)
+        self.assertTrue(client.repository_is_clean(self.root))
 
     def test_cargo_path_bootstrap_has_no_empty_path_segment(self) -> None:
         fake_home = self.root / "home"
@@ -516,7 +511,7 @@ class RepositoryClientTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {"HOME": str(self.root / "other-home")}):
                 self.assertEqual(client.canonical_state_dir(), expected)
 
-    def test_expected_source_mismatch_is_stale_without_running_body(self) -> None:
+    def test_expected_commit_mismatch_is_stale_without_running_body(self) -> None:
         marker = self.root / "must-not-run"
         completed = subprocess.run(
             [
@@ -527,7 +522,7 @@ class RepositoryClientTests(unittest.TestCase):
                 "root",
                 "--verbose-receipt",
                 "--expected-source-key",
-                "sha256:not-the-current-source",
+                "0" * 40,
                 "--repo-root",
                 str(self.root),
                 "--",
@@ -557,11 +552,17 @@ class RepositoryClientTests(unittest.TestCase):
                 mock.patch.object(client.broker, "main", return_value=0) as run:
             self.assertEqual(client.run(arguments), 0)
             command = run.call_args.args[0]
+            self.assertEqual(command[command.index("--source-key") + 1], client.source_commit(self.root))
+            self.assertNotIn("--source-check-json", command)
+            self.assertIn("--share-clean-candidate", command)
             assignments = [command[index + 1] for index, value in enumerate(command) if value == "--env"]
             values = client.broker.parse_environment_assignments(assignments)
             for name in ("CARGO_HOME", "CARGO_TARGET_DIR", "CARGO_BUILD_BUILD_DIR", "TMPDIR"):
                 self.assertTrue(Path(values[name]).is_relative_to(external), name)
             self.assertIn("/usr/bin/sandbox-exec", command)
+            (self.root / "source.txt").write_text("changed\n", encoding="utf-8")
+            self.assertEqual(client.run(arguments), 0)
+            self.assertNotIn("--share-clean-candidate", run.call_args.args[0])
             arguments.unset_env = ["TMPDIR"]
             with self.assertRaisesRegex(client.broker.BrokerError, "cannot unset"):
                 client.run(arguments)

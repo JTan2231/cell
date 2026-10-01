@@ -931,9 +931,6 @@ class Run:
                 git(repository, "worktree", "add", "--detach", str(self.worktree), self.data["source_commit"])
             finally:
                 os.umask(previous_umask)
-        source_key = candidate.content_source_key(self.worktree)
-        self.data["source_key"] = source_key
-        self.save()
         preparation = self.path / "preparation"
         # Affected-only products need the same trustworthy installer boundary
         # as selected products. Prepare their declared maintenance closure once,
@@ -974,6 +971,8 @@ class Run:
         result = read_json(preparation / "result.json")
         if result.get("state") != "built":
             raise DeploymentError("release build did not complete")
+        source_key = result["source_key"]
+        self.data["source_key"] = source_key
         self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
         for product in self.data["prepared_products"]:
             record = self.record(product)
