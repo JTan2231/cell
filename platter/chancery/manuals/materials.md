@@ -159,10 +159,9 @@ edition owns its retained PDF bytes and no longer reads that file. Read
 
 ## Immutability, recovery, and privacy
 
-A schema-seven SQLite snapshot contains the entire retained Platter library.
-Use the maintained migration/backup operation rather than copying an open
-main database without its journal. Schema-one through schema-six state must pass
-the explicit [installation migration](install-operate.md); ordinary work refuses it.
+The schema-seven SQLite library contains retained inputs, templates, artifacts,
+editions, settings, and holds. Schema-one through schema-six state must pass the
+explicit [installation migration](install-operate.md); ordinary work refuses it.
 
 Accepted outputs are immutable by run and kind. A repeated submission resolves
 to existing identical content; conflicting content is refused. Platter can

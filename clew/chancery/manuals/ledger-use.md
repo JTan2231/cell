@@ -135,7 +135,7 @@ migrate state implicitly.
 Use initialized ledger schema three at `~/.local/share/clew/ledger.sqlite3`, or
 select an independent private ledger with global `--state-dir ABSOLUTE_PATH`.
 The directory has mode 0700 and the database is a regular file with mode 0600.
-Read `chancery show clew.state` for initialization, migration, backup, and
+Read `chancery show clew.state` for initialization, migration, and
 compatible recovery. Never repair an entry by editing SQLite.
 
 Keep supplied notes, status, thread names, and links private. These operations

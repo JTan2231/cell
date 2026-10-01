@@ -1,6 +1,6 @@
 {
   "id": "clew.ledger.use",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -138,7 +138,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Ledger and JSON output schemas are three. Coordinated deployment migrates supported schema-one and schema-two ledgers with a consistent private backup, preserving write IDs, sequence, times, exact content, corrections, legacy aliases, and frozen email state. Migration creates no named threads or new reports. Ordinary operations refuse unsupported state. There is no automatic pruning or downgrade."
+        "statement": "Ledger and JSON output schemas are three. Coordinated deployment migrates supported schema-one and schema-two ledgers transactionally, preserving write IDs, sequence, times, exact content, corrections, legacy aliases, and frozen email state. Migration creates no named threads or new reports. Ordinary operations refuse unsupported state. There is no automatic pruning or downgrade."
       }
     ],
     "reliances": [

@@ -1,11 +1,11 @@
 {
   "id": "bazaar.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Understand Bazaar installation and private state",
-  "summary": "Read program and provider publication guarantees, private database initialization, integrity checks, supported state, and compatible backup and recovery boundaries.",
+  "summary": "Read program and provider publication guarantees, private database initialization, integrity checks, supported state, and program recovery boundaries.",
   "manual": "manuals/installation.md",
   "interfaces": [
     {
@@ -67,7 +67,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "SQLite waits up to five seconds for contention. A connection is not shared concurrently between threads; callers open separate handles. There is no daemon, schedule, state migration, automatic backup, deletion, pruning, or restore command, and no capacity, throughput, or hard latency guarantee."
+        "statement": "SQLite waits up to five seconds for contention. A connection is not shared concurrently between threads; callers open separate handles. There is no daemon, schedule, state migration, deletion, pruning, or data restoration command, and no capacity, throughput, or hard latency guarantee."
       }
     ],
     "compatibility_and_evolution": [
@@ -113,7 +113,7 @@
       },
       {
         "status": "declared",
-        "statement": "Filesystem backup requires stopped writers and completed operations and retains the database with all SQLite sidecars. Restore requires a compatible complete backup and exclusive access. Restoring older history can reuse later version numbers; caller references must be reconciled before resuming."
+        "statement": "Program recovery preserves every committed string version. No data restoration is supported."
       }
     ]
   },
@@ -138,7 +138,7 @@
     "Refuse foreign selectors, stale expected selections and unsupported state. Retained-release program recovery leaves database history intact. After an interrupted initialization, repeat init only against the same empty or compatible state."
   ],
   "privacy": [
-    "The default database is ~/.local/share/bazaar/bazaar.sqlite3. State stays outside source and release files. Protect quiescent backups with the same private permissions."
+    "The default database is ~/.local/share/bazaar/bazaar.sqlite3. State stays outside source and release files."
   ],
   "does_not_authorize": [
     "Writing string content, migrating callers, deleting or restoring data, executing a model, or activating a schedule."

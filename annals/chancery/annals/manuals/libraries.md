@@ -1,7 +1,7 @@
 # Annals libraries and instructions
 
 Use this feature to understand library selection, identity, stored instructions,
-read access, initialization, supported migration, statistics, and backup.
+read access, initialization, supported migration, and statistics.
 Use `annals.library.operate` for procedures that change these settings or corpus
 history. Each library is a separate local authority. No combined search, graph,
 cursor, or transaction across libraries is supplied.
@@ -58,8 +58,7 @@ For operator selection, config resolves from `--config`, then nonempty
 `ANNALS_LIBRARY`, then the selected config's `library`. Missing usable
 selection fails with `library_not_configured`. Annals never silently creates
 or selects `./annals.db`. Config `expected_library_id` and
-`--expected-library-id` can pin an operator path and must agree. A backup
-preserves the persistent library identity.
+`--expected-library-id` can pin an operator path and must agree. Persistent library identity survives supported migration.
 
 The installed macOS frontend selects
 `~/Library/Application Support/Annals/config.toml` only when no explicit config
@@ -183,7 +182,7 @@ null legacy provenance. Reconciliation inspection reports used and current
 instruction revisions separately. `annals.work.integrate` and
 `annals.corpus.change` own examination reuse and atomic application checks.
 
-## Initialization, migration, statistics, and backup
+## Initialization, migration, and statistics
 
 The deterministic library interfaces are:
 
@@ -191,7 +190,6 @@ The deterministic library interfaces are:
 annals init [--kind general|decisions]
 annals migrate
 annals stats
-annals backup ABSENT_OUTPUT_PATH
 ```
 
 Initialization creates revision zero and returns `library_id` and immutable
@@ -218,16 +216,14 @@ while retaining earlier projections as legacy acceptance records.
 
 Migration changes no retained source or corpus history. Current-format migration
 is idempotent. Unsupported older or newer schemas fail without partial mutation.
-A pre-version-3 replacement requires the explicitly authorized guarded
-fresh-state installation route. Do not approximate it by editing or replacing
-the active database.
+The installer has no replacement or reset mode. Do not edit or replace an
+unsupported active database to bypass the schema boundary.
 
 `stats` is read-only. It reports corpus revision and corpus, graph, work,
 reconciliation, history, model-run, and database-size information. These counts
 describe the selected library, not model consumption or runtime readiness.
-`backup` creates one consistent standalone SQLite copy and refuses to replace
-its destination. The copy includes retained sources, exact evidence, instruction
-revisions, examination provenance, reconciliation records, and corpus history.
+Annals supplies no data backup or restore interface. Existing backup files
+remain unchanged.
 
 ## Read access and Rust clients
 
@@ -237,8 +233,7 @@ Query scratch tables and indexes stay in memory. Reads do not initialize,
 migrate, checkpoint, or repair state. Missing required files stop the read.
 Initialization, migration, and authorized recovery prepare persistent WAL
 files; migration also prepares a configured spool's control lock. Writers keep
-readable WAL and shared-memory sidecars after close. Backups use rollback-journal
-mode and remain standalone readable files.
+readable WAL and shared-memory sidecars after close.
 
 `annals::api` exports provider-owned library, work, corpus, reconciliation,
 source-activity, history, and inbox views. Database connections and worker state
@@ -259,10 +254,10 @@ Unknown names, mismatched identities, conflicting provisioning state, missing
 read prerequisites, and unsupported schemas fail without choosing replacement
 state. Inspect the selected identity and use the owning operation or installation
 recovery route. Do not edit SQLite, the catalog, or spool receipts directly.
-Initialization, instruction mutation, migration, backup placement, and corpus
+Initialization, instruction mutation, migration and corpus
 application each require authority appropriate to their effects.
 
-Catalogs, libraries, instructions, spools, backups, and outputs can contain
+Catalogs, libraries, instructions, spools, and outputs can contain
 private paths, source text, quotations, and model context. Keep each under its
 local privacy boundary. CLI usage recording requires nonempty `CODEX_THREAD_ID`
 and records command identity, time, and thread ID through Chancery. It records
@@ -272,7 +267,7 @@ errors preserve command results.
 Library schema, catalog identity, instruction revision, corpus revision,
 provider release, feature contract, CLI output schema, and installed package
 generation are distinct compatibility identities. No general migration window,
-client support period, ABI guarantee, capacity, backup-retention duration,
+client support period, ABI guarantee, capacity,
 throughput, or wall-clock latency is promised. Library creation and deterministic
 administration invoke no model or Nucleus job. Bazaar is required for the
 documented initialization text selection.

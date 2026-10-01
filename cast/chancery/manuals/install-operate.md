@@ -20,14 +20,11 @@ keeps the prerequisites, effects, stop conditions, and steps needed to operate.
    current complete configuration and consumed budgets.
 3. Select a installer and supplied binary/bundle for
    program work. Use user-owned paths and the supported macOS shell tools.
-4. Stop callers before state recovery or ownership reconciliation. Obtain a
-   private consistent SQLite backup, including live sidecars when relevant,
-   before state recovery.
+4. Stop callers before ownership reconciliation.
 5. Keep keys outside arguments, configuration, database rows, and logs.
 
 Stop if the intended selector belongs to another owner, an active writer would
-be displaced. Stop before destructive or incompatible state work without a
-defined compatible backup and recovery choice. Program recovery does not
+be displaced. Stop before unsupported destructive or incompatible state work. Program recovery does not
 restore discovery state or configuration.
 
 ## Install the candidate
@@ -184,9 +181,7 @@ deployer is running before removing a stale installation lock and rerunning
 the tested candidate. Never remove another active writer's lock. Runtime
 collection uses a separate kernel-backed lock.
 
-For state recovery, stop all selected-state callers and preserve a private
-consistent SQLite backup, including live sidecars when relevant. Program
-recovery leaves discovery state unchanged. This release provides no automatic
+Program recovery leaves discovery state unchanged. This release provides no automatic
 database migration, pruning, destructive reset, or state uninstaller. Stop
 when a proposed recovery requires unsupported row edits or an incompatible
 program/state pair.

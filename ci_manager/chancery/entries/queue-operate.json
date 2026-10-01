@@ -68,7 +68,7 @@
     "New deterministic emails lead with the outcome and product or check names, include available failed test names or a short diagnostic, and distinguish validation, deployment, recovery, and cleanup failures. Unknown causes remain explicit. Emails omit job and commit IDs, model names, repair budgets, and local artifact paths. Receipts do not promise installed versions or individual final installation states; messages do not infer them. Previously frozen messages keep their exact bytes and key. Emails do not attach the repository, model reasoning, or full CI transcripts."
   ],
   "dependencies": [
-    {"id": "nucleus.requester.integrate", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "nucleus.requester.integrate", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "email.message.send", "min_contract": 4, "max_contract_exclusive": 5},
     {"id": "bazaar.string.read", "min_contract": 1, "max_contract_exclusive": 2}
   ],

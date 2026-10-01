@@ -17,10 +17,10 @@ authorize a note, report, send, schedule, or installation.
 | `clew.ledger.use` | Supplied notes, optional status, named threads, optional external links, local search, entry reads, exact retries, corrections, and retractions. |
 | `clew.application.track` | Explicit Cast job reports, retained-job search, supplied application status, job history, and the boundary between application reports and plain job links. |
 | `clew.digest.email` | Application selection, copied notes, missing job context, frozen occurrences, send authority, uncertain submission, and scheduling failures. |
-| `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration, backup, and compatible recovery. |
+| `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration and compatible program recovery. |
 
 Use `clew.install.operate` for installation, guarded migration,
-schedule preparation, backup, and recovery procedures. Its required feature
+schedule preparation and program recovery procedures. Its required feature
 contracts supply the detailed behavior.
 
 ## How the features work together

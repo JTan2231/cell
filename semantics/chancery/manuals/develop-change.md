@@ -46,8 +46,9 @@ correlations in place. Prompt text edits retain frozen selection semantics.
 
 For a SQLite change, add an explicit versioned migration. Before candidate
 access, disable owned scheduling, suspend public work, hold the worker lock,
-prove SQLite closed, and privately back up database plus `-wal`, `-shm`, and
-`-journal`. Prove rollback after candidate mutation and later activation failure.
+prove SQLite closed, and preserve the live database and sidecars. Prove program
+rollback with an unchanged schema and retained-candidate forward recovery after
+a schema change or later activation failure.
 Never open incompatible state with an older binary or discard committed work.
 
 ## Validate and submit

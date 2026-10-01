@@ -1,6 +1,6 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -73,7 +73,7 @@
   ],
   "failure_and_recovery": [
     "Deployment refuses foreign selectors and stale expected selections; a failed switch restores prior Cast selectors.",
-    "Program rollback does not restore domain state. Preserve the state directory consistently before any database recovery, and do not hand-edit database rows.",
+    "Program rollback preserves current domain state. Do not hand-edit database rows.",
     "Resolve missing keys or provider restrictions separately; configuration changes do not purchase credits or reset accumulated usage."
   ],
   "privacy": [
@@ -94,7 +94,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select the intended home/state, use a supplied candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair or state recovery. Make a private consistent SQLite backup, including live sidecars when relevant, before state recovery."
+        "statement": "Select the intended home/state, use a supplied candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair."
       }
     ],
     "inputs": [
@@ -199,8 +199,8 @@
     },
     {
       "id": "cast.state",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.collect",
@@ -225,7 +225,7 @@
     "Initialize missing state, inspect readiness and complete configuration, and explicitly apply only the intended complete replacement.",
     "Add or disable an exact source and verify ownership and enabled state without treating enrollment as collection success.",
     "Stop collection before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
-    "Recover a canonical retained release. Program recovery leaves discovery state unchanged. Separate data recovery preserves a private consistent backup."
+    "Recover a canonical retained release. Program recovery leaves discovery state unchanged."
   ],
   "checkpoints": [
     "The tested candidate and provider release match and all selectors belong to Cast.",
@@ -240,6 +240,6 @@
   ],
   "stop_when": [
     "A public selector is foreign, an expected selection changed, or an active writer would be displaced.",
-    "Proposed recovery requires unsupported row edits, destructive reset or an incompatible program/state pair without a compatible backup and recovery decision."
+    "Proposed recovery requires unsupported row edits, destructive reset or an incompatible program/state pair."
   ]
 }

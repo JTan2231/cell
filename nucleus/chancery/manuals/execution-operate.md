@@ -202,41 +202,6 @@ refresh tokens to requesters or replace credentials because a read is busy.
 pauses created for this recovery. Never restore an older `auth.json` as a side
 effect of program or database rollback.
 
-## Back up and restore state
-
-Nucleus has no automatic backup or restore command. Select a private destination.
-
-1. Quiesce requesters and wait for jobs to become terminal.
-2. Record the Nucleus version, health, and exact Codex executable.
-3. Stop the user service:
-
-   ```sh
-   launchctl bootout "gui/$(id -u)/org.nucleus.daemon"
-   ```
-
-4. Create a SQLite-aware backup of `nucleus.db`. Other copy methods must preserve
-   the database and any WAL sidecars as one consistent set.
-5. Back up the credential home separately only when credential recovery is required.
-6. Include `quota-policy.json` and `quota-state.json` beside the database. Include
-   logs, service configuration, and requester state as needed.
-7. Start the same service and check readiness:
-
-   ```sh
-   launchctl bootstrap "gui/$(id -u)" \
-     "$HOME/Library/LaunchAgents/org.nucleus.daemon.plist"
-   nucleus health
-   ```
-
-A live copy of only the main database is incomplete. A Nucleus backup does not
-replace requester backups. Use `nucleus.service` for default paths, retained
-state, schema-cutover guarantees, and recovery limits.
-
-Perform restoration with an operator present. Quiesce requesters and stop the
-service. Save current state before restoring a compatible database and binary
-pair. Version-one binaries cannot open schema 2. Do not bypass pending
-compaction or migration failures. Verify health and retained job and output
-reads before resuming. Recover credentials through their separate procedure.
-
 ## Restart or remove the service
 
 Quiesce first when active attempts must finish. `nucleus service restart`
@@ -252,7 +217,7 @@ or individual credential-home files to limit storage.
 
 ## Privacy and command usage
 
-Treat state, logs, and backups as private. They can contain complete prompts,
+Treat state and logs as private. They can contain complete prompts,
 source text, tool arguments and results, exact harness output, and credentials.
 Socket ownership and filesystem permissions are the trust boundary; there is no
 application-level authentication. Read only the records needed for the task.

@@ -35,8 +35,8 @@ without adding its generated PDF to an override edition.
 Already frozen editions retain their exact packet selection, attachments, body
 and send key. Opening or sending them does not read the configured file. Accepted
 editions are not resent and uncertain sends remain held. Replacing the file or
-clearing the setting affects only future editions. A Platter backup includes the
-frozen PDF bytes; future daily work still depends on the configured source file.
+clearing the setting affects only future editions. SQLite retains frozen PDF
+bytes; future daily work still depends on the configured source file.
 
 Single-job preparation, regeneration, URL-selected runs, and retained-material
 preview ignore the daily override and require tailored material. A brief-only
@@ -184,8 +184,8 @@ Do not edit SQLite to force success.
 Authorized sends disclose the exact message and attachments through Email,
 Resend, and Gmail. Posting freshness retrieval discloses HTTP requests to
 employers. Keep resume contact details, job interests, career history, and
-frozen editions private. A consistent Platter backup includes its retained
-message and attachment bytes. Nucleus records and credentials remain separate.
+frozen editions private. SQLite retains message and attachment bytes. Nucleus
+records and credentials remain separate.
 
 ## Command usage
 

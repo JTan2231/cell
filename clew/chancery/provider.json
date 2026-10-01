@@ -33,7 +33,7 @@
       "Frozen mail is retained privately without automatic pruning. Authorized sends disclose complete selected notes, statuses, job details and links through Email."
     ],
     "compatibility_and_retirement": [
-      "Ledger and CLI JSON schemas are three. Coordinated deployment alone converts supported schema-one and schema-two state with a private original-schema backup and exact retry requests and legacy aliases. Existing jobs become explicit application-report associations; no thread is invented. Ordinary commands refuse older or unsupported state; old programs must not use a migrated ledger.",
+      "Ledger and CLI JSON schemas are three. Coordinated deployment alone converts supported schema-one and schema-two state transactionally with exact retry requests and legacy aliases. Existing jobs become explicit application-report associations; no thread is invented. Ordinary commands refuse older or unsupported state; old programs must not use a migrated ledger.",
       "Email storage remains schema one. Frozen messages, send keys and acceptance receipts survive ledger migration. Preserve delivery state and use matching program and ledger versions for recovery."
     ],
     "operational_limits": [

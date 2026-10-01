@@ -8,7 +8,7 @@ chancery show nucleus.service
 ```
 
 The operating manual covers installation, authentication recovery, maintenance,
-backup, restoration, interrupted cutover, restart, and removal. The service
+interrupted cutover, restart, and removal. The service
 feature owns paths, lifecycle, retained-state and schema recovery guarantees.
 Read `chancery resolve nucleus.execution.operate` for the complete contract
 reading and `nucleus manual` for shared coordination and recovery order.

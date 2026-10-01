@@ -112,6 +112,6 @@ readiness, maintenance, and release guarantees.
 Implementation authority alone does not authorize remote Git publication,
 deployment outside the submitted job, state deletion, source mutation,
 narrative publication or email, or another attempt at failed authoring work.
-Keep private requests, sources, and backups protected. CI repair can read
+Keep private requests, sources and runtime records protected. CI repair can read
 candidate source and diagnostics through Nucleus; the manager owns its defined
 outcome email. Unknown state, ownership, or unsupported providers stop work.

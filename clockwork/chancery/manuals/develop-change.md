@@ -44,10 +44,10 @@ success policy is introduced.
 3. Exercise binding first enable, update, idempotence, active refusal,
    bootout/bootstrap failure, compensation, journal recovery, and attributable
    fail-disabled behavior when affected. Never permit intentional dual schedules.
-4. Use a successor schema, explicit quiescent database-plus-sidecar backup,
-   migration, old-state fixture, and database-aware rollback for persistent
-   meaning changes. Retain old definition identity and decoding. Deployment
-   must not migrate storage implicitly or clear an incident.
+4. Use a successor schema, explicit quiescent transactional migration, and
+   old-state fixtures for persistent meaning changes. Retain old definition
+   identity and decoding. Recover with a release compatible with retained state.
+   Deployment must not migrate storage implicitly or clear an incident.
 5. Check policy changes against nonzero exit, startup failure, signal, timeout,
    lost proof, reported failure with exit zero, overlap, re-observation after
    approval, and halt preservation. Use only local Email doubles. Preserve

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -28,7 +28,7 @@
   "success": [
     "The smallest owning code and owning feature contracts, operation procedures, semantic-seed, and packaging contracts agree.",
     "Tests preserve strict manifest rejection, immutable registration, product-artifact containment, exact separately hashed interpreter admission, stable-key-only runtime invocation, artifact verification, per-key overlap, process-group supervision, terminal history, transactional cutover and compensation, privacy, and content-addressed packaging as affected.",
-    "A persistent-state change includes explicit migration, quiescent backup, old-state fixtures, and database-aware rollback rather than implicit deployment migration.",
+    "A persistent-state change includes explicit quiescent transactional migration, old-state fixtures, and recovery with compatible releases rather than implicit deployment migration.",
     "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication.",
     "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome."
   ],
@@ -106,8 +106,8 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -167,7 +167,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Persistent changes require explicit migration, quiescent backup, old-state proof, and database-aware rollback; binding changes preserve three-part database/plist/launchd coherence; the manager validates before deployment and retains both outcomes; release publication remains separate."
+        "statement": "Persistent changes require explicit quiescent transactional migration, old-state proof, and compatible-release recovery; binding changes preserve three-part database/plist/launchd coherence; the manager validates before deployment and retains both outcomes; release publication remains separate."
       }
     ],
     "operational_limits": [

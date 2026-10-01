@@ -83,4 +83,4 @@ if [ -n "$operator" ]; then
 fi
 printf '%s\n' 'All library and operational state was retained:'
 printf '  %s\n' "$STATE_DIR"
-printf '%s\n' 'Remove retained state manually only after making any required backup.'
+printf '%s\n' 'Retained state remains in place. Removal requires separate explicit authority.'

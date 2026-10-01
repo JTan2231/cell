@@ -29,7 +29,7 @@
     "A terminal owner rejects a new answer; inspect domain effects before any replacement job."
   ],
   "privacy": [
-    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state and logs private."
   ],
   "interfaces": [
     {

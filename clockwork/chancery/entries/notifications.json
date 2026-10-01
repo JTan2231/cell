@@ -162,7 +162,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema-two store, schema-one failure-check sidecar, version-one routing, notification-check metadata, feature/provider release, Email contract and pinned broker remain independent. Refresh every enabled broker before relying on the new delay. Older brokers must not run while failure-checks.json exists or with delegated ownership present. Backups preserve all three sidecars plus database and EMT exchange state."
+        "statement": "Schema-two store, schema-one failure-check sidecar, version-one routing, notification-check metadata, feature/provider release, Email contract and pinned broker remain independent. Refresh every enabled broker before relying on the new delay. Older brokers must not run while failure-checks.json exists or with delegated ownership present. Recovery preserves all three sidecars plus database and EMT exchange state."
       },
       {
         "status": "unspecified",

@@ -34,7 +34,7 @@ coordinated deployment ordering; direct installation works independently. No
 dedicated installed contract covers the coordinator, so resolution exposes that
 conditional reliance gap. Installation and inspection grant no authority
 to append content, migrate callers, delete history, send externally, or run an
-agent. Protect all content and backups outside source and release files.
+agent. Protect all content outside source and release files.
 
 ## Install programs
 
@@ -139,15 +139,7 @@ Only schema-one state and version-two installation packages are supported.
 Stop if the selected program cannot read current state. Preserve unresolved
 installation evidence rather than deleting it or changing stored history.
 
-## Preserve private state during separate data recovery
-
-When a separately authorized filesystem backup is required, stop writers, let
-current operations finish, and retain the database and any SQLite sidecars
-together in private storage. When data restoration is separately authorized,
-restore only a compatible complete backup under exclusive access. Run doctor,
-reconcile caller references, then resume writers. Restoring older history can
-reuse later version numbers. Bazaar supplies no automatic backup, pruning,
-deletion, or restore command.
+## Inspect an uncertain append
 
 An uncertain append may have committed. Inspect history and relevant content
 through `bazaar.string.read` before deciding whether another append is intended.

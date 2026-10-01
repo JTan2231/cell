@@ -256,7 +256,7 @@ which do not imply an application status or current employer availability.
 Read `annals.corpus.explore` for Vita reads. Use `annals.work.retain` or
 `annals.library.operate` for separately authorized career-library changes.
 Platter's fixed selection is the Annals library named `vita`. Keep source text,
-outputs, and backups private.
+outputs private.
 
 For an authorized prompt update, use `bazaar.string.update` with the initialized
 private database used by the caller. Append each component, read its returned

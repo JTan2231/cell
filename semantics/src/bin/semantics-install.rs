@@ -32,7 +32,7 @@ enum Action {
     Install(Candidate),
     Inspect(HomeArgs),
     Uninstall(HomeArgs),
-    /// Recover the exact private backup of an interrupted installer transaction.
+    /// Recover an interrupted installer transaction without replacing retained data.
     Recover {
         #[arg(long)]
         transaction: PathBuf,

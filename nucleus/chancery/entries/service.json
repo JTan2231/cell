@@ -1,13 +1,13 @@
 {
   "id": "nucleus.service",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect and maintain the Nucleus service",
-  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, backup, and recovery guarantees.",
+  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, and recovery guarantees.",
   "use_when": [
-    "Nucleus health, service selection, admission holds, drain, installation, backup, restore, restart, or removal must be understood or operated."
+    "Nucleus health, service selection, admission holds, drain, installation, restart, or removal must be understood or operated."
   ],
   "do_not_use_when": [
     "The actual question is requester-domain success, permission to retry lost work, or authority to clear another owner's hold."
@@ -30,8 +30,8 @@
     "Use the retained cutover journal and exact candidate for supported recovery; never roll credentials or an incompatible database backward."
   ],
   "privacy": [
-    "Service state, credentials, logs, cutover journals, quota files, and backups are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
-    "Credential backup/recovery remains separate from database and program rollback; a Nucleus backup does not replace requester backups."
+    "Service state, credentials, logs, cutover journals, and quota files are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
+    "Credential recovery remains separate from program recovery. Program selection preserves current data."
   ],
   "interfaces": [
     {
@@ -166,7 +166,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Deployment runs no model jobs or synthetic requester records. Service installation starts the daemon without waiting for migration, compaction, or health. There is no automatic backup/restore command or general output pruning."
+        "statement": "Deployment runs no model jobs or synthetic requester records. Service installation starts the daemon without waiting for migration, compaction, or health. There is no data restoration command or general output pruning."
       },
       {
         "status": "unspecified",
@@ -180,7 +180,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-two cutover preserves jobs/attempts/registrations/cancellation/terminal state, discards old mixed logs and historical answered mailbox rows, and blocks on live pending calls. Pending compaction marker 1000002 becomes 2 only after successful VACUUM and truncating checkpoint; incompatible recovery needs a matching database/binary pair."
+        "statement": "Schema-two cutover preserves jobs/attempts/registrations/cancellation/terminal state, discards old mixed logs and historical answered mailbox rows, and blocks on live pending calls. Pending compaction marker 1000002 becomes 2 only after successful VACUUM and truncating checkpoint. Recovery requires a program that supports the current database schema."
       },
       {
         "status": "declared",

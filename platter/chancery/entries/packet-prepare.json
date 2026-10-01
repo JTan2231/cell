@@ -128,7 +128,7 @@
     "Normal repetition resumes retained work. A terminal failure receives no automatic replacement or direct Codex fallback. --fresh and regeneration require their feature-defined terminal-job and capture preconditions.",
     "Posting retrieval failure marks a job ineligible; daily work can try another candidate. Other preparation/export errors stop before sending.",
     "Exact frozen/accepted/uncertain occurrences use platter.editions: do not create replacement payloads or send keys to bypass held uncertainty.",
-    "Repair the exact renderer/source/runtime failure before an authorized new attempt. Use platter.install.operate for maintained schema backup/migration; do not edit SQLite.",
+    "Repair the exact renderer/source/runtime failure before an authorized new attempt. Use platter.install.operate for maintained schema migration; do not edit SQLite.",
     "Clockwork continuation permits only future scheduling and preserves Platter preparation/delivery recovery."
   ],
   "privacy": [
@@ -138,8 +138,8 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "platter.preparation",
@@ -163,8 +163,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.message.send",
@@ -173,8 +173,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.corpus.explore",

@@ -1,6 +1,6 @@
 {
   "id": "semantics.develop.change",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -23,11 +23,11 @@
   ],
   "success": [
     "Internal Semantics tests pass with isolated fixtures. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
-    "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
+    "Schema and effect changes retain historical replay or add explicit migration and retained-state recovery proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
   "failure_and_recovery": [
-    "Do not deploy a failing candidate or change persistent bytes without a quiescent backup and tested rollback.",
+    "Do not deploy a failing candidate or change persistent bytes without quiescence and tested retained-state recovery.",
     "Use synthetic upstreams, fake Nucleus mailbox transport, fake Clockwork, fake binaries, and fake launchctl in tests.",
     "Preserve the same job and requester identity across ambiguous submission or result transport."
   ],
@@ -47,18 +47,18 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "nucleus.requester.integrate",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
@@ -77,8 +77,8 @@
     },
     {
       "id": "semantics.service",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "session_surfaces": [
@@ -103,7 +103,7 @@
   ],
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",
-    "Add a versioned SQLite migration and full database-plus-sidecars rollback proof for schema changes.",
+    "Add a versioned SQLite migration and prove retained-state forward recovery for schema changes.",
     "Scale account fixtures across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding when those boundaries change."
   ],
   "stop_when": [
@@ -180,7 +180,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Follow the service feature for state migration/rollback and the reconciliation feature for immutable requests, receipts, and recovery. Add explicit proofs for changed boundaries before submission."
+        "statement": "Follow the service feature for state migration and retained-state recovery and the reconciliation feature for immutable requests, receipts, and recovery. Add explicit proofs for changed boundaries before submission."
       }
     ],
     "operational_limits": [

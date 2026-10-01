@@ -1,11 +1,11 @@
 {
   "id": "clew.state",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect Clew private state and installation lifecycle",
-  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded migration to generic entries and named threads, and compatible backup and recovery.",
+  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded migration to generic entries and named threads, and compatible program recovery.",
   "manual": "manuals/state.md",
   "use_when": [
     "Clew state, integrity observations, installation selection, maintenance, migration or recovery guarantees must be understood."
@@ -27,10 +27,10 @@
   ],
   "failure_and_recovery": [
     "Foreign selectors, changed bytes, stale expected selections, incompatible state, unsafe migration mappings and unresolved holds stop the operation. Preserve recovery evidence.",
-    "Program recovery preserves ledger and email state. Use matching programs and database versions, stop scheduling and commands for consistent backup, and reconcile uncertain writes and acceptance before replay."
+    "Program recovery preserves ledger and email state. Select programs compatible with the retained schema and reconcile uncertain writes and acceptance before replay."
   ],
   "privacy": [
-    "Keep ledger, frozen mail, maintenance state and backups private and outside source and release trees. State directories use mode 0700; database files use mode 0600."
+    "Keep ledger, frozen mail, maintenance state private and outside source and release trees. State directories use mode 0700; database files use mode 0600."
   ],
   "does_not_authorize": [
     "Installation, initialization or inspection does not authorize a report, employer contact, send, schedule enablement, incident approval, direct SQLite repair or deletion of history."
@@ -52,8 +52,8 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.explore",
@@ -67,8 +67,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "promise": {
@@ -93,7 +93,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration reports a private original-schema backup and retains aliases and retry requests."
+        "statement": "Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration retains aliases and retry requests without a data copy."
       }
     ],
     "data_semantics": [
@@ -123,17 +123,21 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, creates a new private consistent backup of the original schema, and commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
+        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "State has no automatic pruning, general automatic backup or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
+        "statement": "State has no data backup, restore, automatic pruning or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
       },
       {
         "status": "unspecified",
         "statement": "No installation completion time, general database capacity, read latency, schedule latency or future availability guarantee is supplied."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Data backup and data restoration are not supplied. Existing backup files are left unchanged."
       }
     ],
     "compatibility_and_evolution": [

@@ -614,10 +614,6 @@ fn migrate_for_configuration(root: &Path, context: &cell_install::adapter::Conte
     let directory = &context.request.run_dir;
     crate::store::private_directory(directory)?;
     let marker = directory.join("emt-migration.json");
-    let backup = root.join(format!(
-        "emt-pre-migration-{}.sqlite",
-        context.request.run_id
-    ));
     if marker.try_exists()? {
         let metadata = fs::symlink_metadata(&marker)?;
         if !metadata.is_file()
@@ -633,35 +629,23 @@ fn migrate_for_configuration(root: &Path, context: &cell_install::adapter::Conte
         }
         return Ok(());
     }
-    let receipt = if context.prior()?["lifecycle"]["initialized"] == false {
+    if context.prior()?["lifecycle"]["initialized"] == false {
         let gate = crate::gate(root);
         let _admission = gate.enter_for(&context.request.run_id)?;
         let _runner = crate::store::runner_lock(root)?;
         crate::store::Store::initialize(root)?;
-        json!({"data":{"schema_version":1,"backup":null}})
     } else {
         cell_install::command::json(
             &context.home.join(".local/bin/emt"),
-            &[
-                "--json".into(),
-                "migrate".into(),
-                "--backup".into(),
-                backup.clone().into_os_string(),
-            ],
+            &["--json".into(), "migrate".into()],
             &BTreeMap::from([(
                 "CELL_DEPLOYMENT_RUN_ID".into(),
                 context.request.run_id.clone().into(),
             )]),
             std::time::Duration::from_secs(600),
-        )?
-    };
-    let mut backups = Vec::new();
-    for name in ["backup", "config_backup"] {
-        if let Some(path) = receipt["data"][name].as_str() {
-            backups.push(path.to_owned());
-        }
+        )?;
     }
-    let receipt = json!({"run_id":context.request.run_id,"schema_version":1,"backups":backups});
+    let receipt = json!({"run_id":context.request.run_id,"schema_version":1});
     let pending = directory.join(format!(".emt-migration-{}", crate::random_token()?));
     let mut file = OpenOptions::new()
         .create_new(true)

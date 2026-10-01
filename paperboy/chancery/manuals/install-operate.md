@@ -29,8 +29,8 @@ provider release. Paperboy owns its private database and recovery. Nucleus owns
 execution and credentials; Conversations owns history reads; Email owns submission;
 Clockwork owns activation, durable scheduling halts and incident notification.
 
-Deployment initializes an absent schema-one database or backs up an existing
-supported database before candidate selection. Unsupported versions stop it.
+Deployment initializes an absent schema-one database or opens existing supported
+state without copying it. Unsupported versions stop it.
 Installation performs setup without artifact-integrity, state-integrity, or
 operational-readiness checks. It succeeds after setup and release of run-owned
 holds. Ordinary doctor and report checks remain separate.
@@ -54,14 +54,14 @@ paperboy-install inspect
 reports the maintained installation. A program selection does not prove that a
 scheduled binding selects that release.
 
-## Maintain admission and back up
+## Maintain admission and initialize state
 
 ```sh
 paperboy --json maintenance hold OWNER
 paperboy --json maintenance status
 paperboy --json maintenance drain
 paperboy --json maintenance release OWNER
-CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate --backup ABSENT_ABSOLUTE_PATH
+CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate
 ```
 
 A run-owned hold fences new work and survives interruption. Drain accounts for
@@ -69,9 +69,10 @@ live admissions and all nonterminal Paperboy Nucleus jobs. Keep the hold until
 work has settled and the prior or candidate installation is coherent. Release
 only the operation's owner; preserve other holds and operator state.
 
-The controlled migration command takes a supported database backup. Retain it
-with a compatible release for recovery. There is no legacy database migration
-or direct incompatible rollback. Do not copy or restore Nucleus authentication.
+The controlled migration command initializes absent schema-one state or opens
+existing supported state. It preserves retained briefs, attempts, summaries and
+email outcomes. There is no legacy database migration or direct incompatible
+rollback. Nucleus authentication remains separately owned.
 
 ## Select the daily schedule
 
@@ -127,8 +128,8 @@ Retain releases pinned by schedules, including disabled selections.
 ## Failure and recovery
 
 A process lock serializes runs and schedule mutations. Preserve maintenance when
-recovery cannot prove a coherent installation. Restore state only with its
-matching compatible release. Unknown apply or email outcomes remain uncertain.
+recovery cannot prove a coherent installation. Use a release compatible with
+retained state. Unknown apply or email outcomes remain uncertain.
 
 Accepted summaries and submission receipts survive later runtime failures.
 Resume an interrupted brief with `paperboy run --brief BRIEF_ID`. A terminal
@@ -163,21 +164,22 @@ One product runner can be active. Agent execution is limited to 1,200 seconds;
 total agent wait to 1,800 seconds; Email invocation observation to 180 seconds.
 History pages contain at most 100 records. Final bodies contain at most 64,000
 UTF-8 bytes. There is no automatic local pruning, unlimited retry guarantee,
-source-completeness promise, or language certification. Keep database backups
+source-completeness promise, or language certification. Keep database state
 private; Nucleus and mail-provider retention are separate.
 
 ## Deployment configuration and activation
 
 Deployment captures and suspends `paperboy/daily`, initializes absent state or
-backs up supported state during configuration, then selects a disabled
+opens supported state during configuration, then selects a disabled
 definition for the final installed program. It preserves existing schedule,
 arguments, environment and output paths. The optional `enabled` deployment
 setting overrides saved enabled intent. With no setting, an absent binding
 remains absent and a disabled binding stays disabled. Activation follows all
 maintenance releases. Existing Clockwork incidents survive every phase.
 
-Recovery repeats configuration under its retained owner. The retained migration receipt reuses the original backup. The product migration
-command retains its ordinary backup and state rules.
+Recovery repeats configuration under its retained owner. The retained completion
+receipt avoids repeating initialization. Existing schema-one receipts remain
+accepted without reading their former data-copy fields.
 
 ## Command usage
 

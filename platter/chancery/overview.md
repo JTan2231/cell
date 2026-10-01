@@ -23,7 +23,7 @@ release's documentation; they neither probe readiness nor authorize work.
 | `platter.preparation` | Source capture, eligibility, freshness, tailored and brief-only authoring, validation, exact continuation, and limits. |
 | `platter.editions` | Selected packets versus attachments, freeze/occurrence identity, daily and URL-selected runs, authorized send acceptance, and uncertainty. |
 | `platter.opportunity.explore` | Stable prepared opportunity references, retained packet metadata, complete selected reads, and search boundaries. |
-| `platter.maintenance` | Owned releases/state, readiness, hold/drain authority, migration, backup, schedule intent, and recovery. |
+| `platter.maintenance` | Owned releases/state, readiness, hold/drain authority, migration, schedule intent, and recovery. |
 
 ## Operations
 
@@ -61,8 +61,8 @@ packet acceptance or email acceptance.
 Opportunity reads expose retained preparation facts without preparation or
 source refresh. Maintenance fences new mutations while exact admitted work
 settles. It preserves captured work, delivery uncertainty, and external schedule
-halts. A consistent Platter backup covers its retained library; Nucleus records
-and credentials remain separate.
+halts. SQLite retains the Platter library; Nucleus records and credentials remain
+separate.
 
 Related references provide navigation. Only declared dependencies participate
 in compatibility and complete resolution. Keep unspecified service levels and

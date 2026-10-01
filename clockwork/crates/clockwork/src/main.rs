@@ -71,11 +71,8 @@ enum Command {
     },
     /// Check private state and local runtime prerequisites.
     Doctor,
-    /// Explicitly migrate the quiescent schema-one database after retaining a backup.
-    Migrate {
-        #[arg(long)]
-        backup: PathBuf,
-    },
+    /// Explicitly migrate the quiescent schema-one database.
+    Migrate,
     /// Inspect retained scheduling failure incidents.
     Incident {
         #[command(subcommand)]
@@ -275,12 +272,9 @@ async fn run(cli: Cli) -> Result<()> {
         );
         return Ok(());
     }
-    if let Command::Migrate { backup } = &cli.command {
-        store::migrate(&layout, backup)?;
-        return emit(
-            &serde_json::json!({"schema_version": 2, "backup": backup}),
-            cli.json,
-        );
+    if let Command::Migrate = &cli.command {
+        store::migrate(&layout)?;
+        return emit(&serde_json::json!({"schema_version": 2}), cli.json);
     }
     let mut store = Store::open(&layout)?;
     match cli.command {
@@ -490,7 +484,7 @@ async fn run(cli: Cli) -> Result<()> {
             &store.report_abend(&activation_id, &code, &occurrence)?,
             cli.json,
         ),
-        Command::Migrate { .. } => {
+        Command::Migrate => {
             unreachable!("migration is dispatched before opening runtime state")
         }
         Command::Exec { .. } => Err(Error::new(
@@ -544,4 +538,15 @@ fn emit_page<T: Serialize>(mut items: Vec<T>, limit: usize, compact: bool) -> Re
         },
         compact,
     )
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn migration_has_no_backup_option() {
+        assert!(Cli::try_parse_from(["clockwork", "migrate"]).is_ok());
+        assert!(Cli::try_parse_from(["clockwork", "migrate", "--backup", "/private/old"]).is_err());
+    }
 }

@@ -227,8 +227,8 @@
   "dependencies": [
     {
       "id": "annals.library.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.decision-account.exchange",
@@ -247,8 +247,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",

@@ -27,7 +27,7 @@
     "A decoder repair can recover derived output from retained evidence without rewriting atoms or terminal state. Missing records cannot be recovered or treated as permission to retry."
   ],
   "privacy": [
-    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state and logs private."
   ],
   "interfaces": [
     {

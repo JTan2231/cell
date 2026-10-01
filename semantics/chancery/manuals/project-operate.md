@@ -57,7 +57,7 @@ semantics-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE --cl
 ```
 
 The installer holds admission and the worker lock, suspends owned scheduling,
-backs up SQLite and sidecars, initializes or migrates state, publishes selectors,
+preserves SQLite and sidecars, initializes or migrates state, publishes selectors,
 and restores captured activation intent. It does not run doctor, replay the
 Annals feed, check Nucleus readiness, or audit installed artifact bytes.
 
@@ -189,7 +189,7 @@ requests and retries retain their frozen instructions.
    Finish pending/processing legacy work. Prove each retained job terminal with
    its exact request, or positively absent if never recorded as admitted.
 3. Hold external Krisis and Annals lifecycle gates. Disable the worker and public
-   command, prove SQLite closed, and privately back up database plus sidecars.
+   command, prove SQLite closed, and preserve the live database and sidecars.
 4. With the dedicated Annals library healthy and Krisis still gated, invoke the
    validated installer with the captured watermark and retained maintenance:
 
@@ -218,10 +218,10 @@ There is no default activation. Ordinary later updates omit the watermark.
   --clockwork "$HOME/.local/bin/clockwork"
 ```
 
-Before the first new account, failure can restore the exact pre-cutover bytes,
-selectors, and scheduler. After any new account or account-derived revision
-commits, recover forward under maintenance; never run an old binary or discard
-new state. Stop on an unknown legacy cursor/job or changed ownership evidence.
+Preserve the activated database and committed revisions. Program rollback is
+limited to an unchanged schema. After a schema change, recover forward under
+maintenance with the retained candidate; never run an incompatible old binary
+or discard committed state. Stop on an unknown legacy cursor/job or changed ownership evidence.
 
 ## Recover installation or uninstall
 
@@ -238,7 +238,7 @@ current candidate installer for that transaction:
 A committed transaction resumes forward. A prior null selection requires
 explicit `recover --forward` for the same retained transaction. It proves exact
 candidate ownership and selection while gated. It never chooses a legacy
-watermark. Unknown ownership, incomplete backup, foreign locks/artifacts, or
+watermark. Unknown ownership, incomplete transaction evidence, foreign locks/artifacts, or
 changed evidence keeps maintenance. Do not remove the gate to force progress.
 Restore captured intent and release only the operation's outer holds. Follow `semantics.service` for complete rollback guarantees.
 
@@ -255,7 +255,7 @@ history, and logs. Retained-state deletion needs a separate destructive decision
 
 ## Privacy and command usage
 
-Keep private documents, repository meanings, paths, requests, and backups inside
+Keep private documents, repository meanings, paths and requests inside
 the local boundary. Inspect only necessary evidence. Routine logs contain
 counters, opaque IDs, and bounded product failures rather than source bodies,
 raw dependency diagnostics, paths, prompts, credentials, or tool values.

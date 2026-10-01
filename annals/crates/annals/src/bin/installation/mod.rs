@@ -78,8 +78,6 @@ struct InstallArgs {
     #[arg(long)]
     expected_current: Option<String>,
     #[arg(long)]
-    fresh_state: bool,
-    #[arg(long)]
     no_start: bool,
     #[arg(long, hide = true)]
     migration_clockwork_handoff: bool,

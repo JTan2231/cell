@@ -135,7 +135,7 @@ retention-horizon, or billing promise is added here.
 
 Nucleus private state can contain complete prompts, source content, tool
 arguments and results, exact harness output, and terminal diagnostics. Keep
-state, logs, and backups private. No automatic output pruning or retention
+state and logs private. No automatic output pruning or retention
 horizon is promised. Use supported interfaces; direct SQLite integration is
 unsupported.
 

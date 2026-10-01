@@ -133,10 +133,10 @@ cleanup() {
 
 restore_file() {
     existed=$1
-    backup_name=$2
+    prior_name=$2
     target=$3
     if [ "$existed" -eq 1 ]; then
-        cp -p "$transaction_dir/$backup_name" "$target"
+        cp -p "$transaction_dir/$prior_name" "$target"
     else
         rm -f "$target"
     fi

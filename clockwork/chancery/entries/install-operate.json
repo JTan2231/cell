@@ -1,6 +1,6 @@
 {
   "id": "clockwork.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -80,13 +80,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "interfaces": [

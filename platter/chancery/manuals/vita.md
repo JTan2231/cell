@@ -8,4 +8,4 @@ Annals owns career storage and interfaces. Read the installed
 `annals.corpus.explore` contract for reads, `annals.work.retain` for authorized
 source additions, and `annals.library.operate` for library operations. These
 contracts are available with `chancery show ID`; use `chancery resolve ID` for
-required detail. Keep career material and backups private.
+required detail. Keep career material private.

@@ -101,7 +101,7 @@ Use `doctor` for dependency readiness and `observe status` for record counts.
 
 Schema 5-to-6 migration adds worker activity and failure history, preserving
 existing failures without retrying them. It cannot restore older overwritten
-attempt errors. Back up the database and document runs before a schema upgrade;
+attempt errors. Preserve the database and document runs through a schema upgrade;
 older binaries cannot open schema 6.
 
 ## Scheduled failure policy

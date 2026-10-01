@@ -101,7 +101,7 @@ temporary active workspace. The coordinator records the installation outcome
 there before removing active evidence. A crash during cleanup does not authorize
 another installation. Reconciliation completes or reports cleanup using the
 recorded outcome. Receipts and request identities are retained without automatic
-pruning. Keep them with deployment state backups. Their absence is not proof
+pruning. Keep them with deployment state. Their absence is not proof
 that an operation never ran if storage was removed or restored incompletely.
 
 CI owns its validation receipt and checks the exact source commit before this
@@ -201,7 +201,7 @@ service control, and recovery. The shared transaction library owns
 immutable artifact manifests, public file selection, writer locks, attribution
 checks, and file compensation.
 
-Products own runtime state, admission holds, database backups, schedules,
+Products own runtime state, admission holds, schema migrations, schedules,
 services, and recovery decisions. Prove database recovery before restoring public
 commands. Nucleus's guarded service installer owns copied executables and
 authentication state.
@@ -398,7 +398,7 @@ recovery limits.
 
 Platter permits mutating installation and recovery only through coordinated
 deployment. See [Platter installation](../platter/chancery/manuals/install-operate.md)
-for its admission, migration, backup and activation rules.
+for its admission, migration and activation rules.
 
 Publication rechecks the captured selection under the product lock and holds
 the Chancery writer lock through publication and compensation. Suspended public
@@ -417,5 +417,5 @@ schedule pins, including disabled bindings, remain protected. Active transaction
 markers and unknown reference inventories stop deletion.
 
 Platter participates in release-history cleanup under its PID-aware file lock.
-Its private packet state and database backups remain outside the installation
+Its private packet state remains outside the installation
 tree and are retained.

@@ -3,7 +3,7 @@
 Clew owns its private ledger, retained email occurrences, program selection,
 and email admission maintenance. This feature explains their lifecycle and
 compatibility. Use `chancery show clew.install.operate` for ordered installation,
-migration, schedule preparation, backup, and recovery procedures.
+migration, schedule preparation, and program recovery procedures.
 
 ## Interfaces and ownership
 
@@ -31,7 +31,7 @@ status, contact an employer, send mail, or enable scheduled activation.
 Global `--state-dir ABSOLUTE_PATH` selects an independent private ledger for
 ordinary Clew commands. Deployment configures only the default ledger. The state
 directory has mode 0700; the databases are regular files with mode 0600. Keep
-notes, statuses, thread names, references, frozen messages, and backups private.
+notes, statuses, thread names, references, and frozen messages private.
 
 The `clew.ledger.use` feature owns general entry meaning, named threads,
 external references, append transactions, exact retry identity, and corrections.
@@ -40,7 +40,8 @@ job-specific view. Plain external job links do not create application reports.
 
 The `clew.digest.email` feature owns message bytes, occurrences, receipts,
 submission recovery, and email schema-one behavior. These records have no
-automatic pruning. Clew has no general automatic backup or deletion operation.
+automatic pruning. Clew supplies no data backup, data restore or deletion operation. Existing
+backup files remain unchanged.
 
 ## Initialization and observations
 
@@ -121,13 +122,11 @@ same Cast job stop migration. Clew does not infer mappings from company, role, o
 URL and does not merge histories. Platter owns the mappings; Clew owns their
 application to its ledger.
 
-Migration creates a private consistent SQLite backup of the original schema
-under the state root as `ledger-schemaN-backup-RUN_ID-UUID.sqlite3`, with mode
-0600. `N` is the original version, one or two. Migration refuses to overwrite an
-earlier backup. An interrupted retry creates a new backup. It commits the new
-schema, normalized application associations, retained aliases, and exact write
-requests in one transaction. Old writers are rejected after commit. Preserve
-the backup and reported recovery evidence until deployment completes.
+Migration commits the new schema, normalized application associations,
+retained aliases, and exact write requests in one transaction. It creates no
+copy of the original database. A failure before commit retains the prior state.
+Old writers are rejected after commit. Preserve reported transaction evidence
+until deployment completes.
 
 Migration preserves entry IDs, sequence, timestamps, supplied text, correction
 links, and retractions. Legacy aliases retain their original argument namespace
@@ -136,28 +135,18 @@ no report or thread is invented. Frozen email bytes, occurrences, send keys,
 and receipts remain unchanged. Migration starts no collection, preparation,
 completion check, or send.
 
-## Backup and recovery compatibility
+## Program recovery compatibility
 
-A consistent filesystem backup requires disabled daily scheduling, stopped Clew
-invocations, and finished commands. Preserve both databases, SQLite sidecars, and
-maintenance state together in a private backup. Keep the previous complete backup
-when restoring compatible history.
+Only schema-three-compatible programs can operate a migrated ledger. Program
+recovery preserves ledger and email state and never restores earlier history.
+Select a program that supports the retained schema. No schema downgrade is
+supplied. Reconcile uncertain writes and provider acceptance before replay.
 
-Restoring older ledger history changes which write IDs are known. Reconcile
-uncertain writes and provider acceptance before replay. Restoring older delivery
-history can permit duplicate mail. A ledger backup alone does not justify
-restoring older email occurrences.
-
-Only schema-three-compatible programs can operate a migrated ledger. Program recovery does not check ledger compatibility. Select a program that
-supports the retained schema. Rollback to an older program requires its matching original-schema
-ledger backup, stopped commands and scheduling, and reconciliation of every
-post-migration entry and uncertain send. Preserve delivery state.
-
-Older Clew releases do not understand daily email state. Disable the daily binding
-and settle admitted sends before explicit rollback to such a release. Compatible
-schema-three commands can finish across program selection. An incompatible
-migration requires its guarded procedure that excludes writers and preserves a
-compatible backup. No completion-time or future compatibility window is promised.
+Older Clew releases do not understand daily email state. Disable the daily
+binding and settle admitted sends before selecting such a release. Compatible
+schema-three commands can finish across program selection. Migration excludes
+writers and commits atomically. No completion-time or future compatibility
+window is promised.
 
 After installation, `clew --register-usage` records command identities in Chancery
 without adding reports. CLI usage observation records metadata, not private

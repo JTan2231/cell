@@ -38,7 +38,7 @@
     "Stop on missing or mismatched config, schema, library identity, spool identity, envelope, or digest. Do not redirect or edit receipts."
   ],
   "privacy": [
-    "Complete documents remain private in producer handoff state and Annals spool, library, archives, and backups. Later model dispatch may disclose document and library context under the inbox contract.",
+    "Complete documents remain private in producer handoff state and Annals spool, library, archives. Later model dispatch may disclose document and library context under the inbox contract.",
     "Feed output includes complete document text, which can include full normalized conversation. Keep it private and out of routine logs. It excludes general-library content."
   ],
   "interfaces": [
@@ -74,8 +74,8 @@
   "dependencies": [
     {
       "id": "annals.libraries",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "annals.inbox",

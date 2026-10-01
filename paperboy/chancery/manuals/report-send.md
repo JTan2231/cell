@@ -150,7 +150,7 @@ Private tool replies and Nucleus records can contain conversation text. Email
 sends the final report to Resend and the personal inbox provider. Email's installed
 wrapper loads its credential; secrets do not enter Paperboy records, agent
 requests, or Clockwork definitions. Logs contain metadata and bounded diagnostics.
-There is no automatic local pruning. Back up Paperboy and Nucleus separately.
+There is no automatic local pruning. Paperboy and Nucleus retain separate state.
 
 Schema 1, `paperboy/daily-report/1`, and `paperboy/decision-report/1` preserve retained request meaning. There
 is no general future compatibility window, legacy database migration, or direct

@@ -253,18 +253,17 @@ runtime state.
 1. Hold product schedules and quiesce all Clockwork commands. Settle or recover
    running rows and pending transitions with the old binary. Retain prior
    definitions, selections, enabled intent, product pauses, and release paths.
-2. Invoke the tested new exact binary with
-   `clockwork migrate --backup /absolute/new-backup-directory`. Verify the
-   private database-plus-sidecar backup and migration receipt.
+2. Invoke the tested new exact binary with `clockwork migrate`. Verify the
+   returned schema version and retained definition and binding identities.
 3. Register and select supported schema-two product definitions under
    maintenance. Preserve disabled selections and import failure-owned halts
    before removing old gates. Verify `failure_policy_active` and refresh all
    enabled broker plists before releasing maintenance.
 
 Program installation never migrates state. Schema-one definitions retain their
-old digest and policy. Stop if quiescence, coherent backup, or newer halt
+old digest and policy. Stop if quiescence, state compatibility, or newer halt
 preservation cannot be proved. Use `clockwork.install.operate` for complete
-schema rollback and installation checkpoints.
+schema compatibility and installation checkpoints.
 
 ## Command usage
 

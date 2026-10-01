@@ -1,6 +1,6 @@
 {
   "id": "weaver.develop.change",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -48,8 +48,8 @@
     },
     {
       "id": "weaver.lifecycle",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "ci-manager.queue.operate",
@@ -115,7 +115,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, backups, sources, and runtime records private."
+        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, sources, and runtime records private."
       }
     ],
     "lifecycle_and_consistency": [

@@ -13,7 +13,7 @@ Nucleus owns execution. Installation starts no preparation or email.
 Read `nucleus manual` before coordinated maintenance. Read
 `chancery resolve platter.install.operate` for this procedure and its required
 feature contracts. `platter.maintenance` owns installation, hold/drain,
-migration, backup, schedule-definition, and recovery guarantees.
+migration, schedule-definition, and recovery guarantees.
 `platter.materials` owns templates and configuration; `platter.preparation`
 owns readiness and prompt captures; `platter.editions` owns delivery authority.
 
@@ -23,7 +23,7 @@ owns readiness and prompt captures; `platter.editions` owns delivery authority.
 2. Inspect the canonical state root, current installation, required dependency
    releases, and maintenance owners.
 3. Select the supported Cell delivery route and applicable installation authority.
-4. Preserve private state and backups outside the source repository.
+4. Preserve private state outside the source repository.
 
 Use the CI manager for ordinary committed delivery:
 
@@ -86,14 +86,14 @@ Use one retained owner identity throughout the authorized maintenance run:
 platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
-CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
+CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate
 platter --json maintenance release OWNER
 ```
 
 1. Hold affected requester admission before holding Nucleus.
 2. Observe actual local and exact matching Nucleus/Weaver work drain.
 3. Require the sole matching owner and activity locks before migration or cutover.
-4. Run migration with its selected absolute private backup path.
+4. Run migration under the sole matching owner hold.
 5. Configure dependency paths and publish the candidate.
 6. Release only this operation's hold and restore captured activation intent.
    Release Nucleus last.
@@ -112,22 +112,19 @@ local activity, or other owner remains unresolved.
 The coordinator uses a selected candidate for maintenance. Affected-only
 installations use the installed command. It does not preflight state compatibility. This choice does not migrate state or start domain work.
 
-Schema-one import commits before backup and hashed file cleanup. Failure before
-commit leaves predecessor state; failure afterward retains new state, originals,
-and recovery information. Resume cleanup only with agreeing backup and source
-hashes. Schemas two through six migrate retained selections and advance to seven.
-Every migration preserves captured inputs, requests, artifacts, and delivery
-identities and retains a complete current-schema recovery backup.
+Schema-one import commits before hashed file cleanup. Failure before commit
+leaves predecessor state; failure afterward retains new state, originals, and
+recovery information. Resume cleanup only with agreeing source hashes. Schemas
+two through six migrate retained selections and advance to seven. Every
+migration preserves captured inputs, requests, artifacts, and delivery identities.
 
-A current-schema backup is not an old-binary rollback image. Older binaries
-cannot operate schema seven. Recovery needs a compatible candidate or an
-explicitly selected complete predecessor database/files backup and matching
-binary. File compensation does not undo migration. Do not copy an open main
-SQLite database without its journal or reset records to force success.
+Older binaries cannot operate schema seven. Recovery needs a compatible
+candidate. File compensation does not undo migration. Do not reset records to
+force success.
 
 ## Complete an interrupted migration
 
-1. Retain the exact deployment owner, chosen backup, corrected compatible
+1. Retain the exact deployment owner, corrected compatible
    executable, and private completion-receipt path.
 2. Stop concurrent coordinator recovery through its deployment lock.
 3. Require the existing sole hold, drained work, and activity locks.
@@ -135,17 +132,16 @@ SQLite database without its journal or reset records to force success.
 
 ```sh
 CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
-  --backup /absolute/private/backup.sqlite3 \
   --completion-receipt /absolute/private/deployment/platter-migration.json
 ```
 
 5. Resume coordinator recovery only after success.
 
-The receipt binds the exact backup path and digest. Repetition verifies that
-basis without changing an existing backup. Changed evidence stops recovery.
-This command does not rebind dependencies, release holds, or establish full
-readiness. Omit `--completion-receipt` for ordinary migration. Keep unresolved
-recovery held; do not perform a direct installer rollback or domain reset.
+The completion receipt prevents a resumed installer from repeating completed
+migration. Existing schema-one receipts remain accepted without reading their
+former data-copy fields. This command does not rebind dependencies, release
+holds, or establish full readiness. Omit `--completion-receipt` for ordinary
+migration. Keep unresolved recovery held; do not reset domain state.
 
 ## Configure future work and preserve activation intent
 
@@ -198,17 +194,17 @@ resume permits future scheduling without retrying preparation or uncertain mail.
 ## Complete installation
 
 Complete resource setup, migration, program/provider publication, run-owned
-hold release, and restoration of captured activation intent. Retain the deployment's
-migration backup; interrupted installer runs reuse the recorded backup.
+hold release, and restoration of captured activation intent. Retain migration
+completion receipts for interrupted installer recovery.
 Register command inventory after installation or update:
 
 ```sh
 platter --register-usage
 ```
 
-This starts no product work. Treat state, configuration, logs, and backups as
-private. Platter backups contain its library; Nucleus evidence and credentials
-require separate backup and recovery. Domain artifacts have no automatic pruning.
+This starts no product work. Treat state, configuration, and logs as private.
+Nucleus evidence and credentials remain separately owned. Domain artifacts have
+no automatic pruning.
 No installation-latency or arbitrary incompatible rollback guarantee is supplied.
 
 ## Command usage

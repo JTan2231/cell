@@ -131,8 +131,7 @@ The gate applies to ordinary and retry-child claims. The enqueue headroom check
 separately applies to explicit spool copies. A gated item submits no liaison
 job. The gate is not a host-wide lock: it does not itself prevent manual
 integration, independent Nucleus work, or deployment. Actual exhaustion can
-still make shared-storage writes fail, including release staging, backup,
-migration, state, or logs. An unreadable probe is distinct from measured low
+still make shared-storage writes fail, including release staging and migration, state, or logs. An unreadable probe is distinct from measured low
 space and can make deployment inspection fail with `storage_probe_failed`.
 
 When storage is ready, `inbox run` performs one authenticated account

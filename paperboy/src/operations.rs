@@ -106,17 +106,14 @@ pub async fn doctor(root: &Path, options: &ReportOptions) -> Result<Value> {
     Ok(json!({"ready":true,"initialized":initialized,"schema_version":1}))
 }
 
-pub fn migrate(root: &Path, backup: &Path) -> Result<Value> {
+pub fn migrate(root: &Path) -> Result<Value> {
     let owner =
         std::env::var("CELL_DEPLOYMENT_RUN_ID").context("migration requires a deployment owner")?;
     let _guard = crate::gate(root).enter_for(&owner)?;
     let _lock = runner_lock(root)?;
     let existed = root.join(crate::store::DATABASE).exists();
-    let store = Store::initialize(root)?;
-    if existed {
-        store.backup(backup)?;
-    }
-    Ok(json!({"schema_version":1,"initialized":!existed,"backup_created":existed}))
+    Store::initialize(root)?;
+    Ok(json!({"schema_version":1,"initialized":!existed}))
 }
 
 pub async fn run(

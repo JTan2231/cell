@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install Clew",
-  "summary": "Install Clew under email admission maintenance, convert supported older ledgers with a private backup, and preserve application history and daily scheduling.",
+  "summary": "Install Clew under email admission maintenance, convert supported older ledgers transactionally, and preserve application history and daily scheduling.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -55,7 +55,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The selected immutable release contains clew, clew-install, and the matching Chancery provider. Coordinated configure initializes empty schema-three state or converts schema one or two with a private consistent backup and retained exact retry requests and legacy aliases."
+        "statement": "The selected immutable release contains clew, clew-install, and the matching Chancery provider. Coordinated configure initializes empty schema-three state or converts schema one or two transactionally with retained exact retry requests and legacy aliases."
       }
     ],
     "data_semantics": [
@@ -85,13 +85,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends, and drains email work, prepares the exact disabled definition, then restores intent after releasing its hold. Migration excludes ledger writers, creates a new private original-schema SQLite backup, and commits schema three, reference associations, aliases, and exact write requests in one transaction. Old writers are rejected. Failure halts and frozen email bytes, keys, and receipts remain intact."
+        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends, and drains email work, prepares the exact disabled definition, then restores intent after releasing its hold. Migration excludes ledger writers, commits schema three, reference associations, aliases, and exact write requests in one transaction. Old writers are rejected. Failure halts and frozen email bytes, keys, and receipts remain intact."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "There is no completion-time guarantee. Compatible schema-three readers and short SQLite writers can finish across program selection. Migration from schema one or two uses a separate guarded write boundary and never overwrites an earlier backup."
+        "statement": "There is no completion-time guarantee. Compatible schema-three readers and short SQLite writers can finish across program selection. Migration from schema one or two uses a separate guarded write boundary and preserves all retained entries atomically."
       }
     ],
     "compatibility_and_evolution": [
@@ -134,18 +134,18 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clew.state",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clew.application.track",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clew.digest.email",
@@ -169,8 +169,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "use_when": [
@@ -181,7 +181,7 @@
   ],
   "outcome": "Installed Clew commands and provider, with coordinated state setup or migration.",
   "effects": [
-    "Program deployment selects immutable files and initializes a missing ledger or converts schema one or two to schema three under maintenance with a private consistent original-schema backup. Existing entry identity, content, and exact retry requests remain intact; no thread is invented.",
+    "Program deployment selects immutable files and initializes a missing ledger or converts schema one or two to schema three under maintenance transactionally in place. Existing entry identity, content, and exact retry requests remain intact; no thread is invented.",
     "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
   ],
   "authority": [
@@ -192,7 +192,7 @@
     "Program selection, requested state setup, and maintenance release complete. Installation does not check artifact integrity, ledger integrity, or the Cast snapshot."
   ],
   "failure_and_recovery": [
-    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve the private original-schema backup and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
+    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve current data and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
     "Retain email occurrences and uncertain acceptance across recovery. Resolve product and schedule selection before releasing run-owned admission; never erase or approve existing failure incidents."
   ],
   "privacy": [

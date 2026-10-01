@@ -1,6 +1,6 @@
 {
   "id": "clockwork.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -66,7 +66,7 @@
     },
     {
       "label": "Explicit migration",
-      "invocation": "clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY"
+      "invocation": "clockwork [--json] migrate"
     }
   ],
   "does_not_authorize": [
@@ -105,7 +105,7 @@
       },
       {
         "status": "declared",
-        "statement": "Explicit migration consumes a new absolute backup directory only after product schedules and Clockwork commands are quiescent and retained running rows/transitions are settled."
+        "statement": "Explicit migration requires product schedules and Clockwork commands to be quiescent and retained running rows/transitions settled."
       }
     ],
     "outputs": [
@@ -161,7 +161,7 @@
       },
       {
         "status": "declared",
-        "statement": "Migration takes a schema gate, checkpoints SQLite, retains private database plus sidecars, then changes schema transactionally without rewriting definition identities or selecting schedules. Older binaries cannot open schema two. Cross-schema rollback needs matching backup, compatible program/product releases and prior plists, with newer incident evidence preserved."
+        "statement": "Migration takes a schema gate and changes schema transactionally in place without rewriting definition identities or selecting schedules. Older binaries cannot open schema two. Recovery requires compatible program/product releases with newer incident evidence preserved; there is no reverse schema operation."
       }
     ],
     "operational_limits": [

@@ -132,7 +132,7 @@ transaction. Direct SQLite integration is unsupported.
 The hidden absolute `--state-root` override is for controlled tests and
 isolation. It is not a second production authority. Definitions and activation
 history expose private paths, arguments, schedules, digests, and process times.
-Keep state, logs, and backups private. Clockwork stores no product secret or
+Keep state and logs private. Clockwork stores no product secret or
 output body. There is no daemon, HTTP surface, agent execution, workflow,
 retry engine, distributed coordination, or system/root service.
 

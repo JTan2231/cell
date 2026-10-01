@@ -54,8 +54,8 @@ migration when possible or quiesce all affected requesters for a coordinated
 cutover.
 
 For a store migration, provide incremental migration from every supported
-version, a representative old-state fixture, transactional proof, a backup and
-rollback plan, and explicit handling of post-commit maintenance. Never restore
+version, a representative old-state fixture, transactional proof, explicit schema compatibility, and handling of
+post-commit maintenance. Never restore
 old binaries onto a database they cannot read.
 
 For an exact Codex upgrade, stage the complete runtime with the candidate
@@ -139,7 +139,7 @@ and recovery procedures and `nucleus.service` for their guarantees.
 
 ## Sensitive material
 
-Fixtures, backups, logs, and retained output can contain complete prompts,
+Fixtures, logs, and retained output can contain complete prompts,
 source content, tool traffic, or authentication data. Keep them within their
 documented private boundaries.
 

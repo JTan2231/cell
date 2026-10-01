@@ -17,7 +17,7 @@ Read [concepts, typed effects, and immutable replay](../chancery/manuals/reposit
 
 Read [source identity, intake state, requests, and receipts](../chancery/manuals/reconciliation.md).
 
-## Backup and migration
+## Migration
 
 Read [persistent compatibility and feed cutover](../chancery/manuals/service.md#persistent-compatibility-and-feed-cutover)
 and [rollback guarantees](../chancery/manuals/service.md#rollback-and-recovery).

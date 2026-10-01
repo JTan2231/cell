@@ -26,7 +26,7 @@ or grant account, email, intervention or installation authority.
 
 ## Operations
 
-Use `emt.installation.operate` to prepare, activate, inspect, back up or recover
+Use `emt.installation.operate` to prepare, activate, inspect or recover
 an installation. It keeps prerequisites, effects, stop conditions and verification
 with the procedure and requires the feature contracts for detailed explanations.
 

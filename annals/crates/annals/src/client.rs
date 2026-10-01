@@ -9,15 +9,15 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::api::{
-    AppliedReconciliation, BacklogImportSummary, BackupResult, ChangeCommand, ChildrenResult,
-    ConceptCommand, ConceptResult, CorpusOverview, DecisionFeedCommand, DiffView, EnqueueSummary,
-    ErrorBody, ErrorOutput, EvidenceResult, GraphView, InboxCommand, InboxRetryCommand,
-    InboxRetryWindowArgs, InboxStatus, InitializedLibrary, InterruptSummary, LatelyReport,
-    LibraryStats, LogResult, MigratedLibrary, PagedAtArgs, ParentsResult, PauseSummary,
-    PrioritySummary, ReconciliationResult, ReconciliationView, RecordedChangeView,
-    RegistrationSummary, Request, RetentionResult, RetryEventsResult, RetrySelection, RevertResult,
-    RootsResult, RunSummary, SearchOutput, ShakeResult, SuccessEnvelope, ValidatedReconciliation,
-    WorkCommand, WorkContent, WorkSummary,
+    AppliedReconciliation, BacklogImportSummary, ChangeCommand, ChildrenResult, ConceptCommand,
+    ConceptResult, CorpusOverview, DecisionFeedCommand, DiffView, EnqueueSummary, ErrorBody,
+    ErrorOutput, EvidenceResult, GraphView, InboxCommand, InboxRetryCommand, InboxRetryWindowArgs,
+    InboxStatus, InitializedLibrary, InterruptSummary, LatelyReport, LibraryStats, LogResult,
+    MigratedLibrary, PagedAtArgs, ParentsResult, PauseSummary, PrioritySummary,
+    ReconciliationResult, ReconciliationView, RecordedChangeView, RegistrationSummary, Request,
+    RetentionResult, RetryEventsResult, RetrySelection, RevertResult, RootsResult, RunSummary,
+    SearchOutput, ShakeResult, SuccessEnvelope, ValidatedReconciliation, WorkCommand, WorkContent,
+    WorkSummary,
 };
 use crate::cli::{Command, InstructionsCommand, LibraryCommand};
 
@@ -43,7 +43,6 @@ pub enum Response {
     Evidence(EvidenceResult),
     Graph(GraphView),
     Shake(ShakeResult),
-    Backup(BackupResult),
     Retained(RetentionResult),
     Works(crate::api::SelectionPage<WorkSummary>),
     Work(WorkContent),
@@ -385,10 +384,6 @@ fn arguments(request: &Request) -> Result<Vec<OsString>, ClientError> {
                 a.push("--yes".into());
             }
         }
-        Command::Backup(v) => {
-            a.push("backup".into());
-            positional(&mut a, [v.output.clone().into_os_string()]);
-        }
         Command::Work(v) => {
             a.push("work".into());
             match v {
@@ -628,7 +623,6 @@ fn response(request: &Request, data: Value) -> Result<Response, ClientError> {
         Command::Roots(_) => decode!(Roots),
         Command::Graph(_) => decode!(Graph),
         Command::Shake(_) => decode!(Shake),
-        Command::Backup(_) => decode!(Backup),
         Command::Concept(v) => match v {
             ConceptCommand::Show(_) => decode!(Concept),
             ConceptCommand::Parents(_) => decode!(Parents),

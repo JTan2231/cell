@@ -28,7 +28,7 @@ to a subscription percentage.
 
 Each report rereads its current Annals and Nucleus authorities. Historical
 recalculation depends on retaining those records. Account reads are live and
-retain no companion snapshot. Installation, updates, backup, and deployment
+retain no companion snapshot. Installation, updates and deployment
 remain Annals operations; use `annals.install.operate` for those procedures.
 
 ## Development

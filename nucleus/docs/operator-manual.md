@@ -12,7 +12,7 @@ without contacting the daemon.
 - [Add a requester](#add-a-new-requester).
 - [Diagnose a failure](#diagnosis-and-recovery).
 - Read `chancery show nucleus.execution.operate` for service setup,
-  authentication, backup, and restore. Use `chancery product nucleus` for its
+  authentication and service recovery. Use `chancery product nucleus` for its
   feature inventory and `chancery resolve ID` for required feature detail.
 
 ## Choose the system by the intended outcome
@@ -147,7 +147,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `emt/worker` | Treat ordinary dependency unavailability as waiting; retain exchange identities and use the basic path for its own halt. |
 
 Before migrating Clockwork runtime state, capture and disable existing bindings,
-settle activations, and use its explicit backup-bearing migration. Old schema-one
+settle activations, and use its explicit migration. Old schema-one
 definitions retain their historical policy until products generate and select
 schema-two definitions. Preserve each captured enabled state and operator pause
 when rebinding. Follow the Clockwork installation
@@ -199,7 +199,7 @@ late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
 
 Refresh every active pinned Clockwork broker before enabling EMT preference.
 Keep Clockwork's `failure-checks.json`, `notification-routing.json` and
-`notification-checks.json` with its incident database during backup and recovery.
+`notification-checks.json` with its incident database during maintenance and recovery.
 Refresh every enabled pinned broker to the new failure-check contract. Older
 brokers do not understand pending failure episodes and must not run while the
 new sidecar exists. Preserve that state during recovery; do not roll back to an
@@ -270,7 +270,7 @@ operator pause, or incident halt.
 EMT owns the shared condition notice through Email without a model job.
 Upgrade requester clients before enabling the gate and use coordinated
 maintenance. Retain the quota policy, state, and EMT notices in their private
-product backups. Read `chancery show nucleus.quota` for the complete Nucleus
+product state. Read `chancery show nucleus.quota` for the complete Nucleus
 policy, protocol, observation freshness, and recovery rules.
 
 ## Compatibility model
@@ -281,7 +281,7 @@ policy, protocol, observation freshness, and recovery rules.
 | Public invocation protocol | Deploy additive daemon support before requesters emit it. Use a new protocol for incompatible meaning. |
 | Capability contract | Version incompatible documented behavior and review consumer dependency bounds. |
 | Codex harness | Prove the exact adapter version before replacing the configured executable. |
-| Persistent schema | Back up and migrate explicitly. Restore only a compatible database and binary pair. |
+| Persistent schema | Migrate transactionally and select a program that supports the current schema. |
 | Immutable schemas and toolsets | Give changed meaning a new identity. Keep decoders for retained jobs. |
 | Requester client | Rebuild when consumed types or behavior change. Shared source does not require lockstep deployment. |
 
@@ -396,14 +396,13 @@ recovery still reports the original deployment failure. Cleanup failure does not
 erase installation success. The coordinator's final result distinguishes these
 outcomes.
 
-Annals recovery restores and checkpoints each journaled library backup before
-declaring its installation safe. Copying progress does not consume its lock-wait
-allowance. A blocked restore or checkpoint retains the deployment hold.
+Annals recovery preserves current library state and verifies program/schema
+compatibility before releasing its deployment hold.
 
 The coordinator retains no public deployment history or resume interface.
 It retains an unresolved active transaction and uses it for recovery at the next
 ordinary deployment command. It removes the workspace only after resolution.
-Product holds and recovery backups remain until resolved. Release cleanup
+Product holds and migration receipts remain until resolved. Release cleanup
 preserves current releases and exact pins held by configuration, schedules, or
 processes. Unknown or incomplete pin inventories stop deletion.
 Cleanup reads configured pins through commands supported by retained products;
@@ -601,7 +600,7 @@ their wrappers, hooks, and pinned brokers when these rules change.
 
 Use `chancery usage commands` or `chancery usage events` to read recorded
 activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,
-registration, privacy, compatibility and backup behavior.
+registration, privacy and compatibility.
 
 ## Guarded change playbooks
 
@@ -665,14 +664,14 @@ examples, and contract checks together.
 ### Nucleus database schema change
 
 Provide a versioned migration from every supported prior version. Define the
-transaction boundary, post-commit maintenance, backup, and rollback procedure.
-Before cutover, settle requesters and pending calls, stop Nucleus, and take the
-required consistent backup. Validate retained jobs, output, and mailbox integrity.
+transaction boundary, post-commit maintenance, and program/schema compatibility.
+Before cutover, settle requesters and pending calls and stop Nucleus. Validate
+retained jobs, output, and mailbox integrity.
 
 Old binaries must not open an incompatible new database. Recovery across that
-boundary requires a matching database and binary pair. Read
+boundary requires a program that supports the current database schema. Read
 `chancery show nucleus.service` for schema recovery guarantees and
-`chancery show nucleus.execution.operate` for the restoration procedure.
+`chancery show nucleus.execution.operate` for the service recovery procedure.
 
 ### Requester schema, toolset, prompt, or permission change
 

@@ -1,6 +1,6 @@
 {
   "id": "clew.application.track",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -97,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive write boundary and private backup. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
+        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive transactional write boundary. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
       }
     ],
     "reliances": [
@@ -113,8 +113,8 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.explore",

@@ -1,6 +1,6 @@
 # Install Clew
 
-Use this operation to install, inspect, migrate, prepare a schedule, back up, or
+Use this operation to install, inspect, migrate, prepare a schedule or
 recover Clew. Read `chancery resolve clew.install.operate` for the required
 `clew.state`, `clew.ledger.use`, `clew.application.track`, and
 `clew.digest.email` contracts. They own the detailed behavior. This procedure
@@ -77,15 +77,11 @@ private state outside source and release trees.
    that select the same Cast job. An empty schema-one ledger needs no Platter read.
    Schema-two conversion is local and needs no external reader. Do not infer a
    mapping from company, role, or URL and do not merge histories.
-4. Let configure create a private, consistent backup of the original database
-   under the state root as `ledger-schemaN-backup-RUN_ID-UUID.sqlite3`, with mode
-   0600. `N` is the original schema version. Refuse to overwrite any earlier
-   backup. An interrupted retry creates a new backup.
-5. Commit schema three, canonical external references, explicit application-report
+4. Commit schema three, canonical external references, explicit application-report
    associations, legacy aliases, and exact write requests in one transaction.
-6. Read the retained deployment outcome. Preserve the
-   backup and reported recovery evidence until deployment completes. Keep a
-   schema-three-compatible program selected after migration. Restore only
+   No original-schema copy is created. Failure before commit preserves prior data.
+5. Read the retained deployment outcome. Preserve reported transaction evidence.
+   Keep a schema-three-compatible program selected after migration. Restore only
    captured or explicit schedule intent after coherent activation.
 
 Existing job identity becomes a `cast.job` external reference with an explicit
@@ -123,24 +119,6 @@ empty one. Provider size limits do not authorize truncation. Actual activation
 depends on login and sleep. Resolve any uncertain submission through
 `clew.digest.email` before approving continuation of a halted binding. Resume
 permits future activation and does not retry an uncertain message.
-
-## Back up or restore private state
-
-1. Record the daily binding's enabled intent and failure state. Disable scheduled
-   activation, stop Clew invocations, and wait for current commands to finish.
-2. Preserve `ledger.sqlite3`, `email.sqlite3` when present, their SQLite sidecars,
-   and `deployment-maintenance/` together in a private consistent backup. Keep the
-   previous complete backup before restoring compatible history.
-3. Reconcile uncertain write IDs and provider acceptance before replaying work.
-   Older ledger history may no longer know a committed write. Older email history
-   may permit a duplicate send.
-4. Run `clew doctor` with a matching program when a ledger diagnostic is needed.
-   Restore only the previously enabled schedule intent after readiness. Preserve
-   pre-existing failure halts and unresolved holds.
-
-Rollback to an older program requires its matching original-schema ledger backup
-and reconciliation of every post-migration entry. Preserve delivery state; a
-ledger backup does not authorize restoration of older email occurrences.
 
 ## Recover program selection
 
