@@ -44,6 +44,10 @@ def validation_exited(directory: Path, job: dict) -> bool:
                     "--candidate", job["candidate_commit"], "--json"]
         if job.get("skip_tests", False):
             expected.append("--skip-tests")
+        if (isinstance(command, list) and "--defer-release-builds" in command
+                and job.get("release_builds_deferred", False) is True
+                and "signing_policy" in job):
+            expected.append("--defer-release-builds")
         # Retain exact command correlation for both validator generations.
         if isinstance(command, list) and command[-2:] == [
                 "--autofix-patch", str(directory / f"{name}.autofix.patch")]:

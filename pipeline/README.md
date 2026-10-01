@@ -131,8 +131,16 @@ checks, applicable provider checks, and formatting. One heavy `cell.clippy`
 gate then runs Clippy for the combined Cargo package set from selected products
 and shared Rust suites. It keeps all target checks and the strict lint rules.
 The shared test gate follows Clippy when tests are enabled. The second product
-phase runs applicable provider checks, documentation and release builds. Shared infrastructure Python regression
-suites remain separate required checks.
+phase runs applicable provider checks and documentation. Ordinary validator calls
+then run one heavy `cell.build.release` gate for the combined selected product
+package set. Shared infrastructure Python regression suites remain separate
+required checks.
+
+The shared release command keeps locked dependencies, warning rejection, and the
+pinned toolchain. It uses offline mode if any selected product requires it. The
+combined command unifies dependency features. It does not prove each product's
+isolated feature configuration. The full private product body retains its own
+release build for existing internal callers.
 
 The Clippy command lists each selected package once and uses Cargo's combined
 dependency feature selection. `CARGO_BUILD_WARNINGS=deny` rejects warnings without
@@ -196,9 +204,10 @@ dependency expansion. The shared suite names are `pipeline`, `install`,
 still checks structure and
 recognition. Its success does not establish full repository validation.
 
-Changes to the shared Clippy runner, parallel test runner, or pinned test tool
-selector select all current products and all three shared Rust suites. When tests
-are enabled, this includes product and platform tests. This validates the common
+Changes to the shared Clippy runner, parallel test runner, release build runner,
+validator selector, or pinned test tool selector select all current products and
+all three shared Rust suites. When tests are enabled, this includes product and
+platform tests. This validates the common
 executors across their complete target inventory. Test-only and documentation
 edits do not select this expansion.
 
@@ -237,6 +246,15 @@ freeze the host signing policy and prepare signed production candidates through
 the installed manager's shared builder before source acceptance. This step runs
 when tests are skipped. A signing configuration failure stops acceptance without
 model repair. Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md).
+
+New manager jobs can request `--defer-release-builds` for committed-range JSON
+validation when their candidate contains `pipeline/release_build.py` and their
+frozen job policy requires signed production preparation. The validator omits
+the shared release gate and records `selection.release_builds_deferred` as true.
+The mandatory production build remains before acceptance. Older jobs and
+callers keep the shared release gate. This flag does not omit provider checks,
+documentation, Clippy, or selected tests.
+
 CI does not run installation persistent-state, general artifact-integrity, or operational-readiness
 checks, or retain test assertions requiring those removed checks. Ordinary
 product behavior and setup operations remain in their applicable test suites.
@@ -255,7 +273,8 @@ candidate commit ID. Fields that could not be established are null. The base
 and candidate fields name the manager's exact committed range.
 
 The selection records its change mode, coverage mode, product tests, platform
-products, shared suites, selection reasons, and ordered `required_gates`.
+products, shared suites, selection reasons, `release_builds_deferred`, and ordered
+`required_gates`.
 Each required gate names its gate ID, lane, and command. The `gates` array
 contains the broker receipts for gates that ran. A required gate absent from
 that array did not complete. The dispatcher stops after the first unsuccessful

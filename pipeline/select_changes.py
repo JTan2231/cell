@@ -21,7 +21,7 @@ from platform_inputs import (
 
 RUST_EXECUTOR_INPUTS = frozenset((
     "pipeline/parallel_tests.py", "pipeline/nextest_tool.py", "pipeline/clippy.sh",
-    "pipeline/autofix.py",
+    "pipeline/autofix.py", "pipeline/release_build.py", "pipeline/select_changes.py",
 ))
 
 
@@ -181,6 +181,7 @@ class Plan:
     platform: dict[str, list[str]]
     shared: dict[str, list[str]]
     tests_skipped: bool
+    release_builds_deferred: bool = False
 
 
 def at_revision(root: Path, revision: str, path: str) -> bytes | None:
@@ -254,6 +255,7 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
         parser.add_argument("--candidate", metavar="COMMIT", help="require this clean committed HEAD")
         parser.add_argument("--json", action="store_true", help="emit one aggregate JSON receipt")
         parser.add_argument("--autofix-patch", metavar="PATH", help=argparse.SUPPRESS)
+        parser.add_argument("--defer-release-builds", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("products", nargs="*", metavar="PRODUCT")
     args = parser.parse_intermixed_args(arguments)
     if direct:
@@ -266,6 +268,8 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
         parser.error("--base and --candidate are required together")
     if getattr(args, "autofix_patch", None) and not (args.json and args.base and args.candidate):
         parser.error("--autofix-patch requires committed-range JSON validation")
+    if getattr(args, "defer_release_builds", False) and not (args.json and args.base and args.candidate):
+        parser.error("--defer-release-builds requires committed-range JSON validation")
     return args
 
 
@@ -339,8 +343,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
             if descriptor or (owned and (catalog or any(fnmatchcase(path, p) for p in patterns))):
                 platform[product].append(path)
 
-    # Common Rust lint and test executors affect every product. Validate their
-    # ordinary and lifecycle target selection together.
+    # Common Rust lint, test, and release executors affect every product.
+    # Validate their ordinary and lifecycle target selection together.
     executor_changes = sorted(changes & RUST_EXECUTOR_INPUTS)
     if executor_changes:
         reason = f"global Rust runner changed: {describe(executor_changes, args.verbose)}"
@@ -394,6 +398,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
           f"skipped={len(products) - len(selected)}", file=sys.stderr)
     if args.skip_tests:
         print("ci: tests skipped; checks and builds retained", file=sys.stderr)
+    if getattr(args, "defer_release_builds", False):
+        print("ci: release compilation deferred to signed production preparation", file=sys.stderr)
     if mode == "changed":
         for product in selected:
             print(f"ci: product {product}: {describe(reasons[product], args.verbose) or 'platform input changed'}", file=sys.stderr)
@@ -419,7 +425,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
         print(f"ci: affected platform products outside requested scope: {','.join(outside)}", file=sys.stderr)
     return Plan(mode, args.verbose, args.quiet_result, expected_source, expected_status,
                 head, base, committed, products, selected, platform, suites,
-                args.skip_tests)
+                args.skip_tests, getattr(args, "defer_release_builds", False))
 
 
 def plan(root: Path, arguments: list[str]) -> None:
@@ -522,6 +528,15 @@ def shared_check_gate(root: Path, suite: str) -> tuple[str, str, list[str]]:
     return f"cell.platform.{suite}", lane, ["sh", str(root / "pipeline/platform.sh"), suite]
 
 
+def release_build_gate(root: Path, products: list[str]) -> tuple[str, str, list[str]] | None:
+    if not products:
+        return None
+    body = [sys.executable, str(root / "pipeline/release_build.py")]
+    for product in products:
+        body.extend(["--product", product])
+    return "cell.build.release", "heavy", body
+
+
 def gate_plan(root: Path, selection: Plan,
               direct: str | None = None) -> list[tuple[str, str, list[str]]]:
     gates = []
@@ -565,6 +580,10 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
     for gate, lane, body in products:
         body = [*body, "--phase", "post"]
         gates.append((gate + ".post", lane, body))
+    if not selection.release_builds_deferred:
+        build_gate = release_build_gate(root, selection.selected)
+        if build_gate:
+            gates.append(build_gate)
     if selection.shared["catalog"]:
         gates.append(shared_check_gate(root, "catalog"))
     return gates
@@ -599,6 +618,7 @@ def run_json(root: Path, arguments: list[str]) -> int:
                 "mode": "committed-range" if selection.committed else "working-tree",
                 "coverage_mode": selection.mode,
                 "tests_skipped": selection.tests_skipped,
+                "release_builds_deferred": selection.release_builds_deferred,
                 "product_tests": selection.selected,
                 "platform_products": [p for p in selection.selected if selection.platform[p]],
                 "shared_suites": [s for s, why in selection.shared.items() if why],

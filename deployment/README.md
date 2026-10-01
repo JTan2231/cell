@@ -75,6 +75,12 @@ settings. Settings identity uses the JSON values, not the settings file path.
 The admitted deployment plan records its expanded product set. Presentation
 flags do not change request identity.
 
+Optional `--prepared-build ABSOLUTE_RESULT_JSON` supplies candidates from an
+earlier build of the same commit under the captured signing policy. Admission
+retains the result file's absolute path and SHA-256 as request inputs. Keep that
+file and its candidates available until preparation finishes. A replay with a
+changed path or result file stops.
+
 An exact replay returns the existing operation. Reuse of the same ID with a
 different request stops. A terminal replay does not run installation again.
 An active or interrupted replay does not start another worker. A different
@@ -117,6 +123,12 @@ shell frontends are runtime assets for credential loading and scheduled jobs.
 Each run creates a detached worktree at the selected commit. It calls the shared
 release builder once for selected products, the maintenance closure, and retained
 dependencies. Preparing an inspector does not select its product for upgrade.
+
+When `--prepared-build` supplies a matching candidate, preparation verifies its
+source, product, executable scope, identity, hashes, and native signatures. It
+copies and seals the bundle in the deployment workspace before maintenance.
+It builds only missing products in one Cargo invocation. An invalid supplied
+candidate stops preparation; it does not trigger a replacement build.
 
 Complete the relevant CI checks during development. Deployment does not run CI
 or require a CI receipt. Preparation builds production binaries and packages the selected files. Tests, formatting, Clippy, documentation

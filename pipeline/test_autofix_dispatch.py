@@ -19,7 +19,7 @@ class AutofixDispatchTests(unittest.TestCase):
                           "--autofix-patch", str(self.patch)]
         self.plan = SimpleNamespace(
             base="a" * 40, head="b" * 40, source="b" * 40,
-            committed=True, mode="changed", tests_skipped=False,
+            committed=True, mode="changed", tests_skipped=False, release_builds_deferred=False,
             selected=["alpha"], platform={"alpha": []}, shared={}, verbose=False,
         )
         self.gates = [(name, "heavy", ["body"]) for name in

@@ -17,7 +17,8 @@ from deployment import build, candidate, signing
 from ci_manager import git_ops
 
 
-def prepare(source: Path, products: list[str], output: Path, policy: dict | None) -> dict:
+def prepare(source: Path, products: list[str], output: Path, policy: dict | None, *,
+            release_check: bool = False) -> dict:
     commit = source_commit(source)
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
@@ -27,11 +28,14 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
     if output.exists():
         result = json.loads((output / "result.json").read_text())
     else:
-        result = build.prepare(source, products, output, signing_policy=policy)
+        options = {"release_check": True} if release_check else {}
+        result = build.prepare(source, products, output, signing_policy=policy, **options)
     if not isinstance(result, dict) or result.get("schema") != 1 or result.get("state") != "built":
         raise candidate.CandidateError("production preparation has an incompatible receipt")
     if result.get("source_key") != commit:
         raise candidate.CandidateError("production preparation has another source identity")
+    if result.get("release_check", False) != release_check:
+        raise candidate.CandidateError("production preparation has another release check policy")
     canonical_products = sorted({"krisis" if product == "decisions" else product for product in products})
     if (not isinstance(result.get("candidates"), dict)
             or sorted(result["candidates"]) != canonical_products):
@@ -51,9 +55,12 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
             raise candidate.CandidateError("production candidate does not match its preparation")
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
-    return {"schema_version": 1, "state": "passed", "source_commit": commit,
-            "signing_policy_digest": signing.policy_digest(policy), "products": canonical_products,
-            "preparation": result}
+    receipt = {"schema_version": 1, "state": "passed", "source_commit": commit,
+               "signing_policy_digest": signing.policy_digest(policy), "products": canonical_products,
+               "preparation": result}
+    if release_check:
+        receipt["preparation_digest"] = candidate.digest(output / "result.json")
+    return receipt
 
 
 def source_commit(source: Path) -> str:
@@ -66,15 +73,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--product", action="append", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--signing-policy-file", required=True, type=Path)
+    parser.add_argument("--release-check", action="store_true")
     args = parser.parse_args(argv)
     try:
         policy = json.loads(args.signing_policy_file.read_text())
-        result = prepare(args.source_root, args.product, args.output, policy)
+        result = prepare(args.source_root, args.product, args.output, policy,
+                         release_check=args.release_check)
         code = 0
     except signing.SigningError as error:
         result = {"schema_version": 1, "state": "error", "failure_kind": "signing_configuration",
                   "message": str(error)}
         code = 78
+    except build.CompilationError as error:
+        result = {"schema_version": 1, "state": "error", "failure_kind": "release_build",
+                  "message": str(error)}
+        code = 1
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         result = {"schema_version": 1, "state": "error", "failure_kind": "production_preparation",
                   "message": str(error)}

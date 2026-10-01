@@ -323,6 +323,16 @@ resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 [validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
 
+For supported candidates, new CI jobs build selected release packages together
+in trusted production preparation before acceptance. Deployment verifies and
+reuses those signed candidates, then builds only additional products required by its dependency
+scope. The combined build unifies selected packages' dependency features.
+Source compilation failures use the job's bounded repair path; signing,
+verification, and other preparation failures stop the job. Older candidates and
+retained jobs keep their original release-build policy. Read the
+[queue contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
+for support detection, receipt meaning, and recovery.
+
 Selected Rust tests run through one parallel nextest stage between the selected
 products' checks before and after tests. The broker retains one compiler writer;
 the test stage has a separate configurable test-process limit. CI does not run

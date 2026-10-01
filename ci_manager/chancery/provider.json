@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.6.1"
+    "release": "0.6.2"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -39,14 +39,16 @@
       "Signing configuration and job snapshots retain public certificate selection, namespace, Keychain path, and policy digests. The private key stays in Keychain. Initial setup retains an encrypted recovery export and its private password in a mode-0700 host backup directory, with mode-0600 files; there is no upload or automatic deletion."
     ],
     "compatibility_and_retirement": [
-      "Manager release 0.6.1 uses journal schema 1, queue contract 8, signing contract 1, and signing policy schema 1. New jobs freeze test, refund, and signing policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
+      "Manager release 0.6.2 uses journal schema 1, queue contract 9, signing contract 1, and signing policy schema 1. New jobs freeze test, refund, signing, and release-build policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. Jobs without release_builds_deferred keep their ordinary release gate and terminal production-preparation failure policy. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
       "The manager enables deterministic fixes only when the committed candidate contains pipeline/autofix.py. Older candidates retain check-only validation. The optional validator mode and retained fix history are additive; existing frozen model, test and signing policies do not change.",
+      "New jobs freeze release_builds_deferred=true. Deferral requires a signing snapshot and the committed pipeline/release_build.py marker; the installed manager checks the validator's recorded mode and requires trusted production release-check evidence before acceptance. Older candidates retain their ordinary release gate and additional production preparation. A mismatched mode fails closed. Source compilation failures in deferred mode use ordinary bounded model repair; signing, verification and other preparation failures remain terminal.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [
       "Production requires a configured external APFS volume with ownership enabled and macOS filesystem write confinement for CI and compiler bodies. The fixed volume UUID and mount path have no internal fallback. Source Git metadata, installed programs, configuration and live provider state remain host-owned.",
       "Only one delivery job and one repair loop may be active. The manager invokes the internal validator through the shared broker; root and product ci.sh wrappers support only manager commands.",
       "The validator captures MachineApplicable suggestions from the existing strict Clippy invocation and runs the formatter once for the selected Cargo packages. It prepares a patch in a temporary tracked snapshot, without changing the committed candidate. The manager applies that patch to a private index, records a private candidate and revalidates against the same job base. This path invokes no model and consumes no model repair point; unresolved lint failures still use bounded model repair.",
+      "Release checks build selected product packages together, which unifies their dependency features. Deferred jobs use one trusted production Cargo build with locked dependencies, denied build warnings and required offline mode. Deployment verifies and copies those exact signed candidates and compiles only additional products in its dependency scope.",
       "New jobs default to three unrefunded gpt-5.6-terra medium repair attempts, then one unrefunded gpt-5.6-sol high attempt, with a 600-second execution timeout per invocation. Git acceptance and a recorded private candidate refund the attempt before later validation. Failed attempts remain charged for the whole job. This limits unrefunded points, not total invocations, runtime, or cost; no separate total-invocation ceiling applies.",
       "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",

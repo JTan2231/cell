@@ -38,6 +38,10 @@ class BuildError(RuntimeError):
     """Selected release materials could not be built."""
 
 
+class CompilationError(BuildError):
+    """Cargo rejected the selected source during release compilation."""
+
+
 def read_descriptor(source: Path, product: str) -> dict[str, str]:
     product = "decisions" if product == "krisis" else product
     if not NAME.fullmatch(product):
@@ -100,7 +104,8 @@ def tool_output(source: Path, environment: dict[str, str], *command: str) -> str
     return result.stdout.strip()
 
 
-def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict[str, Any]]:
+def build_configuration(source: Path, cache: Path, *, release_check: bool = False,
+                        offline: bool = False) -> tuple[dict[str, str], dict[str, Any]]:
     bootstrap_cargo_path()
     environment = {name: value for name, value in os.environ.items()
                    if name in (*MINIMAL_ENVIRONMENT, *CONFIG_ENV)
@@ -115,8 +120,15 @@ def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict
     environment.update(workspace.environment())
     environment.update(CARGO_TARGET_DIR=str(target), CARGO_BUILD_BUILD_DIR=str(target),
                        CARGO_BUILD_JOBS=str(jobs), CARGO_INCREMENTAL="0")
+    if release_check:
+        environment["CARGO_BUILD_WARNINGS"] = "deny"
+    if offline:
+        environment["CARGO_NET_OFFLINE"] = "true"
     cargo_version = tool_output(source, environment, "cargo", "--version")
     rustc_version = tool_output(source, environment, "rustc", "--version", "--verbose")
+    if release_check and (cargo_version.split()[:2] != ["cargo", "1.97.1"]
+                          or rustc_version.split()[:2] != ["rustc", "1.97.1"]):
+        raise BuildError("release checks require cargo and rustc 1.97.1")
     host = next((line.removeprefix("host: ") for line in rustc_version.splitlines()
                  if line.startswith("host: ")), None)
     if host is None:
@@ -148,7 +160,8 @@ def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict
 
 
 def prepare(source: Path, products: list[str], output: Path, unit: str | None = None, *,
-            signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+            signing_policy: dict[str, Any] | None = None, prepared_build: Path | None = None,
+            prepared_build_digest: str | None = None, release_check: bool = False) -> dict[str, Any]:
     source = source.resolve()
     if not output.is_absolute() or output.is_symlink() or output == source or source in output.parents:
         raise BuildError("build output must be an absolute non-symbolic path outside the source worktree")
@@ -163,6 +176,13 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
     policy_digest = signing.policy_digest(policy) if policy is not None else None
     workspace.require_capacity()
     workspace.require_path(output)
+    source_key = candidate.source_identity(source)
+    if prepared_build is not None:
+        return prepare_supplied(source, products, output, unit, policy, source_key,
+                                prepared_build, prepared_build_digest=prepared_build_digest,
+                                release_check=release_check)
+    if prepared_build_digest is not None:
+        raise BuildError("prepared build digest requires a prepared build")
     repository_key = hashlib.sha256(os.fsencode(str(common_git_directory(source)))).hexdigest()
     cache = Path(os.environ.get("CELL_RELEASE_CACHE_DIR", str(workspace.directory("releases/" + repository_key)))).expanduser()
     workspace.require_path(cache)
@@ -170,13 +190,20 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         raise BuildError("release cache must be an absolute non-symbolic directory")
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     (cache / "entries").mkdir(mode=0o700, exist_ok=True)
-    source_key = candidate.source_identity(source)
-    environment, configuration = build_configuration(source, cache)
+    offline = release_check and any(read_descriptor(source, product).get("CARGO_OFFLINE") == "1"
+                                   for product in products)
+    environment, configuration = build_configuration(source, cache, release_check=release_check,
+                                                      offline=offline)
     metadata = json.loads(tool_output(source, environment, "cargo", "metadata", "--format-version", "1",
                                       "--no-deps", "--locked", "--manifest-path", str(source / "Cargo.toml")))
     selected = selection(source, products, unit, metadata)
     identity = {"schema": 1, "source_key": source_key, "configuration": configuration, "selection": selected,
                 "signing_policy": policy, "signing_policy_digest": policy_digest}
+    release_packages = []
+    if release_check:
+        release_packages = sorted({package for product in products
+                                   for package in read_descriptor(source, product).get("CARGO_PACKAGES", "").split()})
+        identity["release_packages"] = release_packages
     build_key = hashlib.sha256(candidate.json_bytes(identity)).hexdigest()
     entry = cache / "entries" / build_key
     started = time.monotonic()
@@ -193,17 +220,24 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         else:
             owners = {name: product for product, item in selected.items() for name in item["binaries"]}
             names = sorted(owners)
-            packages = sorted({record["package"] for item in selected.values() for record in item["binaries"].values()})
+            packages = release_packages if release_check else sorted({record["package"]
+                for item in selected.values() for record in item["binaries"].values()})
             command = ["cargo", "build", "--release", "--locked", "--manifest-path", str(source / "Cargo.toml"),
                        "--target", configuration["target"], "--target-dir", str(cache / "target"),
                        "--jobs", str(configuration["jobs"])]
+            if offline:
+                command.append("--offline")
             for package in packages:
                 command.extend(("--package", package))
-            for name in names:
-                command.extend(("--bin", name))
+            if not release_check:
+                for name in names:
+                    command.extend(("--bin", name))
             build_started = time.monotonic()
-            subprocess.run(workspace.confined_command(command), cwd=source, env=environment,
-                           check=True, stdout=sys.stderr)
+            try:
+                subprocess.run(workspace.confined_command(command), cwd=source, env=environment,
+                               check=True, stdout=sys.stderr)
+            except subprocess.CalledProcessError as error:
+                raise CompilationError(f"release compilation failed (exit {error.returncode})") from error
             build_seconds = time.monotonic() - build_started
             temporary = Path(tempfile.mkdtemp(prefix=".entry-", dir=cache / "entries"))
             try:
@@ -261,7 +295,104 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
                   "candidates": candidates, "cache_hit": cache_hit, "cache_entry": str(entry),
                   "build_seconds": build_seconds, "queue_seconds": queue_seconds,
                   "elapsed_seconds": time.monotonic() - started,
+                  "release_check": release_check,
                   "signing_policy": policy, "signing_policy_digest": policy_digest}
+        (staging / "result.json").write_bytes(candidate.json_bytes(result))
+        staging.rename(output)
+        return result
+    finally:
+        if staging.exists():
+            candidate.remove_tree(staging)
+
+
+def prepare_supplied(source: Path, products: list[str], output: Path, unit: str | None,
+                     policy: dict[str, Any] | None, source_key: str, prepared_build: Path, *,
+                     prepared_build_digest: str | None, release_check: bool) -> dict[str, Any]:
+    """Copy verified supplied bundles and compile only the missing product scope."""
+    started = time.monotonic()
+    if not prepared_build.is_absolute() or prepared_build.is_symlink():
+        raise BuildError("prepared build must be an absolute non-symbolic result file")
+    workspace.require_path(prepared_build)
+    candidate.regular(prepared_build)
+    supplied_bytes = prepared_build.read_bytes()
+    receipt_digest = hashlib.sha256(supplied_bytes).hexdigest()
+    if prepared_build_digest is not None and receipt_digest != prepared_build_digest:
+        raise BuildError("prepared build changed after deployment admission")
+    supplied = json.loads(supplied_bytes)
+    policy_digest = signing.policy_digest(policy) if policy is not None else None
+    if (not isinstance(supplied, dict) or supplied.get("schema") != 1
+            or supplied.get("state") != "built" or supplied.get("source_key") != source_key):
+        raise BuildError("prepared build does not match the selected source")
+    if (supplied.get("signing_policy") != policy
+            or supplied.get("signing_policy_digest") != policy_digest):
+        raise BuildError("prepared build does not match the selected signing policy")
+    available = supplied.get("candidates")
+    if not isinstance(available, dict):
+        raise BuildError("prepared build candidate inventory is invalid")
+    selected = sorted({"krisis" if product == "decisions" else product for product in products})
+    if unit is not None and len(selected) != 1:
+        raise BuildError("--unit requires exactly one selected product")
+    commit = git(source, "rev-parse", "HEAD").decode().strip()
+    reused: dict[str, tuple[Path, dict[str, Any]]] = {}
+    for product in selected:
+        if product not in available:
+            continue
+        record = available[product]
+        if not isinstance(record, dict) or not isinstance(record.get("candidate_dir"), str):
+            raise BuildError(f"prepared candidate record is invalid: {product}")
+        directory = Path(record["candidate_dir"])
+        if not directory.is_absolute():
+            raise BuildError(f"prepared candidate path must be absolute: {product}")
+        workspace.require_path(directory)
+        manifest = candidate.verify(directory, signing_policy=policy)
+        if (manifest.get("product") != product or manifest.get("source_commit") != commit
+                or manifest.get("source_key") != source_key
+                or manifest.get("candidate_id") != record.get("candidate_id")
+                or record.get("source_key") != source_key):
+            raise BuildError(f"prepared candidate does not match the selected source and identity: {product}")
+        values = read_descriptor(source, product)
+        rows = [row.split("|") for row in values.get("RELEASE_BINARY_CHECKS", "").splitlines()]
+        if any(len(row) != 3 for row in rows):
+            raise BuildError(f"invalid binary declaration: {product}")
+        expected = {row[2] for row in rows if unit is None or row[0] == unit}
+        if not expected or set(manifest["binaries"]) != expected:
+            raise BuildError(f"prepared candidate executable scope does not match: {product}")
+        reused[product] = directory, manifest
+    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
+    try:
+        missing = [product for product in selected if product not in reused]
+        built = prepare(source, missing, staging / "missing", unit, signing_policy=policy,
+                        release_check=release_check) if missing else {}
+        candidates = {}
+        for product in selected:
+            if product in reused:
+                directory, expected_manifest = reused[product]
+            else:
+                directory = Path(built["candidates"][product]["candidate_dir"])
+                expected_manifest = candidate.verify(directory, signing_policy=policy)
+            destination = staging / "candidates" / product
+            shutil.copytree(directory, destination)
+            manifest = candidate.verify(destination, signing_policy=policy)
+            if manifest != expected_manifest:
+                raise BuildError(f"prepared candidate changed while copying: {product}")
+            candidate.seal_tree(destination)
+            candidates[product] = {"candidate_id": manifest["candidate_id"], "source_key": source_key,
+                                   "candidate_dir": str(output / "candidates" / product)}
+        if missing:
+            candidate.remove_tree(staging / "missing")
+        result = {"schema": 1, "state": "built", "source_key": source_key,
+                  "candidates": candidates, "prepared_build": str(prepared_build),
+                  "prepared_build_digest": receipt_digest,
+                  "reused_products": sorted(reused), "built_products": missing,
+                  "build_seconds": built.get("build_seconds", 0.0),
+                  "queue_seconds": built.get("queue_seconds", 0.0),
+                  "elapsed_seconds": time.monotonic() - started,
+                  "release_check": release_check,
+                  "signing_policy": policy, "signing_policy_digest": policy_digest}
+        for key in ("build_key", "cache_hit", "cache_entry"):
+            if key in built:
+                result[key] = built[key]
         (staging / "result.json").write_bytes(candidate.json_bytes(result))
         staging.rename(output)
         return result
@@ -277,6 +408,9 @@ def main() -> int:
     parser.add_argument("--unit")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--prepared-build", type=Path, help="reuse verified candidates from this build result")
+    parser.add_argument("--prepared-build-digest", help=argparse.SUPPRESS)
+    parser.add_argument("--release-check", action="store_true", help=argparse.SUPPRESS)
     arguments = parser.parse_args()
     try:
         options = {}
@@ -290,7 +424,9 @@ def main() -> int:
             signing.assert_current(policy)
             options["signing_policy"] = policy
         result = prepare(arguments.source_root, arguments.product, arguments.output,
-                         arguments.unit, **options)
+                         arguments.unit, prepared_build=arguments.prepared_build,
+                         prepared_build_digest=arguments.prepared_build_digest,
+                         release_check=arguments.release_check, **options)
         print(json.dumps(result, sort_keys=True))
         return 0
     except (BuildError, candidate.CandidateError, OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

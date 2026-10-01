@@ -428,7 +428,8 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
                *, verbose: bool = False, settings: dict[str, Any] | None = None,
                selected_commit: str | None = None, chosen_plan: dict[str, Any] | None = None,
                request_id: str | None = None, run_id: str | None = None,
-               signing_policy: dict[str, Any] | None = None) -> Path:
+               signing_policy: dict[str, Any] | None = None,
+               prepared_build: dict[str, str] | None = None) -> Path:
     if sys.version_info < (3, 11):
         raise DeploymentError("deployment requires Python 3.11 or newer")
     chosen = chosen_plan if chosen_plan is not None else plan(root, requested, selected_commit)
@@ -456,6 +457,8 @@ def create_run(root: Path, requested: Sequence[str], storage: Path | None = None
             "signing_policy": policy, "signing_policy_digest": signing.policy_digest(policy)}
     if request_id is not None:
         data["request_id"] = request_id
+    if prepared_build is not None:
+        data["prepared_build"] = prepared_build
     durable_json(run / "run.json", data)
     try:
         archive_source(root, chosen["source_commit"], run / "source")
@@ -544,6 +547,8 @@ def result_from_data(data: dict[str, Any]) -> dict[str, Any]:
               "diagnostics": data.get("diagnostics", []),
               "signing_policy_digest": data.get("signing_policy_digest"),
               "signing_policy": data.get("signing_policy")}
+    if "prepared_build" in data:
+        result["prepared_build"] = data["prepared_build"]
     if data.get("request_id"):
         result["request_id"] = data["request_id"]
     return result
@@ -963,6 +968,10 @@ class Run:
             policy_path = self.path / "signing-policy.json"
             durable_json(policy_path, self.data["signing_policy"])
             command.extend(["--signing-policy-file", str(policy_path)])
+        if "prepared_build" in self.data:
+            supplied = self.data["prepared_build"]
+            command.extend(["--prepared-build", supplied["path"],
+                            "--prepared-build-digest", supplied["sha256"]])
         for product in self.data["prepared_products"]:
             command.extend(["--product", product])
         returncode, _ = self.command("cell", "release-build", command, cwd=self.worktree)
@@ -973,7 +982,8 @@ class Run:
             raise DeploymentError("release build did not complete")
         source_key = result["source_key"]
         self.data["source_key"] = source_key
-        self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds") if key in result}
+        self.data["build"] = {key: result[key] for key in ("cache_hit", "build_key", "elapsed_seconds",
+                              "build_seconds", "reused_products", "built_products") if key in result}
         for product in self.data["prepared_products"]:
             record = self.record(product)
             output = preparation / "candidates" / product
@@ -1277,18 +1287,39 @@ def launch(path: Path, lock_fd: int) -> dict[str, Any]:
     return result
 
 
+def prepared_selection(path: Path | None, expected_digest: str | None = None) -> dict[str, str] | None:
+    if path is None:
+        if expected_digest is not None:
+            raise DeploymentError("prepared build digest requires a prepared build")
+        return None
+    if not path.is_absolute() or path.is_symlink():
+        raise DeploymentError("prepared build must be an absolute non-symbolic result file")
+    workspace.require_path(path)
+    candidate.regular(path)
+    digest = candidate.digest(path)
+    if expected_digest is not None and digest != expected_digest:
+        raise DeploymentError("prepared build differs from the caller's retained selection")
+    return {"path": str(path), "sha256": digest}
+
+
 def canonical_request(root: Path, products: Sequence[str], selected_commit: str | None,
-                      settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+                      settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None,
+                      prepared_build: Path | None = None,
+                      prepared_build_digest: str | None = None) -> dict[str, Any]:
     if selected_commit is None:
         raise DeploymentError("a caller-correlated deployment requires --source-commit")
     revision = source_commit(root, selected_commit)
     inventory = catalog(root, revision)
     if set(settings or {}) - inventory.keys():
         raise DeploymentError("settings name a product outside the selected inventory")
-    return {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
+    request = {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
             "source_commit": revision, "products": sorted(requested_products(inventory, products)),
             "settings": settings or {}, "signing_policy": signing_policy,
             "signing_policy_digest": signing.policy_digest(signing_policy)}
+    supplied = prepared_selection(prepared_build, prepared_build_digest)
+    if supplied is not None:
+        request["prepared_build"] = supplied
+    return request
 
 
 def blocked_result(request_id: str, detail: str, *, blocker: str | None = None) -> dict[str, Any]:
@@ -1345,12 +1376,15 @@ def finish_correlated(storage: Path, request_id: str) -> dict[str, Any]:
 
 def start_correlated(root: Path, products: Sequence[str], storage: Path, *, request_id: str,
                      selected_commit: str | None, verbose: bool,
-                     settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+                     settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None,
+                     prepared_build: Path | None = None,
+                     prepared_build_digest: str | None = None) -> dict[str, Any]:
     operation_path(storage, request_id)
     if signing_policy is not None:
         signing_policy = signing.validate_policy(signing_policy)
     explicit_policy = signing_policy is not None
-    request = canonical_request(root, products, selected_commit, settings, signing_policy)
+    request = canonical_request(root, products, selected_commit, settings, signing_policy,
+                                prepared_build, prepared_build_digest)
     admitted = False
     result = None
     try:
@@ -1381,7 +1415,7 @@ def start_correlated(root: Path, products: Sequence[str], storage: Path, *, requ
             admitted = True
             path = create_run(root, products, storage, verbose=verbose, settings=settings,
                               chosen_plan=chosen, request_id=request_id, run_id=record["run_id"],
-                              signing_policy=policy)
+                              signing_policy=policy, prepared_build=request.get("prepared_build"))
             record["phase"] = "running"
             save_operation(storage, record)
             result = launch(path, lock_fd)
@@ -1450,14 +1484,17 @@ def reconcile_request(storage: Path, request_id: str) -> dict[str, Any]:
 def start(root: Path, products: Sequence[str], storage: Path | None = None,
           *, verbose: bool = False, settings: dict[str, Any] | None = None,
           selected_commit: str | None = None, request_id: str | None = None,
-          signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
+          signing_policy: dict[str, Any] | None = None, prepared_build: Path | None = None,
+          prepared_build_digest: str | None = None) -> dict[str, Any]:
     storage = storage or state_root()
     if request_id is not None:
         return start_correlated(root, products, storage, request_id=request_id,
                                 selected_commit=selected_commit, verbose=verbose, settings=settings,
-                                signing_policy=signing_policy)
+                                signing_policy=signing_policy, prepared_build=prepared_build,
+                                prepared_build_digest=prepared_build_digest)
     policy = signing.load_policy() if signing_policy is None else signing.validate_policy(signing_policy)
     signing.assert_current(policy)
+    supplied = prepared_selection(prepared_build, prepared_build_digest)
     admitted = False
     result = None
     try:
@@ -1466,7 +1503,8 @@ def start(root: Path, products: Sequence[str], storage: Path | None = None,
             reconcile_active(storage, lock_fd)
             cleanup_active(storage)
             path = create_run(root, products, storage, verbose=verbose, settings=settings,
-                              selected_commit=selected_commit, signing_policy=policy)
+                              selected_commit=selected_commit, signing_policy=policy,
+                              prepared_build=supplied)
             result = launch(path, lock_fd)
     finally:
         if admitted:
@@ -1535,6 +1573,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if name == "start":
             command.add_argument("--request-id", help="durable caller identity; requires --source-commit")
             command.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
+            command.add_argument("--prepared-build", type=Path, help="reuse verified candidates from this build result")
+            command.add_argument("--prepared-build-digest", help=argparse.SUPPRESS)
     for name in ("status", "reconcile"):
         command = commands.add_parser(name)
         command.add_argument("--request-id", required=True, help="exact admitted caller identity")
@@ -1564,7 +1604,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 policy = signing.validate_policy(read_json(parsed.signing_policy_file))
             result = start(root, parsed.products, verbose=parsed.verbose, settings=settings,
                            selected_commit=parsed.source_commit, request_id=parsed.request_id,
-                           signing_policy=policy)
+                           signing_policy=policy, prepared_build=parsed.prepared_build,
+                           prepared_build_digest=parsed.prepared_build_digest)
         print_result(result)
         return int(result.get("exit_code", 0))
     except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:

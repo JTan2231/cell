@@ -53,6 +53,7 @@ class SubmissionSigningTests(unittest.TestCase):
         snapshot = json.loads(inserts[0].args[1][-1])
         self.assertEqual(snapshot["signing_policy"], POLICY)
         self.assertEqual(snapshot["signing_policy_digest"], signing.policy_digest(POLICY))
+        self.assertIs(snapshot["release_builds_deferred"], True)
         retained = {**snapshot, "id": job["id"]}
         self.store.db.execute.return_value.fetchone.return_value = retained
         self.store.decode.return_value = retained
@@ -100,7 +101,7 @@ class WorkerSigningTests(unittest.TestCase):
         self.current = stack.enter_context(mock.patch.object(signing, "assert_current"))
         stack.enter_context(mock.patch.object(signing, "preflight"))
         self.writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_json"))
-        stack.enter_context(mock.patch("ci_manager.manager.atomic_bytes"))
+        self.bytes_writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_bytes"))
         stack.enter_context(mock.patch.object(Path, "exists", return_value=False))
 
     def receipt(self):
@@ -157,6 +158,78 @@ class WorkerSigningTests(unittest.TestCase):
                 "ci_manager.manager.git.clean_candidate"):
             self.worker.checking(self.job)
         self.worker.store.save.assert_called_once_with(self.job, "preparing")
+
+    def test_only_new_signed_jobs_with_supported_source_defer_release_builds(self):
+        self.job.update(release_builds_deferred=True, validations=[])
+        receipt = {"schema_version": 1, "state": "passed", "base_commit": self.job["base_commit"],
+                   "candidate_commit": self.job["candidate_commit"], "gates": [],
+                   "selection": {"release_builds_deferred": True, "product_tests": ["alpha"],
+                                 "platform_products": []}}
+        self.worker.process.return_value = ({"exit_code": 0}, json.dumps(receipt).encode(), b"")
+        with mock.patch.object(Path, "is_file", return_value=True), mock.patch(
+                "ci_manager.manager.git.ensure_worktree"), mock.patch("ci_manager.manager.git.clean_candidate"):
+            self.worker.checking(self.job)
+        self.assertIn("--defer-release-builds", self.worker.process.call_args.args[2])
+        self.worker.store.save.assert_called_once_with(self.job, "preparing")
+        for legacy in ({"release_builds_deferred": False}, {"signing_policy": None}):
+            job = self.job | legacy
+            if legacy.get("signing_policy", POLICY) is None:
+                job.pop("signing_policy")
+            with mock.patch.object(Path, "is_file", return_value=True):
+                self.assertFalse(self.worker.release_builds_deferred(job))
+        with mock.patch.object(Path, "is_file", return_value=False):
+            self.assertFalse(self.worker.release_builds_deferred(self.job))
+
+    def test_validator_cannot_defer_without_manager_release_build_policy(self):
+        self.job["validations"] = []
+        receipt = {"schema_version": 1, "state": "passed", "base_commit": self.job["base_commit"],
+                   "candidate_commit": self.job["candidate_commit"], "gates": [],
+                   "selection": {"release_builds_deferred": True}}
+        self.worker.process.return_value = ({"exit_code": 0}, json.dumps(receipt).encode(), b"")
+        with mock.patch("ci_manager.manager.git.ensure_worktree"), self.assertRaisesRegex(
+                ManagerError, "release build policy"):
+            self.worker.checking(self.job)
+        self.worker.store.save.assert_not_called()
+
+    def test_combined_release_failure_retains_compiler_diagnostics_for_repair(self):
+        self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
+        receipt = {"schema_version": 1, "state": "error", "failure_kind": "release_build",
+                   "message": "cargo build failed"}
+        self.worker.process.return_value = ({"exit_code": 1}, json.dumps(receipt).encode(), b"compiler error")
+        self.worker.preparing(self.job)
+        self.assertIn("--release-check", self.worker.process.call_args.args[2])
+        self.assertEqual(self.job["production_diagnostics"], str(self.directory / "production-0.log"))
+        self.bytes_writes.assert_called_once_with(self.directory / "production-0.log",
+                                                 b"compiler error\n" + json.dumps(receipt).encode())
+        self.worker.store.save.assert_called_once_with(self.job, "repair_prepare")
+        self.worker.finish.assert_not_called()
+
+    def test_legacy_preparation_failure_does_not_change_its_repair_policy(self):
+        receipt = {"schema_version": 1, "state": "error", "failure_kind": "release_build",
+                   "message": "cargo build failed"}
+        self.worker.process.return_value = ({"exit_code": 1}, json.dumps(receipt).encode(), b"compiler error")
+        self.worker.preparing(self.job)
+        self.worker.finish.assert_called_once()
+        self.worker.store.save.assert_not_called()
+
+    def test_deferred_release_requires_check_evidence_before_acceptance(self):
+        self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
+        self.job["production_receipt"] = self.receipt()
+        with mock.patch("ci_manager.manager.git.advance") as advance, self.assertRaisesRegex(
+                ManagerError, "release check evidence"):
+            self.worker.accepting(self.job)
+        advance.assert_not_called()
+
+    def test_changed_preparation_receipt_stops_before_acceptance(self):
+        self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
+        receipt = self.receipt()
+        receipt["preparation"]["release_check"] = True
+        self.job["production_receipt"] = receipt | {"preparation_digest": "d" * 64}
+        with mock.patch("ci_manager.manager.production_candidate.digest", return_value="e" * 64), mock.patch(
+                "ci_manager.manager.git.advance") as advance, self.assertRaisesRegex(
+                ManagerError, "receipt changed"):
+            self.worker.accepting(self.job)
+        advance.assert_not_called()
 
     def test_all_signature_proofs_precede_accepted_ref_advancement(self):
         self.job["production_receipt"] = self.receipt()
@@ -221,6 +294,17 @@ class WorkerSigningTests(unittest.TestCase):
         self.writes.assert_called_once_with(self.directory / "signing-policy.json", POLICY)
         self.assertNotIn("--signing-policy-file", self.worker.deployment_command(self.job, "status"))
 
+    def test_deployment_reuses_the_exact_deferred_production_preparation(self):
+        self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
+        self.job["production_receipt"] = self.receipt() | {"preparation_digest": "d" * 64}
+        self.job["deployment_request"] = {"request_id": "deployment", "source_commit": "b" * 40,
+                                           "products": ["alpha"]}
+        command = self.worker.deployment_command(self.job, "start")
+        self.assertEqual(command[command.index("--prepared-build") + 1],
+                         str(self.directory / "production-0/result.json"))
+        self.assertEqual(command[command.index("--prepared-build-digest") + 1], "d" * 64)
+        self.assertNotIn("--prepared-build", self.worker.deployment_command(self.job, "status"))
+
 
 class ProductionHelperTests(unittest.TestCase):
     def setUp(self):
@@ -242,6 +326,7 @@ class ProductionHelperTests(unittest.TestCase):
         stack.enter_context(mock.patch.object(Path, "read_text", return_value=json.dumps(self.result)))
         self.build = stack.enter_context(mock.patch.object(production.build, "prepare", return_value=self.result))
         self.verify = stack.enter_context(mock.patch.object(production.candidate, "verify", return_value=self.manifest))
+        self.digest = stack.enter_context(mock.patch.object(production.candidate, "digest", return_value="d" * 64))
 
     def test_fresh_preparation_uses_frozen_policy_and_verifies_final_bundle(self):
         receipt = production.prepare(self.source, ["alpha"], self.output, POLICY)
@@ -259,6 +344,15 @@ class ProductionHelperTests(unittest.TestCase):
         self.verify.side_effect = signing.SigningError("retained executable has wrong certificate")
         with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
             production.prepare(self.source, ["alpha"], self.output, POLICY)
+
+    def test_deferred_release_uses_strict_combined_check_and_rejects_other_policy(self):
+        self.build.return_value = self.result | {"release_check": True}
+        production.prepare(self.source, ["alpha"], self.output, POLICY, release_check=True)
+        self.build.assert_called_once_with(self.source, ["alpha"], self.output,
+                                          signing_policy=POLICY, release_check=True)
+        self.exists.return_value = True
+        with self.assertRaisesRegex(production.candidate.CandidateError, "release check policy"):
+            production.prepare(self.source, ["alpha"], self.output, POLICY, release_check=True)
 
     def test_initial_dirty_or_changed_head_stops_before_production_build(self):
         self.clean.side_effect = ManagerError("candidate worktree changed")
