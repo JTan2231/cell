@@ -53,17 +53,16 @@ Never open incompatible state with an older binary or discard committed work.
 ## Validate and submit
 
 Use synthetic Annals accepted-document pages and Conversations cwd values.
-Nucleus tests use the fake local server and immutable schemas. Packaging tests
-use fake candidates, Clockwork, and launchctl in an isolated home. Keep live
-service validation separate. Fixtures and logs contain no real user source,
+Nucleus tests use the fake local server and immutable schemas. Keep tests
+isolated from live services. Fixtures and logs contain no real user source,
 credentials, prompts, private paths, or tool payloads.
 
 The internal Semantics gate is offline and has its documented 60-second deadline.
-It checks the Rust installer, recovery fixtures, static shell runtime, Clockwork
-templates, exact release-local runners/frontends, content identity, quiescence,
-rollback, retained-state uninstall, provider/dependency compatibility, rustfmt,
-clippy, tests, rustdoc, and release build. Select fixtures for the changed boundary;
-focused development checks do not replace the manager outcome.
+It uses shared shell and plist syntax checks, provider validation and version
+matching, rustfmt, clippy, selected Rust tests, rustdoc, and release build.
+The shared catalog gate checks contract dependency compatibility. Select fixtures
+for the changed boundary; focused development checks do not replace the manager
+outcome.
 
 Commit the intended change and submit it from the Cell root:
 

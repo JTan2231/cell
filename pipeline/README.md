@@ -17,9 +17,9 @@ fixture tests remain development checks, not CI submission.
 Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
 shell and packaging checks, provider bundles, independently versioned release
 units, CI resource class, release branch, deployment profile, and conservative
-deployment conflict keys. Product-specific catalog regressions remain small
-scripts under `extras/`; arbitrary release or deployment hooks are not part of
-the shared format.
+deployment conflict keys. The shared format has no product-specific script
+hooks. CI keeps common verification stages and the standard Rust test suites;
+it does not add bespoke shell, Python, or catalog assertions for one product.
 
 `RELEASE_COMPANION_MANIFESTS` optionally lists `release-unit|package-manifest`
 rows for provider-owned libraries released at their owner's version. Annals'
@@ -46,7 +46,7 @@ arguments, and direct validation flags are not supported CI entry points.
 New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
 to run selected tests. `--skip-tests` selects the default explicitly. The
 validator retains syntax, formatting, lint, provider, documentation, build,
-version, and candidate checks. It skips Rust tests and Python and shell regression
+version, and candidate checks. It skips Rust tests and shared Python regression
 suites. The receipt records `selection.tests_skipped`; product selection still
 controls automatic deployment.
 
@@ -108,8 +108,7 @@ There are two test groups:
 - Platform tests cover installation, upgrades, packaging, maintenance,
   recovery, and shared CI/release/deployment machinery. Cargo integration
   targets named `install` or `maintenance`, installer binary unit tests, and
-  the `cell-install` and `cell-maintenance` packages belong here. Shell frontend
-  and runner regressions and product catalog regressions also belong here.
+  the `cell-install` and `cell-maintenance` packages belong here.
 
 `parallel_tests.py` selects Cargo targets from metadata inside one admitted
 heavy gate. The plan identifies each allowed package, target kind, and target
@@ -125,7 +124,8 @@ shell and packaging checks, applicable provider checks, formatting, and Clippy.
 The second runs applicable provider checks, documentation, release builds,
 binary version checks, and candidate staging. Selected shared Rust suites retain
 their formatting and Clippy checks but execute their tests in the shared test
-gate. Python and shell regression suites remain separate required checks.
+gate. Shared infrastructure Python regression suites remain separate required
+checks.
 
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or

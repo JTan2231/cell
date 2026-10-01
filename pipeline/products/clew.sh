@@ -15,7 +15,6 @@ CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=clew
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|clew/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='clew|Clew|package|clew/Cargo.toml|clew-|1'
 RELEASE_BINARY_CHECKS='clew|target/release/clew|clew

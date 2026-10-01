@@ -27,9 +27,8 @@ pipeline_clear_descriptor() {
     unset CI_RESOURCE_CLASS RELEASE_BRANCH DEPLOY_PROFILE DEPLOY_CONFLICT_KEYS
     unset CARGO_MANIFEST CARGO_PACKAGES CARGO_OFFLINE CARGO_PATH_PREFIX
     unset CLIPPY_KEEP_GOING TEST_NO_FAIL_FAST
-    unset CI_SHELL_CHECKS CI_RUN_CHECKS CI_PLIST_CHECKS
-    unset CI_PROVIDER_VALIDATION_PHASE CI_EXTRA_BEFORE_RUST
-    unset CI_EXTRA_AFTER_BUILD CI_BINARY_CHECKS
+    unset CI_SHELL_CHECKS CI_PLIST_CHECKS
+    unset CI_PROVIDER_VALIDATION_PHASE CI_BINARY_CHECKS
     unset RELEASE_UNITS RELEASE_ALLOW_EXPLICIT_UNIT RELEASE_USAGE
     unset RELEASE_COMPANION_MANIFESTS
     unset RELEASE_METADATA_NO_DEPS RELEASE_BINARY_CHECKS PROVIDERS
@@ -64,11 +63,8 @@ pipeline_load_descriptor() {
     CLIPPY_KEEP_GOING=${CLIPPY_KEEP_GOING:-1}
     TEST_NO_FAIL_FAST=${TEST_NO_FAIL_FAST:-1}
     CI_SHELL_CHECKS=${CI_SHELL_CHECKS:-}
-    CI_RUN_CHECKS=${CI_RUN_CHECKS:-}
     CI_PLIST_CHECKS=${CI_PLIST_CHECKS:-}
     CI_PROVIDER_VALIDATION_PHASE=${CI_PROVIDER_VALIDATION_PHASE:-before-rust}
-    CI_EXTRA_BEFORE_RUST=${CI_EXTRA_BEFORE_RUST:-}
-    CI_EXTRA_AFTER_BUILD=${CI_EXTRA_AFTER_BUILD:-}
     CI_BINARY_CHECKS=${CI_BINARY_CHECKS:-}
     RELEASE_ALLOW_EXPLICIT_UNIT=${RELEASE_ALLOW_EXPLICIT_UNIT:-0}
     RELEASE_USAGE=${RELEASE_USAGE:-Usage: ./release.sh --patch|--minor|--major}
@@ -276,17 +272,4 @@ EOF
     done <<EOF
 $CI_SHELL_CHECKS
 EOF
-
-    while IFS='|' read -r run_condition script_path; do
-        [ -n "$run_condition" ] || continue
-        [ -x "$PIPELINE_ROOT/$script_path" ] \
-            || pipeline_fail "$PRODUCT_ID check is not executable: $script_path"
-    done <<EOF
-$CI_RUN_CHECKS
-EOF
-
-    for extra_path in "$CI_EXTRA_BEFORE_RUST" "$CI_EXTRA_AFTER_BUILD"; do
-        [ -z "$extra_path" ] || [ -x "$PIPELINE_ROOT/$extra_path" ] \
-            || pipeline_fail "$PRODUCT_ID CI extension is not executable: $extra_path"
-    done
 }

@@ -11,7 +11,6 @@ CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=bazaar
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|bazaar/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='bazaar|Bazaar|package|bazaar/Cargo.toml|bazaar-|1'
 RELEASE_BINARY_CHECKS='bazaar|target/release/bazaar|bazaar

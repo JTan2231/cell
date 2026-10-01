@@ -346,11 +346,10 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
         for product, (directory, _) in products.items():
             owned = path.startswith(directory + "/")
             descriptor = path == f"pipeline/products/{product}.sh"
-            extra = path == f"pipeline/extras/{product}-catalog.sh"
             patterns = (*PRODUCT_INPUTS, *PRODUCT_RUNTIME_INPUTS.get(product, ()))
             catalog = ("/chancery/" in path or "/chancery-" in path
                        or path.startswith("chancery/provider/")) and path.endswith(".json")
-            if descriptor or extra or (owned and (catalog or any(fnmatchcase(path, p) for p in patterns))):
+            if descriptor or (owned and (catalog or any(fnmatchcase(path, p) for p in patterns))):
                 platform[product].append(path)
 
     # A change to the common Rust executor changes every product's test

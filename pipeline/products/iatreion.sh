@@ -17,7 +17,6 @@ CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|iatreion/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='iatreion|Iatreion|package|iatreion/crates/iatreion/Cargo.toml|iatreion-|1'
 RELEASE_COMPANION_MANIFESTS='iatreion|iatreion/crates/iatreion-api/Cargo.toml'

@@ -57,7 +57,7 @@ SHARED_INPUTS = {
     "install": ("deployment/crates/cell-install/*", "deployment/tests/simple_fixture.rs"),
     "maintenance": ("deployment/crates/cell-maintenance/*",),
     "prompts": ("prompting/*",),
-    "catalog": ("pipeline/integrated.sh", "pipeline/extras/*", "*/chancery/*.json",
+    "catalog": ("pipeline/integrated.sh", "*/chancery/*.json",
                 "*/chancery-*/*.json", "chancery/provider/*.json"),
 }
 

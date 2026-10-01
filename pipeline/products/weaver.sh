@@ -16,7 +16,6 @@ CARGO_OFFLINE=1
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|weaver-narrative/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='weaver|Weaver|package|weaver-narrative/Cargo.toml|weaver-|1'
 RELEASE_METADATA_NO_DEPS=1

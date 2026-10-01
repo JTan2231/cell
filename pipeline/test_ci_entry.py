@@ -176,9 +176,6 @@ CARGO_PACKAGES=alpha
 RELEASE_UNITS='alpha|Alpha|package|alpha/Cargo.toml|alpha-|1'
 CI_PROVIDER_VALIDATION_PHASE=after-tests
 PROVIDERS='alpha|alpha|alpha/provider|1'
-CI_RUN_CHECKS='always|checks/packaging.sh'
-CI_EXTRA_BEFORE_RUST=checks/before.sh
-CI_EXTRA_AFTER_BUILD=checks/after.sh
 """)
         recorder = '''#!/usr/bin/env python3
 import json
@@ -194,8 +191,7 @@ else:
         stream.write(json.dumps([label, *sys.argv[1:]]) + "\\n")
 '''
         for relative in ("tools/cargo", "tools/rustc", "pipeline/cargo_tests.py",
-                         "deployment/candidate.py", "checks/packaging.sh", "checks/before.sh",
-                         "checks/after.sh"):
+                         "deployment/candidate.py"):
             self.write(relative, recorder)
 
     def write(self, relative, value):
@@ -220,7 +216,7 @@ else:
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         commands = self.commands()
         self.assertEqual([command[0] for command in commands],
-                         ["packaging.sh", "before.sh", "cargo", "cargo"])
+                         ["cargo", "cargo"])
         self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
                          ["fmt", "clippy"])
 
@@ -230,15 +226,10 @@ else:
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         commands = self.commands()
         self.assertEqual([command[0] for command in commands],
-                         ["cargo", "cargo", "cargo", "after.sh", "candidate.py"])
+                         ["cargo", "cargo", "cargo", "candidate.py"])
         self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
                          ["run", "doc", "build"])
         self.assertEqual(commands[-1][commands[-1].index("--output") + 1], stage)
-
-    def test_ordinary_product_phase_skips_platform_shell_extras(self):
-        result = self.invoke("pre", group="product")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertEqual([command[0] for command in self.commands()], ["cargo", "cargo"])
 
     def test_private_full_body_retains_test_group_compatibility(self):
         result = self.invoke()

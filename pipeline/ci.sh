@@ -46,15 +46,6 @@ ci_shell_and_packaging() {
 $CI_SHELL_CHECKS
 EOF
 
-    while IFS='|' read -r run_condition script_path; do
-        [ -n "$run_condition" ] || continue
-        if [ "$test_groups" = all ] && pipeline_should_run "$run_condition"; then
-            "$PIPELINE_ROOT/$script_path"
-        fi
-    done <<EOF
-$CI_RUN_CHECKS
-EOF
-
     while IFS='|' read -r run_condition plist_mode plist_path; do
         [ -n "$run_condition" ] || continue
         if pipeline_should_run "$run_condition"; then
@@ -104,13 +95,6 @@ ci_validate_providers() {
     done <<EOF
 $PROVIDERS
 EOF
-}
-
-ci_run_extra() {
-    extra_path=$1
-    if [ "$test_groups" = all ] && [ -n "$extra_path" ]; then
-        "$PIPELINE_ROOT/$extra_path"
-    fi
 }
 
 ci_fmt() {
@@ -295,8 +279,6 @@ if [ "$phase" != post ]; then
         ci_stage='provider bundles'
         ci_validate_providers
     fi
-    ci_stage='extra checks'
-    ci_run_extra "$CI_EXTRA_BEFORE_RUST"
     ci_stage='rustfmt'
     ci_fmt
     ci_stage='clippy'
@@ -328,8 +310,6 @@ ci_stage='rustdoc'
 ci_doc
 ci_stage='release build'
 ci_build
-ci_stage='extra checks'
-ci_run_extra "$CI_EXTRA_AFTER_BUILD"
 ci_stage='binary versions'
 ci_check_binaries
 

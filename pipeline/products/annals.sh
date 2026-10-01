@@ -18,7 +18,6 @@ CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|annals/release.sh'
-CI_RUN_CHECKS=
 CI_PLIST_CHECKS='darwin-if-tool:plutil|lint|annals/packaging/launchd/org.annals.inbox.plist
 darwin-if-tool:plutil|lint|annals/packaging/launchd/org.annals.inbox.agent.plist'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
