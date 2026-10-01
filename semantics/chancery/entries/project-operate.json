@@ -52,33 +52,33 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     },
     {
       "id": "semantics.repository.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.projects",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    },
-    {
-      "id": "semantics.reconciliation",
       "min_contract": 2,
       "max_contract_exclusive": 3
     },
     {
-      "id": "semantics.service",
+      "id": "semantics.reconciliation",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "semantics.service",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "session_surfaces": [
@@ -170,6 +170,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "The semantics CLI prints plain text by default. --json selects the existing compact command-specific JSON schema and coded failures on stderr. The typed client and pinned worker explicitly request JSON; machine callers must pass --json. Output schemas, retained state, effects and exit statuses are unchanged."
+      },
       {
         "status": "declared",
         "statement": "Output is the selected operation receipt, project/intake/repository result, readiness report, or exact installation/recovery evidence interpreted under the required feature contracts."

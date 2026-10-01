@@ -1,6 +1,6 @@
 {
   "id": "clockwork.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -109,6 +109,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Deployment publishes one content-addressed release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."

@@ -6,6 +6,10 @@ SQLite state, and the exact runner definition bound as `semantics/worker`.
 Clockwork owns activation, process history, and scheduling incidents. A successful
 process exit does not prove a semantic commit.
 
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific JSON schema. The typed client and pinned worker explicitly
+request JSON. Output selection changes no records, effects, or exit statuses.
+
 ## Paths and configuration
 
 ```text

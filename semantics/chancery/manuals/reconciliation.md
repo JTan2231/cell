@@ -26,6 +26,10 @@ collections. The first name remains for compatibility. Statuses are `unassigned`
 original states and decoding. Records expose fixed routing outcomes and project
 assignment, not transient resolved cwd or raw dependency diagnostics.
 
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific JSON schema. The typed client and pinned worker explicitly
+request JSON. Output selection changes no records, effects, or exit statuses.
+
 ## Feed selection and completeness
 
 Each active or paused project has its own activation and scan cursor in one

@@ -24,6 +24,10 @@ Read `nucleus manual` before shared maintenance. A contract or successful
 readiness observation does not authorize installation, a new model job, upstream
 mutation, or data removal by itself.
 
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific JSON schema. The typed client and pinned worker explicitly
+request JSON. Output selection changes no records, effects, or exit statuses.
+
 ## Inspect before effects
 
 1. Select the exact installation, private database, and Annals decisions config.

@@ -154,12 +154,12 @@
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.collect",
       "min_contract": 5,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",
@@ -174,7 +174,7 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.corpus.explore",
@@ -189,12 +189,12 @@
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     },
     {
       "id": "bazaar.string.update",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [

@@ -108,10 +108,17 @@ charges. Do not erase state to clear allowance or treat an absent error as
 complete coverage. Running collection is a separate invocation under
 `cast.discovery.collect`.
 
-The Cell coordinator uses `cast init` after program selection. Its optional
-`state_dir` and `config_file` settings are absolute paths. A supplied file
-replaces complete configuration; omitted settings preserve current values.
-This setup creates no collection schedule.
+The Cell coordinator uses Cast's native state APIs and product lock after
+program selection. Its optional `state_dir` and `config_file` settings are
+absolute paths. A supplied file replaces complete configuration; omitted
+settings preserve current values. Setup does not invoke the selected CLI or
+source shell configuration, so it also supports a retained CLI without
+`--json`. This setup creates no collection schedule.
+
+Ordinary Cast commands print readable text by default. Add the global `--json`
+flag when a caller parses their output. The JSON success schemas and snapshot
+artifact format remain unchanged. Read `cast.state` and
+`cast.discovery.explore` for output and error rules.
 
 ## Add or disable a source
 

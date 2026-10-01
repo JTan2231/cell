@@ -34,7 +34,7 @@ use crate::store::Store;
     about = "Run immutable, current-user scheduled activations"
 )]
 struct Cli {
-    /// Emit one JSON envelope on stdout, or an error envelope on stderr.
+    /// Emit JSON instead of the default plain text.
     #[arg(long, global = true)]
     json: bool,
     /// Isolate all Clockwork-owned paths (for installation tests only).
@@ -268,11 +268,15 @@ async fn run(cli: Cli) -> Result<()> {
     let layout = Layout::discover(cli.state_root)?;
     if matches!(&cli.command, Command::StatusSnapshot) {
         let snapshot = status::snapshot(&layout)?;
-        println!(
-            "{}",
+        let output = if cli.json {
             serde_json::to_string(&snapshot)
                 .context("output_failed", "serialize status snapshot")?
-        );
+        } else {
+            let value = serde_json::to_value(&snapshot)
+                .context("output_failed", "render status snapshot")?;
+            text_output(&value)
+        };
+        println!("{output}");
         return Ok(());
     }
     if let Command::Migrate { backup } = &cli.command {
@@ -416,9 +420,10 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Launchd { key } => {
             match executor::run(&mut store, &layout, &key, Trigger::Launchd).await {
-                Ok(activation) => emit(&activation, cli.json),
+                // The private broker's retained receipts keep their existing JSON.
+                Ok(activation) => emit_json(&activation, cli.json),
                 Err(error) if error.code() == "binding_halted" => {
-                    emit(&store.binding(&key)?, cli.json)
+                    emit_json(&store.binding(&key)?, cli.json)
                 }
                 Err(error) => Err(error),
             }
@@ -486,10 +491,15 @@ async fn run(cli: Cli) -> Result<()> {
             activation_id,
             code,
             occurrence,
-        } => emit(
-            &store.report_abend(&activation_id, &code, &occurrence)?,
-            cli.json,
-        ),
+        } => {
+            let incident = store.report_abend(&activation_id, &code, &occurrence)?;
+            if !cli.json && incident.is_none() {
+                println!("Failure recorded. No scheduling incident was created.");
+                Ok(())
+            } else {
+                emit(&incident, cli.json)
+            }
+        }
         Command::Migrate { .. } => {
             unreachable!("migration is dispatched before opening runtime state")
         }
@@ -501,7 +511,16 @@ async fn run(cli: Cli) -> Result<()> {
     }
 }
 
-fn emit<T: Serialize>(data: &T, compact: bool) -> Result<()> {
+fn emit<T: Serialize>(data: &T, json: bool) -> Result<()> {
+    if json {
+        return emit_json(data, true);
+    }
+    let value = serde_json::to_value(data).context("output_failed", "render command result")?;
+    println!("{}", text_output(&value));
+    Ok(())
+}
+
+fn emit_json<T: Serialize>(data: &T, compact: bool) -> Result<()> {
     let value = serde_json::to_value(api::Success { ok: true, data })
         .context("output_failed", "serialize command result")?;
     let rendered = if compact {
@@ -512,6 +531,53 @@ fn emit<T: Serialize>(data: &T, compact: bool) -> Result<()> {
     .context("output_failed", "serialize command result")?;
     println!("{rendered}");
     Ok(())
+}
+
+fn text_output(value: &serde_json::Value) -> String {
+    fn record(value: &serde_json::Value, label: &str, indent: usize, lines: &mut Vec<String>) {
+        let prefix = " ".repeat(indent);
+        let nested_indent = if label.is_empty() { indent } else { indent + 2 };
+        match value {
+            serde_json::Value::Object(fields) if !fields.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (key, value) in fields {
+                    record(value, key, nested_indent, lines);
+                }
+            }
+            serde_json::Value::Array(items) if !items.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (index, item) in items.iter().enumerate() {
+                    record(item, &(index + 1).to_string(), nested_indent, lines);
+                }
+            }
+            _ => {
+                let text = match value {
+                    serde_json::Value::Null
+                    | serde_json::Value::Object(_)
+                    | serde_json::Value::Array(_) => "none".to_owned(),
+                    serde_json::Value::String(text) if text.is_empty() => "(empty)".to_owned(),
+                    serde_json::Value::String(text) => text.clone(),
+                    value => value.to_string(),
+                };
+                let label = if label.is_empty() { "Result" } else { label };
+                if text.contains('\n') {
+                    lines.push(format!("{prefix}{label}:"));
+                    for line in text.split('\n') {
+                        lines.push(format!("{prefix}  {line}"));
+                    }
+                } else {
+                    lines.push(format!("{prefix}{label}: {text}"));
+                }
+            }
+        }
+    }
+    let mut lines = Vec::new();
+    record(value, "", 0, &mut lines);
+    lines.join("\n")
 }
 
 fn emit_error(error: &Error, compact: bool) {

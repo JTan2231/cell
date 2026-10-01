@@ -21,7 +21,7 @@ case "$suite" in
         "$PIPELINE_ROOT/pipeline/check.sh"
         python3 "$PIPELINE_ROOT/pipeline/test_parallel_tests.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
-        python3 -m unittest -q deployment.test_signing ci_manager.test_signing
+        python3 -m unittest -q deployment.test_signing ci_manager.test_signing ci_manager.test_integrations
         ;;
     install|maintenance|prompts)
         CARGO_PATH_PREFIX=

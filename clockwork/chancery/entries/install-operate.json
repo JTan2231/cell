@@ -80,13 +80,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "interfaces": [
@@ -140,6 +140,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Deployment publishes one content-addressed release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.definitions",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -51,8 +51,8 @@
   "dependencies": [
     {
       "id": "clockwork.incidents",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -79,6 +79,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Registration returns the SHA-256 digest of canonical JSON for the fully concrete normalized manifest. List returns output-version-two items/has_more with default 20 and positive --limit; show returns full retained metadata."

@@ -37,7 +37,10 @@ clew email send
 clew email send --scheduled
 ```
 
-Preview prints From, To, Subject and body. JSON returns `data.digest` with
+Preview prints From, To, Subject and body. Send prints a readable acceptance
+receipt or maintenance skip. Use `--json` for either command's machine response.
+Human errors go to stderr. JSON errors retain `ok: false` and `error.detail` on
+stdout, with a nonzero exit. JSON preview returns `data.digest` with
 `subject`, `body`, `application_count`, `context_available` and
 `ledger_sequence`. The sequence is the last ledger append observed, including
 corrections; it is null for an empty ledger. Context is available when every

@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -80,6 +80,10 @@
       {
         "status": "declared",
         "statement": "Migration selection version 1 and its immutable text versions remain retained. Prompt edits affect new selections; existing library instructions and source records retain their domain identities."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 7 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "operational_limits": [
@@ -117,7 +121,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Product commands return JSON success data or error text. First initialization retains configuration, library identities, and initial cursor. Repeating init can replace the Annals executable after verifying both pinned library identities; library selections, cursor, records, instructions, and pause state remain unchanged. Update reports intake, handoff, and Annals processing outcomes. A partial failure persists its update report before returning an error; status keeps that report available independently of Annals readiness. Retry and re-examination retain Annals domain receipts. Packaging commands report release/definition outcomes separately."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. First initialization retains configuration, library identities, and initial cursor. Repeating init can replace the Annals executable after verifying both pinned library identities; library selections, cursor, records, instructions, and pause state remain unchanged. Update reports intake, handoff, and Annals processing outcomes. A partial failure persists its update report before returning an error; status keeps that report available independently of Annals readiness. Retry and re-examination retain Annals domain receipts. Packaging commands report release/definition outcomes separately."
       }
     ],
     "data_semantics": [
@@ -248,32 +252,32 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     },
     {
       "id": "conatus.processing",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    },
-    {
-      "id": "conatus.service",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
-    },
-    {
-      "id": "conatus.library.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
     },
     {
-      "id": "conatus.digest.email",
+      "id": "conatus.service",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "conatus.library.explore",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "conatus.digest.email",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ]
 }

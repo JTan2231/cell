@@ -1,6 +1,6 @@
 {
   "id": "bazaar.string.update",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -83,7 +83,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The committed Record contains id, newly allocated version, and exact content. CLI wraps it in schema-one JSON; the in-process Writer returns Record or a typed error. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error. CLI operational errors use ok:false with error.detail and exit 1; syntax errors use a stderr diagnostic and exit 2. The optional --json flag does not change output."
+        "statement": "The committed Record contains id, newly allocated version, and exact content. The default CLI receipt reports the committed ID and version. Global --json wraps the complete record in existing schema-one JSON; the in-process Writer returns Record or a typed error. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error. CLI operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stdout with --json. Syntax errors use a stderr diagnostic and exit 2 in both modes."
       }
     ],
     "completeness_and_freshness": [

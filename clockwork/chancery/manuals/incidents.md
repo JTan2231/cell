@@ -17,9 +17,10 @@ clockwork [--json] incident show INCIDENT_ID
 clockwork [--json] incident feed --after CURSOR --limit N
 ```
 
-Successful commands return an `ok:true` / `data` JSON envelope. `--json`
-selects compact output and coded `ok:false` / `error` failures on stderr with
-exit one; otherwise failures are human-readable.
+Commands print plain text by default. `--json` selects the existing compact
+`ok:true` / `data` JSON envelope. With that flag, coded `ok:false` / `error`
+failures go to stderr with exit one. Other failures are human-readable on
+stderr. Machine callers must pass `--json`.
 
 Manifest schema two adds a product-owned failure configuration:
 

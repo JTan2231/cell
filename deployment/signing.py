@@ -133,7 +133,7 @@ def preflight(policy: dict[str, Any] | None) -> None:
     output = _run(["/usr/bin/security", "find-identity", "-v", "-p", "codesigning", str(path)]).stdout.lower()
     if not re.search(r"\b" + settings["certificate_sha1"] + r"\b", output):
         raise SigningError("configured certificate/private key is missing, expired, or unavailable; identity was not changed")
-    _run(["/usr/bin/codesign", "--dryrun", "--force", "--sign", settings["certificate_sha1"],
+    _run(["/usr/bin/codesign", "--dryrun", "--detached", "/dev/null", "--force", "--sign", settings["certificate_sha1"],
           "--keychain", str(path), "--identifier", settings["identifier_namespace"] + ".preflight",
           "--timestamp=none", "/usr/bin/true"])
 

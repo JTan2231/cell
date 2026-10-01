@@ -1,6 +1,6 @@
 {
   "id": "conatus.processing",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -83,7 +83,7 @@
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -112,7 +112,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Product commands return JSON {ok:true,data:...} or {ok:false,error:string}; --json is optional. Initial configuration retains library identities and cursor. Rebinding reports initialized:false and rebound. Update and status expose separate local and Annals outcomes including a retained partial report."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. Initial configuration retains library identities and cursor. Rebinding reports initialized:false and rebound. Update and status expose separate local and Annals outcomes including a retained partial report."
       }
     ],
     "data_semantics": [
@@ -175,6 +175,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release support or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 2 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

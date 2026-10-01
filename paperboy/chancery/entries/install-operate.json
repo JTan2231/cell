@@ -95,7 +95,7 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -105,7 +105,7 @@
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [

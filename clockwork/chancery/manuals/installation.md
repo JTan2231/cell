@@ -17,6 +17,10 @@ clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY
 ./deploy.sh clockwork
 ```
 
+The `clockwork` CLI prints plain text by default. Pass `--json` for its
+existing compact machine response. The separate installer protocol is
+unchanged.
+
 The Rust installer accepts the binary, installer, and provider files at absolute
 paths. It places those files and publishes their selectors without comparing
 versions, validating provider contents, or probing runtime readiness.

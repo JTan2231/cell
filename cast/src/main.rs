@@ -7,6 +7,8 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
+mod output;
+
 fn emit_iatreion_snapshot() -> bool {
     if let Some(snapshot) = iatreion_api::requested_on_demand_snapshot_json(
         "cast",
@@ -31,6 +33,9 @@ fn emit_iatreion_snapshot() -> bool {
 struct Cli {
     #[arg(long, global = true, env = "CAST_STATE_DIR")]
     state_dir: Option<PathBuf>,
+    /// Emit structured JSON instead of readable text.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -42,10 +47,7 @@ enum Command {
         #[command(subcommand)]
         command: StateCommand,
     },
-    Status {
-        #[arg(long)]
-        json: bool,
-    },
+    Status,
     Doctor,
     Config {
         #[command(subcommand)]
@@ -63,8 +65,6 @@ enum Command {
     },
     #[command(alias = "snapshot")]
     Export {
-        #[arg(long)]
-        json: bool,
         #[arg(long)]
         output: Option<PathBuf>,
     },
@@ -119,8 +119,6 @@ enum ListCommand {
     List {
         #[arg(long, default_value_t = 20)]
         limit: usize,
-        #[arg(long)]
-        json: bool,
     },
 }
 #[derive(Subcommand)]
@@ -157,8 +155,17 @@ async fn main() {
     if emit_iatreion_snapshot() {
         return;
     }
-    if let Err(error) = execute(chancery_usage::cli::parse::<Cli>("cast", "")).await {
-        eprintln!("cast: {error}");
+    let cli = chancery_usage::cli::parse::<Cli>("cast", "");
+    let json_output = cli.json;
+    if let Err(error) = execute(cli).await {
+        if json_output {
+            eprintln!(
+                "{}",
+                json!({"schema_version":1,"ok":false,"error":{"detail":error.to_string()}})
+            );
+        } else {
+            eprintln!("cast: {error}");
+        }
         std::process::exit(1);
     }
 }
@@ -173,7 +180,8 @@ async fn execute(cli: Cli) -> Result<()> {
     } else {
         Store::open(&directory)?
     };
-    let output: Value = match cli.command {
+    let human_command = if cli.json { None } else { Some(&cli.command) };
+    let output: Value = match &cli.command {
         Command::Init => {
             let _lock = store.lock()?;
             json!({"schema_version":1,"state_dir":directory,"initialized":true})
@@ -181,7 +189,7 @@ async fn execute(cli: Cli) -> Result<()> {
         Command::State {
             command: StateCommand::ReconcileOwnership,
         } => store.reconcile_ownership()?,
-        Command::Status { .. } => store.status()?,
+        Command::Status => store.status()?,
         Command::Doctor => {
             json!({"schema_version":1,"database":"ready","state_dir":directory,"credentials":{"theirstack":std::env::var("THEIRSTACK_API_KEY").is_ok_and(|v|!v.is_empty()),"brave":std::env::var("BRAVE_SEARCH_API_KEY").is_ok_and(|v|!v.is_empty())},"agent_runtime":false,"config":store.config()?})
         }
@@ -205,9 +213,9 @@ async fn execute(cli: Cli) -> Result<()> {
             runner::run(
                 &store,
                 RunOptions {
-                    force,
-                    provider: source,
-                    max_requests,
+                    force: *force,
+                    provider: source.clone(),
+                    max_requests: *max_requests,
                     only_source: None,
                 },
             )
@@ -215,24 +223,24 @@ async fn execute(cli: Cli) -> Result<()> {
         }
         Command::Export { output, .. } => {
             if let Some(path) = output {
-                store.atomic_export(&path)?;
+                store.atomic_export(path)?;
                 json!({"exported":path})
             } else {
                 serde_json::to_value(store.snapshot()?)?
             }
         }
         Command::Companies {
-            command: ListCommand::List { limit, .. },
+            command: ListCommand::List { limit },
         } => {
             let snapshot = store.snapshot()?;
             page(
                 snapshot.snapshot_revision,
                 snapshot.companies.iter().map(company_summary).collect(),
-                limit,
+                *limit,
             )?
         }
         Command::Jobs {
-            command: ListCommand::List { limit, .. },
+            command: ListCommand::List { limit },
         } => {
             let snapshot = store.snapshot()?;
             page(
@@ -242,17 +250,17 @@ async fn execute(cli: Cli) -> Result<()> {
                     .iter()
                     .map(|job| job_summary(job, &snapshot))
                     .collect(),
-                limit,
+                *limit,
             )?
         }
         Command::Sources {
-            command: ListCommand::List { limit, .. },
+            command: ListCommand::List { limit },
         } => {
             let snapshot = store.snapshot()?;
             page(
                 snapshot.snapshot_revision,
                 snapshot.source_health.iter().map(source_summary).collect(),
-                limit,
+                *limit,
             )?
         }
         Command::Company {
@@ -262,7 +270,7 @@ async fn execute(cli: Cli) -> Result<()> {
                 .snapshot()?
                 .companies
                 .into_iter()
-                .find(|c| c.id == id)
+                .find(|c| c.id == *id)
                 .ok_or("company not found")?,
         )?,
         Command::Job {
@@ -272,7 +280,7 @@ async fn execute(cli: Cli) -> Result<()> {
                 .snapshot()?
                 .jobs
                 .into_iter()
-                .find(|j| j.id == id)
+                .find(|j| j.id == *id)
                 .ok_or("job not found")?,
         )?,
         Command::Job {
@@ -282,7 +290,7 @@ async fn execute(cli: Cli) -> Result<()> {
                 .snapshot()?
                 .jobs
                 .into_iter()
-                .find(|j| j.id == id)
+                .find(|j| j.id == *id)
                 .ok_or("job not found")?;
             let source = if let Ok(source) = store.source(&job.source_id) {
                 source
@@ -303,19 +311,19 @@ async fn execute(cli: Cli) -> Result<()> {
             command: JobCommand::Collect { url },
         } => serde_json::to_value(cast::models::JobSelection {
             schema_version: 1,
-            job: runner::collect_job(&store, &url).await?,
+            job: runner::collect_job(&store, url).await?,
         })?,
         Command::Source {
             command: SourceCommand::Add { url, company_id },
-        } => serde_json::to_value(store.add_manual_source(&url, company_id.as_deref())?)?,
+        } => serde_json::to_value(store.add_manual_source(url, company_id.as_deref())?)?,
         Command::Source {
             command: SourceCommand::Disable { id },
         } => {
             let _lock = store.lock()?;
-            serde_json::to_value(store.disable_source(&id)?)?
+            serde_json::to_value(store.disable_source(id)?)?
         }
         Command::Unresolved {
-            command: ListCommand::List { limit, .. },
+            command: ListCommand::List { limit },
         } => {
             let snapshot = store.snapshot()?;
             let mut items: Vec<_> = snapshot
@@ -331,7 +339,7 @@ async fn execute(cli: Cli) -> Result<()> {
                     .filter(|s| !matches!(s.status.as_str(), "complete" | "resolved" | "observed"))
                     .map(source_summary),
             );
-            page(snapshot.snapshot_revision, items, limit)?
+            page(snapshot.snapshot_revision, items, *limit)?
         }
         Command::Search { query, limit } => {
             if query.trim().is_empty() {
@@ -350,7 +358,7 @@ async fn execute(cli: Cli) -> Result<()> {
                 {
                     let mut item = company_summary(company);
                     item["matched_field"] = json!(field);
-                    item["excerpt"] = json!(match_excerpt(text, &query));
+                    item["excerpt"] = json!(match_excerpt(text, query));
                     items.push(item);
                 }
             }
@@ -367,14 +375,18 @@ async fn execute(cli: Cli) -> Result<()> {
                 {
                     let mut item = job_summary(job, &snapshot);
                     item["matched_field"] = json!(field);
-                    item["excerpt"] = json!(match_excerpt(text, &query));
+                    item["excerpt"] = json!(match_excerpt(text, query));
                     items.push(item);
                 }
             }
-            page(snapshot.snapshot_revision, items, limit)?
+            page(snapshot.snapshot_revision, items, *limit)?
         }
     };
-    println!("{}", serde_json::to_string_pretty(&output)?);
+    if let Some(command) = human_command {
+        print!("{}", output::human(command, &output));
+    } else {
+        println!("{}", serde_json::to_string_pretty(&output)?);
+    }
     Ok(())
 }
 

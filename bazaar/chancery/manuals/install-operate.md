@@ -112,9 +112,11 @@ is intended; do not treat successful program selection as database readiness.
    executable. Program inspection reads installation metadata without checking artifact integrity.
 
 Use the global `--database` option for initialization and doctor on another
-absolute private database. Init and doctor return schema-one JSON. Operational
-errors return `ok:false` with `error.detail` and exit 1. Invalid command syntax
-uses a stderr diagnostic and exit 2. Treat either failure as an unsuccessful step.
+absolute private database. Init and doctor print readable results by default.
+Add `--json` to request schema-one JSON. Operational errors exit 1 and use text
+on stderr by default, or `ok:false` with `error.detail` on stdout with `--json`.
+Invalid command syntax uses a stderr diagnostic and exit 2 in both modes. Treat
+either failure as an unsuccessful step.
 
 ## Inspect and recover programs
 

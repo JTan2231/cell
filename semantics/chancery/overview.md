@@ -15,6 +15,10 @@ required contracts with `chancery resolve ID`. These commands read the installed
 publication. They do not establish readiness, execute a command, or authorize
 an effect.
 
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific machine responses. Typed clients and the worker explicitly
+request JSON.
+
 ## Features
 
 | ID | Read this to understand |

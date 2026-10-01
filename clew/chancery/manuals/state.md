@@ -44,6 +44,10 @@ automatic pruning. Clew has no general automatic backup or deletion operation.
 
 ## Initialization and observations
 
+`clew init` and `clew doctor` print readable results by default. Use `--json`
+for the schema-three machine response. Human errors go to stderr. JSON errors
+retain `ok: false` and `error.detail` on stdout, with a nonzero exit.
+
 Init creates ledger schema three in an empty database. It can finish initialization
 when an interruption left an empty database. It preserves compatible existing
 rows and refuses nonempty foreign or unsupported state. Ordinary commands never

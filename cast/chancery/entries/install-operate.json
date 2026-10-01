@@ -199,18 +199,18 @@
     },
     {
       "id": "cast.state",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.collect",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "cast.discovery.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [

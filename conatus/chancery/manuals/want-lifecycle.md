@@ -20,10 +20,13 @@ Both commands preserve its ID, wording, source reference, capture time and
 frozen outgoing document. An archived want remains readable. Unarchive is its
 only lifecycle change. No source-edit or deletion operation is added.
 
-The response is JSON `{ "ok": true, "data": { "changed": true, "record": ... } }`.
+The command prints a readable receipt and the saved record by default. Use
+`--json` for the existing machine response,
+`{ "ok": true, "data": { "changed": true, "record": ... } }`.
 The record includes `state`, either `active` or `archived`. Success means the
 local transaction committed. Repeating the same command succeeds with
 `changed:false`. An unknown ID, a decision ID or a storage error returns
+an error on stderr with a nonzero exit. With `--json`, errors retain
 `{ "ok": false, "error": "..." }`. Inspect `want show WANT_ID` after an
 interrupted command. Repeating the requested transition is safe.
 

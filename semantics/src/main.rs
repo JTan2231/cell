@@ -28,6 +28,7 @@ use semantics::{Error, Result};
 struct Cli {
     #[arg(long, env = "SEMANTICS_DATABASE")]
     database: Option<PathBuf>,
+    /// Emit JSON instead of the default plain text.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -67,7 +68,7 @@ fn maintenance_error(error: cell_maintenance::Error) -> Error {
     Error::domain("deployment_maintenance", error.to_string())
 }
 
-fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<()> {
+fn maintenance_command(database: &Path, command: MaintenanceCommand, json: bool) -> Result<()> {
     let gate = deployment_gate(database)?;
     let status = match command {
         MaintenanceCommand::Hold { run_id } => gate.hold(&run_id),
@@ -78,7 +79,7 @@ fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<(
     print(
         &json!({"protocol_version": 1, "contract_version": status.contract_version,
         "holds": status.holds, "drained": status.drained}),
-        true,
+        json,
     )
 }
 
@@ -274,7 +275,7 @@ fn render_error(error: &Error, json_output: bool, scheduled_worker: bool) -> Str
 fn run(cli: Cli) -> Result<()> {
     let database = cli.database.map_or_else(default_database, Ok)?;
     if let Command::Maintenance { command } = cli.command {
-        return maintenance_command(&database, command);
+        return maintenance_command(&database, command, cli.json);
     }
     // Opening the store may initialize or migrate it. Track this lifetime even
     // for reads so installation cannot race a reader's automatic migration.
@@ -714,10 +715,60 @@ fn print(value: &impl Serialize, compact: bool) -> Result<()> {
     let output = if compact {
         serde_json::to_string(value)?
     } else {
-        serde_json::to_string_pretty(value)?
+        text_output(&serde_json::to_value(value)?)
     };
     println!("{output}");
     Ok(())
+}
+
+fn text_output(value: &serde_json::Value) -> String {
+    fn record(value: &serde_json::Value, label: &str, indent: usize, lines: &mut Vec<String>) {
+        let prefix = " ".repeat(indent);
+        let nested_indent = if label.is_empty() { indent } else { indent + 2 };
+        match value {
+            serde_json::Value::Object(fields) if !fields.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (key, value) in fields {
+                    record(value, key, nested_indent, lines);
+                }
+            }
+            serde_json::Value::Array(items) if !items.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (index, item) in items.iter().enumerate() {
+                    record(item, &(index + 1).to_string(), nested_indent, lines);
+                }
+            }
+            _ => {
+                let text = match value {
+                    serde_json::Value::Null
+                    | serde_json::Value::Object(_)
+                    | serde_json::Value::Array(_) => "none".to_owned(),
+                    serde_json::Value::String(text) if text.is_empty() => "(empty)".to_owned(),
+                    serde_json::Value::String(text) => text.clone(),
+                    value => value.to_string(),
+                };
+                let label = if label.is_empty() { "Result" } else { label };
+                if text.contains('\n') {
+                    lines.push(format!("{prefix}{label}:"));
+                    for line in text.split('\n') {
+                        lines.push(format!("{prefix}  {line}"));
+                    }
+                } else {
+                    lines.push(format!("{prefix}{label}: {text}"));
+                }
+            }
+        }
+    }
+    if matches!(value, serde_json::Value::Array(items) if items.is_empty()) {
+        return "No records.".to_owned();
+    }
+    let mut lines = Vec::new();
+    record(value, "", 0, &mut lines);
+    lines.join("\n")
 }
 
 fn default_database() -> Result<PathBuf> {

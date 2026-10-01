@@ -1,6 +1,6 @@
 {
   "id": "bazaar.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -97,7 +97,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor return schema-one JSON with no string content. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. Configure initializes compatible schema-one state; installation adds no separate program-integrity or SQLite-integrity gate."
+        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor print short readable results by default. Global --json selects their existing schema-one JSON on stdout with no string content. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stdout with --json. Syntax errors remain text on stderr with exit 2. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. Configure initializes compatible schema-one state; installation adds no separate program-integrity or SQLite-integrity gate."
       }
     ],
     "completeness_and_freshness": [

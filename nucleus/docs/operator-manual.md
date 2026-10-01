@@ -500,6 +500,17 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
+Pass `--json` when a caller parses CLI output. Bazaar, Cast, Clew, Clockwork,
+Conatus, and Semantics use readable text by default. The flag selects each
+product's structured output. Export files and internal installation interfaces
+retain their documented formats.
+
+Install the CI manager consumer that requests Bazaar `--json` before selecting
+a Bazaar release with readable default output. Follow the paused, drained
+manager replacement procedure. Update Cast collection callers with the matching
+producer flag support during coordinated deployment. Cast installation uses the
+native store interface so recovery can retain an older CLI.
+
 ## Serial CI delivery
 
 Cell's CI manager, broker, compiler targets, release cache, and deployment

@@ -22,8 +22,16 @@ cast export --output /absolute/private/snapshot.json
 ```
 
 Select independent state with the global `--state-dir PATH` option. Output is
-JSON; the commands also accept an explicit `--json` flag. `snapshot` is an
-alias for `export`. Read `cast.state` for state selection and initialization.
+readable text by default. Lists and search print compact rows and report when
+more results exist. Show prints full retained fields, including posting text.
+Status labels retained counts, local budget units, and collection outcomes.
+
+Use the global `--json` flag before or after the command for the supported
+machine interface. Its existing success schemas remain unchanged. `snapshot`
+is an alias for `export`. With `--output`, the snapshot file remains JSON in
+both modes; the flag selects the stdout receipt format. A stdout export prints
+a readable snapshot by default or the complete JSON snapshot with `--json`.
+Read `cast.state` for state selection and initialization.
 
 The provider-owned Rust read surface is `cast::store::Store::open(&Path)` and
 `Store::snapshot()`, returning `cast::models::Snapshot`. Use Cast's exported
@@ -92,8 +100,8 @@ board collection. Use the selected job and run note for targeted retrieval.
 
 ## Output selection
 
-List and search return schema-two pages with `snapshot_revision`, compact
-`items`, and `has_more`. The default limit is 20 items. `--limit` accepts a
+With `--json`, list and search return schema-two pages with
+`snapshot_revision`, compact `items`, and `has_more`. The default limit is 20 items. `--limit` accepts a
 positive integer. An empty page has no stored record matching the selected
 query and limits; it is not evidence that no external jobs exist.
 
@@ -104,7 +112,7 @@ case. Its rows add `matched_field` and a marked excerpt of at most 240 Unicode
 characters.
 
 `unresolved` shows companies without domains and sources whose status is not
-a successful collection/resolution outcome. Status schema 2 returns counts,
+a successful collection/resolution outcome. JSON status schema 2 returns counts,
 budgets, usage, the last run, and collection summaries for sources and queries.
 Counts describe retained records and selected collection work. They do not
 count all postings available from external sources. Show and export return
@@ -132,6 +140,12 @@ consumer-retention protocol.
 
 ## Failure, access, and compatibility
 
+Operational errors exit 1. They use a text diagnostic on stderr by default.
+With `--json`, stderr contains one schema-one object with `ok:false` and
+`error.detail`. Invalid command syntax uses Clap's text diagnostic on stderr
+and exit 2 in both modes. The `status-snapshot --json` operational protocol
+remains separate from ordinary command output.
+
 Reads return stored evidence without refreshing it. Use the collection
 interfaces when source retrieval is required and the supported ownership
 repair when older associations need correction. Do not infer complete source
@@ -142,7 +156,7 @@ data. They can contain search interests, source locators, and posting text.
 Reads send no information to remote systems and grant no authority to contact
 an employer or start a downstream workflow.
 
-Read contract 2, list/search/status schema 2, export schema 1, database schema,
+Read contract 3, list/search/status schema 2, export schema 1, database schema,
 and Cast package version are distinct. No maximum database size, export size,
 read-latency service level, or future deprecation window is promised. These
 reads rely only on local retained Cast state; external source readiness is

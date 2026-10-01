@@ -46,32 +46,26 @@ pub fn lifecycle(
                 .is_some_and(|recovery| recovery["any_apply_started"] == true)
             && context.home.join(".local/bin/cast").exists()
     {
-        let executable = context.home.join(".local/bin/cast");
-        let mut arguments: Vec<std::ffi::OsString> = Vec::new();
-        if let Some(path) = settings.state_dir {
-            arguments.extend(["--state-dir".into(), path.into_os_string()]);
-        }
-        let mut init = arguments.clone();
-        init.push("init".into());
-        cell_install::command::json(
-            &executable,
-            &init,
-            &std::collections::BTreeMap::new(),
-            std::time::Duration::from_secs(60),
-        )?;
+        // Recovery can select a retained CLI with an older output interface.
+        // Setup uses the same state APIs and product lock as the current CLI.
+        let directory = settings
+            .state_dir
+            .or_else(|| {
+                std::env::var_os("CAST_STATE_DIR")
+                    .filter(|path| !path.is_empty())
+                    .map(std::path::PathBuf::from)
+            })
+            .unwrap_or_else(|| context.home.join(".local/share/cast"));
+        let store = crate::store::Store::init(&directory)
+            .map_err(|_| cell_install::Error::new("Cast state initialization failed"))?;
+        let _lock = store.lock().map_err(|_| {
+            cell_install::Error::new("Cast setup could not acquire the product lock")
+        })?;
         if let Some(path) = settings.config_file {
-            arguments.extend([
-                "config".into(),
-                "set".into(),
-                "--file".into(),
-                path.into_os_string(),
-            ]);
-            cell_install::command::json(
-                &executable,
-                &arguments,
-                &std::collections::BTreeMap::new(),
-                std::time::Duration::from_secs(60),
-            )?;
+            let config = serde_json::from_slice(&std::fs::read(path)?)?;
+            store
+                .set_config(&config)
+                .map_err(|_| cell_install::Error::new("Cast configuration replacement failed"))?;
         }
     }
     Ok(serde_json::json!({"configured":operation == Operation::Configure}))

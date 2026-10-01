@@ -1,6 +1,6 @@
 {
   "id": "conatus.want.lifecycle",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -65,7 +65,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON {ok:true,data:{changed,record}} returns the saved record and whether state changed. Errors use {ok:false,error:string}. record.state is active or archived."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. JSON {ok:true,data:{changed,record}} returns the saved record and whether state changed. Errors use {ok:false,error:string}. record.state is active or archived. Human lifecycle receipts identify the saved state and whether it changed."
       }
     ],
     "data_semantics": [
@@ -108,6 +108,10 @@
       {
         "status": "declared",
         "statement": "Existing schema-one settings hold current archive markers. Absence means active, so no migration is required. Older releases ignore markers and can show or email archived wants."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 2 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.bindings",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -56,8 +56,8 @@
   "dependencies": [
     {
       "id": "clockwork.definitions",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -80,6 +80,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Binding receipts expose recorded selected digest, enabled intent, halted_incident and failure_policy_active. Lists use output version two, items/has_more, default 20 and positive --limit. Show does not query launchd or expose private plist digest."

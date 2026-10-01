@@ -14,9 +14,10 @@ clockwork [--json] definition list [--limit N]
 clockwork [--json] definition show DEFINITION_DIGEST
 ```
 
-Successful commands return an `ok:true` / `data` JSON envelope. `--json`
-selects compact output and coded `ok:false` / `error` failures on stderr with
-exit one; otherwise failures are human-readable.
+Commands print plain text by default. `--json` selects the existing compact
+`ok:true` / `data` JSON envelope. With that flag, coded `ok:false` / `error`
+failures go to stderr with exit one. Other failures are human-readable on
+stderr. Machine callers must pass `--json`.
 
 Register validates the complete definition and direct launch images before
 storing a definition. It can prepare private state and initialize an empty

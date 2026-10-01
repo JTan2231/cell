@@ -18,11 +18,21 @@ bazaar history example.prompt
 bazaar --database /absolute/private/bazaar.sqlite3 get example.prompt
 ```
 
-Get returns `id`, `version`, and `content`. History returns `id` and `versions`,
-with every retained version number in descending order. All results use
-`{"schema_version":1,"ok":true,"data":...}` JSON. Operational errors return
-`ok:false` with `error.detail` and exit 1. Invalid command syntax uses Clap's
-stderr diagnostic and exit 2. The optional `--json` flag does not change output.
+Get prints the ID, version, and complete content with readable labels. History
+prints every retained version number in descending order. The default output
+is text. Use the global `--json` flag for the supported machine interface:
+
+```sh
+bazaar get example.prompt --json
+bazaar history example.prompt --json
+```
+
+JSON get returns `id`, `version`, and exact `content`. JSON history returns `id`
+and `versions`. Success uses `{"schema_version":1,"ok":true,"data":...}` on
+stdout. With `--json`, operational errors use `ok:false` with `error.detail`
+on stdout and exit 1. Without the flag, operational errors use a text diagnostic
+on stderr and exit 1. Invalid command syntax uses Clap's stderr diagnostic and
+exit 2 in both modes. Rust reads and the JSON schema remain unchanged.
 
 The default database is `~/.local/share/bazaar/bazaar.sqlite3`. Reads require an
 initialized schema-one database. The absolute path must have a private regular

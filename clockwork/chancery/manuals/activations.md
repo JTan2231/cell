@@ -12,13 +12,21 @@ A zero child exit remains `exited`; it does not become a product success claim.
 clockwork [--json] run KEY
 clockwork [--json] history [KEY] [--limit N] [--details]
 clockwork [--json] doctor
-clockwork status-snapshot --json
+clockwork [--json] status-snapshot
 ```
 
-Every successful CLI command emits `{"ok":true,"data":...}`. `--json` selects
-compact JSON. With that flag, a coded failure writes
+Public commands print plain text by default. `--json` selects the existing
+compact `{"ok":true,"data":...}` envelope. The `status-snapshot --json`
+interface retains its raw Iatreion snapshot schema without that envelope.
+Omit the flag for a plain-text view of the same snapshot.
+With the flag, a coded failure writes
 `{"ok":false,"error":{"code":"...","message":"..."}}` to stderr and exits
-1. Without it, failures are human-readable and unsuitable as a machine protocol.
+1. Other failures are human-readable on stderr. Machine callers must pass
+`--json`.
+
+The private launchd entry point retains its existing JSON broker receipts.
+Product stdout and stderr still go to the registered product-owned files.
+Public output selection changes neither those files nor their content.
 Run accepts only an `owner/name` key, with no runtime executable, argv,
 environment, cwd, schedule, timeout, or policy.
 
@@ -71,9 +79,10 @@ content and retention. `clockwork.definitions` owns destination path and
 permission admission rules.
 
 Once a child starts and Clockwork durably records `exited`, `signaled`, or
-`timed_out`, the broker emits `ok:true` and exits zero even for a nonzero child
-exit. Admission, validation, output-open, spawn, persistence, manual-busy, and
-broker failures emit `ok:false` and exit one. A pre-start failure after admission
+`timed_out`, the broker exits zero even for a nonzero child exit. With
+`--json`, it emits `ok:true`. Admission, validation, output-open, spawn,
+persistence, manual-busy, and broker failures exit one. With `--json`, they
+emit `ok:false`. A pre-start failure after admission
 is retained as `start_failed` when the terminal write succeeds.
 
 A supervision failure after spawn retains the observed terminal state when

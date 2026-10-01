@@ -1,6 +1,6 @@
 {
   "id": "conatus.service",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -70,7 +70,7 @@
     {
       "id": "clockwork.schedule.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     }
   ],
   "promise": {
@@ -95,7 +95,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Packaging reports release selection without state-integrity, artifact-integrity, or readiness checks. Definition receipts identify key, release and path with registered:false and activated:false. Config exposes dependency and library selections; maintenance reports admission and drain."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. Packaging reports release selection without state-integrity, artifact-integrity, or readiness checks. Definition receipts identify key, release and path with registered:false and activated:false. Config exposes dependency and library selections; maintenance reports admission and drain. Ordinary config and maintenance commands use readable labeled text by default. Separate conatus-install and deployment machine responses are unchanged."
       }
     ],
     "data_semantics": [
@@ -162,6 +162,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release support or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [
