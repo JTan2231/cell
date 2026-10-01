@@ -71,7 +71,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 3 consumes Annals exchange 2 complete-document events. Existing intake and cursor state remain valid. Conatus, Annals library schema, and Clockwork versions are separate axes."
+        "statement": "Operation contract 7 consumes Annals exchange 2 complete-document events and requires explicit JSON for machine reads. Existing intake and cursor state remain valid. Conatus, Annals library schema, and Clockwork versions are separate axes."
       },
       {
         "status": "unspecified",
@@ -231,8 +231,8 @@
   "dependencies": [
     {
       "id": "annals.library.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.decision-account.exchange",
@@ -251,7 +251,7 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     },
     {

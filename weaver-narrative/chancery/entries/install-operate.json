@@ -1,6 +1,6 @@
 {
   "id": "weaver.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -76,8 +76,8 @@
     },
     {
       "id": "weaver.lifecycle",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "ci-manager.queue.operate",
@@ -146,7 +146,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, backups, sources, and runtime records private."
+        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, sources, and runtime records private."
       }
     ],
     "lifecycle_and_consistency": [
@@ -205,7 +205,7 @@
     "Prepare private first-installation settings and preview the coordinator plan.",
     "Use the coordinator to hold, drain, select and configure matched program/provider bytes.",
     "Inspect release metadata and register command inventory. Use doctor separately when live diagnostics are needed.",
-    "For attended backup, own a hold, settle exact work, prove drain, save consistent private state, verify and release only that hold.",
+    "For attended maintenance, own a hold, settle exact work, prove drain, verify and release only that hold.",
     "Use retained coordinator transaction recovery after an interrupted deployment; preserve any unproved hold."
   ],
   "checkpoints": [

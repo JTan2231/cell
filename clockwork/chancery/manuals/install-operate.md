@@ -91,15 +91,14 @@ or foreign selectors. Detach neither boots out schedules nor kills children.
 Deleting retained state or releases is a separate destructive operation with
 exact targets and proof that nothing refers to them.
 
-## Migrate or recover database schema
+## Migrate database schema
 
 1. Hold all product schedules and quiesce Clockwork commands. Finish or recover
    running rows and pending binding transitions with the old binary. Capture
    prior bindings, definitions, enabled intent, product pauses, and releases.
-2. Run the tested new binary with
-   `migrate --backup /absolute/new-backup-directory`. It refuses running rows,
-   checkpoints SQLite, retains private database and sidecars, and applies only
-   the schema change. Verify its receipt and backup before proceeding.
+2. Run the tested new binary with `migrate`. It refuses running rows and pending
+   transitions, then changes the schema transactionally in place. Verify the
+   returned schema version before proceeding.
 3. Register schema-two product definitions under product maintenance. Preserve
    disabled selection and transfer failure-owned pauses with
    `binding halt KEY --code CODE --occurrence ID` before removing an old gate.
@@ -107,12 +106,11 @@ exact targets and proof that nothing refers to them.
 4. Verify `failure_policy_active: true` for each upgraded selection. Refresh
    enabled plists to the compatible exact broker before releasing maintenance.
    A migrated schema-one definition retains its original digest and policy.
-5. For rollback across schema two, quiesce again and restore a matching
-   schema-one database and sidecars with compatible Clockwork/product releases,
-   prior definitions and plists. Retain the failed store and newer incident
-   evidence. A pre-halt backup cannot erase a later halt or authorize work.
+5. Recover program selection with a release compatible with the retained schema.
+   Keep failed state and newer incident evidence. There is no reverse schema
+   operation.
 
-Stop if backup coherence, old-state compatibility, disabled intent, or newer
+Stop if state compatibility, disabled intent, or newer
 halt preservation cannot be proved. Program deployment never performs migration.
 Chancery compatibility and installed version evidence do not establish live
 Email, Iatreion, launchd, or product readiness.

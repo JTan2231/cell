@@ -28,7 +28,7 @@
     "Never restore older authentication bytes as part of program, service, or database rollback."
   ],
   "privacy": [
-    "The canonical credential home and backups contain authentication material. Directory/file privacy requirements apply.",
+    "The canonical credential home contains authentication material. Directory/file privacy requirements apply.",
     "Host-managed authentication responses and managed-worker stderr are excluded from retained job output; managed refresh tokens never enter job homes."
   ],
   "interfaces": [

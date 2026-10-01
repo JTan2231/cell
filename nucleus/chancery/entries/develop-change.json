@@ -1,6 +1,6 @@
 {
   "id": "nucleus.develop.change",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -35,14 +35,14 @@
     "Preserve forward-only authentication separately from program or database rollback, including private staging and validated atomic promotion for every Codex credential-writing operation, supervised refresh and account reconciliation that survive requester cancellation, and attended-login exclusion from active job and account sessions."
   ],
   "privacy": [
-    "Development fixtures, logs, and backups may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
+    "Development fixtures and logs may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
     "Deployment readiness does not create synthetic runtime or requester-domain records."
   ],
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
@@ -81,8 +81,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -191,7 +191,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, and retained output stay within their documented private boundaries. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
+        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, logs, credentials, and retained output stay within their documented private boundaries. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       },
       {
         "status": "unsupported",

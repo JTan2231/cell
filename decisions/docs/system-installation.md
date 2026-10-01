@@ -145,8 +145,8 @@ only the new paths does not prove ownership of the old definition. A changed
 library ID, foreign receipt, or unproved prior definition stops the update;
 this transition does not rebind durable account identity to another library.
 
-Group release removes only the coordinator's named hold after product configuration. Recovery invokes this owner's retained product transaction before releasing its hold. It keeps scheduling disabled and retains restored evidence under
-`backups/deployments/`. Unknown ownership or incomplete recovery keeps admission held.
+Group release removes only the coordinator's named hold after product configuration. Recovery invokes this owner's retained product transaction before releasing its hold. It keeps scheduling disabled and preserves live data. Resolved legacy transaction
+directories remain under `install/recovered-*` without consuming their data copies. Unknown ownership or incomplete recovery keeps admission held.
 
 ## Verification
 
@@ -174,7 +174,7 @@ proving one still-unbound source permanently unavailable. Never edit SQLite.
 
 If deployment cannot prove exact selector restoration (including Clockwork's
 inability to restore a selected definition to null), it disables the owned
-candidate and retains the maintenance marker and private transaction backup for
+candidate and retains the maintenance marker and private transaction evidence for
 explicit recovery. Uninstall matches the selected definition to the installed
 ownership receipt and disables only that exact owned active binding; enabled
 foreign or legacy bindings are left
@@ -182,6 +182,8 @@ untouched and stop the operation. It retains the database, baseline, receipt
 ledger, legacy Decisions history, releases, logs, and Clockwork history.
 Deleting those requires a separate destructive decision.
 
+Forward recovery opens retained local state with the candidate's `observe status`
+command before publishing its selectors. A valid observer baseline is required.
 The deployment adapter does not invoke doctor. Runtime diagnosis is separate.
 
 ## Retained installation artifacts
@@ -212,9 +214,10 @@ installer gate through external verification. Repeat the same candidate and
 pins with `--release-maintenance` to prove the installed surfaces and remove
 only that authenticated gate. `--expected-current absent|releases/HASH` is an
 optional stale-selector guard. Controlled rollback keeps public commands
-suspended until database restoration is proved. An uncertain publication is
-first repaired to that suspended view, never to an executable old command over
-candidate database state.
+suspended while schema compatibility is proved. Program rollback preserves live
+data and requires an unchanged schema. A schema change recovers forward with
+the retained candidate. An uncertain publication is first repaired to the
+suspended view.
 
 ## Scheduled failure policy
 

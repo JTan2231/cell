@@ -1,13 +1,13 @@
 {
   "id": "weaver.lifecycle",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect Weaver configuration, readiness, and maintenance",
   "summary": "Interpret Weaver reading configuration, private state, live readiness, owned admission holds, release selection, and installation recovery without authoring a document.",
   "use_when": [
-    "Weaver reading configuration, state compatibility, readiness, maintenance drain, release selection, backup, or installation guarantees must be understood."
+    "Weaver reading configuration, state compatibility, readiness, maintenance drain, release selection, or installation guarantees must be understood."
   ],
   "do_not_use_when": [
     "A narrative must be authored or revised, or Annals source intake, Nucleus authentication, scheduling, or retired Weaver workflows must be operated."
@@ -84,8 +84,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -195,7 +195,7 @@
       },
       {
         "status": "declared",
-        "statement": "The installer refuses foreign selectors and unsupported legacy installation formats. Keep a consistent Weaver database/configuration backup and Nucleus state/credentials under separate provider rules."
+        "statement": "The installer refuses foreign selectors and unsupported legacy installation formats. Program recovery preserves current Weaver state. Nucleus owns credential recovery."
       },
       {
         "status": "unspecified",

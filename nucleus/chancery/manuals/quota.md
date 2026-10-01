@@ -45,7 +45,7 @@ active work finishes.
 
 Set `0 <= pause < resume < 100`. Keep this file and `quota-state.json` as private
 regular files with mode 0600. Invalid files prevent startup. Include both files
-in private Nucleus backups.
+with private Nucleus state.
 
 Nucleus writes state atomically. State contains the policy, account-identity
 digest, `limitId`, `state`, remaining percentage, observation and reset times,

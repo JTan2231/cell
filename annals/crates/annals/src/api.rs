@@ -16,16 +16,15 @@ pub use crate::change::{
     ReconciliationContractError, parse_reconciliation,
 };
 pub use crate::cli::{
-    AtArgs, BackupArgs, ChangeCommand, ChangeSelectArgs, ChangeShowArgs, ChangeSubmitArgs,
-    CliGraphDirection, CliLibraryKind, Command as Request, ConceptCommand, ConceptPageArgs,
-    ConceptShowArgs, DecisionFeedCommand, DecisionFeedPageArgs, DiffArgs, GraphArgs,
-    InboxAcceptArgs, InboxCommand, InboxEnqueueArgs, InboxImportArgs, InboxInterruptArgs,
-    InboxInterruptDisposition, InboxPriorityArgs, InboxRetryCommand, InboxRetryContinueArgs,
-    InboxRetryStartArgs, InboxRetryStatusArgs, InboxRetryWindowArgs, InboxRunArgs,
-    IngestionChannel, IngestionStatus, InitArgs, InstructionsCommand, InstructionsHistoryArgs,
-    InstructionsSetArgs, IntegrateArgs, LatelyArgs, LatelyTime, LibraryCommand, LibraryCreateArgs,
-    LogArgs, PagedAtArgs, RevertArgs, SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand,
-    WorkShowArgs,
+    AtArgs, ChangeCommand, ChangeSelectArgs, ChangeShowArgs, ChangeSubmitArgs, CliGraphDirection,
+    CliLibraryKind, Command as Request, ConceptCommand, ConceptPageArgs, ConceptShowArgs,
+    DecisionFeedCommand, DecisionFeedPageArgs, DiffArgs, GraphArgs, InboxAcceptArgs, InboxCommand,
+    InboxEnqueueArgs, InboxImportArgs, InboxInterruptArgs, InboxInterruptDisposition,
+    InboxPriorityArgs, InboxRetryCommand, InboxRetryContinueArgs, InboxRetryStartArgs,
+    InboxRetryStatusArgs, InboxRetryWindowArgs, InboxRunArgs, IngestionChannel, IngestionStatus,
+    InitArgs, InstructionsCommand, InstructionsHistoryArgs, InstructionsSetArgs, IntegrateArgs,
+    LatelyArgs, LatelyTime, LibraryCommand, LibraryCreateArgs, LogArgs, PagedAtArgs, RevertArgs,
+    SearchArgs, ShakeArgs, WorkAddArgs, WorkCommand, WorkShowArgs,
 };
 pub use crate::client::{CliClient, ClientError, Response};
 pub use crate::corpus::ShakeEdge;
@@ -98,11 +97,6 @@ pub struct MigratedLibrary {
     pub from_version: i64,
     pub to_version: i64,
     pub migrated: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct BackupResult {
-    pub output: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

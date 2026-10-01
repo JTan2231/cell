@@ -16,11 +16,11 @@ authorize an operation.
 | ID | Read this to understand |
 | --- | --- |
 | `weaver.narrative.write` | Directions, authoring, independent batches, revisions, saved document reads, caller identity, source reading, prompt selection, execution, and exact recovery. |
-| `weaver.lifecycle` | Reading configuration, private state, readiness, owned maintenance holds, release selection, installation guarantees, and backup and recovery boundaries. |
+| `weaver.lifecycle` | Reading configuration, private state, readiness, owned maintenance holds, release selection, installation guarantees, and recovery boundaries. |
 
 ## Operations
 
-Use `weaver.install.operate` to install, configure, inspect, back up, or recover
+Use `weaver.install.operate` to install, configure, inspect or recover
 Weaver through the maintained Cell coordinator and current-user commands.
 Use `weaver.develop.change` to change prompts, software, or contracts while
 preserving the supported workflow and publishing matched documentation.

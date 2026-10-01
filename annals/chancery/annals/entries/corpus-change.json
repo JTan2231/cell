@@ -36,7 +36,7 @@
     "History replay failure invalidates the library; direct SQL edits and skipped effects are unsupported recovery."
   ],
   "privacy": [
-    "Library and backup state retain complete source material, exact evidence, instruction revisions, reconciliation provenance, and corpus history. Keep them private."
+    "Library state retain complete source material, exact evidence, instruction revisions, reconciliation provenance, and corpus history. Keep them private."
   ],
   "interfaces": [
     {
@@ -79,8 +79,8 @@
   "dependencies": [
     {
       "id": "annals.libraries",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "annals.corpus.explore",

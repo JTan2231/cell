@@ -15,10 +15,10 @@
   "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Persistent changes require explicit forward migration and recovery evidence without mutating live state during source edits or internal product tests."],
   "privacy": ["Use synthetic fixtures; never include real transcripts, credentials, account bodies, personal paths, prompts, or tool traces."],
   "dependencies": [
-    {"id": "nucleus.requester.integrate", "min_contract": 1, "max_contract_exclusive": 3},
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 4},
+    {"id": "nucleus.requester.integrate", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "semantics.repository.explore", "min_contract": 3, "max_contract_exclusive": 4},
     {"id": "annals.decision-account.exchange", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "clockwork.schedule.operate", "min_contract": 4, "max_contract_exclusive": 6}
+    {"id": "clockwork.schedule.operate", "min_contract": 5, "max_contract_exclusive": 6}
   ],
   "session_surfaces": ["local_filesystem", "local_shell"],
   "runtime": "interactive_agent",

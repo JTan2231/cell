@@ -13,7 +13,7 @@ Use `clockwork.install.operate` for ordered operating procedures.
 <TRUSTED_CLOCKWORK_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY --chancery ABSOLUTE_PATH
 <TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]
 clockwork [--json] doctor
-clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY
+clockwork [--json] migrate
 ./deploy.sh clockwork
 ```
 
@@ -129,16 +129,15 @@ after proving their broker and any child absent. It chooses no journal repair,
 executes no product, and changes no binding. Its evidence is local to invocation;
 it establishes neither product success nor future timer delivery.
 
-## Explicit migration and rollback
+## Explicit schema migration
 
 Clockwork 0.5 and later require SQLite schema two. Schema-one upgrade is an
-explicit `migrate --backup` operation after product schedules and Clockwork
+explicit `migrate` operation after product schedules and Clockwork
 commands are quiescent and old running rows/transitions have been settled.
-Migration takes the schema gate, refuses retained running rows, checkpoints
-SQLite, writes a private database-plus-sidecar backup to a new absolute
-directory, and changes the schema transactionally. It preserves definitions,
-selection, activation history, timers, and product pauses. Program deployment
-never performs migration.
+Migration takes the schema gate, refuses retained running rows and pending
+binding transitions, and changes the schema transactionally in place. It
+preserves definitions, selection, activation history, timers, and product pauses.
+Program deployment never performs migration.
 
 Schema-one definitions keep their original digest and legacy failure behavior.
 They do not acquire policy merely because storage migrated. Product rollout
@@ -148,11 +147,9 @@ inactive intent, and imports failure-owned halts before removing old gates.
 plists need the compatible exact broker before maintenance release. Installation
 cannot invoke incident resume or clear product user pauses and recovery evidence.
 
-An old binary cannot open the schema-two store. Cross-schema rollback needs
-quiescence, a matching schema-one database and sidecars, compatible Clockwork
-and product releases, prior definitions, and generated plists. Failed state
-and newer incidents remain recovery evidence. A pre-halt backup cannot erase
-a later halt or authorize work.
+An old binary cannot open the schema-two store. Recover program selection only
+with a release compatible with retained state. Migration has no reverse schema
+operation. Preserve failed state and newer incident evidence during recovery.
 
 The hidden absolute test-state override uses `STATE_ROOT/email` as the default
 Email double; explicit `failure.email_cli` still selects its authorized wrapper.
@@ -167,8 +164,7 @@ and EMT handoff; stable CLI replacement alone does not refresh them. Additive
 incident feed and routing metadata leave SQLite schema two unchanged.
 
 `failure-checks.json`, `notification-checks.json`, `notification-routing.json`,
-the incident database, and EMT correspondence must be backed up and restored
-together. The schema-one failure-check sidecar retains the immutable abend ledger
+the incident database, and EMT correspondence remain coherent retained state. The schema-one failure-check sidecar retains the immutable abend ledger
 cursor and pending per-key episodes; SQLite remains schema two. Refresh every
 enabled pinned broker before relying on the new delay. An older broker must not
 run while this sidecar exists. Existing incidents remain halted and preserve

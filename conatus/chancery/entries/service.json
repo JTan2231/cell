@@ -69,7 +69,7 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     }
   ],

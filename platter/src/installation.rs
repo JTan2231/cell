@@ -236,21 +236,12 @@ fn lifecycle_inner(
         && (context.selected() || !context.prior()?["installation"]["current"].is_null())
     {
         if context.selected() {
-            let backup = root
-                .join("backups")
-                .join(format!("migration-{}.sqlite", context.request.run_id));
             cell_install::migration::install_once(
                 &context.request.run_dir.join("platter-migration.json"),
-                &backup,
                 || {
                     cell_install::command::json(
                         &context.home.join(".local/bin/platter"),
-                        &[
-                            "--json".into(),
-                            "migrate".into(),
-                            "--backup".into(),
-                            backup.clone().into_os_string(),
-                        ],
+                        &["--json".into(), "migrate".into()],
                         &BTreeMap::from([(
                             "CELL_DEPLOYMENT_RUN_ID".into(),
                             context.request.run_id.clone().into(),

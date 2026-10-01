@@ -1,6 +1,6 @@
 {
   "id": "clockwork.install.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",

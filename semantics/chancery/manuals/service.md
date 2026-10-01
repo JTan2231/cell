@@ -172,9 +172,9 @@ prior binding, stops any owned legacy LaunchAgent, and suspends public selectors
 The selected-definition check is a point-in-time observation; Clockwork supplies
 no compare-and-swap. Concurrent direct mutation of that binding is unsupported.
 
-The installer holds the worker flock, proves SQLite closed, privately backs up
-the database plus `-wal`, `-shm`, and `-journal`, then initializes or migrates the
-database through the Semantics store. The old private selector remains selected
+The installer holds the worker flock, proves SQLite closed, records the prior
+schema version, then initializes or migrates the live database through the
+Semantics store. It creates no data copy. The old private selector remains selected
 and public work stays fenced until publication and durable commit. Setup does
 not replay the Annals feed or check Nucleus readiness. Success publishes release,
 CLI, and provider selectors and selects the candidate Clockwork definition.
@@ -195,8 +195,10 @@ Uninstall or an unproved rollback retains the gate.
 
 ## Rollback and recovery
 
-A pre-commit failure restores the captured database inventory, sidecars, and
-selectors under proved quiescence. It restores the exact prior non-null Clockwork
+A pre-commit failure restores program selectors under proved quiescence when
+the database schema is unchanged. It preserves the live database and sidecars.
+A schema change requires forward recovery with the retained candidate.
+Compatible program rollback restores the exact prior non-null Clockwork
 selection and enabled state, or the prior owned legacy LaunchAgent, never both.
 A previously disabled selected definition remains disabled without transient
 activation. A previously absent or disabled-null binding becomes a disabled
@@ -206,24 +208,31 @@ pruning needs a separate decision.
 
 If rollback cannot prove scheduler/database quiescence, it keeps the maintenance
 gate before releasing the worker flock, attempts both scheduler cleanups, and
-removes public selectors. It retains database backup, prior schedule and selector
-receipts. When a newly selected candidate cannot return to prior null selection,
+removes public selectors. It retains the prior schedule and selector receipts. When a newly selected candidate cannot return to prior null selection,
 it also retains the exact private `current` selector and authenticated hold as
 ownership evidence. The gate prevents domain admission even when scheduler
 cleanup cannot be proved.
 
 Interrupted transactions remain in `install/.transaction.*/transaction.json`.
-Recovery reads the saved database inventory before restoring the captured files. A durably committed transaction resumes forward. A prior null selection
+Recovery preserves live state. New transaction records contain the prior schema
+version. Legacy records remain readable and require forward recovery if state
+was accessed; their old data copies remain untouched. A durably committed transaction resumes forward. A prior null selection
 requires explicit `recover --forward`: the recorded candidate, retained
 release, and definition are proved; state remains gated; candidate
 selectors and binding are restored before releasing its hold. Recovery never
 chooses or repeats a legacy activation watermark.
 
+Forward recovery proves the exact candidate definition before updating a hold
+receipt. An owned transaction can adopt an absent receipt or its exact recorded
+prior receipt. A changed receipt stops recovery. An external unreceipted marker
+remains external: recovery neither claims it nor removes it.
+
 An interrupted installer lock is reclaimed only when its private owner record
 identifies a process proved absent. Foreign locks, changed evidence, foreign
 artifacts, and unknown ownership stop recovery with maintenance retained.
-Successful backups remain in `backups/deployments/`; `last-update.json` records
-the installation receipt. Program rollback never authorizes discarding a committed
+`last-update.json` records the installation receipt. Completed new transaction
+evidence is removed. Resolved legacy transaction directories are retained under
+`install/recovered-*` without restoring or removing their data copies. Program rollback never authorizes discarding a committed
 semantic result.
 
 ## Persistent compatibility and feed cutover
@@ -239,12 +248,12 @@ tool identities are distinct; old admitted jobs retain their original schemas.
 
 A legacy database activates only through the explicit final-watermark installation
 procedure in `semantics.project.operate`. It requires stopped legacy append,
-drained final cursors, settled legacy work/jobs, external gates, private backup,
-and `--keep-maintenance`. It binds one exact Annals library/watermark to every
-non-retired project without importing historical Decisions rows. Before the first
-new account, failure can restore the exact pre-cutover state. After any new account
-or account-derived revision commits, recovery is forward under maintenance;
-never run an old binary or discard new state.
+drained final cursors, settled legacy work/jobs, external gates, and
+`--keep-maintenance`. It binds one exact Annals library/watermark to every
+non-retired project without importing historical Decisions rows. Migration and
+activation preserve live state. After a schema change, recover forward under
+maintenance with the retained candidate. Never run an incompatible old binary
+or discard committed state.
 
 ## Coordinated deployment and uninstall
 
@@ -258,8 +267,8 @@ The adapter requires maintenance support from the installed public command befor
 effects. Unsupported old binaries require the documented compatibility release
 and quiescence procedure; a candidate gate cannot fence an old command.
 Ordinary updates preserve activation/cursors and never choose a legacy watermark.
-Recovery uses the exact retained transaction, restores pre-commit state or finishes
-a committed candidate with scheduling disabled, and keeps outer holds on uncertainty.
+Recovery uses the exact retained transaction, restores compatible prior programs
+or finishes the retained candidate with scheduling disabled, and keeps outer holds on uncertainty.
 
 Deployment settings accept only boolean `enabled`. An omitted value preserves
 captured intent; a new schedule defaults to enabled. For example,
@@ -274,7 +283,7 @@ destructive and is outside uninstall authority.
 
 ## Privacy and related procedures
 
-State and backups can contain full accepted documents, normalized conversation,
+State can contain full accepted documents, normalized conversation,
 project path history, repository meanings, and historical anchors. Product logs
 contain counters, opaque IDs, and bounded product-owned failures only. They exclude
 raw dependency diagnostics, source/project text, paths, prompts, credentials,

@@ -127,7 +127,7 @@
     {
       "id": "nucleus.requester.integrate",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "email.message.send",
@@ -316,6 +316,10 @@
       {
         "status": "unspecified",
         "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "The manager supports Nucleus requester contracts 2 and 3 for its unchanged HTTP execution, replay, cancellation, and quota integration. It uses no requester backup facility. Explicit Bazaar JSON selection supports read contracts 1 and 2 during the manager-before-product cutover."
       }
     ],
     "reliances": [

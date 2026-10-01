@@ -38,7 +38,7 @@
     }
   ],
   "effects": [
-    "Installation writes a content-addressed release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite after backup.",
+    "Installation writes a content-addressed release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite under proved quiescence.",
     "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
     "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs.",
     "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
@@ -48,15 +48,15 @@
     "Clockwork owns scheduled activation, process history, incident halts and notification; Nucleus owns runtime evidence. Shared coordination retains each product commit boundary."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Foreign/changed artifacts, unsafe state files, unavailable existing runtime, or unknown ownership fail closed.",
-    "Pre-commit rollback restores proved database plus sidecars, selectors, and at most one prior scheduler. Unproved rollback keeps maintenance and recovery evidence.",
+    "Pre-commit rollback restores selectors and at most one prior scheduler when the database schema is unchanged. Live data remains in place. Schema changes require forward recovery; unproved recovery retains maintenance and transaction evidence.",
     "Committed transactions recover forward. Prior-null selected-candidate recovery requires explicit --forward for the authenticated exact candidate."
   ],
   "privacy": [
-    "State and backups can contain complete private documents, meanings, paths, correlations, and history.",
+    "State can contain complete private documents, meanings, paths, correlations, and history.",
     "Clockwork receives exact program/schedule/process and bounded incident metadata; it does not read product log bodies."
   ],
   "does_not_authorize": [
@@ -72,7 +72,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Effects require authorized matching candidates, proved owned selectors/files and worker/database quiescence, private complete backup, and compatible dependencies. Unsupported old public admission needs its documented compatibility release first."
+        "statement": "Effects require authorized matching candidates, proved owned selectors/files and worker/database quiescence, and compatible dependencies. Unsupported old public admission needs its documented compatibility release first."
       }
     ],
     "inputs": [
@@ -88,7 +88,7 @@
       },
       {
         "status": "declared",
-        "statement": "Doctor returns typed checks; maintenance returns protocol_version 1, contract_version 1, holds and drained; installer receipts, retained transaction/backup, exact release selectors, and selected definition describe the installation outcome."
+        "statement": "Doctor returns typed checks; maintenance returns protocol_version 1, contract_version 1, holds and drained; installer receipts, retained transaction, exact release selectors, and selected definition describe the installation outcome."
       }
     ],
     "data_semantics": [
@@ -182,8 +182,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.schedule.operate",

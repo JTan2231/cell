@@ -68,8 +68,8 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "platter.preparation",
@@ -83,7 +83,7 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     }
   ],

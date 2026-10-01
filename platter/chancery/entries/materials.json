@@ -1,6 +1,6 @@
 {
   "id": "platter.materials",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -59,7 +59,7 @@
   ],
   "failure_and_recovery": [
     "Invalid templates, overlapping regions, invalid or unreadable configured PDFs, unsupported state, and foreign holds stop the operation. Existing artifacts and frozen editions remain intact.",
-    "Use supported maintained backup and migration. Do not query or edit private SQLite as an integration route."
+    "Use supported maintained migration. Do not query or edit private SQLite as an integration route."
   ],
   "privacy": [
     "Template, career, posting, resume, brief, and edition bytes remain private. Nucleus/model, employer HTTP, and authorized Email disclosures follow their separate feature contracts."
@@ -116,7 +116,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The schema-seven SQLite library contains retained inputs, templates, artifacts, editions, settings, and holds. A consistent backup contains its complete retained history, including frozen daily PDF bytes. Current configuration does not refresh sources or establish current posting availability."
+        "statement": "The schema-seven SQLite library contains retained inputs, templates, artifacts, editions, settings, holds and frozen daily PDF bytes. Current configuration does not refresh sources or establish current posting availability."
       }
     ],
     "access": [

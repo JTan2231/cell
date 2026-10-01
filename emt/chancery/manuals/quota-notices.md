@@ -46,7 +46,7 @@ for inspection. EMT generates no new send identity to escape uncertainty.
 ## Recovery and privacy
 
 Keep the frozen record, payload, receipt and key through restarts. Preserve
-`quota-notifications/` in private backups. Do not delete a record to retry mail.
+`quota-notifications/` through maintenance. Do not delete a record to retry mail.
 Inspect retained state and Email evidence before repeating any action. A worker
 restart or quota recovery cannot undo an email already accepted by the provider.
 A missing or uncertain notice does not establish failure of requester work.

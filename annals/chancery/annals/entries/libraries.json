@@ -1,13 +1,13 @@
 {
   "id": "annals.libraries",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Select Annals libraries and interpret their instructions",
-  "summary": "Understand separate library identity, configuration, stored librarian instructions, read access, supported schema migration, and consistent backups.",
+  "summary": "Understand separate library identity, configuration, stored librarian instructions, read access, supported schema migration.",
   "use_when": [
-    "A caller needs the library selection, identity, admission kind, instruction revision, configuration, read-access, or backup contract.",
+    "A caller needs the library selection, identity, admission kind, instruction revision, configuration, read-access, or migration contract.",
     "An application must use named libraries or provider-owned Annals Rust clients."
   ],
   "do_not_use_when": [
@@ -16,7 +16,7 @@
   ],
   "outcome": "One explicitly selected local library has understood identity, interpretation settings, schema, access, and recovery boundaries.",
   "effects": [
-    "Library reads leave state unchanged. Creation and initialization prepare separate private state; instruction selection appends exact text atomically; migration changes only supported schema; backup creates a consistent absent destination.",
+    "Library reads leave state unchanged. Creation and initialization prepare separate private state; instruction selection appends exact text atomically; migration changes only supported schema; migration preserves existing data in its transaction.",
     "Creation starts no model job or schedule. Instruction selection advances no corpus revision and schedules no reinterpretation."
   ],
   "authority": [
@@ -24,15 +24,15 @@
     "Consuming applications define interpretation through stored instructions. Bazaar owns immutable text versions; Annals owns selection meaning and initialization."
   ],
   "success": [
-    "Selection verifies the intended persistent identity and returns the selected registration, instruction revision, schema, statistics, or backup result.",
-    "Creation is recoverable in provisioning; instruction selection and supported migration are atomic; initialization and backup refuse replacement."
+    "Selection verifies the intended persistent identity and returns the selected registration, instruction revision, schema, statistics.",
+    "Creation is recoverable in provisioning; instruction selection and supported migration are atomic; initialization refuse replacement."
   ],
   "failure_and_recovery": [
     "Unknown names, conflicting state, mismatched identities, missing read prerequisites, and unsupported schemas fail without replacement.",
     "Repeat the same name and kind to resume provisioning. Use authorized migration or installation recovery for missing prepared state; do not edit catalog, SQLite, or spool records."
   ],
   "privacy": [
-    "Catalogs, libraries, instructions, spools, backups, and outputs may contain private paths, complete source, exact evidence, and model context. Preserve their local privacy boundary."
+    "Catalogs, libraries, instructions, spools, and outputs may contain private paths, complete source, exact evidence, and model context. Preserve their local privacy boundary."
   ],
   "interfaces": [
     {
@@ -76,10 +76,6 @@
       "invocation": "/Users/joey/.local/bin/annals stats"
     },
     {
-      "label": "Backup",
-      "invocation": "/Users/joey/.local/bin/annals backup <ABSENT_OUTPUT_PATH>"
-    },
-    {
       "label": "Use provider-owned read views",
       "invocation": "annals::api::LibraryReader"
     },
@@ -102,7 +98,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Selection requires the intended readable or writable compatible state and appropriate mutation authority. Initialization and backup require absent paths; initialization requires initialized private Bazaar state and a complete cell.prompts.annals selection."
+        "statement": "Selection requires the intended readable or writable compatible state and appropriate mutation authority. Initialization require absent paths; initialization requires initialized private Bazaar state and a complete cell.prompts.annals selection."
       }
     ],
     "inputs": [
@@ -122,7 +118,7 @@
       },
       {
         "status": "declared",
-        "statement": "Common JSON success and error envelopes, documented exit categories, statistics, initialization/migration receipts, and consistent backup results retain their selected operation meaning. Client Request values return matching Response values."
+        "statement": "Common JSON success and error envelopes, documented exit categories, statistics, initialization/migration receipts retain their selected operation meaning. Client Request values return matching Response values."
       }
     ],
     "data_semantics": [
@@ -142,7 +138,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Annals catalog.db maps names and stable library IDs to managed database, config, and spool paths under ANNALS_STATE_DIR. New libraries live under libraries/LIBRARY_ID/. Backup preserves identity."
+        "statement": "Annals catalog.db maps names and stable library IDs to managed database, config, and spool paths under ANNALS_STATE_DIR. New libraries live under libraries/LIBRARY_ID/."
       },
       {
         "status": "declared",
@@ -156,11 +152,11 @@
       },
       {
         "status": "declared",
-        "statement": "Show is identity and selected-record evidence, not runtime readiness. A backup is one consistent complete SQLite copy including instruction, source, examination, reconciliation, and corpus history."
+        "statement": "Show is identity and selected-record evidence, not runtime readiness. Annals supplies no data backup or restore interface."
       },
       {
         "status": "unspecified",
-        "statement": "No backup duration, maximum library size, migration latency, or long-term backup-retention guarantee is promised."
+        "statement": "No maximum library size or migration latency is promised."
       }
     ],
     "access": [
@@ -188,7 +184,7 @@
       },
       {
         "status": "declared",
-        "statement": "Initialization and backup refuse replacement. Writers and authorized setup prepare persistent WAL state; migration also prepares the configured spool control lock. Backups remain standalone readable SQLite files."
+        "statement": "Initialization refuse replacement. Writers and authorized setup prepare persistent WAL state; migration also prepares the configured spool control lock."
       }
     ],
     "operational_limits": [
@@ -202,7 +198,11 @@
       },
       {
         "status": "unspecified",
-        "statement": "No maximum library size, throughput, wall-clock latency, ABI support period, or backup-retention duration is promised."
+        "statement": "No maximum library size, throughput, wall-clock latency, ABI support period is promised."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Data backup and data restoration are not supplied. Existing backup files are left unchanged."
       }
     ],
     "compatibility_and_evolution": [
@@ -225,7 +225,7 @@
       },
       {
         "status": "not_applicable",
-        "statement": "Local selection, instruction reads, statistics, and backups require no model, Nucleus job, or network service."
+        "statement": "Local selection, instruction reads, statistics require no model, Nucleus job, or network service."
       }
     ]
   },

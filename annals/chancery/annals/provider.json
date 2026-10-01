@@ -27,7 +27,7 @@
       "Read access does not authorize mutation, application, retry, deployment, destructive replacement, or disclosure. Each entry declares its effects and authority."
     ],
     "shared_privacy_and_retention": [
-      "Annals catalogs, libraries, instruction histories, spools, backups, logs, and Nucleus requests may retain private paths, complete source material, exact evidence, and model context.",
+      "Annals catalogs, libraries, instruction histories, spools, logs, and Nucleus requests may retain private paths, complete source material, exact evidence, and model context.",
       "Model entries invoke Nucleus under their entry-specific disclosure rules. Configured scheduling halts notify the fixed personal recipient through Clockwork and Email using bounded activation metadata. Clockwork retains activation and bounded failure-incident metadata and opens Annals-owned logs without ingesting their bodies.",
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],

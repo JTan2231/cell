@@ -79,8 +79,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.message.send",
@@ -89,7 +89,7 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     },
     {

@@ -17,7 +17,7 @@ Clockwork's observer environment; doctor and process also require the complete
 explicit Annals configuration. The default operation prepares a content-addressed release and Clockwork definition while retaining the
 maintenance gate; it does not select or activate them. After the outer cutover
 has separately proved its Annals and semantic prerequisites, `--final-cutover`
-performs writer shutdown, quiescent backup, migration, baseline activation, selector/hook publication, and schedule handoff. Clockwork process state
+performs writer shutdown, quiescence, migration, baseline activation, selector/hook publication, and schedule handoff. Clockwork process state
 is not cross-system proof.
 
 Every selected definition and legacy plist is inspected and attributed before
@@ -33,7 +33,7 @@ logs, scheduler history, and legacy history.
 
 Installation does not validate persistent-state compatibility, audit release
 integrity, or check dependency readiness. Its setup operations still create and
-migrate state, back up the database, maintain holds, and publish the requested
+migrate state, maintain holds, and publish the requested
 configuration. Ordinary product commands retain their runtime checks.
 
 ## Run-owned deployment admission
@@ -156,7 +156,8 @@ same document key and bytes. No failed observation is selected automatically.
 Schema 5-to-6 adds worker activity and failure history without requeuing work.
 The migration copies currently failed observations into history and cannot
 reconstruct older overwritten errors. Preserve the database and document runs
-in the quiescent backup; restore the compatible database and binary together.
+through quiescent migration. Program rollback preserves data and requires an
+unchanged schema. Recover forward with the retained candidate after a schema change.
 
 ## Scheduled failure policy
 
@@ -189,7 +190,13 @@ them. The retired Decisions schedules remain disabled. Schema-one definitions
 keep their old policy until a schema-two definition is explicitly selected.
 
 Coordinated recovery restores the exact recorded product transaction before it releases its hold. Its private journal binds the deployment owner, home, prior
-selection and candidate release to captured database, hook and schedule state.
+selection and candidate release to the prior database schema, hook and schedule state.
+Forward recovery opens and migrates retained local state through the exact
+candidate's `observe status` command. It does not check dependency readiness.
+An absent or invalid observer baseline stops recovery before hook publication
+or maintenance release. Keep the exact transaction and maintenance. Explicitly
+activate the observer through the retained candidate with the same deployment
+owner, then retry recovery. Recovery does not choose or replay that baseline.
 It does not reclassify observations or run `observe activate` again. Evidence
 from another owner or an older journal without that identity stays retained
 for explicit recovery. Normal deployment preserves the existing Annals library

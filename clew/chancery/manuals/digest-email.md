@@ -59,8 +59,7 @@ Clew retains an exact message, a random stable idempotency key, first-attempt
 time and acceptance receipt in private `email.sqlite3` beside `ledger.sqlite3`.
 The email database is schema one and is created on the first send; it does not
 change the schema-three ledger. Files use mode 0600 under the private
-0700 state directory. Records have no automatic pruning. Back up both databases
-and their sidecars together while commands and scheduling are stopped.
+0700 state directory. Records have no automatic pruning. Clew supplies no data backup or restore.
 
 Sends hold product admission and a separate email lock. A manual occurrence is
 `manual/UUIDv7`. A scheduled occurrence is `daily/YYYY-MM-DD` for the most recent

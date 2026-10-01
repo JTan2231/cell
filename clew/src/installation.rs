@@ -114,12 +114,11 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         .and_then(|r| r.get("any_apply_started"))
         == Some(&json!(true))
         && installed.exists();
-    let mut migration_backup = None;
     if operation == Operation::Configure && context.selected()
         || operation == Operation::Recover && forward
     {
         let _exclusive = gate.enter_for(&context.request.run_id)?;
-        migration_backup = migrate_if_needed(&root, &context.home, &context.request.run_id)?;
+        migrate_if_needed(&root, &context.home)?;
         crate::store::Store::initialize(&root)?;
         if schedule.binding.is_some() || settings.daily_email_enabled.is_some() {
             let fallback = definition(&context.home, &root)?;
@@ -156,22 +155,18 @@ fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
         };
         schedule.activate(&clockwork, KEY, enabled)?;
     }
-    Ok(json!({"schema_version":3,"safe_to_release":true,"migration_backup":migration_backup}))
+    Ok(json!({"schema_version":3,"safe_to_release":true}))
 }
 
-fn migrate_if_needed(root: &Path, home: &Path, owner: &str) -> Result<Option<PathBuf>> {
+fn migrate_if_needed(root: &Path, home: &Path) -> Result<()> {
     if !root.join(crate::store::DATABASE).exists() || !crate::store::Store::migration_needed(root)?
     {
-        return Ok(None);
+        return Ok(());
     }
     let version = crate::store::Store::schema_version_at(root)?;
-    let backup = root.join(format!(
-        "ledger-schema{version}-backup-{owner}-{}.sqlite3",
-        uuid::Uuid::now_v7()
-    ));
     if version == 2 {
-        crate::store::Store::migrate_current(root, &backup)?;
-        return Ok(Some(backup));
+        crate::store::Store::migrate_current(root)?;
+        return Ok(());
     }
     let references = crate::store::Store::legacy_references(root)?;
     let opportunities = if references.is_empty() {
@@ -183,8 +178,8 @@ fn migrate_if_needed(root: &Path, home: &Path, owner: &str) -> Result<Option<Pat
             .items
     };
     let mapping = legacy_mapping(&references, opportunities)?;
-    crate::store::Store::migrate(root, &mapping, &backup)?;
-    Ok(Some(backup))
+    crate::store::Store::migrate(root, &mapping)?;
+    Ok(())
 }
 
 fn legacy_mapping(

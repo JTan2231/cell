@@ -128,8 +128,6 @@ attribution, availability, and revisions.
 
 ## Recovery and privacy
 
-Before state recovery, stop all callers using the selected directory and make
-a private consistent SQLite backup, including live sidecars when relevant.
 Installation state and discovery state are different recovery units. Restoring
 an older program alone cannot restore newer domain state or configuration.
 

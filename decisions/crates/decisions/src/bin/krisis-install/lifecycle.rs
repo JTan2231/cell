@@ -1,4 +1,4 @@
-//! Product-owned admission, scheduler cutover, and database compensation.
+//! Product-owned admission, scheduler cutover, and retained-state recovery.
 use super::{
     Control, Install, home, legacy, package,
     support::{
@@ -184,6 +184,21 @@ fn assert_closed(paths: &Paths) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn database_schema(paths: &Paths) -> Result<Option<i64>> {
+    if !exists(&paths.database)? {
+        return Ok(None);
+    }
+    let connection = rusqlite::Connection::open_with_flags(
+        &paths.database,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .map_err(|error| Error::new(error.to_string()))?;
+    connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map(Some)
+        .map_err(|error| Error::new(error.to_string()))
 }
 
 fn gate_identity(paths: &Paths) -> Result<(u64, u64)> {
@@ -601,7 +616,7 @@ pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Val
     }
 }
 
-// Keep each forward transition beside its database-first compensation sequence.
+// Keep each forward transition beside its program compensation sequence.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn cutover(
     paths: &Paths,
@@ -643,7 +658,7 @@ fn cutover(
     let mut touched = Vec::new();
     let mut stopped = Vec::new();
     let mut suspended: Option<SelectionReceipt> = None;
-    let mut database: Option<Vec<SavedFile>> = None;
+    let mut prior_database_schema = None;
     let result = (|| {
         transaction.recheck(prior)?;
         hook.unchanged()?;
@@ -690,22 +705,13 @@ fn cutover(
         }
         std::thread::sleep(std::time::Duration::from_secs(3));
         assert_closed(paths)?;
-        let backup = ["", "-wal", "-shm", "-journal"]
-            .into_iter()
-            .map(|suffix| {
-                SavedFile::capture(
-                    &PathBuf::from(format!("{}{suffix}", text(&paths.database)?)),
-                    paths.uid,
-                    0o600,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let schema = database_schema(paths)?;
         atomic_write(
-            &evidence.join("database.json"),
-            &serde_json::to_vec(&backup)?,
+            &evidence.join("database-schema.json"),
+            &serde_json::to_vec(&schema)?,
             0o600,
         )?;
-        database = Some(backup);
+        prior_database_schema = Some(schema);
         checked(
             paths,
             &prepared.root.join("libexec/krisis"),
@@ -767,7 +773,7 @@ fn cutover(
             )));
         }
         let rollback: Result<()> = (|| {
-            // Public candidate access must be removed before restoring database bytes.
+            // Public candidate access stays fenced while program compatibility is checked.
             if let Some(selection) = &suspended {
                 transaction.recover(&selection.after, prepared, false, |_| Ok(()))?;
             }
@@ -778,11 +784,12 @@ fn cutover(
                     disable(paths, &options.clockwork, key, &selected)?;
                 }
             }
-            if let Some(backup) = &database {
+            if let Some(schema) = prior_database_schema {
                 assert_closed(paths)?;
-                for file in backup {
-                    file.restore()?;
-                }
+                require(
+                    database_schema(paths)? == schema,
+                    "database migration requires forward recovery with the retained candidate",
+                )?;
             }
             receipt.restore()?;
             for key in touched.iter().rev() {
@@ -903,28 +910,61 @@ pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
                 disable(&paths, &options.clockwork, key, &actual)?;
             }
         }
-        if prior.current.is_none()
-            && binding(&paths, &options.clockwork, ACTIVE)?
-                .definition_digest
-                .as_deref()
-                == Some(&digest)
+        assert_closed(&paths)?;
+        let schema_receipt = evidence.join("database-schema.json");
+        let legacy_data = exists(&evidence.join("database.json"))?;
+        let changed_schema = if exists(&schema_receipt)? {
+            owned_file(&schema_receipt, paths.uid, Some(0o600))?;
+            let schema: Option<i64> = serde_json::from_slice(&fs::read(&schema_receipt)?)?;
+            database_schema(&paths)? != schema
+        } else {
+            legacy_data
+        };
+        if changed_schema
+            || (prior.current.is_none()
+                && binding(&paths, &options.clockwork, ACTIVE)?
+                    .definition_digest
+                    .as_deref()
+                    == Some(&digest))
         {
-            owned_file(&evidence.join("publication.json"), paths.uid, Some(0o600))?;
-            require(
-                fs::read(&paths.hooks)? == fs::read(prepared.root.join("package/hooks.json"))?,
-                "fresh Krisis recovery hook changed",
+            tx.suspend(
+                &actual,
+                &layout
+                    .public
+                    .iter()
+                    .map(|entry| entry.path.clone())
+                    .collect::<Vec<_>>(),
             )?;
-            let receipt = binding_receipt(&paths)?;
+            hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
+            let payload = prepared.root.join("libexec/krisis");
+            cell_install::signing::verify_native("krisis", "krisis", &payload)?;
+            let status: Value = serde_json::from_slice(&checked(
+                &paths,
+                &payload,
+                &args(&[
+                    "--database",
+                    text(&paths.database)?,
+                    "--json",
+                    "observe",
+                    "status",
+                ]),
+                &pins.environment(),
+                180,
+            )?)?;
             require(
-                receipt["release_id"] == prepared.info.release_id
-                    && receipt["definition_digest"] == digest,
-                "fresh Krisis recovery receipt changed",
+                status["observer_baseline_at"].as_i64().is_some(),
+                "retained Krisis state has no valid observer baseline; keep maintenance, explicitly activate the observer through the exact retained candidate, then retry recovery",
             )?;
             tx.recover(&prior, &prepared, true, |_| Ok(()))?;
+            atomic_write(
+                &paths.hooks,
+                &fs::read(prepared.root.join("package/hooks.json"))?,
+                0o600,
+            )?;
+            atomic_write(&paths.binding,format!("format=1\nrelease_id={}\ndefinition_digest={digest}\nannals_binary={}\nannals_config={}\nannals_library_id={}\n",prepared.info.release_id,text(&pins.annals_binary)?,text(&pins.annals_config)?,pins.annals_library_id).as_bytes(),0o600)?;
+            switch(&paths, &options.clockwork, ACTIVE, &digest, false)?;
             release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
-            let retained = paths.state.join("backups/deployments");
-            directory(&retained, paths.uid, 0o700)?;
-            fs::rename(&evidence, retained.join(entry.file_name()))?;
+            finish_evidence(&paths, &evidence, legacy_data)?;
             candidate = Some(candidate.unwrap_or(true));
             continue;
         }
@@ -938,25 +978,6 @@ pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
         )?;
         hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
         assert_closed(&paths)?;
-        let database = evidence.join("database.json");
-        if exists(&database)? {
-            owned_file(&database, paths.uid, Some(0o600))?;
-            let files: Vec<SavedFile> = serde_json::from_slice(&fs::read(database)?)?;
-            let expected: Vec<_> = ["", "-wal", "-shm", "-journal"]
-                .iter()
-                .map(|suffix| PathBuf::from(format!("{}{suffix}", paths.database.display())))
-                .collect();
-            require(
-                files.len() == expected.len()
-                    && files.iter().zip(&expected).all(|(file, path)| {
-                        file.path == *path && file.uid == paths.uid && file.mode == 0o600
-                    }),
-                "Krisis database recovery inventory is invalid",
-            )?;
-            for file in files {
-                file.restore()?;
-            }
-        }
         receipt.restore()?;
         tx.recover(&prior, &prepared, false, |_| Ok(()))?;
         hook.restore()?;
@@ -966,12 +987,24 @@ pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
             }
         }
         release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
-        let retained = paths.state.join("backups/deployments");
-        directory(&retained, paths.uid, 0o700)?;
-        fs::rename(&evidence, retained.join(entry.file_name()))?;
+        finish_evidence(&paths, &evidence, legacy_data)?;
         candidate = Some(false);
     }
     Ok(candidate)
+}
+
+fn finish_evidence(paths: &Paths, evidence: &Path, legacy_data: bool) -> Result<()> {
+    if legacy_data {
+        fs::rename(
+            evidence,
+            paths
+                .install
+                .join(format!("recovered-{}", uuid::Uuid::now_v7())),
+        )?;
+    } else {
+        fs::remove_dir_all(evidence)?;
+    }
+    Ok(())
 }
 
 pub fn uninstall(options: &Control) -> Result<Value> {

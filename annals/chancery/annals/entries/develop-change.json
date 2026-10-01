@@ -1,6 +1,6 @@
 {
   "id": "annals.develop.change",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -32,11 +32,11 @@
   ],
   "failure_and_recovery": [
     "Do not infer compatibility from the shared workspace. Check product release, schema, and Nucleus protocol separately.",
-    "Use guarded installed fresh-state or schema migration procedures rather than ad hoc database edits.",
+    "Use supported schema migration procedures rather than ad hoc database edits. The installer has no data reset or restore mode.",
     "Preserve Annals domain results when later Nucleus runtime failure occurs."
   ],
   "privacy": [
-    "Tests, experiments, source fixtures, libraries, spools, backups, and Nucleus output may contain retained source and model context.",
+    "Tests, experiments, source fixtures, libraries, spools, and Nucleus output may contain retained source and model context.",
     "Do not add contributor instructions or Semantics repository output to the constrained liaison runtime prompt."
   ],
   "dependencies": [
@@ -47,13 +47,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     },
     {
       "id": "annals.libraries",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "annals.corpus.change",
@@ -67,8 +67,8 @@
     },
     {
       "id": "annals.installation",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "annals.work.retain",
@@ -115,7 +115,7 @@
   ],
   "stop_when": [
     "A source or corpus semantic cannot be expressed consistently with the canonical model.",
-    "A destructive migration or installed fresh-state cutover lacks explicit authority and recovery material.",
+    "A destructive migration lacks explicit authority and a supported procedure.",
     "An affected shared execution change has not been reconciled with Nucleus's owning contract."
   ],
   "does_not_authorize": [
@@ -233,7 +233,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Every code change must be committed, submitted through the CI manager, and completed with a verified retained job outcome. Contributor Semantics output must not enter liaison context. Destructive migration or installed fresh state requires exact authority and recovery material."
+        "statement": "Every code change must be committed, submitted through the CI manager, and completed with a verified retained job outcome. Contributor Semantics output must not enter liaison context. Destructive migration requires exact authority and a supported procedure."
       },
       {
         "status": "unspecified",

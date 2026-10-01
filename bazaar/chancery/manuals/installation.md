@@ -115,14 +115,10 @@ or rewrites string versions. Compatible commands can finish across program
 selection. A program rollback does not restore older data or make unsupported
 state compatible.
 
-Every committed string version remains retained. There is no automatic backup,
-pruning, deletion, or restore command. For a filesystem backup, stop writers,
-let current operations finish, and retain the database and any SQLite sidecars
-together in private storage. Restore only a compatible complete backup under
-exclusive access. Restoring older history can reuse later version numbers;
-reconcile caller references before resuming.
+Every committed string version remains retained. There is no pruning, deletion,
+or data restoration command.
 
-Content and backups stay outside source and release files. Installation,
+Content stays outside source and release files. Installation,
 initialization, inspection, and usage registration authorize no content update,
 caller migration, external send, or agent execution. `bazaar --register-usage`
 separately registers command identities in Chancery and creates no strings.

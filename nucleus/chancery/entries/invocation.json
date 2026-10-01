@@ -28,7 +28,7 @@
     "Correct unsupported policy deliberately; never replace a retained request under the same ID or use a hidden direct-Codex fallback."
   ],
   "privacy": [
-    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state and logs private."
   ],
   "interfaces": [
     {

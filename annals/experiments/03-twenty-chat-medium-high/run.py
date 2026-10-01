@@ -366,11 +366,16 @@ def setup(manifest_path: Path, run_dir: Path, annals: Path) -> None:
     if not validation["valid"] or stats["revision"] != 0 or stats["work_count"] != 20:
         fail("seed library did not validate as a 20-work revision-zero library")
     for arm in ARM_ORDER:
+        library = run_dir / f"{arm}.db"
         json_command(
-            annals_arguments(binary, seed, "backup", str(run_dir / f"{arm}.db")),
-            output=setup_dir / f"backup-{arm}.json",
+            annals_arguments(binary, library, "init"),
+            output=setup_dir / f"{arm}-init.json",
         )
-        os.chmod(run_dir / f"{arm}.db", 0o600)
+        for item in locked:
+            json_command(
+                annals_arguments(binary, library, "work", "add", str(run_dir / item["input"]), "--name", item["label"]),
+                output=setup_dir / f"{arm}-{item['index']:02d}-work-add.json",
+            )
     verify_run(run_dir)
 
 

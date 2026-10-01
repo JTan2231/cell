@@ -108,13 +108,13 @@ remain uninterrupted. Perform attended login, then verify
 
 Do not replace credentials merely because an account read reports contention.
 Do not restore an older `auth.json` as part of program, service, or database
-rollback. A backup of credentials is separate recovery material, not permission
+rollback. Credential recovery requires separate authority; it is not permission
 to rewind a consumed or refreshed token. Installation imports credentials only
 under the documented service and interrupted-cutover rules in `nucleus.service`.
 
 ## Privacy and compatibility
 
-The credential home and any backup contain authentication material. Managed
+The credential home contains authentication material. Managed
 refresh tokens never enter job homes or harness-output records. Static API-key
 jobs receive isolated snapshots without copy-back. Requests and other output
 remain private even when the credential exclusions hold.

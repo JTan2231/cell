@@ -2,7 +2,6 @@ use std::fs::{self, OpenOptions};
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::backup::Backup;
 use rusqlite::{Connection, OpenFlags, TransactionBehavior};
 
 use crate::error::AppError;
@@ -128,9 +127,8 @@ pub fn open_read(path: &Path) -> Result<Connection, AppError> {
     Ok(connection)
 }
 
-/// Open a library at the fresh-state boundary or current version solely as a
-/// consistent pre-migration backup source.
-pub fn open_backup_source(path: &Path) -> Result<Connection, AppError> {
+/// Inspect a supported library before migration without changing its journal mode.
+pub fn open_migration_source(path: &Path) -> Result<Connection, AppError> {
     let connection = open_existing(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
     configure_connection(&connection)?;
     let version = schema_version(&connection)?;
@@ -234,16 +232,6 @@ pub fn migrate(path: &Path) -> Result<MigrationResult, AppError> {
         to_version: CURRENT_SCHEMA_VERSION,
         migrated,
     })
-}
-
-/// Copy a consistent `SQLite` backup without replacing an existing output path.
-pub fn backup(source: &Connection, output: &Path) -> Result<(), AppError> {
-    reserve_new_file(output, "backup_exists", "backup output")?;
-    let result = backup_to_reserved_file(source, output);
-    if result.is_err() {
-        let _ = fs::remove_file(output);
-    }
-    result
 }
 
 fn initialize_reserved_file(
@@ -399,34 +387,6 @@ fn reserve_new_file(path: &Path, code: &'static str, description: &str) -> Resul
             format!("unable to create {description} {}: {error}", path.display()),
         )),
     }
-}
-
-fn backup_to_reserved_file(source: &Connection, output: &Path) -> Result<(), AppError> {
-    let mut destination = Connection::open_with_flags(output, OpenFlags::SQLITE_OPEN_READ_WRITE)
-        .map_err(|error| {
-            AppError::database(
-                "backup_failed",
-                format!("unable to open backup output {}: {error}", output.display()),
-            )
-        })?;
-    let backup = Backup::new(source, &mut destination).map_err(|error| {
-        AppError::database(
-            "backup_failed",
-            format!("unable to start SQLite backup: {error}"),
-        )
-    })?;
-    backup
-        .run_to_completion(128, Duration::from_millis(10), None)
-        .map_err(|error| {
-            AppError::database(
-                "backup_failed",
-                format!("unable to complete SQLite backup: {error}"),
-            )
-        })?;
-    drop(backup);
-    // A backup is a standalone file, readable without creating WAL sidecars.
-    destination.pragma_update(None, "journal_mode", "DELETE")?;
-    Ok(())
 }
 
 fn open_error(path: &Path, error: &rusqlite::Error) -> AppError {

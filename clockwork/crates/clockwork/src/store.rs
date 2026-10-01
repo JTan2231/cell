@@ -1197,8 +1197,7 @@ fn record_abend_in(connection: &Connection, input: &AbendInput<'_>) -> Result<Op
 }
 
 /// Migration is separate from opening state and from program deployment.
-#[allow(clippy::too_many_lines)]
-pub(crate) fn migrate(layout: &Layout, backup: &Path) -> Result<()> {
+pub(crate) fn migrate(layout: &Layout) -> Result<()> {
     layout.prepare()?;
     let _schema_gate =
         KeyLock::try_acquire_transition(layout, "clockwork/schema")?.ok_or_else(|| {
@@ -1239,58 +1238,6 @@ pub(crate) fn migrate(layout: &Layout, backup: &Path) -> Result<()> {
             "use the old binary to finish or recover running activations before migration",
         ));
     }
-    if !backup.is_absolute() || backup.exists() {
-        return Err(Error::new(
-            "backup_path_invalid",
-            "backup must be a new absolute directory",
-        ));
-    }
-    let parent = backup
-        .parent()
-        .ok_or_else(|| Error::new("backup_path_invalid", "backup requires a parent directory"))?;
-    if parent
-        .canonicalize()
-        .context("backup_path_invalid", "resolve backup parent")?
-        != parent
-    {
-        return Err(Error::new(
-            "backup_path_invalid",
-            "backup parent must be canonical",
-        ));
-    }
-    fs::create_dir(backup).context("backup_failed", "create migration backup directory")?;
-    fs::set_permissions(backup, fs::Permissions::from_mode(0o700))
-        .context("backup_failed", "make backup directory private")?;
-    let checkpoint: (i64, i64, i64) = connection
-        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
-        })
-        .context("backup_failed", "checkpoint quiescent database")?;
-    if checkpoint.0 != 0 {
-        return Err(Error::new("migration_busy", "database checkpoint is busy"));
-    }
-    for suffix in ["", "-wal", "-shm"] {
-        let source = layout
-            .database()
-            .with_file_name(format!("clockwork.db{suffix}"));
-        if source.exists() {
-            let mut input =
-                std::fs::File::open(&source).context("backup_failed", "open backup source")?;
-            let mut output = OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .mode(0o600)
-                .open(backup.join(format!("clockwork.db{suffix}")))
-                .context("backup_failed", "create backup file")?;
-            std::io::copy(&mut input, &mut output).context("backup_failed", "copy backup bytes")?;
-            output
-                .sync_all()
-                .context("backup_failed", "sync backup file")?;
-        }
-    }
-    std::fs::File::open(backup)
-        .and_then(|file| file.sync_all())
-        .context("backup_failed", "sync backup directory")?;
     connection
         .execute_batch("PRAGMA foreign_keys=ON; PRAGMA synchronous=FULL;")
         .context("database_write_failed", "configure migration durability")?;
@@ -1412,7 +1359,7 @@ fn initialize_or_verify_schema(connection: &Connection) -> Result<()> {
         1 => {
             return Err(Error::new(
                 "database_migration_required",
-                "Clockwork schema one requires explicit migrate --backup DIR before this binary can open it",
+                "Clockwork schema one requires explicit migrate before this binary can open it",
             ));
         }
         2 => verify_schema(connection, 2)?,

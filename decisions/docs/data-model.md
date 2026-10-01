@@ -20,7 +20,7 @@ Private `document-runs/OBSERVATION-ATTEMPT/` directories contain the frozen
 normalized conversation, immutable Nucleus request, job identity, tool receipts,
 and optional `decision.md`. They allow classification and rendering to resume
 without rebuilding source or changing an ambiguous request. They remain after
-Annals acceptance and must be included in private state protection and backup.
+Annals acceptance and must be included in private state protection.
 
 The document key is SHA-256 over the serialized host/thread/turn identity tuple
 with a `document_` prefix. The content digest is SHA-256 of the exact UTF-8

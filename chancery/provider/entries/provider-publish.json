@@ -73,8 +73,8 @@
     },
     {
       "id": "chancery.usage.record",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [

@@ -1,13 +1,13 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect and maintain Platter releases and state",
-  "summary": "Understand owned release selection, canonical state, readiness, durable holds, exact drain, schema migration, backups, and safe recovery.",
+  "summary": "Understand owned release selection, canonical state, readiness, durable holds, exact drain, schema migration, and safe recovery.",
   "use_when": [
-    "A reader needs installation identity, readiness scope, hold/drain guarantees, maintained migration, backup completeness, or release/schedule recovery."
+    "A reader needs installation identity, readiness scope, hold/drain guarantees, maintained migration, or release/schedule recovery."
   ],
   "do_not_use_when": [
     "The goal is preparing/sending, direct installer cutover, domain reset, unrelated Weaver cancellation, or implicit dependency upgrades."
@@ -39,8 +39,8 @@
       "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain"
     },
     {
-      "label": "Migrate with backup",
-      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH"
+      "label": "Migrate supported state",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate"
     },
     {
       "label": "Release owned hold",
@@ -49,7 +49,7 @@
   ],
   "effects": [
     "Matched executable/installer/provider bytes publish through owned selectors as one immutable release. Direct install/recover are refused in favor of coordinated Cell maintenance.",
-    "Durable owner-keyed holds prevent new mutations while admitted work settles. Drain observes matching requester summaries and can cancel orphaned exact matching work. Migration preserves retained identities and writes a complete current-schema backup before hashed legacy cleanup.",
+    "Durable owner-keyed holds prevent new mutations while admitted work settles. Drain observes matching requester summaries and can cancel orphaned exact matching work. Migration preserves retained identities and commits its import before hashed legacy cleanup.",
     "Readiness checks do not collect sources, read Vita works, render PDF, submit models, or send. Explicit supplied setup can initialize a missing template or create activation intent; deployment itself prepares no packets and sends no email.",
     "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
@@ -57,14 +57,14 @@
     "Platter owns domain compatibility, hold/drain scope, state migration, readiness, and product definition. Cell owns coordinated selected release sequencing and installation transactions. Nucleus owns matching execution/cancellation and Clockwork owns binding activation/incident policy."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves retained state, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
-    "Old binaries cannot operate schema seven. Binary-only rollback cannot undo migration; select a compatible candidate or explicitly chosen complete predecessor data/files backup with matching binary. Interrupted cleanup and receipts require exact unchanged evidence."
+    "Old binaries cannot operate schema seven. Binary-only rollback cannot undo migration; select a compatible candidate. Interrupted cleanup requires agreeing source hashes. Completion receipts avoid repeating completed migration."
   ],
   "privacy": [
-    "Mode-0600 database and private state/backups contain career, resume, packet, and send history. Public manifests retain only program/provider identity, modes/digests, and local paths. Nucleus history and credentials need separate backup."
+    "Mode-0600 database and private state contain career, resume, packet, and send history. Public manifests retain only program/provider identity, modes/digests, and local paths. Nucleus history and credentials remain separately owned."
   ],
   "does_not_authorize": [
     "Model work, sending, domain reset, foreign-hold release, unrelated Weaver cancellation, dependency upgrades, or automatic clearing of Clockwork halts."
@@ -72,8 +72,8 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "platter.preparation",
@@ -87,12 +87,12 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     }
   ],
@@ -112,23 +112,23 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Selected committed Cell source and sealed candidate identity, an exact owner, absolute private backup path, explicit missing-template/projects-template/activation setup when desired, and exact retained completion-receipt evidence for interrupted migration."
+        "statement": "Selected committed Cell source and sealed candidate identity, an exact owner, explicit missing-template/projects-template/activation setup when desired, and retained completion-receipt evidence for interrupted migration."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Matched immutable release selectors and integrity manifests, bounded maintenance/readiness observations, a complete schema-seven recovery backup, and exact hashed legacy cleanup/completion evidence."
+        "statement": "Matched immutable release selectors and integrity manifests, bounded maintenance/readiness observations, and exact hashed legacy cleanup/completion evidence."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "All durable runtime content/settings/holds live in canonical schema-seven packets.sqlite3. Disposable Ashby cache and renderer files stay outside the database; source caches are excluded from backup. Nucleus credentials/evidence remain separately owned."
+        "statement": "All durable runtime content/settings/holds live in canonical schema-seven packets.sqlite3. Disposable Ashby cache and renderer files stay outside the database. Nucleus credentials/evidence remain separately owned."
       },
       {
         "status": "declared",
-        "statement": "A current-schema migration backup supports current compatible recovery; it is not an old-binary rollback image. Hold owner identity is durable authority, not a process-liveness inference."
+        "statement": "Migration preserves retained state in place; recovery requires a compatible binary. Hold owner identity is durable authority, not a process-liveness inference."
       }
     ],
     "identity_and_units": [
@@ -160,7 +160,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import commits transactionally before backup/hashed cleanup; schemas two through six preserve legacy workflows and ordered selections while advancing to seven. Interrupted backup/cleanup retains originals and exact resumption evidence. Existing validated backup and completion receipts remain unchanged."
+        "statement": "Schema-one import commits transactionally before hashed cleanup; schemas two through six preserve legacy workflows and ordered selections while advancing to seven. Interrupted cleanup retains originals and exact source hashes. Completion receipts avoid repeating completed migration, including legacy schema-one receipts without reading their former data-copy fields."
       },
       {
         "status": "declared",

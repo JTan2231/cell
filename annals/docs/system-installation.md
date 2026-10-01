@@ -38,9 +38,9 @@ and [inbox recovery](../chancery/annals/manuals/inbox-operate.md) for those boun
 Read [deployment admission](../chancery/annals/manuals/installation.md#deployment-admission-and-coordination)
 and follow [run-owned admission](../chancery/annals/manuals/install-operate.md#operate-run-owned-admission).
 
-## Backup and retirement
+## State and retirement
 
-Read [libraries and backups](../chancery/annals/manuals/libraries.md) and
+Read [library state](../chancery/annals/manuals/libraries.md) and
 [installation ownership and retirement](../chancery/annals/manuals/installation.md#verification-privacy-and-retirement).
 
 ## Scheduled failure policy

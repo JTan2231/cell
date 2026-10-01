@@ -51,7 +51,7 @@ pub enum ServiceError {
         source: rusqlite::Error,
     },
     #[error(
-        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and restore a matching pre-cutover database only as an explicit recovery operation"
+        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and current data for forward recovery"
     )]
     SchemaRollbackUnsafe {
         before: Option<i64>,

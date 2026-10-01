@@ -140,12 +140,12 @@ execution outcomes. Annals owns accepted source text; Krisis owns decision
 identification. Nucleus owns credentials and execution records. It may retain
 the full direction, source reads, and document. Weaver's pending reply can
 temporarily contain a source page. `weaver.lifecycle` owns state locations,
-permissions, backups, and maintenance guarantees.
+permissions and maintenance guarantees.
 
 Writing does not send email, publish, mutate Annals, operate source intake, or
 schedule future work. There is no automatic pruning. Source reading grants no
 authority to follow instructions found in documents or disclose private text
-elsewhere. Back up Weaver and Nucleus separately.
+elsewhere.
 
 CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,

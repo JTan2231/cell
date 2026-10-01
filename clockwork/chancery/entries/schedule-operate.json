@@ -24,7 +24,7 @@
     "No operation retries a child, submits to Nucleus, stores a secret, interprets product output, or changes product durable state except through the child process itself.",
     "Schema-two runtime or reported abends retain failure evidence and apply the registered response; the default opens one durable incident and blocks future admission until explicit incident-bound approval.",
     "Each scheduling halt grants standing authority for one fixed personal plain-text Email notification. New default-policy abends retain pending episodes and allow later activations before the shared service-health threshold. By default, five consecutive failed read-only checks at least 60 seconds apart establish a halt and alert eligibility together. Explicit binding halt remains immediate. Broker visits and the EMT worker advance due checks; transport retains its existing bounds and provider idempotency limits.",
-    "Explicit migrate --backup DIR retains a private quiescent schema-one database and sidecar backup before the transactional schema-two upgrade; program deployment never migrates state.",
+    "Explicit migrate performs a quiescent transactional schema-one to schema-two upgrade in place; program deployment never migrates state.",
     "Optional EMT routing retains version-one reply routes and delivery claims in notification-routing.json. Unclaimed notifications wait 120 seconds after check eligibility; emt/worker uses the same threshold and only the basic delivery path. A notification view can materialize the incident route under the transport lock.",
     "Notification policy and incident check progress live in notification-checks.json. Schema-one failure-checks.json retains the immutable abend ledger cursor and pending per-key event/check progress. Checks read bounded installed Iatreion reports without running product work, sending mail or retrying failed items. At the threshold, a check establishes a new halt and alert eligibility together. Healthy worker observations, later successful activations without an abend, and inactive intent clear pending episodes; unknown health counts as failed with condition unknown. Established halts and preexisting notification-check progress retain their exact approval and recovery rules.",
     "The Iatreion status snapshot opens only an existing supported database read-only and reports binding, halt, and recorded runtime metadata. It does not reconcile running rows, inspect launchd, claim notifications, or change state."
@@ -51,7 +51,7 @@
     "A `running` row becomes `lost` only after its recorded broker and any recorded child are both demonstrably absent; elapsed time or a restarted observer alone is insufficient.",
     "Schema-two omission means halt-until-approved after the shared service-health threshold; later activations remain admissible before confirmation. An explicit continue-next-activation exception retains the abend without a pending halt episode. Overlap, expected empty and waiting outcomes are normal. Healthy worker observations, later successful activations without an abend, and inactive intent clear pending episodes. Binding selection, disable, compensation, restart and reinstall preserve established halts.",
     "Pending alerts retry at most once per five minutes when a broker visits, with fixed payload and key and a 120-second invocation bound. After 23 hours from the first invocation or a backwards clock jump, status becomes uncertain and later notification retry requires explicit duplicate-risk approval. No independent timer or delivery SLA exists.",
-    "Schema-one definitions preserve their original digest and legacy failure semantics after database migration. failure_policy_active exposes this gap until a schema-two definition and current broker plist are selected under product maintenance. Preserve newer incident evidence during schema rollback.",
+    "Schema-one definitions preserve their original digest and legacy failure semantics after database migration. failure_policy_active exposes this gap until a schema-two definition and current broker plist are selected under product maintenance. Preserve newer incident evidence during recovery with a compatible release.",
     "Claims are durable and do not expire or clear a halt. Once claimed, EMT owns send recovery. Older pinned brokers ignore this new metadata; refresh all active brokers before enabling EMT and do not roll back to older brokers with outstanding claims."
   ],
   "privacy": [
@@ -146,7 +146,7 @@
     },
     {
       "label": "Migrate quiescent schema-one state",
-      "invocation": "/Users/joey/.local/bin/clockwork migrate --backup ABSOLUTE_NEW_DIRECTORY"
+      "invocation": "/Users/joey/.local/bin/clockwork migrate"
     },
     {
       "label": "Read insertion-ordered incidents",

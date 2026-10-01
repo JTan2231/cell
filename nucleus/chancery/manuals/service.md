@@ -3,7 +3,7 @@
 Nucleus runs as a current-user macOS service. It owns its private state, socket,
 program installation, readiness, and durable maintenance holds. Use this feature
 to interpret service health, admission, drain, restart, installation, and recovery.
-Use `chancery show nucleus.execution.operate` for ordered installation, backup,
+Use `chancery show nucleus.execution.operate` for ordered installation,
 restore, and service-control procedures. Read `nucleus manual` for shared
 requester coordination and recovery order before work that can interrupt it.
 
@@ -39,7 +39,7 @@ POST /v1/maintenance/release
 | Program releases | `~/Library/Application Support/Nucleus/install/releases/` |
 | Logs | `~/Library/Logs/Nucleus/` |
 
-Treat state, credentials, logs, and backups as private. Database and mailbox
+Treat state, credentials, and logs as private. Database and mailbox
 content can include prompts, source text, and tool values. Socket access uses
 local ownership and permissions; protocol 1 has no TCP listener or separate
 application authentication.
@@ -192,18 +192,7 @@ Unknown ownership or unfinished jobs keep admission held. Successful recovery re
 Deployment settings accept only `codex_bin` and `codex_home`, both strings.
 Unknown keys or values of another type fail inspection before admission holds.
 
-## Backup, schema recovery, and retention
-
-Nucleus has no automatic backup or restore command. Quiesce requesters and stop
-the service before a consistent backup or restoration. A SQLite-aware backup
-must preserve the database state; other copy methods must preserve the database
-and WAL sidecars as one consistent set. Copying only the live main database is
-incomplete. Include private `quota-policy.json` and `quota-state.json` beside the
-database. A Nucleus backup does not replace requester product backups.
-
-Credential backup and recovery remain separate. Restore with an operator
-present, save current state separately, and use a compatible database and binary
-pair. Verify health and retained job/output reads before resuming admission.
+## Schema compatibility and retention
 
 Store schema 2 has an explicit version-one cutover. It preserves jobs, attempts,
 registrations, cancellation, and terminal state. It discards the old mixed log
@@ -217,8 +206,8 @@ publishes `user_version=2` and allows startup to continue. A failed compaction
 remains pending and visible. Publishing the final marker can leave one bounded
 WAL frame.
 
-Version-one binaries cannot open schema 2. Recovery across the cutover requires
-an explicit compatible database and binary pair. Keep credential recovery separate.
+Version-one binaries cannot open schema 2. Select a program that supports the
+current schema. Keep credential recovery separate.
 
 The LaunchAgent writes `nucleusd.stdout.log` and `nucleusd.stderr.log` under the
 private log directory. Use the host's private-log rotation policy. Nucleus has

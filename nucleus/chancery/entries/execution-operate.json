@@ -1,6 +1,6 @@
 {
   "id": "nucleus.execution.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -311,8 +311,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ]
 }

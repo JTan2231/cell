@@ -20,7 +20,7 @@ concepts, exact supporting quotations, source activity, and revision history.
 
 | Feature | Authoritative page | What it explains |
 | --- | --- | --- |
-| Libraries and instructions | `annals.libraries` | Selection, identity, configuration, instruction revisions, storage, and backups |
+| Libraries and instructions | `annals.libraries` | Selection, identity, configuration, instruction revisions, storage, and migration |
 | Retained sources | `annals.work.retain` | Exact bytes, work labels, source deliveries, metadata, and retention outcomes |
 | Corpus reading | `annals.corpus.explore` | Concepts, evidence, lexical search, bounded graph views, activity, and history reads |
 | Corpus changes | `annals.corpus.change` | Reconciliation language, validation, application, commits, shake, and revert |
@@ -36,7 +36,7 @@ prove live readiness.
 
 ## Operate Annals
 
-Use `annals.library.operate` to create libraries, select instructions, back up or
+Use `annals.library.operate` to create libraries, select instructions,
 migrate state, and explicitly submit, apply, simplify, or revert the corpus.
 Use `annals.inbox.operate` to enqueue, dispatch, pause, prioritize, interrupt,
 or recover a bounded range of failed deliveries.
@@ -62,7 +62,7 @@ consumption projection; read `chancery product annals-usage`. An account allowan
 is shared account information, not a per-delivery consumption share.
 
 Libraries, catalogs, instructions, source archives, evidence, model context,
-logs, and backups can contain private content. Model integration can disclose
+and logs can contain private content. Model integration can disclose
 source and frozen corpus context through Nucleus to its model provider.
 Read access grants no mutation, retry, application, deployment, cleanup, or
 remote-sharing authority. Installed documentation grants no additional access.

@@ -1,6 +1,6 @@
 # Install and operate Weaver
 
-Use this procedure to install, configure, inspect, back up, or recover Weaver.
+Use this procedure to install, configure, inspect, or recover Weaver.
 Read `chancery resolve weaver.install.operate` for the required feature and
 manager contracts. `weaver.lifecycle` owns configuration, state, readiness,
 maintenance, and release guarantees. `weaver.narrative.write` owns authoring,
@@ -8,7 +8,7 @@ prompt selection, and exact assignment recovery.
 
 Weaver reads an existing identity-bound Annals decisions library. It does not
 provision that library. Read the installed `nucleus manual` before coordinated
-maintenance. Keep settings, database, configuration, and backups private.
+maintenance. Keep settings, database, and configuration private.
 Installation and readiness checks create no narrative or model job. Manual
 installation publishes local program bytes; it does not publish Git changes,
 publish a narrative, send email, or authorize an authoring retry.
@@ -93,9 +93,9 @@ publish a narrative, send email, or authorize an authoring retry.
    and source readiness without authoring a test narrative. Stop on unknown or
    incompatible evidence; do not edit SQLite or initialize replacement state.
 
-## Back up or recover
+## Recover an interrupted deployment
 
-1. Acquire an explicit maintenance owner for backup or attended maintenance.
+1. Acquire an explicit maintenance owner for attended maintenance.
    Preserve any pre-existing holds.
 
    ```sh
@@ -104,7 +104,7 @@ publish a narrative, send email, or authorize an authoring retry.
    weaver maintenance drain
    ```
 
-2. Settle admitted work before copying state. Resume each exact document/job ID
+2. Settle admitted work before maintenance. Resume each exact document/job ID
    under `weaver.narrative.write` when needed. Cancel only an exact Nucleus job
    that the authorized operation intends to abandon. Drain must prove that no
    Weaver process or nonterminal Weaver Nucleus job remains. Unavailable
@@ -118,12 +118,7 @@ publish a narrative, send email, or authorize an authoring retry.
    After an intended cancellation, resume the same ID to collect its outcome.
    Resume reuses the saved request and job; it does not create another attempt.
    Inspect `weaver show DOCUMENT_ID` if runtime failure follows saved Markdown.
-3. Save a consistent SQLite backup of `weaver.sqlite` and the private
-   `config.json`, or copy the database while Weaver is drained. Both are under
-   `~/Library/Application Support/Weaver`. Back up Nucleus records and
-   credentials separately under its own rules. Schema 1 has no predecessor
-   migration and does not import retired Weaver workflow records.
-4. Recover an interrupted deployment through the coordinator's retained
+3. Recover an interrupted deployment through the coordinator's retained
    transaction. Follow its original ownership and exact candidate. The next
    ordinary deployment command uses an unresolved transaction for recovery;
    there is no separate public deployment resume route. Before publication the
@@ -131,7 +126,7 @@ publish a narrative, send email, or authorize an authoring retry.
    forward with recorded reading configuration and supported state. Keep the
    named hold if recovery cannot be proved. Do not delete holds or change
    database rows to bypass the failure.
-5. Confirm complete drain before releasing the hold acquired for attended
+4. Confirm complete drain before releasing the hold acquired for attended
    maintenance. Source and readiness diagnostics remain separate operations.
 
    ```sh
@@ -139,9 +134,8 @@ publish a narrative, send email, or authorize an authoring retry.
    ```
 
    Release only that owner. Uninstall retains private state; clearing it needs
-   a separate decision. No backup command, general restore automation, recovery
-   latency, retention horizon, release cadence, or future model availability is
-   promised by this procedure.
+   a separate decision. No data restoration, recovery latency, retention horizon,
+   release cadence, or future model availability is promised by this procedure.
 
 CLI usage recording needs a nonempty `CODEX_THREAD_ID`. It records command
 identity, time, and thread ID without arguments, output, or outcomes. Recording

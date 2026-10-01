@@ -453,19 +453,22 @@ impl State<'_> {
             || !self.child_transactions()?.is_empty())
     }
     fn child_archives(&self) -> Result<Vec<String>> {
-        let parent = self.target.join("backups/deployments");
-        if !exists(&parent) {
-            return Ok(Vec::new());
-        }
-        dir(&parent, self.uid)?;
         let mut names = Vec::new();
-        for entry in fs::read_dir(parent)? {
-            let name = entry?
-                .file_name()
-                .into_string()
-                .map_err(|_| failure("invalid Annals recovery archive name"))?;
-            if name.starts_with("transaction.primary.") {
-                names.push(name);
+        // Older completed transactions remain readable without moving their data.
+        for relative in ["install/transactions", "backups/deployments"] {
+            let parent = self.target.join(relative);
+            if !exists(&parent) {
+                continue;
+            }
+            dir(&parent, self.uid)?;
+            for entry in fs::read_dir(parent)? {
+                let name = entry?
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| failure("invalid Annals transaction name"))?;
+                if name.starts_with("transaction.primary.") {
+                    names.push(format!("{relative}/{name}"));
+                }
             }
         }
         names.sort();
@@ -497,25 +500,28 @@ impl State<'_> {
         } else {
             // A completed child may lose its stdout before the parent saves it.
             // Its newly archived committed journal proves completion without
-            // replaying --fresh-state against the already-moved generation.
+            // replaying the already-completed installation.
             let baseline = self.transaction.join("child-archives.json");
             file(&baseline, self.invoking_uid, Some(0o600))?;
             let baseline: Vec<String> = serde_json::from_slice(&fs::read(baseline)?)?;
             let mut completed = 0;
             for name in self.child_archives()? {
-                if baseline.contains(&name) {
+                if baseline.contains(&name)
+                    || baseline
+                        .iter()
+                        .any(|prior| Some(prior.as_str()) == name.rsplit('/').next())
+                {
                     continue;
                 }
-                let root = self.target.join("backups/deployments").join(name);
+                let root = self.target.join(name);
                 dir(&root, self.uid)?;
                 let path = root.join("journal.json");
                 file(&path, self.uid, Some(0o600))?;
                 let journal: Value = serde_json::from_slice(&fs::read(path)?)?;
-                if journal["schema"] == 1
+                if matches!(journal["schema"].as_u64(), Some(1 | 2))
                     && journal["home"] == json!(self.home)
                     && journal["key"] == KEY
                     && journal["committed"] == true
-                    && journal["fresh_state"] == true
                     && journal["keep_maintenance"] == true
                     && journal["candidate"]["release_id"] == proof["release_id"]
                 {
@@ -664,7 +670,7 @@ impl State<'_> {
             || phase.as_deref() == Some("rewritten") && self.child_may_have_run()?
         {
             return Err(failure(
-                "child installation may have committed; migration state and backups must remain for recovery",
+                "child installation may have committed; migration state and transaction evidence must remain for recovery",
             ));
         }
         self.empty_binding()?;
@@ -711,7 +717,7 @@ impl State<'_> {
                 fs::remove_file(marker)?;
             }
             // Only directories proved absent before this transaction are its disposable staging.
-            for (name, flag) in [("install", "had-install"), ("backups", "had-backups")] {
+            for (name, flag) in [("install", "had-install")] {
                 if self.record(flag)? == "0" && exists(&self.legacy.join(name)) {
                     fs::remove_dir_all(self.legacy.join(name))?;
                 }
@@ -955,10 +961,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
             "had-install",
             u8::from(exists(&state.legacy.join("install"))).to_string(),
         ),
-        (
-            "had-backups",
-            u8::from(exists(&state.legacy.join("backups"))).to_string(),
-        ),
         ("frontend-sha256", hash(&state.frontend)?),
         ("payload-sha256", hash(&state.payload)?),
     ] {
@@ -1054,14 +1056,14 @@ pub(super) fn run(args: &Args) -> Result<Value> {
             child.push(flag.into());
             child.push(value.as_os_str().to_owned());
         }
-        child.extend(words(&["--fresh-state", "--migration-clockwork-handoff"]));
+        child.extend(words(&["--migration-clockwork-handoff"]));
         state.owner_write(
             &state.transaction.join("child-archives.json"),
             &serde_json::to_vec(&state.child_archives()?)?,
             state.invoking_uid,
         )?;
-        // The child can archive the original generation before returning. A
-        // missing response never authorizes deleting those recovery backups.
+        // The child can complete before returning. A missing response never
+        // authorizes deleting current state or retained transaction evidence.
         cell_install::signing::verify_native_for_user(
             "annals",
             "annals-install",

@@ -21,7 +21,7 @@ state and adds the named system and commands. Each identity is idempotent. A
 later error can leave earlier registrations committed. Historical commands
 removed from a later release remain registered; this is not proof of current
 installation or instrumentation. Read `chancery show chancery.usage.operate`
-for registration and backup/restore procedures.
+for registration and inspection procedures.
 
 ## Writer API and attribution
 
@@ -172,13 +172,11 @@ cannot enumerate missed observations or infer usage before instrumentation.
 No completeness percentage, retention horizon, throughput, or hard latency
 objective is promised. Rows contain no duration, outcome, token count or output.
 
-Recovery requires a consistent compatible journal/schema pair and stopped
-writers. Keep sidecars with any quiescent file backup and preserve the old
-history. Program rollback does not erase new rows. Missing or unsupported state
+Program rollback does not erase new rows. Missing or unsupported state
 remains an explicit error; never recreate a populated database or bypass its
 triggers. Chancery recording does not operate product databases, authenticate
 services, execute represented capabilities, or authorize domain actions. Read
-`chancery.usage.operate` for backup, restore, and registration steps.
+`chancery.usage.operate` for registration and inspection steps.
 
 Rebuild participating binaries to adopt these rules; replacing Chancery alone
 does not update their compiled recorder. Deploy matching wrappers and hooks,

@@ -539,7 +539,6 @@ fn install_args(context: &Context, snapshot: &InstallSnapshot) -> Result<Install
             home: Some(context.home.clone()),
         },
         expected_current: Some(selection(snapshot)),
-        fresh_state: false,
         no_start: false,
         migration_clockwork_handoff: false,
         launchctl: "/bin/launchctl".into(),

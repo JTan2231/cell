@@ -97,22 +97,12 @@ fn lifecycle_inner(
     if (operation == Operation::Configure || operation == Operation::Recover && forward)
         && context.selected()
     {
-        let backup = context.home.join(format!(
-            "Library/Application Support/Paperboy/paperboy-pre-migration-{}.sqlite",
-            context.request.run_id
-        ));
         cell_install::migration::install_once(
             &context.request.run_dir.join("paperboy-migration.json"),
-            &backup,
             || {
                 cell_install::command::json(
                     &context.home.join(".local/bin/paperboy"),
-                    &[
-                        "--json".into(),
-                        "migrate".into(),
-                        "--backup".into(),
-                        backup.clone().into_os_string(),
-                    ],
+                    &["--json".into(), "migrate".into()],
                     &std::collections::BTreeMap::from([(
                         "CELL_DEPLOYMENT_RUN_ID".into(),
                         context.request.run_id.clone().into(),

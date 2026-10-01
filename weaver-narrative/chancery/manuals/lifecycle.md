@@ -108,7 +108,7 @@ and supported database. Unproved recovery retains the named hold. The Cell
 coordinator owns this cross-product procedure; no dedicated installed Chancery
 contract covers it. This remains a resolver gap.
 
-## State, privacy, and backup
+## State and privacy
 
 | Item | Current-user location |
 | --- | --- |
@@ -122,13 +122,11 @@ retained state; it is not a supported direct database integration surface.
 Use the CLI and provider-owned Rust client for documents.
 
 Private files use mode 0600 and state directories use mode 0700. Keep database,
-configuration, and backups private. A pending reply can contain a source page.
-Nucleus may retain the full direction, source reads, and document. Back up
-Weaver and Nucleus separately, and keep credential recovery under Nucleus
-authority.
+and configuration private. A pending reply can contain a source page.
+Nucleus may retain the full direction, source reads, and document. Keep
+credential recovery under Nucleus authority.
 
-Schema 1 has no predecessor migration. Use a consistent SQLite backup or copy
-the database while Weaver is drained. There is no automatic pruning, retention
+Schema 1 has no predecessor migration. There is no automatic pruning, retention
 horizon, database-capacity promise, future compatibility lifetime, or deprecation
 interval. Missing or unsupported state stops work; it does not create a
 replacement database. State deletion requires separate authority.

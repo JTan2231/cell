@@ -1,41 +1,37 @@
-//! Exercise retained-material migration, `SQLite` preview and authorized Email
-//! delivery without changing the installed library or its eligibility fields.
+//! Exercise `SQLite` preview and authorized Email delivery in a prepared
+//! isolated library without changing its eligibility fields.
 use anyhow::{Context, Result, ensure};
-use platter::{ad_hoc, migration, store::Store};
+use platter::{ad_hoc, store::Store};
 use std::path::PathBuf;
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     ensure!(
-        args.len() == 5,
-        "usage: ad_hoc_canary SOURCE_ROOT SNAPSHOT_ROOT DAY OCCURRENCE_ID EMAIL_EXECUTABLE"
+        args.len() == 4,
+        "usage: ad_hoc_canary STATE_ROOT DAY OCCURRENCE_ID EMAIL_EXECUTABLE"
     );
-    let source = PathBuf::from(&args[0]);
-    let snapshot = PathBuf::from(&args[1]);
-    let email = PathBuf::from(&args[4]);
-    if !snapshot.exists() {
-        migration::snapshot(&source, &snapshot)?;
-    }
-    let before = Store::open_read_only(&snapshot)?.jobs()?;
-    let edition = ad_hoc::preview(&snapshot, &args[2], &args[3], &[], None)?;
+    let state = PathBuf::from(&args[0]);
+    let email = PathBuf::from(&args[3]);
+    let before = Store::open_read_only(&state)?.jobs()?;
+    let edition = ad_hoc::preview(&state, &args[1], &args[2], &[], None)?;
     println!(
         "Preview: {} ({} PDF attachments)",
         edition.subject,
         edition.attachments.len()
     );
-    let edition = ad_hoc::send(&snapshot, &args[2], &args[3], Some(&email))?;
+    let edition = ad_hoc::send(&state, &args[1], &args[2], Some(&email))?;
     let receipt = edition
         .receipt
         .as_deref()
         .context("Email acceptance receipt missing")?;
     ensure!(edition.status == "sent", "edition was not accepted");
-    let store = Store::open_read_only(&snapshot)?;
+    let store = Store::open_read_only(&state)?;
     ensure!(
         serde_json::to_value(&before)? == serde_json::to_value(store.jobs()?)?,
         "ad hoc delivery changed eligibility"
     );
     let retained = store
-        .edition(&format!("ad-hoc/{}", args[3]))?
+        .edition(&format!("ad-hoc/{}", args[2]))?
         .context("edition receipt was not retained")?;
     ensure!(
         retained.receipt == edition.receipt && retained.status == "sent",
@@ -44,8 +40,8 @@ fn main() -> Result<()> {
     println!("{receipt}");
     println!(
         "Retained: {}",
-        snapshot.join(platter::store::DATABASE).display()
+        state.join(platter::store::DATABASE).display()
     );
-    println!("Job eligibility unchanged; installed source library unchanged.");
+    println!("Job eligibility unchanged.");
     Ok(())
 }

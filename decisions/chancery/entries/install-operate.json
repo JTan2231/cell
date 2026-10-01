@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -29,12 +29,12 @@
     "Codex owns hook discovery and trust, Clockwork owns definition and runtime history, Annals owns its dedicated library, and Krisis owns observation and delivery state."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves backups, operator pauses, and incident halts."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Saved conversation read failures (document_source_unavailable) return zero and permit later scheduled work; other processing failures end the current run. Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "Coordinated inspection stops before effects if an installed CLI lacks maintenance support; bootstrap its compatibility release through the existing deployer and writer-quiescence procedure. Adapter recovery stops on retained product-installer maintenance or unfinished transactions without clearing their evidence or another owner's hold.",
-    "A provable failed update restores prior owned selectors, hook bytes, database and sidecars, and schedule selection; an unprovable rollback retains the private maintenance gate and transaction backup.",
+    "A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
     "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
   ],
@@ -51,8 +51,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -61,7 +61,7 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
+      "min_contract": 5,
       "max_contract_exclusive": 6
     },
     {
@@ -89,7 +89,7 @@
     "Persistent database and log paths stay under Library/Application Support/Decisions and Library/Logs/Decisions for migration compatibility.",
     "The Codex, Annals, and Annals-config paths are absolute and explicit, the expected library ID is exact lowercase 32-hex, and doctor uses that Codex path while validating Conversations plus the decision-feed watermark contract and library identity.",
     "A private release-independent maintenance marker gates the runner during quiescence, migration, selector switching, hook replacement, and schedule handoff.",
-    "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 6. The document cutover refuses pending legacy handoffs or classification jobs.",
+    "The live database and sidecars remain in place. After exact owned writers stop and quiescence is proved, migration proceeds sequentially through schema 6. The document cutover refuses pending legacy handoffs or classification jobs.",
     "No release, deploy, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
   ],
   "adaptation": [
@@ -170,7 +170,7 @@
       },
       {
         "status": "declared",
-        "statement": "Before migration, exact product writers are maintenance-gated and quiesced and a private database-plus-sidecars backup exists."
+        "statement": "Before migration, exact product writers are maintenance-gated and quiesced. Migration retains the live database and committed records."
       },
       {
         "status": "declared",
@@ -276,7 +276,7 @@
       },
       {
         "status": "declared",
-        "statement": "Provable failure restores prior state; unprovable rollback retains maintenance gating and backup and does not claim external scheduler success."
+        "statement": "Provable failure restores prior programs and controls while retaining data when the schema is unchanged. Schema changes require forward recovery. Unproved recovery retains maintenance and transaction evidence."
       },
       {
         "status": "declared",

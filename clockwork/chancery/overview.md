@@ -32,13 +32,14 @@ Use `clockwork.schedule.operate` to register, select, disable, inspect, or run a
 product schedule; inspect incidents and explicitly approved continuation;
 operate retained alerts and optional EMT handoff; or migrate quiescent state.
 This broad entry retains its capability kind and stable ID. Contract five
-includes plain text defaults and preserves the shared service-health delay
-before new automatic halts. Its manual owns procedure order and action-critical checkpoints; its
+includes plain text defaults and in-place transactional migration. It preserves
+the shared service-health delay before new automatic halts. Its manual owns
+procedure order and action-critical checkpoints; its
 required feature contracts supply the detailed explanations.
 
 Use `clockwork.install.operate` to install and verify program/provider bytes,
 coordinate broker refresh, recover a verified retained release, detach owned
-selectors, or migrate and recover matching state. Direct program installation
+selectors, or explicitly migrate quiescent state. Direct program installation
 is separate from product definition selection and database migration.
 
 Use `clockwork.develop.change` to change Clockwork while preserving scope,

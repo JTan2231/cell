@@ -1,9 +1,8 @@
-# Register and recover command usage
+# Register and inspect command usage
 
 Use this operation to register an installed program's full command inventory,
-inspect recorded activity, or create and restore a compatible private journal
-backup. Read `chancery resolve chancery.usage.operate` for the complete journal
-feature, including writer APIs, attribution, query semantics, privacy, and
+inspect recorded activity. Read `chancery resolve chancery.usage.operate` for
+the complete journal feature, including writer APIs, attribution, query semantics, privacy, and
 failure limits. There is no daemon or network transport.
 
 The journal observes command-handler entry. It does not prove completion,
@@ -94,28 +93,6 @@ retry or duplicate suppression exists; an uncertain append may have committed.
 Inspect available evidence and accept the observation gap. Do not retry product
 work to obtain a journal row.
 
-## Back up and restore
-
-1. Create a consistent SQLite backup separately from product data. Protect it
-   as private current-user metadata. For a quiescent file backup, stop every
-   writer and keep the journal's sidecars with the file.
-2. Identify the exact compatible backup and schema before restoration. Preserve
-   the old history and current program selection. Stop every journal writer
-   before replacing selected files; Chancery has no central daemon to stop them.
-3. Restore the compatible journal/schema pair under private file permissions.
-   The regular journal file must be 0600. Do not open a newer unsupported
-   journal with an older program or recreate a populated journal.
-4. Read systems, command counts, and selected events to verify the restored
-   history. Re-establish cursors from that history. Repeat unchanged registration
-   for installed inventories when needed; registration preserves prior records.
-5. Resume the writers after verification. Program rollback leaves newer rows
-   intact and does not itself restore journal history.
-
-Stop if writer quiescence, backup consistency, schema compatibility, private
-ownership, or retained-history verification cannot be established. There is no
-retention cleanup, migration, deletion, or trigger-bypass procedure. Keep
-unknown state available for diagnosis.
-
 ## Privacy and completion
 
 Registration and usage store opaque system, command, and thread identities,
@@ -124,6 +101,5 @@ credentials, arguments, output, duration, or outcome. Filesystem permissions
 are the current-user trust boundary; supplied thread IDs are cooperative
 attribution rather than authenticated Codex history.
 
-Completion requires the intended registered identities or verified compatible
-restored history. Readiness and success of any product command remain owned by
-that product. Journal registration is a separate installation result.
+Completion requires the intended registered identities or the selected
+recorded observations. Each product owns readiness and success of its commands. Journal registration is a separate installation result.

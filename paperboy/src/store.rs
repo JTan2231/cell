@@ -157,52 +157,6 @@ impl Store {
         Ok(Self { connection })
     }
 
-    pub fn backup(&self, target: &Path) -> Result<()> {
-        if target.exists() {
-            regular(target)?;
-            self.connection.execute(
-                "ATTACH DATABASE ?1 AS deployment_backup",
-                [target.to_str().context("backup path must be UTF-8")?],
-            )?;
-            let result = (|| -> Result<()> {
-                let integrity: String = self.connection.query_row(
-                    "PRAGMA deployment_backup.quick_check",
-                    [],
-                    |row| row.get(0),
-                )?;
-                ensure!(
-                    integrity == "ok",
-                    "retained deployment backup failed integrity"
-                );
-                for table in ["briefs", "agent_attempts", "email_attempts"] {
-                    let difference: bool = self.connection.query_row(&format!("SELECT EXISTS(SELECT * FROM main.{table} EXCEPT SELECT * FROM deployment_backup.{table}) OR EXISTS(SELECT * FROM deployment_backup.{table} EXCEPT SELECT * FROM main.{table})"), [], |row| row.get(0))?;
-                    ensure!(
-                        !difference,
-                        "retained deployment backup differs from held Paperboy state"
-                    );
-                }
-                Ok(())
-            })();
-            self.connection
-                .execute_batch("DETACH DATABASE deployment_backup")?;
-            return result;
-        }
-        ensure!(
-            target.is_absolute() && !target.exists(),
-            "backup must be an absent absolute path"
-        );
-        private_directory(target.parent().context("backup parent missing")?)?;
-        let file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .open(target)?;
-        drop(file);
-        self.connection.backup("main", target, None)?;
-        File::open(target)?.sync_all()?;
-        Ok(())
-    }
-
     pub fn brief(&self, id: &str) -> Result<Brief> {
         let row = self.connection.query_row("SELECT id,occurrence,scheduled_for,window_start,window_end,timezone,source_pointers,subject,body,summary_recorded_at,producing_attempt,email_key FROM briefs WHERE id=?1", [id], |r| {
             Ok((Brief { id:r.get(0)?,occurrence:r.get(1)?,scheduled_for:r.get(2)?,window_start:r.get(3)?,window_end:r.get(4)?,timezone:r.get(5)?,source_pointers:Value::Null,subject:r.get(7)?,body:r.get(8)?,summary_recorded_at:r.get(9)?,producing_attempt:r.get(10)?,email_key:r.get(11)? }, r.get::<_,String>(6)?))

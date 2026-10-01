@@ -188,7 +188,7 @@ abends. Existing archives are history, not new incidents.
 
 ## Private state and command usage
 
-Keep source envelopes, library state, logs, backups, and Nucleus context private.
+Keep source envelopes, library state, logs, and Nucleus context private.
 This operation grants no publication, deletion, credential, or service-restart
 authority. A request to continue authorizes its documented effects only.
 

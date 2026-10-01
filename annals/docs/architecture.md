@@ -6,7 +6,7 @@ current behavior and boundaries:
 
 | Subject | Authoritative explanation |
 | --- | --- |
-| Library identity, selection, instructions, schema, and backup | [Libraries](../chancery/annals/manuals/libraries.md) |
+| Library identity, selection, instructions, schema | [Libraries](../chancery/annals/manuals/libraries.md) |
 | Immutable source and delivery records | [Retained sources](../chancery/annals/manuals/work-retain.md) |
 | Graph meaning, evidence, queries, and replay cost | [Corpus reading](../chancery/annals/manuals/corpus-explore.md) |
 | Liaison, frozen examination, tools, drafts, and Nucleus boundary | [Interpretation](../chancery/annals/manuals/work-integrate.md) |

@@ -1,13 +1,13 @@
 # EMT worker and installation state
 
 EMT owns its current-user private configuration, incident and exchange state,
-worker admission, maintenance holds, backups and matched program publication.
+worker admission, maintenance holds, matched program publication.
 Clockwork owns `emt/worker` scheduling and failure halts. Nucleus owns agent
 execution. Email owns transport, account configuration and credentials.
 
 Use this feature to understand service readiness, activation, maintenance,
 installation guarantees and retained state. Use `emt.installation.operate` to
-carry out installation, setup, activation, backup or recovery. Read
+carry out installation, setup, activation or recovery. Read
 `emt.incident.respond` for incident, assignment and correspondence meaning.
 `emt.quota-notices` supplies the required quota and frozen-notice behavior.
 
@@ -28,7 +28,7 @@ emt maintenance hold OWNER
 emt maintenance status
 emt maintenance drain
 emt maintenance release OWNER
-emt migrate --backup /absolute/private/emt-backup.sqlite3
+emt migrate
 emt-install install --binary ABS --bundle ABS
 ~~~
 
@@ -91,18 +91,15 @@ A requester-only update leaves Nucleus admission open. Nucleus replacement
 waits for EMT exchanges before holding Nucleus. Restart cannot resume an old
 agent process; the owning product must inspect uncertain effects.
 
-Migration accepts only schema one. Existing drained state is copied into a
-database backup and companion `.config.json`. The absolute destination is
-separate from live database and configuration. Existing destinations must match
-and are never overwritten. With no database, migration initializes paused state
-and returns `backup:null`. Initialization can finish an interrupted empty schema
-or missing empty-state configuration. It refuses missing configuration when
-incident or exchange records already exist.
+Migration accepts only schema one and requires drained work. `emt migrate`
+checks existing state and returns `schema_version:1`. With no database, it
+initializes paused state. It copies no database or configuration. Initialization
+can finish an interrupted empty schema or missing empty-state configuration.
+It refuses missing configuration when incident or exchange records already exist.
 
 EMT retains correspondence and Nucleus references without automatic deletion.
-Keep backups private. Preserve `quota-notifications/` with other state; database
-backups alone do not erase or restore its delivery history. Nucleus, Resend and
-the inbox provider retain separate records that an EMT backup does not restore.
+Preserve `quota-notifications/` with the database and configuration. Nucleus,
+Resend and the inbox provider retain separate records under their own authority.
 EMT has no activity mirror, operation ledger or credential copy. Ordinary status
 and logs omit bodies; explicit reads, model prompts and email expose selected
 content. No future support lifetime or retention horizon is promised.
@@ -139,8 +136,8 @@ a disabled exact definition before release and then applies the captured pause
 and enabled settings. Fresh initialization's temporary pause is not operator
 intent. Existing pauses and failure-halt evidence survive each phase.
 The retained coordinator directory holds the migration receipt with completed
-schema and original backup paths. Recovery reuses this backup;
-it does not replace it with already configured state.
+schema and deployment owner. Recovery reuses this receipt and captured intent.
+Legacy receipts remain readable without accessing their old data copies.
 
 Direct selector recovery is unsupported after initialization. Use maintained
 coordinator recovery and retain unresolved holds. Never release another owner's
@@ -155,7 +152,7 @@ exist. Routing uses a version-one sidecar beside Clockwork's schema-two database
 
 Clockwork's read-only service checks require compatible Iatreion. EMT supplies
 its configured stable Cell root. Preserve Clockwork's `failure-checks.json`,
-`notification-checks.json`, routing metadata and incident database in backups.
+`notification-checks.json`, routing metadata and incident database during maintenance.
 Refresh enabled pinned brokers to the new failure-check contract; an older
 broker must not run while the new sidecar exists. Clockwork owns check policy,
 notification ownership, scheduling and incident-bound continuation. The shared

@@ -87,7 +87,7 @@ Repeat the same build command and directory after an interruption. Krisis reuses
 the frozen source and exact request under the same job ID. It does not reread the
 conversation or create a successor attempt. Repeated identical calls receive
 their saved response; conflicting call content fails. A different exchange
-cannot reuse the directory. Back up the entire directory together if needed.
+cannot reuse the directory. Keep the entire directory together.
 The run contains full conversation text and remains local until removed by its
 owner; automatic retention cleanup is not provided.
 

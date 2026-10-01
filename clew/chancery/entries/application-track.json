@@ -97,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive write boundary and private backup. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
+        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive transactional write boundary. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
       },
       {
         "status": "declared",
