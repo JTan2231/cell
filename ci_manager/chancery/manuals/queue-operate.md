@@ -210,7 +210,7 @@ explicitly, or `--run-tests` to run the selected product and platform tests.
 The job freezes this choice. Existing jobs without the choice still run tests.
 The request key includes this choice; do not reuse it with a different test policy.
 Skipping tests retains structure, recognition, syntax, provider, formatting,
-lint, documentation, build and production signing checks. It skips Rust tests
+lint, build and production signing checks. It skips Rust tests
 and shared Python regression suites. Receipts and outcome emails state when
 tests were skipped. Product selection still controls
 automatic deployment. A passing result with skipped tests supplies no test evidence.

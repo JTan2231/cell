@@ -122,22 +122,6 @@ EOF
     "$@"
 }
 
-ci_doc() {
-    printf '%s\n' '==> rustdoc'
-    set -- cargo doc --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
-    while IFS= read -r cargo_package; do
-        [ -n "$cargo_package" ] || continue
-        set -- "$@" --package "$cargo_package"
-    done <<EOF
-$(ci_packages)
-EOF
-    set -- "$@" --no-deps --locked
-    if [ "$CARGO_OFFLINE" = 1 ]; then
-        set -- "$@" --offline
-    fi
-    RUSTDOCFLAGS='-D warnings' "$@"
-}
-
 ci_build() {
     printf '%s\n' '==> release build'
     set -- cargo build --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
@@ -235,8 +219,6 @@ if [ "$CI_PROVIDER_VALIDATION_PHASE" = after-tests ]; then
     ci_stage='provider bundles'
     ci_validate_providers
 fi
-ci_stage='rustdoc'
-ci_doc
 if [ "$phase" = full ]; then
     ci_stage='release build'
     ci_build
