@@ -15,8 +15,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 text(&data["to"]),
                 text(&data["digest"]["subject"]),
                 text(&data["digest"]["body"])
-            )
-            ;
+            );
         }
         Command::Want(WantCommand::List { .. }) | Command::Decision(ReadCommand::List { .. }) => {
             list(&mut output, data);
@@ -36,8 +35,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 } else {
                     ""
                 }
-            )
-            ;
+            );
             details(&mut output, "Record", &data["record"], 0);
         }
         Command::Email(EmailCommand::Send { .. }) => {
@@ -79,8 +77,7 @@ fn list(output: &mut String, data: &Value) {
         "{} records shown: {}",
         row_text(&data["kind"]),
         items.len()
-    )
-    ;
+    );
     if items.is_empty() {
         output.push_str("No matching records.\n");
     }
@@ -101,8 +98,7 @@ fn list(output: &mut String, data: &Value) {
             } else {
                 ""
             }
-        )
-        ;
+        );
     }
     if data["has_more"] == true {
         output.push_str("More records are available. Increase --limit to read more.\n");
