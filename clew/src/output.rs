@@ -40,8 +40,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                     row_text(&application["cast_job_id"]),
                     row_text(&application["status"]),
                     row_text(&application["latest_entry"]["id"])
-                )
-                ;
+                );
             }
         }
         Command::Entry { .. } | Command::Record { .. } | Command::Retract { .. } => {
@@ -72,8 +71,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 scalar(&data["to"]),
                 scalar(&data["digest"]["subject"]),
                 scalar(&data["digest"]["body"])
-            )
-            ;
+            );
         }
         Command::Email(EmailCommand::Send { .. }) => {
             if let Some(reason) = data["skipped"].as_str() {
@@ -110,8 +108,7 @@ fn candidates(output: &mut String, data: &Value) {
             row_text(&candidate["company"]),
             row_text(&candidate["title"]),
             row_text(&candidate["tracked"])
-        )
-        ;
+        );
         for url in candidate["urls"].as_array().into_iter().flatten() {
             let _ = writeln!(output, "  URL: {}", row_text(url));
         }
@@ -125,8 +122,7 @@ fn candidates(output: &mut String, data: &Value) {
             output,
             "Retained reference without Cast record: {}",
             row_text(reference)
-        )
-        ;
+        );
     }
     field(output, "Complete", &data["complete"]);
 }
@@ -167,8 +163,7 @@ fn entry_row(output: &mut String, entry: &Value) {
         } else {
             ""
         }
-    )
-    ;
+    );
 }
 
 fn history(output: &mut String, history: &Value) {
@@ -206,8 +201,7 @@ fn entry(output: &mut String, entry: &Value) {
             scalar(&reference["namespace"]),
             scalar(&reference["external_id"]),
             scalar(&reference["role"])
-        )
-        ;
+        );
     }
     if let Some(notes) = entry["notes"].as_str() {
         let _ = writeln!(output, "Notes:\n{notes}");
