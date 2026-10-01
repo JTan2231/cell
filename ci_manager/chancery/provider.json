@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.5.2"
+    "release": "0.5.3"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -36,7 +36,7 @@
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them."
     ],
     "compatibility_and_retirement": [
-      "This release uses manager journal schema 1 and queue contract 5. New submissions freeze refund_accepted_patches=true; retained jobs without that policy flag preserve their original limit on all invocations. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
+      "This release uses manager journal schema 1 and queue contract 6. New submissions freeze refund_accepted_patches=true; retained jobs without that policy flag preserve their original limit on all invocations. A mismatched journal schema fails closed; no migration or backward-compatibility window is promised.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [

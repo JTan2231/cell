@@ -362,6 +362,27 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(len(gates), 18)
         self.assertEqual(gates[-1], "integrated")
 
+    def test_skip_tests_retains_checks_builds_and_deployment_scope(self):
+        self.write("pipeline/nextest_tool.py", "raise RuntimeError('must not load nextest')\n")
+        result = self.ci("--all", "--skip-tests", "--json", CELL_CI_TEST_THREADS="invalid")
+        self.assert_passed(result)
+        gates = self.gates()
+        self.assertEqual([gate["gate"] for gate in gates], [
+            "preflight", "recognition", "shared-install", "shared-maintenance", "shared-prompts",
+            "alpha.pre", "beta.pre", "krisis.pre", "alpha.post", "beta.post", "krisis.post",
+            "integrated",
+        ])
+        self.assertTrue(all(gate["args"] == ["--checks-only"] for gate in gates
+                            if gate["gate"].startswith("shared-")))
+        self.assertTrue(all(gate["args"][1] == "none" for gate in gates
+                            if gate["gate"].endswith((".pre", ".post"))))
+        receipt = json.loads(result.stdout)
+        self.assertTrue(receipt["selection"]["tests_skipped"])
+        self.assertEqual(receipt["selection"]["product_tests"], ["alpha", "beta", "krisis"])
+        self.assertEqual(receipt["selection"]["platform_products"], ["alpha", "beta", "krisis"])
+        self.assertEqual([gate["gate"] for gate in receipt["selection"]["required_gates"]],
+                         [gate["gate"] for gate in receipt["gates"]])
+
     def test_explicitly_listing_every_project_does_not_request_integrated_check(self):
         result = self.ci("alpha", "beta", "krisis")
         self.assert_passed(result)
@@ -461,6 +482,16 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(gates[-1]["args"], ["--tests", "all", "--phase", "post",
                                             "--stage-candidate", stage])
 
+    def test_skip_tests_keeps_direct_candidate_staging_after_checks(self):
+        stage = str(Path(self.temporary.name) / "sealed candidate")
+        result = self.helper("product", "alpha", "--skip-tests", "--stage-candidate", stage)
+        self.assert_passed(result)
+        gates = self.gates()
+        self.assertEqual([gate["gate"] for gate in gates],
+                         ["shared-install", "alpha.pre", "alpha.post"])
+        self.assertEqual(gates[-1]["args"], ["--tests", "none", "--phase", "post",
+                                            "--stage-candidate", stage])
+
     def test_direct_shared_rust_selection_uses_one_parallel_gate(self):
         result = self.helper("shared", "install", "prompts")
         self.assert_passed(result)
@@ -477,6 +508,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["schema_version"], 1)
         self.assertEqual(receipt["state"], "passed")
+        self.assertFalse(receipt["selection"]["tests_skipped"])
         required = receipt["selection"]["required_gates"]
         expected = ["cell.structure", "cell.recognition", "alpha.pre", "beta.pre",
                     "cell.tests.rust", "alpha.post", "beta.post"]

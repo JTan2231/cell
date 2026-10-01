@@ -190,6 +190,7 @@ class Plan:
     platform: dict[str, list[str]]
     shared: dict[str, list[str]]
     stage_candidate: str | None
+    tests_skipped: bool
 
 
 def at_revision(root: Path, revision: str, path: str) -> bytes | None:
@@ -255,6 +256,8 @@ def parse_arguments(arguments: list[str], direct: str | None = None) -> argparse
     parser.add_argument("--platform", action="store_true",
                         help="add platform tests for named products; without names, run everything")
     parser.add_argument("--verbose", action="store_true", help="stream gate output")
+    parser.add_argument("--skip-tests", action="store_true",
+                        help="skip test execution while retaining checks and builds")
     parser.add_argument("--quiet-result", action="store_true", help=argparse.SUPPRESS)
     if direct:
         parser.add_argument("--stage-candidate", metavar="ABSOLUTE_DIRECTORY")
@@ -407,17 +410,23 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
               "committed branch changes excluded", file=sys.stderr)
     print(f"ci: mode={mode}; selected={','.join(selected) or 'none'}; "
           f"skipped={len(products) - len(selected)}", file=sys.stderr)
+    if args.skip_tests:
+        print("ci: tests skipped; checks and builds retained", file=sys.stderr)
     if mode == "changed":
         for product in selected:
             print(f"ci: product {product}: {describe(reasons[product], args.verbose) or 'platform input changed'}", file=sys.stderr)
     for product in selected:
         why = platform[product]
         print(f"ci: platform {product}: " +
-              (f"run; {describe(why, args.verbose)}" if why else "skip; no platform input changed"),
+              (f"{'checks only' if args.skip_tests else 'run'}; {describe(why, args.verbose)}"
+               if why else "skip; no platform input changed"),
               file=sys.stderr)
     for suite, why in suites.items():
+        action = "run"
+        if args.skip_tests and suite != "catalog":
+            action = "checks only" if suite in RUST_SHARED_SUITES else "skip; tests disabled"
         print(f"ci: platform shared/{suite}: " +
-              (f"run; {describe(why, args.verbose)}" if why else "skip; no platform input changed"),
+              (f"{action}; {describe(why, args.verbose)}" if why else "skip; no platform input changed"),
               file=sys.stderr)
     if shared:
         print(f"ci: shared or unowned changes ({len(shared)} paths): "
@@ -427,7 +436,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
     if outside:
         print(f"ci: affected platform products outside requested scope: {','.join(outside)}", file=sys.stderr)
     return Plan(mode, args.verbose, args.quiet_result, expected_source, expected_status,
-                head, base, committed, products, selected, platform, suites, stage_candidate)
+                head, base, committed, products, selected, platform, suites, stage_candidate,
+                args.skip_tests)
 
 
 def plan(root: Path, arguments: list[str]) -> None:
@@ -525,7 +535,8 @@ def gate_plan(root: Path, selection: Plan,
     # Checks retain separate admissions. The shared test gate owns one heavy
     # lease while nextest schedules tests across the selected products.
     for suite, why in selection.shared.items():
-        if why and suite != "catalog":
+        if (why and suite != "catalog"
+                and (not selection.tests_skipped or suite in RUST_SHARED_SUITES)):
             gates.append(shared_check_gate(root, suite))
     products = []
     for product in selection.selected:
@@ -539,17 +550,18 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
         if len(fields) != 2 or not fields[0] or fields[1] not in ("heavy", "light"):
             raise SelectionError(f"invalid CI gate descriptor for {product}")
         gate, lane = fields
-        group = "all" if selection.platform[product] else "product"
+        group = "none" if selection.tests_skipped else "all" if selection.platform[product] else "product"
         body = [str(root / "pipeline/ci.sh"), product, "--tests", group]
         products.append((gate, lane, body))
         gates.append((gate + ".pre", lane, [*body, "--phase", "pre"]))
-    test_gate = rust_test_gate(
-        root, selection.selected,
-        [product for product in selection.selected if selection.platform[product]],
-        [suite for suite in RUST_SHARED_SUITES if selection.shared[suite]],
-    )
-    if test_gate:
-        gates.append(test_gate)
+    if not selection.tests_skipped:
+        test_gate = rust_test_gate(
+            root, selection.selected,
+            [product for product in selection.selected if selection.platform[product]],
+            [suite for suite in RUST_SHARED_SUITES if selection.shared[suite]],
+        )
+        if test_gate:
+            gates.append(test_gate)
     for gate, lane, body in products:
         body = [*body, "--phase", "post"]
         if selection.stage_candidate:
@@ -590,6 +602,7 @@ def run_json(root: Path, arguments: list[str]) -> int:
             "selection": {
                 "mode": "committed-range" if selection.committed else "working-tree",
                 "coverage_mode": selection.mode,
+                "tests_skipped": selection.tests_skipped,
                 "product_tests": selection.selected,
                 "platform_products": [p for p in selection.selected if selection.platform[p]],
                 "shared_suites": [s for s, why in selection.shared.items() if why],

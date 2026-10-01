@@ -66,6 +66,7 @@ def submit(store: Store, args) -> dict:
         raise ManagerError("submit from a worktree of the configured repository")
     revision = git.commit(root, args.commit)
     products = sorted(set(args.deploy)) if args.deploy is not None else None
+    skip_tests = getattr(args, "skip_tests", True)
     if products is not None and any(not re.fullmatch(r"[a-z][a-z0-9-]*", item) for item in products):
         raise ManagerError("invalid deployment product name")
     request_key = args.request_id or uuid.uuid4().hex
@@ -75,7 +76,8 @@ def submit(store: Store, args) -> dict:
         previous = store.db.execute("SELECT * FROM jobs WHERE submission_key=?", (request_key,)).fetchone()
         if previous:
             job = store.decode(previous)
-            if job["input_commit"] != revision or job["deploy_products"] != products:
+            if (job["input_commit"] != revision or job["deploy_products"] != products
+                    or job.get("skip_tests", False) != skip_tests):
                 raise ManagerError("submission request ID belongs to different inputs")
             return job
         identity = uuid.uuid4().hex
@@ -83,7 +85,7 @@ def submit(store: Store, args) -> dict:
         # is harmless and cannot be mistaken for an admitted queue item.
         git.git(root, "update-ref", git.private_ref(identity, "input"), revision, "0" * len(revision))
         now = time.time()
-        data = {"input_commit": revision, "deploy_products": products,
+        data = {"input_commit": revision, "deploy_products": products, "skip_tests": skip_tests,
                 "policy": {**config["policy"], "refund_accepted_patches": True}, "submission_key": request_key}
         store.db.execute("INSERT INTO jobs(id,submission_key,phase,created,updated,data) VALUES (?,?,'queued',?,?,?)",
                          (identity, request_key, now, now, json.dumps(data)))
@@ -134,6 +136,12 @@ def main(argv: list[str] | None = None) -> int:
     submission.add_argument("--repo")
     submission.add_argument("--request-id")
     submission.add_argument("--deploy", action="append")
+    tests = submission.add_mutually_exclusive_group()
+    tests.add_argument("--skip-tests", dest="skip_tests", action="store_true",
+                       help="skip tests; retain other checks (default)")
+    tests.add_argument("--run-tests", dest="skip_tests", action="store_false",
+                       help="run the selected product and platform tests")
+    submission.set_defaults(skip_tests=True)
     inspection = commands.add_parser("status")
     inspection.add_argument("job", nargs="?")
     wait = commands.add_parser("wait")

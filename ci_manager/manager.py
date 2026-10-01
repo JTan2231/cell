@@ -144,6 +144,8 @@ class Worker:
         command = [sys.executable, str(worktree / "pipeline/select_changes.py"), "run",
                    "--base", job["base_commit"],
                    "--candidate", candidate, "--json"]
+        if job.get("skip_tests", False):
+            command.append("--skip-tests")
         result, output, diagnostic = self.process(job, f"validation-{ordinal}", command, worktree)
         if self.store.job(job["id"])["cancel_requested"]:
             self.finish(job, "cancelled", "Cancelled after the current validation drained.")
@@ -155,6 +157,11 @@ class Worker:
         if (receipt.get("schema_version") != 1 or receipt.get("base_commit") != job["base_commit"]
                 or receipt.get("candidate_commit") != candidate):
             raise ManagerError("validator receipt does not identify the requested candidate")
+        tests_skipped = (receipt.get("selection") or {}).get("tests_skipped", False)
+        if (type(tests_skipped) is not bool
+                or (receipt.get("state") == "passed"
+                    and tests_skipped != job.get("skip_tests", False))):
+            raise ManagerError("validator receipt does not match the requested test policy")
         git.clean_candidate(worktree, candidate)
         retained = self.directory(job) / f"validation-{ordinal}.json"
         atomic_json(retained, receipt)

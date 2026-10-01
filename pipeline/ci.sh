@@ -240,7 +240,7 @@ while [ "$#" -gt 0 ]; do
     case "$1" in
         --tests)
             test_groups=$2
-            case "$test_groups" in product|all) ;; *) ci_fail 'invalid test groups' ;; esac
+            case "$test_groups" in product|all|none) ;; *) ci_fail 'invalid test groups' ;; esac
             ;;
         --phase)
             phase=$2
@@ -253,12 +253,12 @@ while [ "$#" -gt 0 ]; do
                 *) ci_fail 'candidate staging directory must be absolute' ;;
             esac
             ;;
-        *) ci_fail 'usage: PRODUCT --tests product|all [--phase pre|post] [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
+        *) ci_fail 'usage: PRODUCT --tests product|all|none [--phase pre|post] [--stage-candidate ABSOLUTE_DIRECTORY]' ;;
     esac
     shift 2
 done
 [ -n "$test_groups" ] || ci_fail 'the public dispatcher must select test groups'
-[ -z "$stage_candidate" ] || [ "$test_groups" = all ] \
+[ -z "$stage_candidate" ] || [ "$test_groups" = all ] || [ "$test_groups" = none ] \
     || ci_fail 'candidate staging requires both test groups'
 [ -z "$stage_candidate" ] || [ "$phase" != pre ] \
     || ci_fail 'candidate staging requires the post-test phase'
@@ -308,7 +308,9 @@ if [ "$phase" = pre ]; then
 fi
 # The dispatcher runs one shared Rust test gate between pre and post phases.
 # Retain the complete private body for existing internal callers.
-if [ "$phase" = full ]; then
+if [ "$test_groups" = none ]; then
+    printf '%s\n' '==> tests skipped by CI selection'
+elif [ "$phase" = full ]; then
     ci_stage='product tests'
     ci_test product
     if [ "$test_groups" = all ]; then

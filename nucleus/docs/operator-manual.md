@@ -522,6 +522,11 @@ private input and candidate refs, and its private worktrees. `./ci.sh submit COM
 and `cell-ci submit COMMIT` submit to this manager. Bare `./ci.sh` does not
 validate; the manager invokes the internal validator for each candidate.
 
+New submissions skip tests by default and retain other checks. Use
+`./ci.sh submit COMMIT --run-tests` to run the selected tests. Existing jobs
+retain their frozen test policy. Validation receipts and outcome emails state
+when tests were skipped.
+
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
 a new commit before validation. Every validation compares the same accepted

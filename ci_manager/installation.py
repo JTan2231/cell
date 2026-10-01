@@ -251,11 +251,14 @@ def _cancelled_validation_exited(store: Store, job: dict) -> bool:
         if not isinstance(request, dict) or not isinstance(result, dict):
             return False
         command = request["command"]
-        return (isinstance(command, list) and len(command) == 8
+        expected = [str(worktree / "pipeline/select_changes.py"), "run",
+                    "--base", job["base_commit"],
+                    "--candidate", job["candidate_commit"], "--json"]
+        if job.get("skip_tests", False):
+            expected.append("--skip-tests")
+        return (isinstance(command, list) and len(command) == len(expected) + 1
                 and isinstance(command[0], str) and Path(command[0]).is_absolute()
-                and command[1:] == [str(worktree / "pipeline/select_changes.py"), "run",
-                                    "--base", job["base_commit"],
-                                    "--candidate", job["candidate_commit"], "--json"]
+                and command[1:] == expected
                 and request["cwd"] == str(worktree)
                 and all(request[key] == str(directory / f"{name}.{suffix}")
                         for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
