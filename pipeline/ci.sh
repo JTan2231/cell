@@ -111,32 +111,7 @@ EOF
 }
 
 ci_clippy() {
-    printf '%s\n' '==> clippy'
-    set -- cargo clippy --manifest-path "$PIPELINE_ROOT/$CARGO_MANIFEST"
-    while IFS= read -r cargo_package; do
-        [ -n "$cargo_package" ] || continue
-        set -- "$@" --package "$cargo_package"
-    done <<EOF
-$(ci_packages)
-EOF
-    set -- "$@" --all-targets --locked
-    if [ "$CLIPPY_KEEP_GOING" = 1 ]; then
-        set -- "$@" --keep-going
-    fi
-    if [ "$CARGO_OFFLINE" = 1 ]; then
-        set -- "$@" --offline
-    fi
-    set -- "$@" -- \
-        -D warnings \
-        -F unsafe_code \
-        -D clippy::all \
-        -D clippy::pedantic \
-        -D clippy::dbg_macro \
-        -D clippy::todo \
-        -D clippy::unimplemented \
-        -D clippy::unwrap_used \
-        -D clippy::expect_used
-    "$@"
+    sh "$PIPELINE_ROOT/pipeline/clippy.sh" --product "$PRODUCT_ID"
 }
 
 ci_test() {
@@ -281,14 +256,16 @@ if [ "$phase" != post ]; then
     fi
     ci_stage='rustfmt'
     ci_fmt
-    ci_stage='clippy'
-    ci_clippy
+    if [ "$phase" = full ]; then
+        ci_stage='clippy'
+        ci_clippy
+    fi
 fi
 if [ "$phase" = pre ]; then
     printf '%s\n' 'ci.sh: pre-test checks passed'
     exit 0
 fi
-# The dispatcher runs one shared Rust test gate between pre and post phases.
+# The dispatcher runs shared Clippy and Rust test gates between these phases.
 # Retain the complete private body for existing internal callers.
 if [ "$test_groups" = none ]; then
     printf '%s\n' '==> tests skipped by CI selection'

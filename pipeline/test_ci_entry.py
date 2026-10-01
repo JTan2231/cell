@@ -158,7 +158,8 @@ class ProductPhaseTests(unittest.TestCase):
         self.environment = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
                             "FIXTURE_PHASE_LOG": str(self.log),
                             "PATH": str(self.root / "tools") + os.pathsep + os.environ["PATH"]}
-        for relative in ("pipeline/ci.sh", "pipeline/platform.sh", "pipeline/lib.sh"):
+        for relative in ("pipeline/ci.sh", "pipeline/platform.sh", "pipeline/lib.sh",
+                         "pipeline/clippy.sh"):
             self.write(relative, (SOURCE / relative).read_text())
         self.write("Cargo.toml", '[workspace]\n')
         self.write("Cargo.lock", "fixture\n")
@@ -189,6 +190,13 @@ if sys.argv[1:] == ["--version"]:
 else:
     with Path(os.environ["FIXTURE_PHASE_LOG"]).open("a") as stream:
         stream.write(json.dumps([label, *sys.argv[1:]]) + "\\n")
+    if label == "cargo" and sys.argv[1] == "clippy":
+        if path := os.environ.get("FIXTURE_CLIPPY_ENV_LOG"):
+            Path(path).write_text(json.dumps({
+                "cwd": os.getcwd(), "offline": os.environ.get("CARGO_NET_OFFLINE"),
+                "warnings": os.environ.get("CARGO_BUILD_WARNINGS"),
+            }))
+        raise SystemExit(int(os.environ.get("FIXTURE_CLIPPY_STATUS", "0")))
 '''
         for relative in ("tools/cargo", "tools/rustc", "pipeline/cargo_tests.py",
                          "deployment/candidate.py"):
@@ -211,14 +219,14 @@ else:
             command.extend(["--stage-candidate", stage])
         return subprocess.run(command, env=self.environment, capture_output=True, text=True)
 
-    def test_pre_phase_runs_setup_and_linting_without_tests_or_release(self):
+    def test_pre_phase_runs_setup_and_formatting_without_clippy_tests_or_release(self):
         result = self.invoke("pre")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         commands = self.commands()
         self.assertEqual([command[0] for command in commands],
-                         ["cargo", "cargo"])
+                         ["cargo"])
         self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
-                         ["fmt", "clippy"])
+                         ["fmt"])
 
     def test_post_phase_runs_provider_docs_release_and_seals_after_build(self):
         stage = str(self.root.parent / "sealed candidate")
@@ -237,6 +245,8 @@ else:
         tests = [command for command in self.commands() if command[0] == "cargo_tests.py"]
         self.assertEqual([command[command.index("--group") + 1] for command in tests],
                          ["product", "platform"])
+        clippy = [command for command in self.commands() if command[:2] == ["cargo", "clippy"]]
+        self.assertEqual(len(clippy), 1)
 
     def test_skip_tests_retains_provider_lint_docs_and_release_checks(self):
         result = self.invoke(group="none")
@@ -265,7 +275,7 @@ else:
 
     def test_shared_checks_only_body_excludes_tests_and_legacy_body_keeps_them(self):
         script = str(self.root / "pipeline/platform.sh")
-        for extra, expected in ((["--checks-only"], ["fmt", "clippy"]),
+        for extra, expected in ((["--checks-only"], ["fmt"]),
                                 ([], ["fmt", "clippy", "test"])):
             with self.subTest(extra=extra):
                 self.log.unlink(missing_ok=True)
@@ -273,6 +283,71 @@ else:
                                         capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual([command[1] for command in self.commands()], expected)
+
+    def invoke_clippy(self, *arguments, **environment):
+        return subprocess.run(["sh", str(self.root / "pipeline/clippy.sh"), *arguments],
+                              env={**self.environment, **environment}, capture_output=True, text=True)
+
+    def test_shared_clippy_deduplicates_product_and_shared_suite_packages(self):
+        self.write("beta/Cargo.toml", '[package]\nname = "beta"\nversion = "1.0.0"\n')
+        self.write("pipeline/products/beta.sh", """PIPELINE_SCHEMA=1
+PRODUCT_ID=beta
+PRODUCT_NAME=Beta
+PRODUCT_DIR=beta
+CI_RESOURCE_CLASS=heavy
+RELEASE_BRANCH=main
+DEPLOY_PROFILE=custom
+DEPLOY_CONFLICT_KEYS=beta
+CARGO_PACKAGES='alpha
+beta
+cell-install'
+RELEASE_UNITS='beta|Beta|package|beta/Cargo.toml|beta-|1'
+CARGO_OFFLINE=1
+CLIPPY_KEEP_GOING=0
+""")
+        environment_log = self.root.parent / "clippy-env.json"
+        result = self.invoke_clippy("--product", "alpha", "--product", "beta", "--product", "alpha",
+                                    "--shared-suite", "install", "--shared-suite", "prompts",
+                                    FIXTURE_CLIPPY_ENV_LOG=str(environment_log))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertEqual(len(commands), 1)
+        command = commands[0]
+        self.assertEqual(command[:2], ["cargo", "clippy"])
+        self.assertEqual(command[command.index("--manifest-path") + 1], str(self.root / "Cargo.toml"))
+        packages = [command[index + 1] for index, value in enumerate(command) if value == "--package"]
+        self.assertEqual(sorted(packages), ["alpha", "beta", "cell-install", "cell-prompts"])
+        for flag in ("--all-targets", "--locked", "--keep-going", "--offline"):
+            self.assertIn(flag, command)
+        self.assertEqual(command[command.index("--") + 1:], [
+            "-D", "warnings", "-F", "unsafe_code", "-D", "clippy::all",
+            "-D", "clippy::pedantic", "-D", "clippy::dbg_macro", "-D", "clippy::todo",
+            "-D", "clippy::unimplemented", "-D", "clippy::unwrap_used", "-D", "clippy::expect_used",
+        ])
+        environment = json.loads(environment_log.read_text())
+        self.assertEqual(environment["cwd"], str(self.root.resolve()))
+        self.assertEqual(environment["offline"], "true")
+        self.assertEqual(environment["warnings"], "deny")
+
+    def test_shared_only_clippy_preserves_suite_scope_and_cargo_failure(self):
+        result = self.invoke_clippy("--shared-suite", "maintenance", "--shared-suite", "maintenance",
+                                    FIXTURE_CLIPPY_STATUS="37")
+        self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertEqual(len(commands), 1)
+        command = commands[0]
+        self.assertEqual(command[command.index("--package") + 1], "cell-maintenance")
+        self.assertEqual(command.count("--package"), 1)
+        self.assertNotIn("--keep-going", command)
+        self.assertNotIn("--offline", command)
+
+    def test_clippy_rejects_empty_or_invalid_scope_before_cargo(self):
+        for arguments in ((), ("--product",), ("--product", "missing"),
+                          ("--shared-suite", "broker"), ("--unknown", "alpha")):
+            with self.subTest(arguments=arguments):
+                result = self.invoke_clippy(*arguments)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(self.commands(), [])
 
 
 class CancelledValidationRecoveryTests(unittest.TestCase):

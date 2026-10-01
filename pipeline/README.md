@@ -122,13 +122,23 @@ Compilation can include other targets from the selected packages; execution
 uses the exact allowed target filter. Shared dependencies use Cargo's combined
 feature selection.
 
-Product checks run in two phases around this test gate. The first phase runs
-shell and packaging checks, applicable provider checks, formatting, and Clippy.
-The second runs applicable provider checks, documentation, release builds,
-binary version checks, and candidate staging. Selected shared Rust suites retain
-their formatting and Clippy checks but execute their tests in the shared test
-gate. Shared infrastructure Python regression suites remain separate required
-checks.
+Product checks run in two phases. The first phase runs shell and packaging
+checks, applicable provider checks, and formatting. One heavy `cell.clippy`
+gate then runs Clippy for the combined Cargo package set from selected products
+and shared Rust suites. It keeps all target checks and the strict lint rules.
+The shared test gate follows Clippy when tests are enabled. The second product
+phase runs applicable provider checks, documentation, release builds, binary
+version checks, and candidate staging. Shared infrastructure Python regression
+suites remain separate required checks.
+
+The Clippy command lists each selected package once and uses Cargo's combined
+dependency feature selection. It does not prove each product's isolated feature
+configuration. It uses offline mode if any selected product requires offline
+Cargo access, as the shared test gate does. Missing cached dependencies then
+fail without a download. It keeps going after compiler errors if any selected
+product requests that behavior; any lint or compiler failure still fails the
+gate. Clippy runs when tests are skipped. The receipt records its selected
+products and shared suites in the gate command and records its timing separately.
 
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or
@@ -166,10 +176,11 @@ dependency expansion. The shared suite names are `pipeline`, `broker`,
 `catalog`. A validation with no selected products still checks structure and
 recognition. Its success does not establish full repository validation.
 
-Changes to the parallel runner or its pinned tool selector select all current
-products' product and platform tests and all
-three shared Rust suites. This validates the common executor across its complete
-target inventory. Test-only and documentation edits do not select this expansion.
+Changes to the shared Clippy runner, parallel test runner, or pinned test tool
+selector select all current products and all three shared Rust suites. When tests
+are enabled, this includes product and platform tests. This validates the common
+executors across their complete target inventory. Test-only and documentation
+edits do not select this expansion.
 
 The validator binds selection and every gate to one source candidate. It
 rejects source, Git status, or HEAD changes during planning or execution as
@@ -184,12 +195,13 @@ candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
 
 Recognition does not run shared library tests. The `install` and `maintenance`
-check gates format and lint those libraries separately. Their tests run in the
-parallel Rust gate. They are infrastructure, with no separate product identity
-or release unit.
+check gates format those libraries. Their lint checks join the shared Clippy
+gate, and their tests run in the parallel Rust gate. They are infrastructure,
+with no separate product identity or release unit.
 
 The internal dispatcher in `select_changes.py` requests broker admission for
-each product phase, shared check suite, and the parallel Rust test stage. The
+each product phase, shared check suite, shared Clippy stage, and parallel Rust
+test stage. The
 broker schedules execution; it does not decide relevance. Product bodies receive
 `--tests product|all|none` and their phase in the brokered command identity. The Rust
 test command records all selected products, platform products, shared Rust

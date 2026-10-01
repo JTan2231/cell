@@ -109,7 +109,9 @@ It records an expired runner as lost.
 Root and product `ci.sh` wrappers route to the installed CI manager. Its
 internal dispatcher selects relevant product and platform tests and always
 invokes this client. Product checks before and after tests, shared check suites,
-and the parallel Rust test stage have separate queue entries. Selection and
+the combined Clippy stage, and the parallel Rust test stage have separate queue
+entries. The Clippy stage holds one heavy lease for the selected product and
+shared-library package set. Selection and
 phase are part of the brokered command identity. The shared `pipeline/ci.sh`
 body is internal. It is not a second CI submission path, and callers cannot use
 it to bypass admission.

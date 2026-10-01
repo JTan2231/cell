@@ -46,12 +46,8 @@ case "$suite" in
         pipeline_bootstrap_cargo
         package=cell-$suite
         cargo fmt --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" -- --check
-        cargo clippy --manifest-path "$PIPELINE_ROOT/Cargo.toml" \
-            --package "$package" --all-targets --locked -- \
-            -D warnings -F unsafe_code -D clippy::all -D clippy::pedantic \
-            -D clippy::dbg_macro -D clippy::todo -D clippy::unimplemented \
-            -D clippy::unwrap_used -D clippy::expect_used
         if [ "$checks_only" = 0 ]; then
+            sh "$PIPELINE_ROOT/pipeline/clippy.sh" --shared-suite "$suite"
             cargo test --manifest-path "$PIPELINE_ROOT/Cargo.toml" --package "$package" --locked
         fi
         ;;

@@ -63,6 +63,7 @@ RELEASE_UNITS='{product}|{product}|package|{directory}/Cargo.toml|{product}-|1'
             self.write(f"{directory}/ci.sh", self.wrapper(product), executable=True)
         for filename, label in (("check.sh", "preflight"),
                                 ("recognition.sh", "recognition"),
+                                ("clippy.sh", "clippy"),
                                 ("integrated.sh", "integrated")):
             self.write(f"pipeline/{filename}", self.wrapper(label), executable=True)
         self.write("pipeline/ci.sh", '''#!/bin/sh
@@ -334,19 +335,20 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
-                         ["preflight", "recognition", "beta.pre", "parallel-rust", "beta.post"])
+                         ["preflight", "recognition", "beta.pre", "clippy", "parallel-rust", "beta.post"])
         self.assertEqual(gates[2]["args"], ["--tests", "product", "--phase", "pre"])
         self.assertEqual(gates[-1]["args"], ["--tests", "product", "--phase", "post"])
-        self.assertIn("--product", gates[3]["args"])
-        self.assertIn("beta", gates[3]["args"])
-        self.assertNotIn("--platform-product", gates[3]["args"])
+        self.assertEqual(gates[3]["args"], ["--product", "beta"])
+        self.assertIn("--product", gates[4]["args"])
+        self.assertIn("beta", gates[4]["args"])
+        self.assertNotIn("--platform-product", gates[4]["args"])
         self.assertTrue(gates[-1]["source"].startswith("sha256:"))
 
     def test_explicit_alias_uses_descriptor_directory(self):
         result = self.ci("decisions")
         self.assert_passed(result)
         self.assertEqual([gate["gate"] for gate in self.gates()],
-                         ["preflight", "recognition", "krisis.pre", "parallel-rust", "krisis.post"])
+                         ["preflight", "recognition", "krisis.pre", "clippy", "parallel-rust", "krisis.post"])
 
     def test_all_root_run_includes_integrated_check(self):
         result = self.ci("--all")
@@ -355,11 +357,12 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(gates[:2], ["preflight", "recognition"])
         self.assertEqual(set(gates[2:-1]), {
             "alpha.pre", "beta.pre", "krisis.pre", "alpha.post", "beta.post", "krisis.post",
-            "parallel-rust", "shared-pipeline", "shared-broker",
+            "clippy", "parallel-rust", "shared-pipeline", "shared-broker",
             "shared-deployment", "shared-build", "shared-cleanup", "shared-install",
             "shared-maintenance", "shared-prompts",
         })
-        self.assertEqual(len(gates), 18)
+        self.assertEqual(len(gates), 19)
+        self.assertEqual(gates.count("clippy"), 1)
         self.assertEqual(gates[-1], "integrated")
 
     def test_skip_tests_retains_checks_builds_and_deployment_scope(self):
@@ -369,13 +372,19 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates], [
             "preflight", "recognition", "shared-install", "shared-maintenance", "shared-prompts",
-            "alpha.pre", "beta.pre", "krisis.pre", "alpha.post", "beta.post", "krisis.post",
+            "alpha.pre", "beta.pre", "krisis.pre", "clippy", "alpha.post", "beta.post", "krisis.post",
             "integrated",
         ])
         self.assertTrue(all(gate["args"] == ["--checks-only"] for gate in gates
                             if gate["gate"].startswith("shared-")))
         self.assertTrue(all(gate["args"][1] == "none" for gate in gates
                             if gate["gate"].endswith((".pre", ".post"))))
+        clippy = [gate for gate in gates if gate["gate"] == "clippy"]
+        self.assertEqual([gate["args"] for gate in clippy], [[
+            "--product", "alpha", "--product", "beta", "--product", "krisis",
+            "--shared-suite", "install", "--shared-suite", "maintenance",
+            "--shared-suite", "prompts",
+        ]])
         receipt = json.loads(result.stdout)
         self.assertTrue(receipt["selection"]["tests_skipped"])
         self.assertEqual(receipt["selection"]["product_tests"], ["alpha", "beta", "krisis"])
@@ -388,9 +397,9 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = [gate["gate"] for gate in self.gates()]
         self.assertEqual(gates[:2], ["preflight", "recognition"])
-        self.assertEqual(gates[2:], ["alpha.pre", "beta.pre", "krisis.pre", "parallel-rust",
+        self.assertEqual(gates[2:], ["alpha.pre", "beta.pre", "krisis.pre", "clippy", "parallel-rust",
                                      "alpha.post", "beta.post", "krisis.post"])
-        self.assertEqual(len(gates), 9)
+        self.assertEqual(len(gates), 10)
 
     def test_project_failure_propagates_and_stops_later_gates(self):
         result = self.ci("--all", FIXTURE_FAIL_AT="alpha.pre")
@@ -404,7 +413,17 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         result = self.ci("alpha", "beta", FIXTURE_FAIL_AT="parallel-rust")
         self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
         self.assertEqual([gate["gate"] for gate in self.gates()],
-                         ["preflight", "recognition", "alpha.pre", "beta.pre", "parallel-rust"])
+                         ["preflight", "recognition", "alpha.pre", "beta.pre", "clippy", "parallel-rust"])
+
+    def test_clippy_failure_stops_tests_and_all_post_test_gates(self):
+        result = self.ci("alpha", "beta", "--json", FIXTURE_FAIL_AT="clippy")
+        self.assertEqual(result.returncode, 23, result.stdout + result.stderr)
+        self.assertEqual([gate["gate"] for gate in self.gates()],
+                         ["preflight", "recognition", "alpha.pre", "beta.pre", "clippy"])
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt["state"], "failed")
+        self.assertEqual(receipt["gates"][-1]["gate"], "cell.clippy")
+        self.assertEqual(receipt["gates"][-1]["exit_code"], 23)
 
     def test_shared_rust_checks_and_platform_targets_join_one_test_gate(self):
         result = self.ci("--platform", "alpha", "beta")
@@ -412,9 +431,11 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
                          ["preflight", "recognition", "shared-install", "alpha.pre", "beta.pre",
-                          "parallel-rust", "alpha.post", "beta.post"])
+                          "clippy", "parallel-rust", "alpha.post", "beta.post"])
         self.assertEqual(gates[2]["args"], ["--checks-only"])
-        arguments = gates[5]["args"]
+        self.assertEqual(gates[5]["args"], ["--product", "alpha", "--product", "beta",
+                                              "--shared-suite", "install"])
+        arguments = gates[6]["args"]
         self.assertEqual(arguments.count("--product"), 2)
         self.assertEqual(arguments.count("--platform-product"), 2)
         self.assertEqual(arguments[-2:], ["--shared-suite", "install"])
@@ -471,13 +492,28 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertEqual(tokens[5:], [])
         self.assertNotIn("global Rust runner changed", result.stderr)
 
+    def test_clippy_executor_change_selects_all_products_and_shared_rust_suites(self):
+        driver = self.root / "pipeline/clippy.sh"
+        self.write("pipeline/clippy.sh", driver.read_text() + "# changed executor\n", executable=True)
+        tokens, result = self.plan()
+        self.assertEqual(tokens[5:], ["alpha", "beta", "krisis"])
+        self.assertIn("global Rust runner changed", result.stderr)
+        result = self.ci()
+        self.assert_passed(result)
+        clippy = [gate for gate in self.gates() if gate["gate"] == "clippy"]
+        self.assertEqual([gate["args"] for gate in clippy], [[
+            "--product", "alpha", "--product", "beta", "--product", "krisis",
+            "--shared-suite", "install", "--shared-suite", "maintenance",
+            "--shared-suite", "prompts",
+        ]])
+
     def test_direct_candidate_staging_is_only_in_the_post_test_phase(self):
         stage = str(Path(self.temporary.name) / "sealed candidate")
         result = self.helper("product", "alpha", "--stage-candidate", stage)
         self.assert_passed(result)
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
-                         ["shared-install", "alpha.pre", "parallel-rust", "alpha.post"])
+                         ["shared-install", "alpha.pre", "clippy", "parallel-rust", "alpha.post"])
         self.assertNotIn("--stage-candidate", gates[1]["args"])
         self.assertEqual(gates[-1]["args"], ["--tests", "all", "--phase", "post",
                                             "--stage-candidate", stage])
@@ -488,7 +524,7 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
-                         ["shared-install", "alpha.pre", "alpha.post"])
+                         ["shared-install", "alpha.pre", "clippy", "alpha.post"])
         self.assertEqual(gates[-1]["args"], ["--tests", "none", "--phase", "post",
                                             "--stage-candidate", stage])
 
@@ -497,7 +533,8 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assert_passed(result)
         gates = self.gates()
         self.assertEqual([gate["gate"] for gate in gates],
-                         ["shared-install", "shared-prompts", "parallel-rust"])
+                         ["shared-install", "shared-prompts", "clippy", "parallel-rust"])
+        self.assertEqual(gates[2]["args"], ["--shared-suite", "install", "--shared-suite", "prompts"])
         self.assertEqual(gates[-1]["args"][-4:], ["--shared-suite", "install",
                                                   "--shared-suite", "prompts"])
         self.assertNotIn("--product", gates[-1]["args"])
@@ -511,12 +548,14 @@ exec python3 "$ROOT/fixture_gate.py" {label} "$@"
         self.assertFalse(receipt["selection"]["tests_skipped"])
         required = receipt["selection"]["required_gates"]
         expected = ["cell.structure", "cell.recognition", "alpha.pre", "beta.pre",
-                    "cell.tests.rust", "alpha.post", "beta.post"]
+                    "cell.clippy", "cell.tests.rust", "alpha.post", "beta.post"]
         self.assertEqual([gate["gate"] for gate in required], expected)
         self.assertEqual([gate["gate"] for gate in receipt["gates"]], expected)
         self.assertTrue(all(gate["source_key"] == receipt["source_key"] for gate in receipt["gates"]))
         self.assertEqual(required[4]["lane"], "heavy")
         self.assertEqual(required[4]["command"].count("--product"), 2)
+        self.assertEqual(required[5]["lane"], "heavy")
+        self.assertEqual(required[5]["command"].count("--product"), 2)
 
     def test_preflight_failure_stops_before_recognition(self):
         result = self.ci("--all", FIXTURE_FAIL_AT="preflight")

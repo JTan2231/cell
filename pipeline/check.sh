@@ -11,6 +11,7 @@ for script_path in \
     ci.sh \
     pipeline/lib.sh \
     pipeline/ci.sh \
+    pipeline/clippy.sh \
     pipeline/release.sh \
     pipeline/generate.sh \
     pipeline/test.sh \

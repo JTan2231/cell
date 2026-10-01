@@ -21,7 +21,7 @@ from platform_inputs import (
 
 
 RUST_EXECUTOR_INPUTS = frozenset((
-    "pipeline/parallel_tests.py", "pipeline/nextest_tool.py",
+    "pipeline/parallel_tests.py", "pipeline/nextest_tool.py", "pipeline/clippy.sh",
 ))
 
 
@@ -352,8 +352,8 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
             if descriptor or (owned and (catalog or any(fnmatchcase(path, p) for p in patterns))):
                 platform[product].append(path)
 
-    # A change to the common Rust executor changes every product's test
-    # behavior. Validate its ordinary and lifecycle target selection together.
+    # Common Rust lint and test executors affect every product. Validate their
+    # ordinary and lifecycle target selection together.
     executor_changes = sorted(changes & RUST_EXECUTOR_INPUTS)
     if executor_changes:
         reason = f"global Rust runner changed: {describe(executor_changes, args.verbose)}"
@@ -492,6 +492,18 @@ def gate_exit_code(receipt: dict) -> int:
 RUST_SHARED_SUITES = ("install", "maintenance", "prompts")
 
 
+def clippy_gate(root: Path, products: list[str],
+                suites: list[str]) -> tuple[str, str, list[str]] | None:
+    if not products and not suites:
+        return None
+    body = ["sh", str(root / "pipeline/clippy.sh")]
+    for product in products:
+        body.extend(["--product", product])
+    for suite in suites:
+        body.extend(["--shared-suite", suite])
+    return "cell.clippy", "heavy", body
+
+
 def rust_test_gate(root: Path, products: list[str], platform: list[str],
                    suites: list[str]) -> tuple[str, str, list[str]] | None:
     if not products and not suites:
@@ -553,11 +565,15 @@ printf '%s\\n%s\\n' "$CI_GATE_ID" "$CI_RESOURCE_CLASS"
         body = [str(root / "pipeline/ci.sh"), product, "--tests", group]
         products.append((gate, lane, body))
         gates.append((gate + ".pre", lane, [*body, "--phase", "pre"]))
+    shared_rust = [suite for suite in RUST_SHARED_SUITES if selection.shared[suite]]
+    lint_gate = clippy_gate(root, selection.selected, shared_rust)
+    if lint_gate:
+        gates.append(lint_gate)
     if not selection.tests_skipped:
         test_gate = rust_test_gate(
             root, selection.selected,
             [product for product in selection.selected if selection.platform[product]],
-            [suite for suite in RUST_SHARED_SUITES if selection.shared[suite]],
+            shared_rust,
         )
         if test_gate:
             gates.append(test_gate)
@@ -703,7 +719,11 @@ def run_shared(root: Path, arguments: list[str]) -> None:
                    "PYTHONDONTWRITEBYTECODE": "1"}
     check(root, expected_source, expected_status)
     gates = [shared_check_gate(root, suite) for suite in suites if suite != "catalog"]
-    test_gate = rust_test_gate(root, [], [], [suite for suite in suites if suite in RUST_SHARED_SUITES])
+    shared_rust = [suite for suite in suites if suite in RUST_SHARED_SUITES]
+    lint_gate = clippy_gate(root, [], shared_rust)
+    if lint_gate:
+        gates.append(lint_gate)
+    test_gate = rust_test_gate(root, [], [], shared_rust)
     if test_gate:
         gates.append(test_gate)
     if "catalog" in suites:
