@@ -24,7 +24,7 @@ from ci_manager.integrations import (
 from ci_manager.storage import (
     ManagerError, Store, TERMINAL, atomic_bytes, atomic_json, lock, private_directory,
 )
-from deployment import candidate as production_candidate, signing
+from deployment import build as production_build, candidate as production_candidate, signing
 
 
 class Worker:
@@ -497,6 +497,12 @@ class Worker:
                     or manifest.get("product") != product
                     or manifest.get("candidate_id") != record["candidate_id"]):
                 raise ManagerError("production signing receipt has a mismatched candidate")
+            try:
+                expected = production_build.executable_scope(self.worktree(job), product)
+            except production_build.BuildError as exception:
+                raise ManagerError(str(exception)) from exception
+            if set(manifest["binaries"]) != expected:
+                raise ManagerError("production candidate executable scope does not match its descriptor")
 
     def accepting(self, job: dict) -> None:
         receipt = job["last_receipt"]

@@ -55,6 +55,8 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
                 or manifest.get("candidate_id") != record.get("candidate_id")
                 or manifest.get("product") != product):
             raise candidate.CandidateError("production candidate does not match its preparation")
+        if set(manifest["binaries"]) != build.executable_scope(source, product):
+            raise candidate.CandidateError("production candidate executable scope does not match its descriptor")
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
     return {"schema_version": 1, "state": "passed", "source_commit": commit,

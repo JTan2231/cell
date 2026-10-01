@@ -185,6 +185,16 @@ fn native(path: &Path) -> Result<bool> {
         ))
 }
 
+fn recorded_native(path: &Path, recorded: &FileEntry) -> Result<bool> {
+    let is_native = native(path)?;
+    if recorded.code_identifier.is_some() && !is_native {
+        return Err(Error::new(
+            "recorded native artifact is no longer native code",
+        ));
+    }
+    Ok(is_native)
+}
+
 #[derive(Default)]
 pub(crate) struct Verifier {
     policy: Option<Policy>,
@@ -295,7 +305,8 @@ pub(crate) fn verify_files(
     let installer = files.get("package/install");
     for (relative, file) in files {
         let path = root.join(relative);
-        if !enabled() || !native(&path)? {
+        let is_native = recorded_native(&path, file)?;
+        if !enabled() || !is_native {
             continue;
         }
         let key = recorded_key(product, relative, file, installer)?;
@@ -341,7 +352,8 @@ pub(crate) fn verify_recorded_file(
     if regular(path)?.mode() & 0o7777 != recorded.mode {
         return Err(Error::new("recorded recovery artifact mode changed"));
     }
-    if !enabled() || !native(path)? {
+    let is_native = recorded_native(path, recorded)?;
+    if !enabled() || !is_native {
         return Ok(());
     }
     let artifact = artifact
@@ -429,7 +441,8 @@ pub(crate) fn verify_recorded_files(
     for (relative, recorded) in files {
         let key = recorded_key(product, relative, recorded, installer);
         let path = root.join(relative);
-        if enabled() && native(&path)? {
+        let is_native = recorded_native(&path, recorded)?;
+        if enabled() && is_native {
             verify_recorded_file(product, &key, &path, recorded)?;
         } else if regular(&path)?.mode() & 0o7777 != recorded.mode {
             return Err(Error::new("recorded recovery artifact mode changed"));
@@ -548,6 +561,36 @@ mod tests {
             recorded_key("fixture", "bin/frontend", &ordinary, Some(&ordinary))?,
             "frontend"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn recorded_native_files_cannot_be_replaced_by_scripts() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let root = temporary.path();
+        std::fs::create_dir(root.join("bin"))?;
+        let path = root.join("bin/fixture");
+        std::fs::write(&path, "#!/bin/sh\nexit 0\n")?;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o555))?;
+        let recorded = FileEntry {
+            sha256: String::new(),
+            mode: 0o555,
+            code_identifier: Some("local.cell.fixture.fixture".to_owned()),
+        };
+        let files = BTreeMap::from([("bin/fixture".to_owned(), recorded.clone())]);
+        for result in [
+            verify_files("fixture", root, &files),
+            verify_recorded_file("fixture", &Ok("fixture".to_owned()), &path, &recorded),
+            verify_recorded_files("fixture", root, &files),
+        ] {
+            let error = result
+                .err()
+                .ok_or_else(|| Error::new("native replacement accepted"))?;
+            assert_eq!(
+                error.message,
+                "recorded native artifact is no longer native code"
+            );
+        }
         Ok(())
     }
 

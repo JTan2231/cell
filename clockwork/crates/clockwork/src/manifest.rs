@@ -618,7 +618,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     fn opaque_release_ids_preserve_runtime_artifact_hash_checks()
     -> Result<(), Box<dyn std::error::Error>> {
-        use super::{LaunchImage, Layout, Manifest, validate};
+        use super::{LaunchImage, Layout, Manifest, validate, verify_hash};
 
         let directory = tempfile::tempdir()?;
         let root = directory.path().canonicalize()?;
@@ -631,14 +631,22 @@ mod tests {
             std::fs::create_dir(&release)?;
             let binary = release.join("worker");
             std::fs::copy(std::env::current_exe()?, &binary)?;
+            let hash = cell_install::file_digest(&binary)?;
             let mut manifest: Manifest = serde_json::from_value(serde_json::json!({
                 "schema_version":2,"key":"example/worker","release_id":identity,
                 "release_root":release,"authority":"current-user-background","overlap":"skip",
                 "arguments":[],"cwd":root,"schedule":{"kind":"interval","seconds":60,"run_at_load":false},
-                "launch":{"kind":"direct","program":binary,"sha256":cell_install::file_digest(&binary)?},
+                "launch":{"kind":"direct","program":binary,"sha256":hash},
                 "environment":{},"output":{"stdout":root.join("out"),"stderr":root.join("err")}
             }))?;
-            validate(&manifest, &layout)?;
+            let trusted_paths = match validate(&manifest, &layout) {
+                Ok(()) => true,
+                Err(error) => {
+                    assert_eq!(error.code(), "manifest_path_unsafe");
+                    assert!(error.message().starts_with("release_root ancestor "));
+                    false
+                }
+            };
             let original = manifest.release_id.clone();
             for invalid in [
                 "../foreign",
@@ -652,13 +660,23 @@ mod tests {
                 );
             }
             manifest.release_id = original;
+            verify_hash(&binary, &hash, "program")?;
+            let wrong_hash = "0".repeat(64);
             if let LaunchImage::Direct { sha256, .. } = &mut manifest.launch {
-                *sha256 = "0".repeat(64);
+                sha256.clone_from(&wrong_hash);
             }
             assert_eq!(
-                validate(&manifest, &layout).unwrap_err().code(),
+                verify_hash(&binary, &wrong_hash, "program")
+                    .unwrap_err()
+                    .code(),
                 "artifact_hash_mismatch"
             );
+            if trusted_paths {
+                assert_eq!(
+                    validate(&manifest, &layout).unwrap_err().code(),
+                    "artifact_hash_mismatch"
+                );
+            }
         }
         Ok(())
     }

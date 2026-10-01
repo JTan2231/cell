@@ -5,6 +5,7 @@ import copy
 import json
 from pathlib import Path
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -13,7 +14,7 @@ from ci_manager import client, production
 from ci_manager.manager import Worker
 from ci_manager.process import validation_exited
 from ci_manager.storage import ManagerError
-from deployment import signing
+from deployment import candidate, signing
 
 
 POLICY = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
@@ -103,6 +104,8 @@ class WorkerSigningTests(unittest.TestCase):
         self.writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_json"))
         self.bytes_writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_bytes"))
         stack.enter_context(mock.patch.object(Path, "exists", return_value=False))
+        self.descriptors = stack.enter_context(mock.patch.object(production.build, "read_descriptor",
+            side_effect=lambda source, product: {"RELEASE_BINARY_CHECKS": f"main|target/release/{product}|{product}"}))
 
     def receipt(self):
         records = {product: {"candidate_dir": str(self.directory / "production-0/candidates" / product),
@@ -114,7 +117,7 @@ class WorkerSigningTests(unittest.TestCase):
     def manifest(self, path, *, signing_policy):
         self.assertEqual(signing_policy, POLICY)
         return {"source_commit": self.job["candidate_commit"], "source_key": self.job["candidate_commit"],
-                "product": path.name, "candidate_id": f"candidate:{path.name}"}
+                "product": path.name, "candidate_id": f"candidate:{path.name}", "binaries": {path.name: {}}}
 
     def test_prepare_covers_checked_and_explicit_products_with_installed_host_code(self):
         self.worker.process.return_value = ({"exit_code": 0}, json.dumps(self.receipt()).encode(), b"")
@@ -245,6 +248,47 @@ class WorkerSigningTests(unittest.TestCase):
         self.assertEqual(order, ["verify:alpha", "verify:beta", "advance"])
         self.assertTrue(self.job["accepted"])
 
+    def test_removing_binary_and_manifest_entry_cannot_advance_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.directory = Path(directory)
+            self.worker.directory.return_value = self.directory
+            root = self.directory / "production-0/candidates/alpha"
+            (root / "bin").mkdir(parents=True)
+            binaries = {name: {"path": f"bin/{name}", "code_identifier": f"local.cell.alpha.{name}"}
+                        for name in ("alpha", "alpha-helper")}
+            for name in binaries:
+                (root / "bin" / name).write_bytes(b"native executable fixture")
+            manifest = self.manifest(root, signing_policy=POLICY) | {
+                "schema": 1, "candidate_id": "uuid:" + "a" * 32,
+                "signing_policy": POLICY, "binaries": binaries}
+            (root / "candidate.json").write_text(json.dumps(manifest))
+            self.job["production_receipt"] = self.receipt()
+            recorded = self.job["production_receipt"]["preparation"]["candidates"]["alpha"]
+            recorded["candidate_id"] = manifest["candidate_id"]
+            self.descriptors.side_effect = lambda source, product: {"RELEASE_BINARY_CHECKS":
+                "main|target/release/alpha|alpha\nmain|target/release/alpha-helper|alpha-helper"}
+            with mock.patch.object(signing, "verify"), mock.patch(
+                    "ci_manager.manager.git.advance") as advance:
+                candidate.verify(root, signing_policy=POLICY)
+                (root / "bin/alpha-helper").unlink()
+                del manifest["binaries"]["alpha-helper"]
+                (root / "candidate.json").write_text(json.dumps(manifest))
+                # The remaining package agrees with its own edited manifest.
+                candidate.verify(root, signing_policy=POLICY)
+                with self.assertRaisesRegex(ManagerError, "executable scope"):
+                    self.worker.accepting(self.job)
+                advance.assert_not_called()
+
+    def test_invalid_executable_descriptor_stops_acceptance(self):
+        self.job["production_receipt"] = self.receipt()
+        self.descriptors.side_effect = None
+        self.descriptors.return_value = {"RELEASE_BINARY_CHECKS": "malformed"}
+        with mock.patch.object(production.candidate, "verify", side_effect=self.manifest), mock.patch(
+                "ci_manager.manager.git.advance") as advance:
+            with self.assertRaisesRegex(ManagerError, "invalid binary declaration"):
+                self.worker.accepting(self.job)
+            advance.assert_not_called()
+
     def test_missing_malformed_or_mismatched_receipts_cannot_advance_accepted(self):
         valid = self.receipt()
         variants = (None, [], valid | {"source_commit": "c" * 40},
@@ -318,7 +362,7 @@ class ProductionHelperTests(unittest.TestCase):
                        "candidates": {"alpha": {"candidate_dir": str(self.output / "candidates/alpha"),
                                                  "candidate_id": "candidate:alpha"}}}
         self.manifest = {"source_commit": self.commit, "source_key": self.commit, "product": "alpha",
-                         "candidate_id": "candidate:alpha"}
+                         "candidate_id": "candidate:alpha", "binaries": {"alpha": {}}}
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(signing, "assert_current"))
@@ -329,6 +373,8 @@ class ProductionHelperTests(unittest.TestCase):
         stack.enter_context(mock.patch.object(Path, "read_text", return_value=json.dumps(self.result)))
         self.build = stack.enter_context(mock.patch.object(production.build, "prepare", return_value=self.result))
         self.verify = stack.enter_context(mock.patch.object(production.candidate, "verify", return_value=self.manifest))
+        self.descriptors = stack.enter_context(mock.patch.object(production.build, "read_descriptor",
+            return_value={"RELEASE_BINARY_CHECKS": "main|target/release/alpha|alpha"}))
 
     def test_fresh_preparation_uses_frozen_policy_and_verifies_final_bundle(self):
         receipt = production.prepare(self.source, ["alpha"], self.output, POLICY)
@@ -346,6 +392,14 @@ class ProductionHelperTests(unittest.TestCase):
         self.verify.side_effect = signing.SigningError("retained executable has wrong certificate")
         with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
             production.prepare(self.source, ["alpha"], self.output, POLICY)
+
+    def test_retained_preparation_requires_all_descriptor_executables(self):
+        self.exists.return_value = True
+        self.descriptors.return_value = {"RELEASE_BINARY_CHECKS":
+            "main|target/release/alpha|alpha\nmain|target/release/alpha-helper|alpha-helper"}
+        with self.assertRaisesRegex(candidate.CandidateError, "executable scope"):
+            production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.build.assert_not_called()
 
     def test_deferred_release_uses_strict_combined_check_and_rejects_other_policy(self):
         self.build.return_value = self.result | {"release_check": True}

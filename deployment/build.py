@@ -53,6 +53,27 @@ def read_descriptor(source: Path, product: str) -> dict[str, str]:
     return values
 
 
+def executable_scope(source: Path, product: str, unit: str | None = None) -> set[str]:
+    values = read_descriptor(source, product)
+    units = {row.split("|")[0] for row in values.get("RELEASE_UNITS", "").splitlines()}
+    if unit is not None and unit not in units:
+        raise BuildError(f"unknown release unit for {product}: {unit}")
+    names: set[str] = set()
+    for row in values.get("RELEASE_BINARY_CHECKS", "").splitlines():
+        fields = row.split("|")
+        if len(fields) != 3:
+            raise BuildError(f"invalid binary declaration: {product}")
+        release_unit, relative, name = fields
+        if unit is not None and release_unit != unit:
+            continue
+        if not NAME.fullmatch(name) or relative != f"target/release/{name}" or name in names:
+            raise BuildError(f"invalid or repeated release executable: {name}")
+        names.add(name)
+    if not names:
+        raise BuildError(f"product declares no selected release executables: {product}")
+    return names
+
+
 def selection(source: Path, products: list[str], unit: str | None,
               metadata: dict[str, Any]) -> dict[str, dict[str, Any]]:
     selected: dict[str, dict[str, Any]] = {}
@@ -273,12 +294,7 @@ def prepare_supplied(source: Path, products: list[str], output: Path, unit: str 
                 or manifest.get("candidate_id") != record.get("candidate_id")
                 or record.get("source_key") != source_key):
             raise BuildError(f"prepared candidate does not match the selected source and identity: {product}")
-        values = read_descriptor(source, product)
-        rows = [row.split("|") for row in values.get("RELEASE_BINARY_CHECKS", "").splitlines()]
-        if any(len(row) != 3 for row in rows):
-            raise BuildError(f"invalid binary declaration: {product}")
-        expected = {row[2] for row in rows if unit is None or row[0] == unit}
-        if not expected or set(manifest["binaries"]) != expected:
+        if set(manifest["binaries"]) != executable_scope(source, product, unit):
             raise BuildError(f"prepared candidate executable scope does not match: {product}")
         reused[product] = directory, manifest
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)

@@ -112,8 +112,9 @@ pruning. Keep them with deployment state. Their absence is not proof
 that an operation never ran if storage was removed or restored incompletely.
 
 CI owns its validation receipt and checks the exact source commit before this
-handoff. Deployment does not determine CI coverage or turn a caller ID into
-permission to deploy.
+handoff. Production preparation and acceptance check the candidate executable
+set against the product descriptor at that commit. Deployment does not determine
+CI coverage or turn a caller ID into permission to deploy.
 
 The coordinator and release builder use Python. Product installation and
 deployment adapters are Rust executables backed by `cell-install`; retained
@@ -126,7 +127,7 @@ release builder once for selected products, the maintenance closure, and retaine
 dependencies. Preparing an inspector does not select its product for upgrade.
 
 When `--prepared-build` supplies a matching candidate, preparation verifies its
-source, product, executable scope, identity, hashes, and native signatures. It
+source, product, executable scope, identity, and native signatures. It
 copies and seals the bundle in the deployment workspace before maintenance.
 It builds only missing products in one Cargo invocation. An invalid supplied
 candidate stops preparation; it does not trigger a replacement build.
