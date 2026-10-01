@@ -54,7 +54,7 @@
     {
       "id": "ci-manager.queue.operate",
       "min_contract": 5,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     },
     {
       "id": "semantics.repository.explore",
