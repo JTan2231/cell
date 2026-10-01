@@ -23,7 +23,13 @@ key, and code-signing usability through macOS Security and a dry-run signature.
 It changes no signing configuration or product selection. A Keychain or macOS
 authorization prompt can require the current user.
 
-Success returns JSON with `policy`, `policy_digest`, and `ready: true`.
+Success prints the selected fingerprint, namespace, Keychain, and readiness.
+Add `--json` to receive `policy`, `policy_digest`, and `ready: true` as JSON:
+
+```sh
+cell-ci signing status --json
+```
+
 `ready` describes this probe; it is not a lasting readiness guarantee. Missing
 configuration, an inaccessible Keychain, or an unavailable or expired identity
 returns exit 78 with a diagnostic. CLI syntax errors return exit 2.
@@ -46,7 +52,7 @@ cancels work or removes a lock or journal.
 The setup command requires macOS, the configured external Cell work volume,
 current-user Keychain access, `/usr/bin/security`, `/usr/bin/codesign`, and
 `/usr/bin/openssl`. The configuration file is owned by the current user and
-has mode 0600. Its parent and backup directory have mode 0700.
+has mode 0600. Its parent directory has mode 0700.
 
 Before the updated manager is installed, use the source client from the Cell
 root with the same subcommands:
@@ -75,20 +81,18 @@ the certificate and key into the current user's login Keychain, authorizes
 certificate. macOS can require native user authorization for those actions.
 
 The command preflights the identity before writing signing configuration.
-It refuses existing signing configuration, a `Cell Local Signing` certificate
-in the selected login Keychain, or a retained signing recovery directory.
-Initial creation is not a renewal or recovery operation.
+It refuses existing signing configuration or a `Cell Local Signing` certificate
+in the selected login Keychain. Initial creation does not renew a certificate
+or replace an unavailable identity.
 
-Setup retains `certificate.pem`, encrypted `identity.p12`, and the recovery
-password file under `~/Library/Application Support/Cell/signing-backup/`.
-Private files have mode 0600. It removes temporary unencrypted key material
-when generation finishes. The encrypted export and its password share a
-private host directory; current-user file access is the recovery trust boundary.
+Generation files remain in private temporary staging and are removed when setup
+exits. Cell retains the certificate and private key in Keychain. It retains no
+certificate or private-key export in the host filesystem.
 
-Success returns the selected `policy` and `recovery_directory`. A failure can
-leave the recovery directory or an imported certificate without configuration.
-Keep that evidence and restore or configure the same identity. Do not delete
-the recovery export merely to rerun certificate creation.
+Success prints the selected fingerprint, namespace, and Keychain. Add `--json`
+to receive the selected `policy` and `policy_digest`. A failure can leave an
+imported certificate without configuration. Use `configure` to select that
+existing identity after its key is usable. Do not delete it to rerun creation.
 
 ## Select an existing certificate
 
@@ -108,7 +112,8 @@ identifier. Certificate name matching, per-product overrides, and environment
 signer overrides are unsupported.
 
 Configuration checks the selected identity before atomically writing
-`~/Library/Application Support/Cell/signing.json`. Success returns `policy` and
+`~/Library/Application Support/Cell/signing.json`. Success prints the selected
+fingerprint, namespace, and Keychain. Add `--json` to receive `policy` and
 `policy_digest`. Failure preserves prior configuration. The supported format is:
 
 ```json
@@ -167,19 +172,13 @@ certificate-renewal, or automatically generated identity fallback. Signing
 configuration failures do not request model repair. The manager supplies
 repair agents no private-key material or signing configuration writer.
 
-## Recover or rotate the identity
+## Make a deliberate identity change
 
-Restore the exact certificate and private key from the retained `identity.p12`
-through macOS Keychain Access. Supply its recovery password privately. Restore
-the original code-signing trust and `/usr/bin/codesign` key access, then use
-`configure` with the original fingerprint and selected Keychain. Verify status
-before restoring queue admission. Losing both the key and recovery export
-requires a deliberate new certificate and configuration selection.
-
-Copy the complete private recovery directory to a protected backup location if
-host-loss recovery is required. Cell does not upload or synchronize it. Keep
-the original certificate as well as its private key: reissuing a certificate
-with the same key still changes the fingerprint.
+If the selected certificate or private key is unavailable, signing remains
+blocked until that identity is usable or the user explicitly configures another
+identity. Cell does not generate a replacement. Reissuing a certificate with
+the same private key still changes the fingerprint and requires explicit
+selection.
 
 For initial adoption or rotation, select the full intended product inventory
 in CI with repeated `--deploy PRODUCT` options and verify the retained deployment
@@ -188,11 +187,10 @@ manager separately under its maintenance procedure; product deployment does
 not replace the manager.
 
 Product installation is sequential. A failed rollout can leave prior signed
-releases selected or restore recorded prior installation. Inspect each retained
+releases selected. Inspect each retained
 outcome before claiming that the full inventory uses one signer. Existing
 immutable releases are never re-signed in place. Prepare historical source as
-a new release under the current policy, or explicitly select the historical
-identity before a requested recovery.
+a new release under the current policy.
 
 No certificate auto-renewal, fleet-wide atomic rotation, historical release
 retro-signing, private-key escrow, or completion-time guarantee is supplied.

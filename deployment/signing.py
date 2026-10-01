@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import pwd
 import re
-import secrets
 import stat
 import subprocess
 import sys
@@ -265,37 +264,23 @@ def create_local() -> dict[str, Any]:
         except (OSError, subprocess.TimeoutExpired) as error:
             raise SigningError("cannot establish whether a Cell signing certificate already exists") from error
         if existing.returncode == 0:
-            raise SigningError("Cell Local Signing already exists in Keychain; restore and configure that identity")
+            raise SigningError("Cell Local Signing already exists in Keychain; configure that identity")
         # errSecItemNotFound is security's exit status 44. Other failures do not
         # prove absence and must not create a second identity.
         if existing.returncode != 44:
             raise SigningError("cannot establish whether a Cell signing certificate already exists")
-        backup = config_path().parent / "signing-backup"
-        if backup.exists() or backup.is_symlink():
-            raise SigningError("a signing recovery export exists; restore it instead of silently replacing the identity")
-        _directory(backup)
-        # Retain only the encrypted export, its private recovery password, and
-        # public certificate. Unencrypted generation material is temporary.
-        password_path = backup / "recovery-password"
-        descriptor = os.open(password_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-        with os.fdopen(descriptor, "w") as stream:
-            stream.write(secrets.token_urlsafe(48) + "\n")
-            stream.flush()
-            os.fsync(stream.fileno())
+        # Generation material exists only in private temporary staging. The
+        # persistent certificate and private key live in the user's Keychain.
         with tempfile.TemporaryDirectory(prefix=".signing-setup-", dir=config_path().parent) as directory:
             staging = Path(directory)
             key = staging / "key.pem"
-            certificate = backup / "certificate.pem"
+            certificate = staging / "certificate.pem"
             openssl = "/usr/bin/openssl"
             _run([openssl, "req", "-new", "-newkey", "rsa:3072", "-nodes", "-x509", "-sha256",
                   "-days", "3650", "-subj", "/CN=Cell Local Signing", "-keyout", str(key),
                   "-out", str(certificate), "-addext", "basicConstraints=critical,CA:FALSE",
                   "-addext", "keyUsage=critical,digitalSignature", "-addext", "extendedKeyUsage=critical,codeSigning"])
             certificate.chmod(0o600)
-            export = backup / "identity.p12"
-            _run([openssl, "pkcs12", "-export", "-inkey", str(key), "-in", str(certificate),
-                  "-name", "Cell Local Signing", "-out", str(export), "-passout", "file:" + str(password_path)])
-            export.chmod(0o600)
             # Import PEM certificate and private key separately, avoiding a
             # password argument or broad '-A' access on the key.
             _run(["/usr/bin/security", "import", str(certificate), "-k", str(keychain)])
@@ -308,15 +293,18 @@ def create_local() -> dict[str, Any]:
                                      "keychain": str(keychain), "identifier_namespace": "local.cell"}})
             preflight(policy)
             _write_policy(policy)
-        return {"policy": policy, "recovery_directory": str(backup)}
+        return {"policy": policy, "policy_digest": policy_digest(policy)}
 
 
 def run_cli(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("status")
-    commands.add_parser("create-local")
+    status = commands.add_parser("status")
+    status.add_argument("--json", action="store_true", help="return structured JSON")
+    create = commands.add_parser("create-local")
+    create.add_argument("--json", action="store_true", help="return structured JSON")
     command = commands.add_parser("configure")
+    command.add_argument("--json", action="store_true", help="return structured JSON")
     command.add_argument("--certificate-sha1", required=True)
     command.add_argument("--keychain", type=Path, required=True)
     command.add_argument("--identifier-namespace", default="local.cell")
@@ -333,7 +321,14 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         else:
             policy = configure(args.certificate_sha1, args.keychain, args.identifier_namespace)
             result = {"policy": policy, "policy_digest": policy_digest(policy)}
-        print(json.dumps(result, sort_keys=True))
+        if args.json:
+            print(json.dumps(result, sort_keys=True))
+        else:
+            settings = result["policy"]["macos"]
+            state = "ready" if args.command == "status" else "configured"
+            print(f"Cell macOS signing {state}: {settings['certificate_sha1']}")
+            print(f"Identifier namespace: {settings['identifier_namespace']}")
+            print(f"Keychain: {settings['keychain']}")
         return 0
     except (SigningError, OSError, ValueError, RuntimeError) as error:
         print(f"cell-signing: {error}", file=sys.stderr)

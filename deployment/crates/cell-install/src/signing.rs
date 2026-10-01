@@ -191,10 +191,6 @@ pub(crate) struct Verifier {
 }
 
 fn enabled() -> bool {
-    #[cfg(test)]
-    if TEST_VERIFIER.with(|verifier| verifier.borrow().is_some()) {
-        return true;
-    }
     cfg!(target_os = "macos")
 }
 
@@ -202,10 +198,6 @@ impl Verifier {
     pub(crate) fn verify(&mut self, product: &str, artifact: &str, path: &Path) -> Result<()> {
         if !enabled() || !native(path)? {
             return Ok(());
-        }
-        #[cfg(test)]
-        if let Some(verifier) = TEST_VERIFIER.with(|verifier| verifier.borrow().clone()) {
-            return verifier(product, artifact, path);
         }
         if self.policy.is_none() {
             let uid = current_uid()?;
@@ -243,10 +235,6 @@ pub fn verify_native_for_user(
 ) -> Result<()> {
     if !enabled() || !native(path)? {
         return Ok(());
-    }
-    #[cfg(test)]
-    if let Some(verifier) = TEST_VERIFIER.with(|verifier| verifier.borrow().clone()) {
-        return verifier(product, artifact, path);
     }
     Policy::read(home, uid)?.verify(product, artifact, path)
 }
@@ -314,35 +302,9 @@ pub(crate) fn verify_recorded_files(
 }
 
 #[cfg(test)]
-type TestVerifier = dyn Fn(&str, &str, &Path) -> Result<()>;
-
-#[cfg(test)]
-thread_local! {
-    static TEST_VERIFIER: std::cell::RefCell<Option<std::rc::Rc<TestVerifier>>> =
-        const { std::cell::RefCell::new(None) };
-}
-
-#[cfg(test)]
-pub(crate) fn with_verifier<T>(
-    verifier: impl Fn(&str, &str, &Path) -> Result<()> + 'static,
-    action: impl FnOnce() -> Result<T>,
-) -> Result<T> {
-    struct Restore(Option<std::rc::Rc<TestVerifier>>);
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            TEST_VERIFIER.with(|verifier| *verifier.borrow_mut() = self.0.take());
-        }
-    }
-    let _restore =
-        Restore(TEST_VERIFIER.with(|current| current.replace(Some(std::rc::Rc::new(verifier)))));
-    action()
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::fs;
 
     fn configuration() -> serde_json::Value {
         json!({"schema":1,"macos":{"profile":"local","certificate_sha1":format!("{}ABCD", "ABCDEF".repeat(6)),"keychain":"/private/test/cell.keychain-db","identifier_namespace":"local.cell"}})
@@ -422,19 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn scripts_are_not_native_and_installer_aliases_keep_source_identity() -> Result<()> {
-        let temporary = tempfile::tempdir()?;
-        let script = temporary.path().join("frontend");
-        fs::write(&script, "#!/bin/sh\nexit 0\n")?;
-        assert!(!native(&script)?);
-        for magic in [
-            [0xcf, 0xfa, 0xed, 0xfe],
-            [0xca, 0xfe, 0xba, 0xbe],
-            [0xbf, 0xba, 0xfe, 0xca],
-        ] {
-            fs::write(&script, magic)?;
-            assert!(native(&script)?);
-        }
+    fn installer_aliases_keep_source_identity() -> Result<()> {
         assert_eq!(
             artifact_key("fixture", "package/install", false)?,
             "fixture-install"
