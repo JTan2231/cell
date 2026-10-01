@@ -34,14 +34,14 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 output.push_str("No tracked applications.\n");
             }
             for application in applications {
-                writeln!(
+                let _ = writeln!(
                     output,
                     "{} | Status: {} | Latest entry: {}",
                     row_text(&application["cast_job_id"]),
                     row_text(&application["status"]),
                     row_text(&application["latest_entry"]["id"])
                 )
-                .expect("write to string");
+                ;
             }
         }
         Command::Entry { .. } | Command::Record { .. } | Command::Retract { .. } => {
@@ -65,7 +65,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
             history(&mut output, &data["history"]);
         }
         Command::Email(EmailCommand::Preview { .. }) => {
-            writeln!(
+            let _ = writeln!(
                 output,
                 "From: {}\nTo: {}\nSubject: {}\n\n{}",
                 scalar(&data["from"]),
@@ -73,12 +73,11 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 scalar(&data["digest"]["subject"]),
                 scalar(&data["digest"]["body"])
             )
-            .expect("write to string");
+            ;
         }
         Command::Email(EmailCommand::Send { .. }) => {
             if let Some(reason) = data["skipped"].as_str() {
-                writeln!(output, "Email skipped: {}.", reason.replace('_', " "))
-                    .expect("write to string");
+                let _ = writeln!(output, "Email skipped: {}.", reason.replace('_', " "));
             } else {
                 output.push_str("Email accepted by provider.\n");
                 for (label, key) in [
@@ -104,7 +103,7 @@ fn candidates(output: &mut String, data: &Value) {
         output.push_str("No matching retained jobs.\n");
     }
     for candidate in candidates {
-        writeln!(
+        let _ = writeln!(
             output,
             "{} | {} | {} | Tracked: {}",
             row_text(&candidate["cast_job_id"]),
@@ -112,9 +111,9 @@ fn candidates(output: &mut String, data: &Value) {
             row_text(&candidate["title"]),
             row_text(&candidate["tracked"])
         )
-        .expect("write to string");
+        ;
         for url in candidate["urls"].as_array().into_iter().flatten() {
-            writeln!(output, "  URL: {}", row_text(url)).expect("write to string");
+            let _ = writeln!(output, "  URL: {}", row_text(url));
         }
     }
     for reference in data["retained_references_without_cast_record"]
@@ -122,12 +121,12 @@ fn candidates(output: &mut String, data: &Value) {
         .into_iter()
         .flatten()
     {
-        writeln!(
+        let _ = writeln!(
             output,
             "Retained reference without Cast record: {}",
             row_text(reference)
         )
-        .expect("write to string");
+        ;
     }
     field(output, "Complete", &data["complete"]);
 }
@@ -149,7 +148,7 @@ fn entry_row(output: &mut String, entry: &Value) {
         })
         .collect::<Vec<_>>()
         .join(", ");
-    writeln!(
+    let _ = writeln!(
         output,
         "{} | {} | Status: {} | Thread: {} | Superseded by: {} | References: {} | {}{}",
         row_text(&entry["id"]),
@@ -169,7 +168,7 @@ fn entry_row(output: &mut String, entry: &Value) {
             ""
         }
     )
-    .expect("write to string");
+    ;
 }
 
 fn history(output: &mut String, history: &Value) {
@@ -201,24 +200,24 @@ fn entry(output: &mut String, entry: &Value) {
     field(output, "Thread", &entry["thread"]["name"]);
     field(output, "Thread ID", &entry["thread"]["id"]);
     for reference in entry["references"].as_array().into_iter().flatten() {
-        writeln!(
+        let _ = writeln!(
             output,
             "Reference: {} {} ({})",
             scalar(&reference["namespace"]),
             scalar(&reference["external_id"]),
             scalar(&reference["role"])
         )
-        .expect("write to string");
+        ;
     }
     if let Some(notes) = entry["notes"].as_str() {
-        writeln!(output, "Notes:\n{notes}").expect("write to string");
+        let _ = writeln!(output, "Notes:\n{notes}");
     } else {
         output.push_str("Notes: None\n");
     }
 }
 
 fn field(output: &mut String, label: &str, value: &Value) {
-    writeln!(output, "{label}: {}", scalar(value)).expect("write to string");
+    let _ = writeln!(output, "{label}: {}", scalar(value));
 }
 
 fn scalar(value: &Value) -> String {

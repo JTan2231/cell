@@ -8,7 +8,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
     let mut output = String::new();
     match command {
         Command::Email(EmailCommand::Preview { .. }) => {
-            writeln!(
+            let _ = writeln!(
                 output,
                 "From: {}\nTo: {}\nSubject: {}\n\n{}",
                 text(&data["from"]),
@@ -16,10 +16,10 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 text(&data["digest"]["subject"]),
                 text(&data["digest"]["body"])
             )
-            .expect("write to string");
+            ;
         }
         Command::Want(WantCommand::List { .. }) | Command::Decision(ReadCommand::List { .. }) => {
-            list(&mut output, data)
+            list(&mut output, data);
         }
         Command::Want(WantCommand::Add(_)) => {
             output.push_str("Want captured locally.\n");
@@ -27,7 +27,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
         }
         Command::Want(WantCommand::Archive { .. } | WantCommand::Unarchive { .. }) => {
             let state = text(&data["record"]["state"]);
-            writeln!(
+            let _ = writeln!(
                 output,
                 "Want {}: {state}{}.",
                 text(&data["record"]["id"]),
@@ -37,13 +37,12 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                     ""
                 }
             )
-            .expect("write to string");
+            ;
             details(&mut output, "Record", &data["record"], 0);
         }
         Command::Email(EmailCommand::Send { .. }) => {
             if let Some(reason) = data["skipped"].as_str() {
-                writeln!(output, "Email skipped: {}.", reason.replace('_', " "))
-                    .expect("write to string");
+                let _ = writeln!(output, "Email skipped: {}.", reason.replace('_', " "));
             } else {
                 output.push_str("Email accepted by provider.\n");
                 details(&mut output, "Receipt", data, 0);
@@ -75,13 +74,13 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
 
 fn list(output: &mut String, data: &Value) {
     let items = data["items"].as_array().map_or(&[][..], Vec::as_slice);
-    writeln!(
+    let _ = writeln!(
         output,
         "{} records shown: {}",
         row_text(&data["kind"]),
         items.len()
     )
-    .expect("write to string");
+    ;
     if items.is_empty() {
         output.push_str("No matching records.\n");
     }
@@ -91,7 +90,7 @@ fn list(output: &mut String, data: &Value) {
         let state = item["state"]
             .as_str()
             .map_or(String::new(), |state| format!(" | {}", one_line(state)));
-        writeln!(
+        let _ = writeln!(
             output,
             "{}{} | {}{}",
             row_text(&item["id"]),
@@ -103,7 +102,7 @@ fn list(output: &mut String, data: &Value) {
                 ""
             }
         )
-        .expect("write to string");
+        ;
     }
     if data["has_more"] == true {
         output.push_str("More records are available. Increase --limit to read more.\n");
@@ -116,25 +115,25 @@ fn details(output: &mut String, label: &str, value: &Value, indent: usize) {
     let prefix = " ".repeat(indent);
     match value {
         Value::Object(fields) => {
-            writeln!(output, "{prefix}{label}:").expect("write to string");
+            let _ = writeln!(output, "{prefix}{label}:");
             if fields.is_empty() {
-                writeln!(output, "{prefix}  None").expect("write to string");
+                let _ = writeln!(output, "{prefix}  None");
             }
             for (key, value) in fields {
                 details(output, &field_label(key), value, indent + 2);
             }
         }
         Value::Array(items) => {
-            writeln!(output, "{prefix}{label}: {} items", items.len()).expect("write to string");
+            let _ = writeln!(output, "{prefix}{label}: {} items", items.len());
             for (index, item) in items.iter().enumerate() {
                 details(output, &format!("Item {}", index + 1), item, indent + 2);
             }
         }
         Value::String(content) if content.contains('\n') => {
-            writeln!(output, "{prefix}{label}:\n{content}").expect("write to string");
+            let _ = writeln!(output, "{prefix}{label}:\n{content}");
         }
         _ => {
-            writeln!(output, "{prefix}{label}: {}", text(value)).expect("write to string");
+            let _ = writeln!(output, "{prefix}{label}: {}", text(value));
         }
     }
 }

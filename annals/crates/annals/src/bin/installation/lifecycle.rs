@@ -792,7 +792,16 @@ fn apply_library(
     }
     journal.mutation_started = true;
     journal.save(path)?;
-    if !journal.database_existed {
+    if journal.database_existed {
+        annals(
+            &payload,
+            &library.join("config.toml"),
+            &["migrate"],
+            &journal.home,
+            Some(&journal.owner),
+        )?;
+        write_private(&library.join("config.toml"), &journal.config_after, true)?;
+    } else {
         let stage = path.join("new-library");
         initialize(&payload, &journal.home, &stage, socket, decisions)?;
         let staged_config = toml_value(&fs::read_to_string(stage.join("config.toml"))?)?;
@@ -825,15 +834,6 @@ fn apply_library(
             write_private(&library.join("config.toml"), &journal.config_after, true)?;
         }
         hold(&payload, &library, &journal.home, &journal.owner, "hold")?;
-    } else {
-        annals(
-            &payload,
-            &library.join("config.toml"),
-            &["migrate"],
-            &journal.home,
-            Some(&journal.owner),
-        )?;
-        write_private(&library.join("config.toml"), &journal.config_after, true)?;
     }
     private_state(&library, decisions)?;
     if !handoff && journal.candidate_digest.is_none() {
