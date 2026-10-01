@@ -13,7 +13,9 @@ use std::path::{Component, Path, PathBuf};
 
 pub const TRANSACTION_FORMAT: &str = "cell-install-v3";
 
-fn transaction_format(value: &str) -> bool {
+/// Recognize current and retained shared transaction release formats.
+#[must_use]
+pub fn is_transaction_format(value: &str) -> bool {
     matches!(value, TRANSACTION_FORMAT | "cell-install-v2")
 }
 
@@ -370,7 +372,7 @@ impl Drop for HeldLock {
 
 fn read_manifest(root: &Path) -> Result<Manifest> {
     let manifest: Manifest = serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-    if !transaction_format(&manifest.format) {
+    if !is_transaction_format(&manifest.format) {
         return Err(Error::new("unsupported installation format"));
     }
     validate_public(&manifest.public)?;
@@ -395,7 +397,7 @@ pub fn read_release_at(
         if value
             .get("format")
             .and_then(serde_json::Value::as_str)
-            .is_some_and(transaction_format)
+            .is_some_and(is_transaction_format)
         {
             read_manifest(root)?.info()
         } else {
@@ -1095,7 +1097,7 @@ fn verify_manifest(root: &Path, product: Option<&str>) -> Result<Manifest> {
     verify_tree_ownership(root, current_uid()?)?;
     let bytes = fs::read(root.join("manifest.json"))?;
     let manifest: Manifest = serde_json::from_slice(&bytes)?;
-    if !transaction_format(&manifest.format)
+    if !is_transaction_format(&manifest.format)
         || product.is_some_and(|p| p != manifest.product)
         || !valid_release_id(&manifest.release_id)
         || root.file_name().and_then(|p| p.to_str()) != Some(manifest.release_id.as_str())
@@ -1178,7 +1180,7 @@ pub fn verify_release_at(
         if format
             .get("format")
             .and_then(serde_json::Value::as_str)
-            .is_some_and(transaction_format)
+            .is_some_and(is_transaction_format)
         {
             let manifest = verify_manifest(root, Some(&layout.product))?;
             if manifest.public != layout.public {

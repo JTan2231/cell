@@ -172,10 +172,8 @@ impl Adapter {
         let snapshot = self.snapshot()?;
         if let Some(current) = &snapshot.current {
             require(
-                matches!(
-                    current.format.as_str(),
-                    "legacy-4" | cell_install::transaction::TRANSACTION_FORMAT
-                ),
+                current.format == "legacy-4"
+                    || cell_install::is_transaction_format(&current.format),
                 "legacy Decisions requires the documented direct migration",
             )?;
         }

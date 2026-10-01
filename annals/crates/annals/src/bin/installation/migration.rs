@@ -71,9 +71,6 @@ fn failure(message: &str) -> Error {
 fn exists(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok()
 }
-fn hash(path: &Path) -> Result<String> {
-    cell_install::file_digest(path)
-}
 fn file(path: &Path, owner: u32, mode: Option<u32>) -> Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if !metadata.is_file()
@@ -408,11 +405,7 @@ impl State<'_> {
             &super::release::legacy,
         )?;
         let runner = release.join("bin/annals-inbox");
-        let launch = if info.format == cell_install::TRANSACTION_FORMAT {
-            json!({"kind":"direct","program":runner,"sha256":hash(&runner)?})
-        } else {
-            json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":hash(Path::new("/bin/sh"))?,"script":runner,"script_sha256":hash(&runner)?})
-        };
+        let launch = super::schedule::launch(&info.format, &runner)?;
         let mut expected = json!({"schema_version":2,"key":KEY,"release_id":release_id,"release_root":release,"authority":"current-user-background","overlap":"skip","arguments":[],"cwd":self.target,
             "schedule":{"kind":"interval","seconds":300,"run_at_load":true},
             "launch":launch,
