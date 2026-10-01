@@ -162,8 +162,16 @@ def run_plan(root: Path, plan: TestPlan, nextest_path: Path, test_threads: int) 
             user_config = temporary / "user.toml"
             report = temporary / "nextest/default/report.xml"
             # This gate's coverage and scheduler do not depend on user/repo overrides.
-            config.write_text("[store]\ndir = " + json.dumps(str(temporary / "nextest"))
-                              + '\n[profile.default.junit]\npath = "report.xml"\n')
+            config.write_text(
+                "[store]\ndir = " + json.dumps(str(temporary / "nextest"))
+                + '\n[test-groups]\nnucleus-harness = { max-threads = 1 }\n'
+                + '[[profile.default.overrides]]\n'
+                + "filter = '(package(=nucleus-codex) & kind(=lib)) | "
+                + "(package(=nucleus-codex) & binary(=local_execution)) | "
+                + "(package(=nucleus-daemon) & binary(=http_contract))'\n"
+                + 'test-group = "nucleus-harness"\n'
+                + '[profile.default.junit]\npath = "report.xml"\n'
+            )
             user_config.write_text("")
             command = [
                 str(nextest_path), "nextest", "run", *common, "--all-targets",

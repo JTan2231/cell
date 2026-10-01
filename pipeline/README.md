@@ -67,7 +67,10 @@ It does not download a runner during a CI gate or select a runner from `PATH`.
 Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
 limit. The default is four concurrent test processes. The dispatcher records
 the limit in the gate command. This limit is separate from the broker's compiler
-job limit. Tests can create additional threads or child processes.
+job limit. Tests can create additional threads or child processes. One test group
+runs Nucleus Codex library tests, `local_execution` tests, and daemon
+`http_contract` tests one at a time. Other selected tests keep the configured
+worker limit.
 
 ### Change CI while a job is active
 

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import patch
 
@@ -151,9 +152,15 @@ class ExecutionTests(unittest.TestCase):
             selected = [command[i + 1] for i, argument in enumerate(command) if argument == "--package"]
             self.assertEqual(selected, ["alpha", "beta"])
             self.assertFalse(any(key.startswith("NEXTEST_") for key in kwargs["env"]))
-            config = Path(command[command.index("--config-file") + 1]).read_text()
-            self.assertIn("[profile.default.junit]", config)
-            self.assertNotIn("overrides", config)
+            config = tomllib.loads(Path(command[command.index("--config-file") + 1]).read_text())
+            self.assertEqual(config["test-groups"], {"nucleus-harness": {"max-threads": 1}})
+            self.assertEqual(config["profile"]["default"]["overrides"], [{
+                "filter": "(package(=nucleus-codex) & kind(=lib)) | "
+                          "(package(=nucleus-codex) & binary(=local_execution)) | "
+                          "(package(=nucleus-daemon) & binary(=http_contract))",
+                "test-group": "nucleus-harness",
+            }])
+            self.assertEqual(config["profile"]["default"]["junit"], {"path": "report.xml"})
             self.assertEqual(Path(command[command.index("--user-config-file") + 1]).read_text(), "")
             return subprocess.CompletedProcess(command, 0)
 
