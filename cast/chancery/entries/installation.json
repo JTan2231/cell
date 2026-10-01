@@ -1,27 +1,26 @@
 {
   "id": "cast.installation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and recover Cast program releases",
-  "summary": "Understand matching program and documentation packaging, owned selectors, frontend credential loading, deployment setup, and verified program recovery without replacing discovery state.",
+  "summary": "Install, inspect, or recover Cast programs and their provider selector. Installation performs setup and basic execution checks.",
   "use_when": [
-    "Cast program packaging, selector ownership, installation compatibility or verified program recovery must be understood.",
-    "The installed frontend's environment and credential loading or Cell deployment setup must be understood."
+    "Cast programs should be installed, inspected, or recovered."
   ],
   "do_not_use_when": [
     "Collection or downstream application work should be started.",
     "The requested result is provider billing, credential replacement, destructive state reset or a schedule."
   ],
-  "outcome": "One matching verified program/documentation selection with separate discovery-state compatibility and recovery boundaries.",
+  "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "interfaces": [
     {
       "label": "Install the tested candidate",
       "invocation": "<TESTED_CAST_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]"
     },
     {
-      "label": "Recover a verified retained release",
+      "label": "Recover a retained release",
       "invocation": "cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY"
     },
     {
@@ -30,21 +29,16 @@
     }
   ],
   "effects": [
-    "Installation stages content-addressed payload, static frontend, Rust installer and exact provider bundle and advances only Cast-owned selectors.",
-    "Program selection creates no discovery database, live-state migration, schedule or provider request.",
-    "The frontend executes user-owned shell configuration for provider keys; Cell configuration separately initializes missing state and optionally applies a complete config file."
+    "Copy supplied programs and documentation into retained releases and select owned public paths atomically. Preserve other product selectors and separate product data."
   ],
   "authority": [
-    "Cast owns release identity, integrity verification, installation and matching command/provider selectors.",
-    "Discovery state retains its own lifecycle; user shell configuration and remote provider readiness remain separately owned."
+    "Cast owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
   ],
   "success": [
-    "Installation or recovery selects a verified matching program and provider bundle, confirmed through command identity and help checks."
+    "Owned command and provider selectors follow the installed release. Basic help/version invocations complete. No artifact-integrity, persistent-state, or operational-readiness gate is run."
   ],
   "failure_and_recovery": [
-    "Foreign selectors and mismatched candidate/provider versions are refused. A failed switch restores prior selectors.",
-    "Recover only a verified canonical owned release through a trusted tested installer. Program recovery leaves discovery state and budgets unchanged.",
-    "Remove a stale .update-lock only after proving no Cast deployer is running; never remove another active writer's lock."
+    "Refuse foreign public selectors or stale expected-current selections. File-operation or basic execution failures restore prior selectors when possible. Recovery selects retained program files and leaves product data unchanged."
   ],
   "privacy": [
     "Provider keys do not enter arguments, saved config, provider contracts or output. The user owns executable .zshrc behavior.",
@@ -56,8 +50,8 @@
   "dependencies": [
     {
       "id": "cast.state",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -70,53 +64,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Installation requires a validated executable candidate matching the provider release, user-owned paths and supported macOS shell tools. Recovery requires a verified retained canonical owned release. Chancery need not be installed for Cast to operate."
+        "statement": "Supplied program and provider paths, an intended installation home, and authority to change owned selectors. Installation does not require a validation receipt."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "install accepts absolute --binary and --bundle paths, optional --home PATH and --expected-current absent|releases/HASH. recover accepts --release ABSOLUTE_RELEASE_DIRECTORY."
-      },
-      {
-        "status": "declared",
-        "statement": "Cell deployment setup accepts optional absolute state_dir and config_file paths after program selection. A supplied complete config_file is applied through config set; omitted settings remain unchanged."
-      },
-      {
-        "status": "declared",
-        "statement": "The frontend reads THEIRSTACK_API_KEY and BRAVE_SEARCH_API_KEY from user-owned ~/.zshrc. It preserves state selection and command-usage values captured before shell configuration."
+        "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Installed ~/.local/bin/cast, ~/.local/bin/cast-install and Cast's provider selector follow one atomic current release. Command identity and help establish program selection, not current provider readiness."
+        "statement": "Recorded release metadata and selected public paths, or an installation error. Inspection reports metadata without checking artifact integrity."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Release integrity verifies installed program/documentation artifacts. Discovery records, provider authentication and external collection have separate success conditions."
+        "statement": "Program selection is installation state. It establishes neither database integrity nor dependency readiness nor domain success."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release HASH identifies exact payload, frontend, Rust installer and provider bytes beneath ~/Library/Application Support/Cast/install/releases/HASH. The cell-install-v2 manifest is manifest.json; package/install retains the Rust installer."
-      },
-      {
-        "status": "not_applicable",
-        "statement": "Program installation defines no provider billing unit."
+        "statement": "Release hashes name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [
       {
-        "status": "unsupported",
-        "statement": "Program checks observe the selected release. Catalog publication, command versions and local readiness do not establish current remote-provider balance, authentication or collection success."
-      },
-      {
         "status": "declared",
-        "statement": "Artifact integrity and selected release identity are local installation observations; discovery freshness belongs to retained record evidence."
+        "statement": "Inspection reads current selectors and recorded installation metadata. It does not audit retained content or probe a live dependency."
       }
     ],
     "access": [
@@ -132,45 +110,25 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Deployment takes product and catalog writer locks, refuses foreign selectors, verifies candidate/provider versions, switches current atomically and restores prior selectors after a failed switch."
-      },
-      {
-        "status": "declared",
-        "statement": "Prior releases remain available. Recovery verifies retained legacy or cell-install-v2 artifacts before selection and does not restore discovery state, configuration or consumed budgets."
-      },
-      {
-        "status": "declared",
-        "statement": "Cell configure invokes cast init without collection and optionally replaces complete config. It preserves existing records and consumed budgets and creates no collection schedule."
-      },
-      {
-        "status": "declared",
-        "statement": "An abruptly killed deployer can leave .update-lock. Runtime mutation uses a separate kernel-backed lock."
+        "statement": "Product and catalog locks serialize atomic publication. Expected-current guards detect changed selection. File-operation or basic execution failures restore the prior selection when possible. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation creates no database, daemon, LaunchAgent, scheduler binding, provider request, model job or automatic live-state migration."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No installation-latency objective, future migration promise, automatic state rollback or deprecation window is defined."
+        "statement": "Installation copies files and performs required setup plus basic help/version execution checks. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Provider release, contract version, installation format and database/config/export schemas evolve separately. The exact provider bundle is published and recovered with its matching product release; Chancery is documentation, not a runtime requirement."
-      },
-      {
-        "status": "declared",
-        "statement": "Register declared inventory with cast --register-usage after installation or update. CLI usage recording requires nonempty CODEX_THREAD_ID; private records contain identity, time and thread ID only. Internal product calls are excluded and recording errors preserve command results."
+        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Program recovery must verify compatibility with selected discovery state and configuration without restoring them.",
+        "statement": "Program recovery selects retained files without a state compatibility check and does not restore discovery state or configuration.",
         "target": "cast",
         "kind": "data",
         "contract": "cast.state"

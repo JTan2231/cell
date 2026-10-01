@@ -76,13 +76,13 @@ def render(job: dict) -> tuple[str, str]:
     outcome = job["outcome"]
     phase = job.get("stopped_phase", job.get("phase"))
     lines = []
-    if job.get("installation_verified"):
+    if job.get("installation_completed", job.get("installation_verified", False)):
         title = "deployed"
         lines = [f"{scope or 'Selected products'} deployed successfully.",
-                 "Required checks and deployment verification passed."]
+                 "Required checks passed and installation completed."]
         if deployment.get("state") == "cleanup_failed":
             title = "deployed; cleanup failed"
-            lines += ["", "Installed releases are verified, but release cleanup failed."]
+            lines += ["", "Installation completed, but release cleanup failed."]
     elif outcome == "already_included":
         title = "already included"
         lines = ["These changes are already included. No new checks or deployment ran."]

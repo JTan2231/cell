@@ -40,4 +40,4 @@ Use `chancery show ID` for a focused feature or procedure and
 - [Command usage feature and API](provider/manuals/usage-record.md)
 - [Provider publication](provider/manuals/provider-publish.md)
 - [Reader installation and recovery](provider/manuals/installation-operate.md)
-- [Usage registration, backup, and restore](provider/manuals/usage-operate.md)
+- [Usage registration and inspection](provider/manuals/usage-operate.md)

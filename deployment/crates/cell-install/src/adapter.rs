@@ -1,11 +1,9 @@
-//! The fixed coordinator protocol and sealed candidate boundary.
+//! The fixed coordinator protocol and candidate paths.
 
-use crate::{Error, Result, file_digest};
+use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
@@ -20,7 +18,6 @@ pub enum Operation {
     Drain,
     Apply,
     Configure,
-    Verify,
     Recover,
     Release,
     Activate,
@@ -35,7 +32,6 @@ impl FromStr for Operation {
             "drain" => Ok(Self::Drain),
             "apply" => Ok(Self::Apply),
             "configure" => Ok(Self::Configure),
-            "verify" => Ok(Self::Verify),
             "recover" => Ok(Self::Recover),
             "release" => Ok(Self::Release),
             "activate" => Ok(Self::Activate),
@@ -77,24 +73,15 @@ pub struct DependencyCandidate {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct Candidate {
-    schema: u32,
-    product: String,
-    source_commit: String,
-    source_key: String,
-    source_inputs: BTreeMap<String, String>,
+    #[serde(default)]
+    product: Option<String>,
     binaries: BTreeMap<String, Binary>,
-    #[serde(rename = "candidate_id")]
-    id: String,
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct Binary {
     path: String,
-    sha256: String,
-    version: String,
 }
 
 pub struct Context {
@@ -110,27 +97,9 @@ fn relative(value: &str) -> Result<&Path> {
             .components()
             .all(|part| matches!(part, Component::Normal(_)))
     {
-        return Err(Error::new("candidate path escapes its sealed root"));
+        return Err(Error::new("candidate path escapes its candidate root"));
     }
     Ok(path)
-}
-
-fn canonical(value: &Value) -> Result<Vec<u8>> {
-    // Preserve Python schema-one sorted JSON, including UTF-16 surrogate pairs.
-    let mut encoded = String::new();
-    for character in serde_json::to_string(value)?.chars() {
-        if character.is_ascii() {
-            encoded.push(character);
-        } else {
-            let mut buffer = [0; 2];
-            for unit in character.encode_utf16(&mut buffer) {
-                write!(encoded, "\\u{unit:04x}")
-                    .map_err(|_| Error::new("candidate encoding failed"))?;
-            }
-        }
-    }
-    encoded.push('\n');
-    Ok(encoded.into_bytes())
 }
 
 impl Context {
@@ -183,20 +152,20 @@ impl Context {
     }
 
     /// Select the installed dependency command or, only when it is absent, a
-    /// proved dependency candidate for read-only first-install discovery.
+    /// supplied dependency candidate for read-only first-install discovery.
     ///
     /// # Errors
-    /// Rejects a missing, changed or differently sourced dependency candidate.
+    /// Rejects a missing dependency candidate or invalid path.
     pub fn dependency_binary(&self, product: &str) -> Result<PathBuf> {
         self.resolve_dependency_binary(product, false)
     }
 
-    /// Use a selected dependency's sealed candidate for read-only inspection,
+    /// Use a selected dependency's candidate for read-only inspection,
     /// including when its installed predecessor lacks a required interface.
     /// Never use this selection for product mutations or schedule activation.
     ///
     /// # Errors
-    /// Rejects a missing, changed or differently sourced dependency candidate.
+    /// Rejects a missing dependency candidate or invalid path.
     pub fn dependency_inspection_binary(&self, product: &str) -> Result<PathBuf> {
         self.resolve_dependency_binary(
             product,
@@ -223,46 +192,28 @@ impl Context {
             .get(product)
             .ok_or_else(|| Error::new("dependency candidate is unavailable"))?;
         let manifest: Candidate = serde_json::from_value(supplied.candidate.clone())?;
-        let mut content = supplied.candidate.clone();
-        content
-            .as_object_mut()
-            .ok_or_else(|| Error::new("invalid dependency candidate"))?
-            .remove("candidate_id");
-        if manifest.schema != 1
-            || manifest.product != product
-            || !supplied.candidate_dir.is_absolute()
-            || self
-                .request
-                .candidate
-                .as_ref()
-                .and_then(|value| value.get("source_key"))
-                != Some(&json!(manifest.source_key))
-            || manifest.id != format!("sha256:{:x}", Sha256::digest(canonical(&content)?))
-        {
-            return Err(Error::new("dependency candidate identity does not match"));
-        }
         let binary = manifest
             .binaries
             .get(product)
             .ok_or_else(|| Error::new("dependency candidate command is missing"))?;
         let path = supplied.candidate_dir.join(relative(&binary.path)?);
-        if binary.path != format!("bin/{product}") || file_digest(&path)? != binary.sha256 {
-            return Err(Error::new("dependency candidate command changed"));
-        }
+        crate::signing::verify_native(
+            manifest.product.as_deref().unwrap_or(product),
+            product,
+            &path,
+        )?;
         Ok(path)
     }
 
-    /// Read and verify one bounded coordinator request and its sealed installer.
+    /// Read one bounded coordinator request and its candidate paths.
     ///
     /// # Errors
-    /// Refuses malformed requests, missing candidates, changed source or binary
-    /// bytes, invalid paths, and an executing installer from another candidate.
-    #[allow(clippy::too_many_lines)] // One ordered proof of the fixed request and complete candidate.
+    /// Refuses malformed requests, missing candidates, or invalid paths.
     pub fn read(
         product: &str,
         source_directory: &str,
-        installer_name: &str,
-        installer_version: &str,
+        _installer_name: &str,
+        _installer_version: &str,
     ) -> Result<Self> {
         let mut bytes = Vec::new();
         io::stdin().take(MAX_REQUEST + 1).read_to_end(&mut bytes)?;
@@ -289,83 +240,20 @@ impl Context {
             .candidate_dir
             .as_ref()
             .filter(|path| path.is_absolute())
-            .ok_or_else(|| Error::new("adapter requires a sealed candidate"))?;
+            .ok_or_else(|| Error::new("adapter requires a candidate"))?;
         let value = request
             .candidate
             .as_ref()
             .ok_or_else(|| Error::new("adapter requires candidate evidence"))?;
         let candidate: Candidate = serde_json::from_value(value.clone())?;
-        let mut content = value.clone();
-        content
-            .as_object_mut()
-            .ok_or_else(|| Error::new("invalid candidate"))?
-            .remove("candidate_id");
-        if candidate.schema != 1
-            || candidate.product != product
-            || candidate.source_commit.is_empty()
-            || candidate.source_key.is_empty()
-            || candidate.id != format!("sha256:{:x}", Sha256::digest(canonical(&content)?))
-        {
-            return Err(Error::new("candidate identity does not match"));
-        }
-        let mut binaries = BTreeMap::new();
-        for (name, binary) in &candidate.binaries {
-            relative(name)?;
-            if binary.path != format!("bin/{name}")
-                || file_digest(&directory.join(&binary.path))? != binary.sha256
-            {
-                return Err(Error::new("candidate binary differs from sealed evidence"));
-            }
-            binaries.insert(name.clone(), directory.join(&binary.path));
-        }
-        let installer = candidate
+        let binaries = candidate
             .binaries
-            .get(installer_name)
-            .ok_or_else(|| Error::new("candidate installer missing"))?;
-        if installer.version != format!("{installer_name} {installer_version}")
-            || file_digest(&std::env::current_exe()?)? != installer.sha256
-        {
-            return Err(Error::new(
-                "executing installer differs from admitted candidate",
-            ));
-        }
-        for (path, hash) in &candidate.source_inputs {
-            if file_digest(&request.source_root.join(relative(path)?))? != *hash {
-                return Err(Error::new("candidate packaging differs from pinned source"));
-            }
-        }
-        for prefix in [
-            format!("{source_directory}/chancery"),
-            format!("{source_directory}/provider"),
-        ] {
-            for entry in std::fs::read_dir(request.source_root.join(source_directory))? {
-                let path = entry?.path();
-                let relative_path = path
-                    .strip_prefix(&request.source_root)
-                    .map_err(|_| Error::new("invalid source root"))?
-                    .to_str()
-                    .ok_or_else(|| Error::new("source path is not UTF-8"))?
-                    .to_owned();
-                if relative_path.starts_with(&prefix) && path.is_dir() {
-                    let (files, _) = crate::artifact::inventory(&path)?;
-                    let actual: BTreeMap<_, _> = files
-                        .into_iter()
-                        .map(|(name, file)| (format!("{relative_path}/{name}"), file.sha256))
-                        .collect();
-                    let expected: BTreeMap<_, _> = candidate
-                        .source_inputs
-                        .iter()
-                        .filter(|(name, _)| name.starts_with(&format!("{relative_path}/")))
-                        .map(|(name, hash)| (name.clone(), hash.clone()))
-                        .collect();
-                    if actual.is_empty() || actual != expected {
-                        return Err(Error::new(
-                            "provider inventory differs from sealed evidence",
-                        ));
-                    }
-                }
-            }
-        }
+            .iter()
+            .map(|(name, binary)| {
+                relative(name)?;
+                Ok((name.clone(), directory.join(relative(&binary.path)?)))
+            })
+            .collect::<Result<_>>()?;
         let home = std::env::var_os("HOME")
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
@@ -377,15 +265,18 @@ impl Context {
         })
     }
 
-    /// Return an exact admitted executable path.
+    /// Return an supplied executable path.
     ///
     /// # Errors
-    /// Returns an error if that executable is absent from the sealed candidate.
+    /// Returns an error if that executable is absent from the candidate.
     pub fn binary(&self, name: &str) -> Result<PathBuf> {
-        self.binaries
+        let path = self
+            .binaries
             .get(name)
             .cloned()
-            .ok_or_else(|| Error::new("required candidate executable is absent"))
+            .ok_or_else(|| Error::new("required candidate executable is absent"))?;
+        crate::signing::verify_native(&self.request.product, name, &path)?;
+        Ok(path)
     }
 
     /// Read the captured inspection result.

@@ -1,18 +1,18 @@
 {
   "id": "email.installation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Email installation and recovery guarantees",
-  "summary": "Understand immutable current-user releases, credential wrapper boundaries, matching documentation, and verified program rollback.",
+  "summary": "Install, inspect, or recover Email programs and their provider selector. Installation performs setup and basic execution checks.",
   "use_when": [
-    "A caller or operator needs the supported Email program selection, publication, or rollback guarantees."
+    "Email programs should be installed, inspected, or recovered."
   ],
   "do_not_use_when": [
     "The goal is to prove live account readiness, authorize a message, or recover retained mail history."
   ],
-  "outcome": "A complete explanation of Email program installation, selectors, wrapper access, and supported retained-release recovery.",
+  "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "interfaces": [
     {
       "label": "Installed Email command",
@@ -23,7 +23,7 @@
       "invocation": "<TESTED_EMAIL_INSTALL> install --binary <TESTED_EMAIL_BINARY> --bundle ABSOLUTE_BUNDLE"
     },
     {
-      "label": "Recover a verified retained release",
+      "label": "Recover a retained release",
       "invocation": "<TESTED_EMAIL_INSTALL> recover --release ABSOLUTE_RELEASE_DIRECTORY"
     },
     {
@@ -32,19 +32,16 @@
     }
   ],
   "effects": [
-    "Installation publishes immutable program and provider-bundle bytes and selects their current-user paths. Recovery verifies and selects a retained release.",
-    "Help/version checks and command registration read or send no mail. Private account settings remain separate from program release selection."
+    "Copy supplied programs and documentation into retained releases and select owned public paths atomically. Preserve other product selectors and separate product data."
   ],
   "authority": [
-    "Email owns its installed release integrity, wrappers, selectors and provider publication. The operator selects matching trusted tested artifacts and authorizes installation.",
-    "Resend and Gmail own account and mail readiness; requesters own message or occurrence authority."
+    "Email owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
   ],
   "success": [
-    "Matching verified programs and their provider bundle are selected. A failed post-switch check restores selectors. Installer success establishes no real-send or receiving readiness."
+    "Owned command and provider selectors follow the installed release. Basic help/version invocations complete. No artifact-integrity, persistent-state, or operational-readiness gate is run."
   ],
   "failure_and_recovery": [
-    "Reject foreign provider selectors and unverified retained releases. Resolve previous to its canonical owned directory and use a trusted tested installer for recovery.",
-    "Preserve the reported error after failed verification or selection; do not rewrite immutable releases or execute an unverified retained installer."
+    "Refuse foreign public selectors or stale expected-current selections. File-operation or basic execution failures restore prior selectors when possible. Recovery selects retained program files and leaves product data unchanged."
   ],
   "privacy": [
     "The wrapper extracts only the RESEND_API_KEY fallback from ~/.zshrc and starts the payload in a scrubbed environment. Credential bytes are absent from release artifacts and command arguments.",
@@ -64,41 +61,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Install or recover only matching trusted tested artifacts from a validated candidate under the required operator authority. Manual selection needs absolute binary, bundle or owned release paths."
+        "statement": "Supplied program and provider paths, an intended installation home, and authority to change owned selectors. Installation does not require a validation receipt."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Installation accepts a matching Email binary and provider bundle through the tested Rust installer. Recovery accepts an absolute canonical owned retained release. Usage registration selects the installed inventory."
+        "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "An immutable release and selected programs/documentation, or the installer error. Installation and recovery verify through help/version probes, never a real message."
+        "statement": "Recorded release metadata and selected public paths, or an installation error. Inspection reports metadata without checking artifact integrity."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Release identity covers payload, wrapper, Rust installer, public layout and the full Chancery bundle. Provider publication describes that selected release; private account settings are outside the program-release selection."
+        "statement": "Program selection is installation state. It establishes neither database integrity nor dependency readiness nor domain success."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable releases beneath ~/Library/Application Support/Email/install/releases. current and previous name owned selections; no mail identity is created by installation."
+        "statement": "Release hashes name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Matching documentation follows the selected program release. Installation or registration establishes no current Resend/Gmail access, delivery or receiving observation."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No release-retention horizon or general installation-time service-availability objective is promised."
+        "statement": "Inspection reads current selectors and recorded installation metadata. It does not audit retained content or probe a live dependency."
       }
     ],
     "access": [
@@ -110,23 +103,19 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Identical bytes reuse a validated immutable release. Upgrade retains the superseded release through previous. Foreign provider selectors are refused and failed post-switch verification restores all selectors. Retained legacy and cell-install-v2 releases are verified before recovery; account settings remain separate."
+        "statement": "Product and catalog locks serialize atomic publication. Expected-current guards detect changed selection. File-operation or basic execution failures restore the prior selection when possible. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Email has no daemon, delivery database, scheduler or queue. Installation/recovery run only help/version checks. The provider selector is created even without Chancery, and the Email command remains usable without its binary or registry."
+        "statement": "Installation copies files and performs required setup plus basic help/version execution checks. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Immutable program release, provider publication and private account settings have separate identities and recovery boundaries. Legacy and cell-install-v2 retained releases are verified before selection."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No general cross-release support interval or retirement policy is promised."
+        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
       }
     ],
     "reliances": [

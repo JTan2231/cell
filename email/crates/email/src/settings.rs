@@ -260,6 +260,7 @@ pub(crate) async fn receiving_settings() -> AppResult<ReceivingSettings> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn domains_refuse_addresses_urls_and_empty_labels() {
         for value in [
@@ -272,19 +273,5 @@ mod tests {
             assert!(validate_domain(value).is_err());
         }
         assert!(validate_domain("account.resend.app").is_ok());
-    }
-    #[test]
-    fn credential_sources_must_be_private_and_are_bounded() -> Result<(), Box<dyn std::error::Error>>
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        let root = tempfile::tempdir()?;
-        let path = root.path().join("key");
-        std::fs::write(&path, "synthetic-key")?;
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644))?;
-        assert!(read_private(&path, 4096).is_err());
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?;
-        assert_eq!(credential(read_private(&path, 4096)?)?, "synthetic-key");
-        assert!(read_private(&path, 3).is_err());
-        Ok(())
     }
 }

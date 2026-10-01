@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 8,
+  "contract_version": 10,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -15,28 +15,26 @@
     "Only an account should be searched or read; use Annals.",
     "A foreign hooks file should be merged, live retained state deleted, or a release performed implicitly."
   ],
-  "outcome": "A validated current-user Krisis installation with one periodic observer, exact hook, explicit Codex history reader, preserved legacy Decisions state, explicit Annals decisions-library configuration, and retired digest/review schedules.",
+  "outcome": "A current-user Krisis installation with one periodic observer, exact hook, explicit Codex history reader, preserved legacy Decisions state, explicit Annals decisions-library configuration, and retired digest/review schedules.",
   "effects": [
     "The package builds and seals krisis and krisis-install; the latter is also retained as package/install and implements the schema-one coordinator adapter. Static runtime frontend and observer scripts remain exact release data.",
     "The Cell product adapter composes preparation and explicit final cutover under run-owned CLI admission, preserves the write-once baseline and prior schedule enabled booleans, and retains existing product-owned installer and recovery boundaries.",
     "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
     "Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
-    "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion."
+    "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
-    "The product-owned Rust krisis-install executable owns database migration ordering, hook ownership, maintenance gating, scheduler handoff, and rollback. The shared cell-install library owns exact retained artifact verification and selector transactions.",
+    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
     "Codex owns hook discovery and trust, Clockwork owns definition and runtime history, Annals owns its dedicated library, and Krisis owns observation and delivery state."
   ],
   "success": [
-    "Preparation reports the candidate release identity in JSON, retains its authenticated maintenance receipt, and leaves current/previous, hook, command, provider, and binding selectors unchanged.",
-    "Final cutover reports the selected Krisis release identity, provider releases match, doctor and the observer use the same explicit Codex executable, doctor proves schema 6 and exact Conversations, Nucleus, and Annals readiness, and selectors resolve inside one validated release.",
-    "The write-once baseline exists before hook and krisis/observer publication, and old daily and observer schedules are disabled.",
-    "Routine observer logs remain body-free and account delivery reaches only the configured dedicated Annals library."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Saved conversation read failures (document_source_unavailable) return zero and permit later scheduled work; other processing failures end the current run. Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "Coordinated inspection stops before effects if an installed CLI lacks maintenance support; bootstrap its compatibility release through the existing deployer and writer-quiescence procedure. Adapter recovery stops on retained product-installer maintenance or unfinished transactions without clearing their evidence or another owner's hold.",
-    "A provable failed update restores prior owned selectors, hook bytes, database and sidecars, and schedule selection; an unprovable rollback retains the private maintenance gate and transaction backup.",
+    "A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
     "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
   ],
@@ -53,8 +51,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -63,13 +61,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "session_surfaces": [
@@ -91,7 +89,7 @@
     "Persistent database and log paths stay under Library/Application Support/Decisions and Library/Logs/Decisions for migration compatibility.",
     "The Codex, Annals, and Annals-config paths are absolute and explicit, the expected library ID is exact lowercase 32-hex, and doctor uses that Codex path while validating Conversations plus the decision-feed watermark contract and library identity.",
     "A private release-independent maintenance marker gates the runner during quiescence, migration, selector switching, hook replacement, and schedule handoff.",
-    "The prior database plus sidecars is backed up only after exact owned writers are stopped and quiescence is proven; migration is sequential through schema 6. The document cutover refuses pending legacy handoffs or classification jobs.",
+    "The live database and sidecars remain in place. After exact owned writers stop and quiescence is proved, migration proceeds sequentially through schema 6. The document cutover refuses pending legacy handoffs or classification jobs.",
     "No release, deploy, live account acceptance, trust change, or retained-state deletion occurs without separate authority."
   ],
   "adaptation": [
@@ -142,10 +140,6 @@
       "invocation": "krisis-install inspect [--home ABSOLUTE_HOME]"
     },
     {
-      "label": "Verify retained release",
-      "invocation": "krisis-install verify-release ABSOLUTE_RELEASE"
-    },
-    {
       "label": "Worker health",
       "invocation": "/Users/joey/.local/bin/krisis health [--max-idle-seconds N] [--json]"
     }
@@ -172,11 +166,11 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment requires a green exact krisis binary and matching provider, one explicit compatible Codex executable, compatible dependencies, explicit valid Annals configuration, and owned or absent selectors and service artifacts."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       },
       {
         "status": "declared",
-        "statement": "Before migration, exact product writers are maintenance-gated and quiesced and a private database-plus-sidecars backup exists."
+        "statement": "Before migration, exact product writers are maintenance-gated and quiesced. Migration retains the live database and committed records."
       },
       {
         "status": "declared",
@@ -190,7 +184,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected database and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."
+        "statement": "Maintenance accepts the selected database and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. Controlled commands use CELL_DEPLOYMENT_RUN_ID only under the same sole hold and exclusive drained activity; without a hold, they use ordinary admission."
       },
       {
         "status": "declared",
@@ -212,7 +206,7 @@
       },
       {
         "status": "declared",
-        "statement": "Successful explicit final cutover selects one validated content-addressed release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
+        "statement": "Successful explicit final cutover selects one content-addressed release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
       },
       {
         "status": "declared",
@@ -250,7 +244,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Preparation verifies exact versions, content, the selected Codex path, definition fields, and library routing without activation; final cutover additionally verifies schema, dependencies, owned selectors, baseline ordering, owned legacy binding retirement, and active observer selection."
+        "statement": "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force."
       },
       {
         "status": "unspecified",
@@ -278,15 +272,11 @@
       },
       {
         "status": "declared",
-        "statement": "Ordinary Annals binary or config pin transitions prove the complete prior definition against its release and private receipt's old target, require the unchanged persistent decisions-library ID, and validate the new target with candidate doctor. Foreign ownership or a changed library ID stops the update. Ordinary coordinated updates do not choose a legacy activation watermark."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       },
       {
         "status": "declared",
-        "statement": "Preparation validates and registers the candidate with one explicit Codex reader while retaining maintenance. Final cutover revalidates closed release trees, private database files, definitions, and the ownership receipt bound to the target. It disables enabled schedules only after verifying ownership, then suspends public commands and the exact hook for its timeout. It backs up idle SQLite state, migrates and runs doctor with the prepared payload, activates the baseline once, and publishes the command, providers, and hook. It then verifies krisis/observer, commits, and clears the authenticated gate. If publication fails, public commands remain suspended. Original commands return only after verified product database rollback."
-      },
-      {
-        "status": "declared",
-        "statement": "Provable failure restores prior state; unprovable rollback retains maintenance gating and backup and does not claim external scheduler success."
+        "statement": "Provable failure restores prior programs and controls while retaining data when the schema is unchanged. Schema changes require forward recovery. Unproved recovery retains maintenance and transaction evidence."
       },
       {
         "status": "declared",
@@ -310,7 +300,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New installations use cell-install-v2 complete artifact manifests. Retained legacy Decisions formats 2 and 3 and Krisis format 4 remain exact verified migration inputs. The archived shell deployer does not install the new format. State schema is 6."
+        "statement": "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force."
       },
       {
         "status": "declared",

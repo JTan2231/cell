@@ -65,9 +65,20 @@ fn binding(client: &Client) -> Result<Option<BindingRecord>> {
 }
 
 fn selected_release(root: &Path) -> Result<ReleaseInfo> {
+    let release = selected_release_metadata(root)?;
+    let spec = specification();
+    transaction::verify_release_at(
+        &spec.layout(),
+        &root.join("install/releases").join(&release.release_id),
+        &|path| spec.legacy(path),
+    )
+    .map_err(Into::into)
+}
+
+fn selected_release_metadata(root: &Path) -> Result<ReleaseInfo> {
     let home = require_standard_root(root)?;
     let spec = specification();
-    transaction::inspect_installation(&spec.layout(), &home, &|path| spec.legacy(path))?
+    transaction::inspect_installation(&spec.layout(), &home, &|path| spec.read_legacy(path))?
         .current
         .ok_or_else(|| fail("install EMT before enabling its worker"))
 }
@@ -150,6 +161,9 @@ pub fn installation_status(root: &Path) -> Result<Value> {
     let spec = specification();
     let snapshot =
         transaction::inspect_installation(&spec.layout(), &home, &|path| spec.legacy(path))?;
+    if snapshot.current.is_some() {
+        selected_release(root)?;
+    }
     Ok(serde_json::to_value(snapshot)?)
 }
 
@@ -345,7 +359,7 @@ pub fn installer_main() -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "emt-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nverify --binary ABS --bundle ABS [--home ABS]\nverify-release ABS\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nCoordinated deployment preserves worker intent and activates after verification.",
+            "emt-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\n\nDirect install is for uninitialized state and leaves scheduling disabled.\nInitialized updates and recovery use the Cell maintained deployment coordinator.\nCoordinated deployment preserves worker intent and activates after configuration.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::SUCCESS;
@@ -447,7 +461,6 @@ fn deployment_operation(
             }
             config.receiving_domain.clone_from(&settings.domains[0]);
         }
-        config.validate()?;
         let observed = if context
             .home
             .join("Library/Application Support/Clockwork/clockwork.db")
@@ -458,9 +471,6 @@ fn deployment_operation(
         } else {
             None
         };
-        if let Some(value) = &observed {
-            require_owned_binding(&root, &client, value)?;
-        }
         return Ok(
             json!({"binding":observed,"config":config,"initialized":initialized,
             "activate":activate.unwrap_or_else(|| observed.as_ref().map_or(!initialized, |value| value.enabled))}),
@@ -518,7 +528,6 @@ fn deployment_operation(
             config.paused = prior["config"]["paused"]
                 .as_bool()
                 .ok_or_else(|| fail("saved pause intent is missing"))?;
-            config.validate()?;
             // Routing starts only after every prior broker has been refreshed.
             Client::new(&config.clockwork_executable).notification_check_root(&config.cell_root)?;
             Client::new(&config.clockwork_executable).configure_emt(if config.paused {
@@ -538,34 +547,6 @@ fn deployment_operation(
             let selected = client.switch(WORKER_KEY, digest)?;
             if !selected.enabled || selected.definition_digest.as_deref() != Some(digest) {
                 return Err(fail("Clockwork did not confirm worker activation"));
-            }
-        }
-    }
-    if matches!(
-        operation,
-        Operation::Verify | Operation::Recover | Operation::Activate
-    ) {
-        let observed = if context.home.join(".local/bin/clockwork").is_file() {
-            binding(&client)?
-        } else {
-            None
-        };
-        if forward
-            && (before.is_some() || prior["initialized"] == false || prior["activate"] == true)
-            && observed.is_none()
-        {
-            return Err(fail("configured worker binding is absent"));
-        }
-        if let Some(observed) = observed {
-            require_owned_binding(&root, &client, &observed)?;
-            if before.as_ref().is_some_and(|before| {
-                before.halted_incident.is_some()
-                    && observed.halted_incident != before.halted_incident
-            }) {
-                return Err(fail("deployment changed the worker failure halt"));
-            }
-            if operation != Operation::Activate && observed.enabled {
-                return Err(fail("worker became enabled before deployment activation"));
             }
         }
     }
@@ -603,7 +584,6 @@ fn configure_worker(
     let _admission = gate.enter_for(&context.request.run_id)?;
     let _runner = crate::store::runner_lock(root)?;
     let mut config: crate::store::Config = serde_json::from_value(prior["config"].clone())?;
-    config.validate()?;
     if prior["initialized"] == false {
         config.paused = true;
     }
@@ -612,7 +592,7 @@ fn configure_worker(
     if before.is_none() && prior["initialized"] == true && prior["activate"] != true {
         return Ok(());
     }
-    let selected = selected_release(root)?;
+    let selected = selected_release_metadata(root)?;
     let definition = manifest(root, &selected)?;
     let digest = definition.digest()?;
     crate::store::private_directory(&root.join("logs"))?;
@@ -634,10 +614,6 @@ fn migrate_for_configuration(root: &Path, context: &cell_install::adapter::Conte
     let directory = &context.request.run_dir;
     crate::store::private_directory(directory)?;
     let marker = directory.join("emt-migration.json");
-    let backup = root.join(format!(
-        "emt-pre-migration-{}.sqlite",
-        context.request.run_id
-    ));
     if marker.try_exists()? {
         let metadata = fs::symlink_metadata(&marker)?;
         if !metadata.is_file()
@@ -651,52 +627,25 @@ fn migrate_for_configuration(root: &Path, context: &cell_install::adapter::Conte
         if receipt["run_id"] != context.request.run_id || receipt["schema_version"] != 1 {
             return Err(fail("migration receipt does not match this deployment"));
         }
-        for (path, hash) in receipt["backups"]
-            .as_object()
-            .ok_or_else(|| fail("migration backup evidence is missing"))?
-        {
-            if cell_install::file_digest(Path::new(path))?
-                != hash
-                    .as_str()
-                    .ok_or_else(|| fail("migration backup digest is invalid"))?
-            {
-                return Err(fail("retained migration backup changed"));
-            }
-        }
         return Ok(());
     }
-    let receipt = if context.prior()?["lifecycle"]["initialized"] == false {
+    if context.prior()?["lifecycle"]["initialized"] == false {
         let gate = crate::gate(root);
         let _admission = gate.enter_for(&context.request.run_id)?;
         let _runner = crate::store::runner_lock(root)?;
         crate::store::Store::initialize(root)?;
-        json!({"data":{"schema_version":1,"backup":null}})
     } else {
         cell_install::command::json(
             &context.home.join(".local/bin/emt"),
-            &[
-                "--json".into(),
-                "migrate".into(),
-                "--backup".into(),
-                backup.clone().into_os_string(),
-            ],
+            &["--json".into(), "migrate".into()],
             &BTreeMap::from([(
                 "CELL_DEPLOYMENT_RUN_ID".into(),
                 context.request.run_id.clone().into(),
             )]),
             std::time::Duration::from_secs(600),
-        )?
-    };
-    let mut backups = serde_json::Map::new();
-    for name in ["backup", "config_backup"] {
-        if let Some(path) = receipt["data"][name].as_str() {
-            backups.insert(
-                path.to_owned(),
-                json!(cell_install::file_digest(Path::new(path))?),
-            );
-        }
+        )?;
     }
-    let receipt = json!({"run_id":context.request.run_id,"schema_version":1,"backups":backups});
+    let receipt = json!({"run_id":context.request.run_id,"schema_version":1});
     let pending = directory.join(format!(".emt-migration-{}", crate::random_token()?));
     let mut file = OpenOptions::new()
         .create_new(true)

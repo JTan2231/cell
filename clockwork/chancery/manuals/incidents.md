@@ -17,9 +17,10 @@ clockwork [--json] incident show INCIDENT_ID
 clockwork [--json] incident feed --after CURSOR --limit N
 ```
 
-Successful commands return an `ok:true` / `data` JSON envelope. `--json`
-selects compact output and coded `ok:false` / `error` failures on stderr with
-exit one; otherwise failures are human-readable.
+Commands print plain text by default. `--json` selects the existing compact
+`ok:true` / `data` JSON envelope. With that flag, coded `ok:false` / `error`
+failures go to stderr with exit one. Other failures are human-readable on
+stderr. Machine callers must pass `--json`.
 
 Manifest schema two adds a product-owned failure configuration:
 
@@ -157,12 +158,12 @@ incident rows are not deleted. No retention duration is promised.
 ## Privacy, recovery, and compatibility
 
 Reports contain bounded identifiers only. Do not put source text, email body,
-credentials, or an unbounded error in them. State and backups remain private
+credentials, or an unbounded error in them. State remains private
 because keys, identifiers, timestamps, and launch metadata can identify work.
-Direct storage mutation is unsupported. Back up `failure-checks.json` with the
-incident database and notification sidecars. Preserve product evidence, pending
-episodes and newer halt records during recovery; a pre-halt backup cannot
-authorize resumed work. Do not run an older broker while the new sidecar exists.
+Direct storage mutation is unsupported. Preserve `failure-checks.json`, the
+incident database, notification sidecars, product evidence, pending episodes
+and newer halt records during recovery. Recovery does not authorize resumed
+work. Do not run an older broker while the new sidecar exists.
 
 Schema-one definitions retain their original digest and legacy failure
 behavior even in the schema-two store. `failure_policy_active: false` exposes

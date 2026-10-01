@@ -109,58 +109,9 @@ pub(super) fn legacy(root: &Path) -> cell_install::Result<ReleaseInfo> {
     ];
     let text = fs::read_to_string(root.join("manifest.txt"))?;
     let old = text.starts_with("format=1\n");
-    let values = cell_install::legacy::manifest(&root.join("manifest.txt"))?;
-    let keys = [
-        "format",
-        "release_id",
-        "version",
-        "binary_sha256",
-        "frontend_sha256",
-        "runner_sha256",
-        if old {
-            "plist_sha256"
-        } else {
-            "clockwork_template_sha256"
-        },
-        "deployer_sha256",
-        "uninstaller_sha256",
-        "chancery_sha256",
-    ];
-    let mut expected = String::new();
-    for key in keys {
-        expected.push_str(key);
-        expected.push('=');
-        expected.push_str(values.get(key).map_or("", String::as_str));
-        expected.push('\n');
-    }
-    let version = values.get("version").map_or("", String::as_str);
-    let base = version.split(['+', '-']).next().unwrap_or("");
-    let valid_version = base.split('.').count() == 3
-        && base
-            .split('.')
-            .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()));
-    if text != expected || !valid_version {
-        return Err(cell_install::Error {
-            message: "legacy Semantics manifest is not canonical".into(),
-            disposition: cell_install::Disposition::Unchanged,
-        });
-    }
-    let spec = cell_install::InstallSpec {
-        product: "semantics",
-        application: "Semantics",
-        commands: &["semantics"],
-        provider: "semantics",
-    };
-    let files = cell_install::provider_inventory(&root.join("share/chancery/semantics"), &spec)?;
-    if files.len() != 7 {
-        return Err(cell_install::Error {
-            message: "legacy Semantics provider inventory differs".into(),
-            disposition: cell_install::Disposition::Unchanged,
-        });
-    }
     let mut public = layout().public;
     public.retain(|entry| entry.path != Path::new(".local/bin/semantics-install"));
-    cell_install::legacy::verify(
+    cell_install::legacy::read(
         root,
         &LegacySpec {
             format: if old { "1" } else { "2" },
@@ -179,8 +130,8 @@ pub(super) fn legacy(root: &Path) -> cell_install::Result<ReleaseInfo> {
     )
 }
 
-pub(super) fn verify_release(release: &Path) -> Result<ReleaseInfo> {
-    Ok(cell_install::transaction::verify_release_at(
+pub(super) fn read_release(release: &Path) -> Result<ReleaseInfo> {
+    Ok(cell_install::transaction::read_release_at(
         &layout(),
         release,
         &legacy,
@@ -190,17 +141,6 @@ pub(super) fn verify_release(release: &Path) -> Result<ReleaseInfo> {
 pub(super) fn prepare(args: &Candidate) -> Result<PreparedRelease> {
     if !args.binary.is_absolute() || !args.bundle.is_absolute() {
         return fail("candidate binary and bundle must be absolute");
-    }
-    digest(&args.binary)?;
-    if fs::metadata(&args.binary)?.mode() & 0o111 == 0 {
-        return fail("Semantics candidate is not executable");
-    }
-    let version = Command::new(&args.binary).arg("--version").output()?;
-    if !version.status.success()
-        || String::from_utf8_lossy(&version.stdout).trim()
-            != format!("semantics {}", env!("CARGO_PKG_VERSION"))
-    {
-        return fail("candidate and installer versions disagree");
     }
     let inputs = tempfile::tempdir()?;
     let mut files = BTreeMap::from([
@@ -281,7 +221,7 @@ fn current(paths: &Paths) -> Result<Option<String>> {
             if !value.strip_prefix("releases/").is_some_and(valid_hash) {
                 return fail("invalid Semantics current selector");
             }
-            verify_release(&paths.install.join(&path))?;
+            read_release(&paths.install.join(&path))?;
             Ok(value.to_owned())
         })
         .transpose()
@@ -301,17 +241,6 @@ pub(super) fn inspect(home: &HomeArgs) -> Result<Value> {
     Ok(
         json!({"installed":installed,"current":current.as_deref().unwrap_or("absent"),"controls":controls}),
     )
-}
-
-pub(super) fn verify(args: &Candidate) -> Result<Value> {
-    let prepared = prepare(args)?;
-    let value = inspect(&args.home)?;
-    if value["installed"]["current"]["release_id"] != prepared.info.release_id {
-        return fail("installed Semantics release differs from the sealed candidate");
-    }
-    let paths = Paths::new(&args.home)?;
-    paths.doctor(&paths.payload(), None, None)?;
-    Ok(value)
 }
 
 pub(super) struct Paths {
@@ -429,7 +358,6 @@ impl Paths {
         for path in [
             self.install.clone(),
             self.install.join("releases"),
-            self.state.join("backups/deployments"),
             self.logs(),
             self.home.join(".local/bin"),
             self.home.join("Library/LaunchAgents"),
@@ -456,9 +384,6 @@ impl Paths {
     }
     fn service(&self) -> String {
         format!("gui/{}/org.semantics.worker", self.uid)
-    }
-    pub fn payload(&self) -> PathBuf {
-        self.install.join("current/libexec/semantics")
     }
     fn selectors(&self) -> Vec<PathBuf> {
         vec![
@@ -543,76 +468,37 @@ impl Paths {
         }
         Ok(result["data"].clone())
     }
-    pub fn doctor(&self, payload: &Path, watermark: Option<&str>, run: Option<&str>) -> Result<()> {
-        let annals = self.home.join(".local/bin/annals");
-        if !fs::metadata(&annals).is_ok_and(|m| m.is_file() && m.mode() & 0o111 != 0) {
-            return fail("Annals executable is unavailable");
-        }
-        let config = self
-            .home
-            .join("Library/Application Support/Annals/decisions/config.toml");
-        if !fs::symlink_metadata(&config)?.is_file() {
-            return fail("Annals decisions config is unavailable");
-        }
-        let execute = |args: &[&str]| -> Result<Value> {
+    pub fn initialize(&self, payload: &Path, watermark: Option<&str>) -> Result<()> {
+        cell_install::signing::verify_native("semantics", "semantics", payload)?;
+        semantics::store::Store::open(&self.database)?;
+        if let Some(watermark) = watermark {
             let output = Command::new(payload)
-                .args(["--database"])
+                .arg("--database")
                 .arg(&self.database)
-                .arg("--json")
-                .args(args)
+                .args([
+                    "--json",
+                    "project",
+                    "activate-annals",
+                    "--final-decisions-watermark",
+                    watermark,
+                ])
                 .env_clear()
                 .env("HOME", &self.home)
                 .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
                 .env(
                     "CELL_DEPLOYMENT_RUN_ID",
-                    run.map_or_else(
-                        || std::env::var("CELL_DEPLOYMENT_RUN_ID").unwrap_or_default(),
-                        str::to_owned,
-                    ),
+                    std::env::var("CELL_DEPLOYMENT_RUN_ID").unwrap_or_default(),
                 )
-                .env("SEMANTICS_ANNALS", &annals)
-                .env("SEMANTICS_ANNALS_CONFIG", &config)
+                .env("SEMANTICS_ANNALS", self.home.join(".local/bin/annals"))
+                .env(
+                    "SEMANTICS_ANNALS_CONFIG",
+                    self.home
+                        .join("Library/Application Support/Annals/decisions/config.toml"),
+                )
                 .output()?;
             if !output.status.success() {
-                return fail("Semantics candidate readiness failed");
+                return fail("Semantics Annals activation failed");
             }
-            Ok(serde_json::from_slice(&output.stdout)?)
-        };
-        if let Some(watermark) = watermark {
-            if watermark.is_empty() {
-                return fail("final Decisions watermark is empty");
-            }
-            execute(&[
-                "project",
-                "activate-annals",
-                "--final-decisions-watermark",
-                watermark,
-            ])?;
-        }
-        let doctor = execute(&["doctor"])?;
-        let checks = doctor["checks"]
-            .as_array()
-            .ok_or("Semantics doctor omitted checks")?;
-        if doctor["ok"] != true
-            || [
-                "database",
-                "participation_markers",
-                "annals_decision_feed",
-                "nucleus_reconciliation",
-            ]
-            .iter()
-            .any(|name| {
-                !checks.iter().any(|c| {
-                    c["name"] == *name
-                        && c["ok"] == true
-                        && (*name != "database"
-                            || c["detail"]
-                                .as_str()
-                                .is_some_and(|s| s.starts_with("schema 3 at")))
-                })
-            })
-        {
-            return fail("Semantics doctor did not prove schema 3 and every required dependency");
         }
         Ok(())
     }
@@ -642,7 +528,7 @@ pub(super) struct Binding {
     pub definition_digest: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Hold {
     version: u32,
@@ -652,7 +538,7 @@ struct Hold {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+// Unknown legacy transaction fields remain readable without restoring data.
 // These are independent durable facts needed for crash recovery.
 #[allow(clippy::struct_excessive_bools)]
 struct Transaction {
@@ -661,14 +547,13 @@ struct Transaction {
     deployment_owner: Option<String>,
     committed: bool,
     baseline: cell_install::transaction::InstallSnapshot,
-    backup_files: BTreeMap<String, String>,
+    #[serde(default)]
+    prior_database_schema: Option<i64>,
     home: PathBuf,
     selectors: BTreeMap<PathBuf, Option<PathBuf>>,
     binding: Binding,
     legacy_loaded: bool,
     legacy_plist: bool,
-    database_absent: bool,
-    database_backed_up: bool,
     database_touched: bool,
     scheduler_changed: bool,
     candidate_selected: bool,
@@ -744,7 +629,7 @@ pub(super) fn binding(paths: &Paths, current: Option<&str>) -> Result<Binding> {
         let release = paths
             .install
             .join(current.ok_or("selected Clockwork binding has no current release")?);
-        verify_release(&release)?;
+        read_release(&release)?;
         let actual = paths.clock(&["definition", "show", digest])?;
         if actual["digest"] != *digest
             || actual["key"] != KEY
@@ -773,7 +658,7 @@ fn legacy_plist(paths: &Paths, selected: Option<&str>) -> Result<(bool, bool)> {
         let release = paths
             .install
             .join(selected.ok_or("legacy LaunchAgent has no current release")?);
-        verify_release(&release)?;
+        read_release(&release)?;
         let mut template = fs::read_to_string(release.join("package/org.semantics.worker.plist"))?;
         for (key, path) in [
             (
@@ -815,48 +700,69 @@ fn public_paths() -> Vec<PathBuf> {
         .collect()
 }
 
-fn restore_database(paths: &Paths, transaction: &Transaction, backup: &Path) -> Result<()> {
-    if !transaction.database_touched {
-        return Ok(());
+pub(super) fn database_schema(paths: &Paths) -> Result<Option<i64>> {
+    if !exists(&paths.database) {
+        return Ok(None);
     }
-    if !transaction.database_backed_up {
-        return fail("database rollback has no complete backup");
-    }
-    let expected_database = transaction.backup_files.contains_key("semantics.db");
-    if expected_database == transaction.database_absent {
-        return fail("Semantics backup database presence differs from its transaction");
-    }
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        let name = format!("semantics.db{suffix}");
-        let saved = backup.join(&name);
-        match transaction.backup_files.get(&name) {
-            Some(expected) => {
-                private_file(&saved, paths.uid, true)?;
-                if digest(&saved)? != *expected {
-                    return fail("Semantics retained database backup changed");
-                }
-            }
-            None if exists(&saved) => {
-                return fail("Semantics retained backup has an unexpected sidecar");
-            }
-            None => {}
-        }
-    }
-    paths.quiescent()?;
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        let live = paths.state.join(format!("semantics.db{suffix}"));
-        let saved = backup.join(format!("semantics.db{suffix}"));
-        if exists(&saved) {
-            private_file(&saved, paths.uid, true)?;
-        }
-        if exists(&live) {
-            fs::remove_file(&live)?;
-        }
-        if exists(&saved) {
-            write_private(&live, &fs::read(&saved)?)?;
-        }
+    private_file(&paths.database, paths.uid, true)?;
+    let connection = rusqlite::Connection::open_with_flags(
+        &paths.database,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )?;
+    Ok(Some(connection.pragma_query_value(
+        None,
+        "user_version",
+        |row| row.get(0),
+    )?))
+}
+
+fn require_compatible_database(paths: &Paths, transaction: &Transaction) -> Result<()> {
+    if transaction.database_touched
+        && (transaction.version < 2 || database_schema(paths)? != transaction.prior_database_schema)
+    {
+        return fail("database migration requires forward recovery with the retained candidate");
     }
     Ok(())
+}
+
+fn forward_hold(paths: &Paths, transaction: &Transaction, id: &str, digest: &str) -> Result<()> {
+    private_file(&paths.marker(), paths.uid, true)?;
+    if transaction.hold_owned != (transaction.marker_created || transaction.prior_receipt.is_some())
+    {
+        return fail("forward recovery maintenance ownership differs from its transaction");
+    }
+    let candidate = Hold {
+        version: 1,
+        key: KEY.into(),
+        release_id: id.into(),
+        definition_digest: digest.into(),
+    };
+    if exists(&paths.receipt()) {
+        private_file(&paths.receipt(), paths.uid, true)?;
+        let receipt: Hold = serde_json::from_slice(&fs::read(paths.receipt())?)?;
+        if receipt == candidate {
+            return Ok(());
+        }
+        if !transaction.hold_owned || transaction.prior_receipt.as_ref() != Some(&receipt) {
+            return fail("forward recovery maintenance receipt changed");
+        }
+        if receipt.version != 1
+            || receipt.key != KEY
+            || transaction
+                .baseline
+                .current
+                .as_ref()
+                .map(|release| &release.release_id)
+                != Some(&receipt.release_id)
+            || transaction.binding.definition_digest.as_ref() != Some(&receipt.definition_digest)
+        {
+            return fail("forward recovery prior hold differs from its recorded selection");
+        }
+    } else if !transaction.hold_owned {
+        // An unreceipted marker predating this transaction remains external.
+        return Ok(());
+    }
+    write_private(&paths.receipt(), &serde_json::to_vec(&candidate)?)
 }
 
 fn recovery_binding(paths: &Paths, transaction: &Transaction) -> Result<Binding> {
@@ -892,7 +798,7 @@ fn recovery_binding(paths: &Paths, transaction: &Transaction) -> Result<Binding>
 fn rollback(
     paths: &Paths,
     transaction: &Transaction,
-    backup: &Path,
+    evidence: &Path,
     tx: &mut cell_install::transaction::InstallTransaction<'_>,
 ) -> Result<()> {
     paths.gate()?;
@@ -918,11 +824,11 @@ fn rollback(
             "Clockwork cannot clear the candidate to the prior null selection; private release and authenticated maintenance remain for forward recovery",
         );
     }
-    restore_database(paths, transaction, backup)?;
+    require_compatible_database(paths, transaction)?;
     if transaction.legacy_plist {
         write_private(
             &paths.plist(),
-            &fs::read(backup.join("prior-worker.plist"))?,
+            &fs::read(evidence.join("prior-worker.plist"))?,
         )?;
         fs::set_permissions(paths.plist(), fs::Permissions::from_mode(0o644))?;
     }
@@ -964,7 +870,7 @@ fn rollback(
             .ok_or("missing recovery candidate")?,
     );
     let prepared = PreparedRelease {
-        info: verify_release(&release)?,
+        info: read_release(&release)?,
         root: release,
     };
     tx.recover(&transaction.baseline, &prepared, false, |_| Ok(()))?;
@@ -1044,13 +950,13 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
     }
     tx.recheck(&installed)?;
     let mut transaction = Transaction {
-        version: 1,
+        version: 2,
         deployment_owner: std::env::var("CELL_DEPLOYMENT_RUN_ID")
             .ok()
             .filter(|owner| !owner.is_empty()),
         committed: false,
         baseline: installed.clone(),
-        backup_files: BTreeMap::new(),
+        prior_database_schema: None,
         home: paths.home.clone(),
         selectors: paths
             .selectors()
@@ -1060,8 +966,6 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         binding,
         legacy_loaded,
         legacy_plist,
-        database_absent: !exists(&paths.database),
-        database_backed_up: false,
         database_touched: false,
         scheduler_changed: false,
         candidate_selected: false,
@@ -1085,27 +989,22 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         }
         transaction.prior_receipt = Some(receipt);
     }
-    let backup = tempfile::Builder::new()
+    let evidence = tempfile::Builder::new()
         .prefix(".transaction.")
         .tempdir_in(&paths.install)?;
-    let backup = backup.keep();
-    save(&transaction, &backup)?;
+    let evidence = evidence.keep();
+    save(&transaction, &evidence)?;
     if transaction.legacy_plist {
         write_private(
-            &backup.join("prior-worker.plist"),
+            &evidence.join("prior-worker.plist"),
             &fs::read(paths.plist())?,
         )?;
     }
-    let retained_backup = paths.state.join("backups/deployments").join(format!(
-        "pre-{}-{}",
-        prepared.info.release_id,
-        uuid::Uuid::now_v7()
-    ));
     let mut worker = None;
     let result = (|| -> Result<Value> {
         transaction.marker_created = paths.gate()?;
         transaction.hold_owned = transaction.marker_created || transaction.prior_receipt.is_some();
-        save(&transaction, &backup)?;
+        save(&transaction, &evidence)?;
         for name in ["worker.stdout.log", "worker.stderr.log"] {
             let log = paths.logs().join(name);
             if exists(&log) {
@@ -1115,7 +1014,7 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         }
         let definition = definition(&paths, &prepared.root)?;
         let toml = toml::to_string(&definition)?;
-        let definition_path = backup.join("worker.toml");
+        let definition_path = evidence.join("worker.toml");
         write_private(&definition_path, toml.as_bytes())?;
         let registered = paths.clock(&[
             "definition",
@@ -1129,7 +1028,7 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
             .to_owned();
         transaction.candidate_digest = Some(digest.clone());
         transaction.scheduler_changed = true;
-        save(&transaction, &backup)?;
+        save(&transaction, &evidence)?;
         paths.clock(&["binding", "disable", KEY])?;
         if transaction.legacy_loaded
             && !paths
@@ -1143,31 +1042,12 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
             fs::remove_file(paths.plist())?;
         }
         transaction.suspension = Some(tx.suspend(&installed, &public_paths())?);
-        save(&transaction, &backup)?;
+        save(&transaction, &evidence)?;
         worker = Some(worker_lock(&paths)?);
         paths.quiescent()?;
-        for suffix in ["", "-wal", "-shm", "-journal"] {
-            let live = paths.state.join(format!("semantics.db{suffix}"));
-            if exists(&live) {
-                write_private(
-                    &backup.join(format!("semantics.db{suffix}")),
-                    &fs::read(&live)?,
-                )?;
-                let name = format!("semantics.db{suffix}");
-                transaction
-                    .backup_files
-                    .insert(name.clone(), cell_install::file_digest(&backup.join(name))?);
-            }
-        }
-        paths.quiescent()?;
-        transaction.database_backed_up = true;
+        transaction.prior_database_schema = database_schema(&paths)?;
         transaction.database_touched = true;
-        save(&transaction, &backup)?;
-        paths.doctor(
-            &prepared.root.join("libexec/semantics"),
-            args.final_decisions_watermark.as_deref(),
-            None,
-        )?;
+        save(&transaction, &evidence)?;
         if transaction.hold_owned {
             let hold = Hold {
                 version: 1,
@@ -1177,26 +1057,30 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
             };
             write_private(&paths.receipt(), &serde_json::to_vec(&hold)?)?;
         }
+        paths.initialize(
+            &prepared.root.join("libexec/semantics"),
+            args.final_decisions_watermark.as_deref(),
+        )?;
         let suspended = transaction
             .suspension
             .as_ref()
             .ok_or("missing suspended installation")?;
         transaction.publication = Some(tx.publish(&prepared, &suspended.after, |_| Ok(()))?);
         transaction.candidate_selected = true;
-        save(&transaction, &backup)?;
+        save(&transaction, &evidence)?;
         if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
             paths.clock(&["binding", "disable", KEY, "--select", &digest])?;
         } else {
             paths.clock(&["binding", "switch", KEY, &digest])?;
         }
         private_file(&paths.marker(), paths.uid, true)?;
-        let receipt = json!({"version":1,"release_id":prepared.info.release_id,"previous":installed,"clockwork_definition":digest,"maintenance_retained":args.keep_maintenance || !transaction.hold_owned,"rollback_snapshot":retained_backup});
+        let receipt = json!({"version":1,"release_id":prepared.info.release_id,"previous":installed,"clockwork_definition":digest,"maintenance_retained":args.keep_maintenance || !transaction.hold_owned});
         write_private(
             &paths.install.join("last-update.json"),
             &serde_json::to_vec(&receipt)?,
         )?;
         transaction.committed = true;
-        save(&transaction, &backup)?;
+        save(&transaction, &evidence)?;
         Ok(receipt)
     })();
     match result {
@@ -1207,40 +1091,40 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
                 fs::remove_file(paths.receipt())?;
                 fs::remove_file(paths.marker())?;
             }
-            fs::rename(&backup, &retained_backup)?;
+            fs::remove_dir_all(&evidence)?;
             Ok(value)
         }
         Err(error) => {
-            if rollback(&paths, &transaction, &backup, &mut tx).is_ok() {
+            if rollback(&paths, &transaction, &evidence, &mut tx).is_ok() {
                 drop(worker);
-                fs::remove_dir_all(&backup)?;
+                fs::remove_dir_all(&evidence)?;
                 Err(error)
             } else {
                 retain_failure(&paths, &transaction, &mut tx);
                 drop(worker);
-                Err(format!("{error}; Semantics remains maintenance-gated; private recovery transaction: {}", backup.display()).into())
+                Err(format!("{error}; Semantics remains maintenance-gated; private recovery transaction: {}", evidence.display()).into())
             }
         }
     }
 }
 
-pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<()> {
+pub(super) fn recover(home: &HomeArgs, evidence: &Path, forward: bool) -> Result<()> {
     let paths = Paths::new(home)?;
-    if backup.parent() != Some(paths.install.as_path())
-        || !backup
+    if evidence.parent() != Some(paths.install.as_path())
+        || !evidence
             .file_name()
             .is_some_and(|n| n.to_string_lossy().starts_with(".transaction."))
     {
         return fail("recovery requires an exact retained Semantics transaction");
     }
-    if !exists(backup) {
+    if !exists(evidence) {
         return fail("Semantics recovery transaction is absent");
     }
-    directory(backup, paths.uid)?;
-    private_file(&backup.join("transaction.json"), paths.uid, true)?;
+    directory(evidence, paths.uid)?;
+    private_file(&evidence.join("transaction.json"), paths.uid, true)?;
     let mut transaction: Transaction =
-        serde_json::from_slice(&fs::read(backup.join("transaction.json"))?)?;
-    if transaction.version != 1
+        serde_json::from_slice(&fs::read(evidence.join("transaction.json"))?)?;
+    if !matches!(transaction.version, 1 | 2)
         || transaction.home != paths.home
         || std::env::var("CELL_DEPLOYMENT_RUN_ID")
             .ok()
@@ -1274,33 +1158,19 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
                 .ok_or("missing candidate recovery release")?,
         );
         let prepared = PreparedRelease {
-            info: verify_release(&release)?,
+            info: read_release(&release)?,
             root: release,
         };
         let digest = transaction
             .candidate_digest
             .as_ref()
             .ok_or("missing candidate recovery definition")?;
-        if exists(&paths.receipt()) {
-            private_file(&paths.receipt(), paths.uid, true)?;
-            let receipt: Hold = serde_json::from_slice(&fs::read(paths.receipt())?)?;
-            if receipt.version != 1
-                || receipt.key != KEY
-                || receipt.release_id != prepared.info.release_id
-                || receipt.definition_digest != *digest
-            {
-                return fail(
-                    "forward recovery requires the authenticated candidate maintenance hold",
-                );
-            }
-        } else if !transaction.committed || !transaction.hold_owned {
-            return fail("forward recovery has no authenticated candidate hold");
-        }
         let definition = paths.clock(&["definition", "show", digest])?;
         if definition["manifest"] != self::definition(&paths, &prepared.root)? {
             return fail("forward recovery definition differs from exact retained candidate");
         }
-        paths.doctor(&prepared.root.join("libexec/semantics"), None, None)?;
+        forward_hold(&paths, &transaction, &prepared.info.release_id, digest)?;
+        paths.initialize(&prepared.root.join("libexec/semantics"), None)?;
         tx.recover(&transaction.baseline, &prepared, true, |_| Ok(()))?;
         let selection = if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
             paths.clock(&["binding", "disable", KEY, "--select", digest])
@@ -1312,7 +1182,7 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
             return Err(error);
         }
         transaction.committed = true;
-        save(&transaction, backup)?;
+        save(&transaction, evidence)?;
         private_file(&paths.marker(), paths.uid, true)?;
         if transaction.hold_owned {
             if exists(&paths.receipt()) {
@@ -1320,18 +1190,30 @@ pub(super) fn recover(home: &HomeArgs, backup: &Path, forward: bool) -> Result<(
             }
             fs::remove_file(paths.marker())?;
         }
-        fs::rename(
-            backup,
-            paths
-                .state
-                .join("backups/deployments")
-                .join(format!("recovered-{}", uuid::Uuid::now_v7())),
-        )?;
+        if transaction.version >= 2 {
+            fs::remove_dir_all(evidence)?;
+        } else {
+            fs::rename(
+                evidence,
+                paths
+                    .install
+                    .join(format!("recovered-{}", uuid::Uuid::now_v7())),
+            )?;
+        }
         return Ok(());
     }
-    match rollback(&paths, &transaction, backup, &mut tx) {
+    match rollback(&paths, &transaction, evidence, &mut tx) {
         Ok(()) => {
-            fs::remove_dir_all(backup)?;
+            if transaction.version >= 2 {
+                fs::remove_dir_all(evidence)?;
+            } else {
+                fs::rename(
+                    evidence,
+                    paths
+                        .install
+                        .join(format!("recovered-{}", uuid::Uuid::now_v7())),
+                )?;
+            }
             Ok(())
         }
         Err(error) => {
@@ -1388,99 +1270,4 @@ pub(super) fn recover_lock(home: &HomeArgs) -> Result<()> {
     let layout = layout();
     let _lock = cell_install::transaction::lock_installation(&layout, &paths.home, &legacy)?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn backup_fixture() -> Result<(tempfile::TempDir, Paths, PathBuf, Transaction)> {
-        let root = tempfile::tempdir()?;
-        let state = root.path().join("state");
-        let backup = root.path().join("backup");
-        fs::create_dir(&state)?;
-        fs::create_dir(&backup)?;
-        let paths = Paths {
-            home: root.path().to_owned(),
-            install: state.join("install"),
-            database: state.join("semantics.db"),
-            state,
-            clockwork: root.path().join("must-not-run"),
-            launchctl: root.path().join("must-not-run"),
-            uid: fs::metadata(root.path())?.uid(),
-        };
-        write_private(&paths.database, b"candidate database")?;
-        write_private(&paths.state.join("semantics.db-wal"), b"candidate WAL")?;
-        let mut backup_files = BTreeMap::new();
-        for (name, bytes) in [
-            ("semantics.db", "prior database"),
-            ("semantics.db-wal", "prior WAL"),
-        ] {
-            let path = backup.join(name);
-            write_private(&path, bytes.as_bytes())?;
-            backup_files.insert(name.into(), digest(&path)?);
-        }
-        let transaction = Transaction {
-            version: 1,
-            deployment_owner: None,
-            committed: false,
-            baseline: serde_json::from_value(json!({"current":null,"previous":null,"entries":{}}))?,
-            backup_files,
-            home: paths.home.clone(),
-            selectors: BTreeMap::new(),
-            binding: Binding {
-                exists: false,
-                enabled: false,
-                definition_digest: None,
-            },
-            legacy_loaded: false,
-            legacy_plist: false,
-            database_absent: false,
-            database_backed_up: true,
-            database_touched: true,
-            scheduler_changed: false,
-            candidate_selected: false,
-            candidate_release: None,
-            candidate_digest: None,
-            marker_created: false,
-            prior_receipt: None,
-            hold_owned: false,
-            suspension: None,
-            publication: None,
-        };
-        Ok((root, paths, backup, transaction))
-    }
-
-    #[test]
-    fn missing_backup_database_does_not_remove_any_live_file() -> Result<()> {
-        let (_root, paths, backup, transaction) = backup_fixture()?;
-        fs::remove_file(backup.join("semantics.db"))?;
-        assert!(restore_database(&paths, &transaction, &backup).is_err());
-        assert_eq!(fs::read(&paths.database)?, b"candidate database");
-        assert_eq!(
-            fs::read(paths.state.join("semantics.db-wal"))?,
-            b"candidate WAL"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn changed_backup_sidecar_does_not_replace_the_live_database() -> Result<()> {
-        let (_root, paths, backup, transaction) = backup_fixture()?;
-        write_private(&backup.join("semantics.db-wal"), b"changed saved WAL")?;
-        let error = restore_database(&paths, &transaction, &backup)
-            .err()
-            .ok_or("expected database recovery to fail")?;
-        assert!(
-            error
-                .to_string()
-                .contains("retained database backup changed")
-        );
-        assert_eq!(fs::read(&paths.database)?, b"candidate database");
-        assert_eq!(
-            fs::read(paths.state.join("semantics.db-wal"))?,
-            b"candidate WAL"
-        );
-        Ok(())
-    }
 }

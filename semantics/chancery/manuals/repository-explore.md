@@ -29,8 +29,11 @@ reads return `RepositoryView`; `Client::repository_provenance` returns the full
 replay representation. The client does not open SQLite or invoke hidden worker
 or cutover commands. Consumers own their local projections and action policy.
 
-The CLI returns JSON. `--json` selects compact JSON. Compact errors use
-`{"ok":false,"error":{"code":"...","message":"..."}}` on stderr.
+The `semantics` CLI prints plain text by default. `--json` selects the existing compact
+JSON schema for each command. The typed client explicitly requests JSON.
+Machine callers must pass `--json`. With that flag, errors use
+`{"ok":false,"error":{"code":"...","message":"..."}}` on stderr; other
+errors are human-readable on stderr.
 The default database is
 `~/Library/Application Support/Semantics/semantics.db`. `--database ABSOLUTE_PATH`
 or `SEMANTICS_DATABASE` selects an isolated database. Direct SQLite integration
@@ -67,7 +70,8 @@ optional; when supplied, it must identify the selected source exactly.
 
 ## Output and completeness
 
-Ordinary show and search use output schema 2. They include project identity,
+With `--json`, ordinary show and search use output schema 2. Plain text
+retains the selected records and their full meanings. They include project identity,
 selected revision, concept IDs, labels, full meanings, active state, replacement,
 and complete distinctions for the selected concepts. `show --provenance` returns
 grounds, withdrawals, and creation/change revision bookkeeping as well.
@@ -104,7 +108,8 @@ contains no raw transcript, project file, command, tool result, prompt, or
 credential. Grounding history is retained local provenance, not a live upstream
 read dependency.
 
-Contract 2 preserves project and concept identities and historical typed-effect
+Contract 3 requires `--json` for machine responses. It preserves project
+and concept identities and historical typed-effect
 replay. No repository-size, result-count, wall-clock read objective, future
 contract deprecation interval, or migration window is promised. This read feature
 defines no usage or pricing unit and authorizes no registration, seed, commit,

@@ -92,7 +92,7 @@ code must not invoke the Chancery catalog as an execution dependency, and produc
 Chancery binary is absent.
 
 Test fresh install, identical redeploy, upgrade, failed upgrade, rollback,
-tamper rejection, and a pre-existing selector owned by something else. Never
+and a pre-existing selector owned by something else. Never
 silently take over another provider's selector.
 
 ## 5. Deploy reader-first and prove installed behavior

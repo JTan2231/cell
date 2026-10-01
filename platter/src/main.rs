@@ -41,10 +41,8 @@ enum Command {
         #[command(subcommand)]
         command: Maintenance,
     },
-    /// Verify compatible state and retain a consistent pre-install backup.
+    /// Migrate and verify compatible state under held admission.
     Migrate {
-        #[arg(long)]
-        backup: PathBuf,
         /// Retain or verify the coordinator's migration completion receipt.
         #[arg(long)]
         completion_receipt: Option<PathBuf>,
@@ -404,11 +402,7 @@ async fn administrative(
         } else {
             readiness::doctor(root).await?
         }),
-        Command::Migrate {
-            backup,
-            completion_receipt,
-        } => {
-            anyhow::ensure!(backup.is_absolute(), "backup path must be absolute");
+        Command::Migrate { completion_receipt } => {
             let status = maintenance::status(home, root).await?;
             anyhow::ensure!(
                 status.drained,
@@ -416,18 +410,18 @@ async fn administrative(
             );
             let (_admission, _runner) = maintenance::install_admission(home, root)?;
             let migrate = || -> cell_install::Result<()> {
-                platter::migration::migrate(root, backup)
+                platter::migration::migrate(root)
                     .and_then(|()| readiness::local_state(root).map(|_| ()))
                     .map_err(|error| cell_install::Error::new(error.to_string()))
             };
             if let Some(receipt) = completion_receipt {
-                cell_install::migration::run_once(receipt, backup, migrate)?;
+                cell_install::migration::install_once(receipt, migrate)?;
             } else {
                 migrate()?;
             }
             let report = serde_json::json!({"compatible":true,"initialized":readiness::local_state(root)?,"state_dir":root});
             Some(
-                serde_json::json!({"schema_version":platter::store::SCHEMA_VERSION,"backup":backup,"readiness":report}),
+                serde_json::json!({"schema_version":platter::store::SCHEMA_VERSION,"readiness":report}),
             )
         }
 
@@ -469,4 +463,15 @@ fn print_status(root: &std::path::Path) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn migration_has_no_backup_option() {
+        assert!(Cli::try_parse_from(["platter", "migrate"]).is_ok());
+        assert!(Cli::try_parse_from(["platter", "migrate", "--backup", "/private/old"]).is_err());
+    }
 }

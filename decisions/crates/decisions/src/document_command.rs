@@ -630,6 +630,3 @@ fn atomic_write(directory: &Path, name: &str, bytes: &[u8]) -> AppResult<()> {
     }
     result
 }
-
-#[cfg(test)]
-mod tests;

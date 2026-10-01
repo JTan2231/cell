@@ -14,9 +14,10 @@ clockwork [--json] binding list [--limit N]
 clockwork [--json] binding show KEY
 ```
 
-Successful commands return an `ok:true` / `data` JSON envelope. `--json`
-selects compact output and coded `ok:false` / `error` failures on stderr with
-exit one; otherwise failures are human-readable.
+Commands print plain text by default. `--json` selects the existing compact
+`ok:true` / `data` JSON envelope. With that flag, coded `ok:false` / `error`
+failures go to stderr with exit one. Other failures are human-readable on
+stderr. Machine callers must pass `--json`.
 
 A binding retains a nullable selected definition whose manifest key must match.
 Disable retains its selection and history. An absent key becomes a disabled

@@ -3,8 +3,8 @@
 Nucleus runs as a current-user macOS service. It owns its private state, socket,
 program installation, readiness, and durable maintenance holds. Use this feature
 to interpret service health, admission, drain, restart, installation, and recovery.
-Use `chancery show nucleus.execution.operate` for ordered installation, backup,
-restore, and service-control procedures. Read `nucleus manual` for shared
+Use `chancery show nucleus.execution.operate` for ordered installation,
+recovery, and service-control procedures. Read `nucleus manual` for shared
 requester coordination and recovery order before work that can interrupt it.
 
 ## Interfaces and access
@@ -39,7 +39,7 @@ POST /v1/maintenance/release
 | Program releases | `~/Library/Application Support/Nucleus/install/releases/` |
 | Logs | `~/Library/Logs/Nucleus/` |
 
-Treat state, credentials, logs, and backups as private. Database and mailbox
+Treat state, credentials, and logs as private. Database and mailbox
 content can include prompts, source text, and tool values. Socket access uses
 local ownership and permissions; protocol 1 has no TCP listener or separate
 application authentication.
@@ -64,7 +64,7 @@ Live service reads do not prove requester domain success. No service-availabilit
 or general response-latency objective is promised. The always-on macOS service
 relies on launchd; a foreground instance does not prove launchd readiness.
 
-## Deployment admission and verification
+## Deployment admission
 
 The deployment coordinator owns one durable hold through:
 
@@ -100,11 +100,10 @@ installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard
 locally; the public health proof requires all guards drained.
 
-Without a hold, deployment readiness also accepts a healthy runtime whose
-admission is paused by reported low, exhausted, or unknown quota. Harness,
-authentication, protocol, and execution checks still apply. An unexplained
-admission pause fails. The installer reads raw health through `service status`
-for this proof. Quota policy and ordinary requester admission remain unchanged.
+Installation checks the native CLI and daemon signatures under Cell's configured
+signing policy. It does not call health or check harness, authentication, or
+persistent-state integrity. Use the ordinary diagnostic interfaces for those
+observations. Maintenance ownership and drain remain required for replacement.
 
 The HTTP surfaces are GET `/v1/maintenance` and POST
 `/v1/maintenance/{hold,release}`. Each POST accepts exactly
@@ -114,8 +113,7 @@ these request/response types.
 The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
 it under the product update lock before selector mutation. With
 `CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained
-hold and retains an exclusive activity guard through replacement and health
-verification. The existing guarded database/credential rollback rules remain.
+hold and retains an exclusive activity guard through replacement. The existing guarded database/credential rollback rules remain.
 
 Daemon startup retires terminal records from the removed built-in deployment
 probe. Retirement is limited to requester `nucleus-deployment`, label
@@ -126,33 +124,41 @@ and shared schemas remain unchanged. This is not a general pruning API.
 
 ## Installation guarantees
 
-Use matching sealed CLI, daemon, installer, and Chancery bundle candidates.
-The Rust `nucleus-install` executable is sealed beside the tested CLI and daemon.
-Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS` command uses
-immutable `cell-install-v2` packages and the Nucleus-owned service installer.
-Public CLI and daemon copies remain service-owned so captured prior programs
-and schema rollback evidence are preserved. The predecessor format-1 package
-remains verifiable. `inspect` and `verify-release ABS` are read-only; they do
-not execute a retained installer or restore authentication.
+The Rust `nucleus-install` executable packages the CLI, daemon, installer, and
+Chancery bundle. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
+command selects a `cell-install-v2` package and invokes the Nucleus service
+installer. Public CLI and daemon copies remain service-owned. `inspect` reads
+release metadata. There are no installer `verify` or `verify-release` commands.
 
-The packaging installer stages the release and matching documentation bundle.
+macOS service installation also requires Cell's persistent signing policy.
+The supplied native CLI and daemon must use its exact certificate and the
+permanent `nucleus/nucleus` and `nucleus/nucleusd` product/artifact keys.
+Their code identifiers are `NAMESPACE.nucleus.nucleus` and
+`NAMESPACE.nucleus.nucleusd`, where `NAMESPACE` is the configured namespace.
+The service installer verifies input before copying and installed copies before
+launchd bootstrap. Missing or invalid policy, unsigned or ad hoc input, a
+different certificate, a wrong identifier, or failed verification stops the
+installation. It does not choose another identity or re-sign input. Read
+`chancery show ci-manager.signing.operate` for policy setup and explicit changes.
+
 The service installer captures prior public programs, replaces the LaunchAgent,
-and allows up to two minutes for migration, compaction, and health. The daemon
-stays in the foreground under launchd. A failed cutover restores captured
-programs and service configuration only when the database schema is unchanged.
-A schema change prevents binary-only rollback. Provider and release selectors
-recover with their programs. Authentication is excluded from rollback.
+imports a supplied credential source when needed, and starts the daemon under
+launchd. It does not wait for health, migration, or compaction. Normal daemon
+startup and job admission keep their existing compatibility and readiness checks.
+Installation success establishes completed setup, not operational readiness.
+
+A failed file or service operation can restore captured programs and service
+configuration only when the database schema is unchanged. Authentication is
+excluded from rollback. An uncertain service cutover retains the candidate
+package and journal for recovery without comparing program bytes.
 
 After installation, `nucleus --register-usage` registers the command inventory
-without product work. Verify matching programs, the exact harness, account, and
-runtime readiness before restoring requester admission. A reported quota pause
-can remain after successful installation.
+without product work. Health and account diagnostics remain separate operations.
 
 ## Coordinated first installation and interrupted cutover
 
 A fresh coordinated installation accepts `codex_bin` and `codex_home` in
-Nucleus's deployment settings. Both paths are absolute. `codex_bin` must be the
-exact supported Codex version. `codex_home` identifies an existing authenticated
+Nucleus's deployment settings. Both paths are absolute. Runtime execution requires the supported Codex version. `codex_home` identifies an existing authenticated
 home; settings never contain credential bytes. If Nucleus already owns valid
 authentication, installation preserves it. Existing deployments retain a
 compatible configured harness and do not import another credential home.
@@ -163,36 +169,29 @@ candidate installer:
 <TESTED_NUCLEUS_INSTALL> stage-harness --codex /absolute/release/codex
 ```
 
-The source directory must contain `codex` and its matching
-`codex-code-mode-host` from the same release. Staging checks the exact Codex
-version and executable files, copies both files, and records their SHA-256
-identities in `nucleus-runtime.json`. It publishes the complete directory at
-`~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
-An identical staged runtime is reused. A different existing directory is refused.
+The source directory must contain `codex` and `codex-code-mode-host`. Staging
+copies both files and records their SHA-256 identities in `nucleus-runtime.json`
+for the ordinary runtime checks. It does not compare source versions or verify
+the staged files. An existing destination is reused from its recorded manifest.
 Staging does not select a service runtime, import credentials, or run model work.
-The source release is operator-selected; the manifest detects changes to the
-selected files and does not independently authenticate their origin.
 
-Installation, health, and admission verify the manifest and required files.
-Every selected upgrade requires the staged runtime used by the Nucleus CI gate.
-It keeps a configured runtime only when both file identities match that staged
-pair; otherwise it selects the staged runtime. An old single-file installation at the
-same version also requires this replacement. Deployment captures both file
-identities and checks them again before cutover and after installation. Keep
-the previous runtime available for supported recovery. Preserve credentials,
-retained jobs, and existing failure halts.
+A selected upgrade uses the supported version's staged runtime unless deployment
+settings supply `codex_bin`. An affected-only deployment preserves the path from
+the installed LaunchAgent. Installation does not compare runtime file identities.
+Health and admission keep their ordinary manifest and harness checks.
 
 The installer persists the run's local admission hold before a fresh daemon
 exists. It starts the service under that hold so dependent products can finish
-configuration. The configure phase proves the live harness, authentication,
-protocol and drained capacity. Admission opens only at group release.
+configuration. Admission opens only at group release after configuration.
+The installer retries the owned release request for up to 120 seconds while
+the service socket is unavailable. An API rejection fails immediately. This
+release operation does not call health or submit work.
 
 Before selector or service replacement, the installer writes private
 `service-cutover.json` with its owner, prior package, candidate and harness.
 Recovery uses this journal to select and reinstall the exact candidate through
 `nucleus service recover --daemon ABS --codex ABS` with the recorded
-`CELL_DEPLOYMENT_RUN_ID`. This controlled restart establishes which executable
-is resident; matching files and a health response alone are insufficient.
+`CELL_DEPLOYMENT_RUN_ID`. Recovery reinstalls the recorded candidate and starts its service.
 The service must have its sole drained hold. If it is stopped, recovery reads
 the database without migration and requires every retained job and attempt to
 be terminal. It does not cancel or retry requester work.
@@ -200,24 +199,12 @@ be terminal. It does not cancel or retry requester work.
 Recovery can import the recorded authentication source only if Nucleus's owned
 authentication file is absent. It never rolls back a credential or database.
 A schema or service failure keeps the candidate and journal for recovery.
-Unknown ownership or unfinished jobs keep admission held. Successful recovery
-removes the cutover journal after held live health and exact program-copy checks.
+Unknown ownership or unfinished jobs keep admission held. Successful recovery removes the cutover journal after service setup completes.
 
 Deployment settings accept only `codex_bin` and `codex_home`, both strings.
 Unknown keys or values of another type fail inspection before admission holds.
 
-## Backup, schema recovery, and retention
-
-Nucleus has no automatic backup or restore command. Quiesce requesters and stop
-the service before a consistent backup or restoration. A SQLite-aware backup
-must preserve the database state; other copy methods must preserve the database
-and WAL sidecars as one consistent set. Copying only the live main database is
-incomplete. Include private `quota-policy.json` and `quota-state.json` beside the
-database. A Nucleus backup does not replace requester product backups.
-
-Credential backup and recovery remain separate. Restore with an operator
-present, save current state separately, and use a compatible database and binary
-pair. Verify health and retained job/output reads before resuming admission.
+## Schema compatibility and retention
 
 Store schema 2 has an explicit version-one cutover. It preserves jobs, attempts,
 registrations, cancellation, and terminal state. It discards the old mixed log
@@ -231,8 +218,8 @@ publishes `user_version=2` and allows startup to continue. A failed compaction
 remains pending and visible. Publishing the final marker can leave one bounded
 WAL frame.
 
-Version-one binaries cannot open schema 2. Recovery across the cutover requires
-an explicit compatible database and binary pair. Keep credential recovery separate.
+Version-one binaries cannot open schema 2. Select a program that supports the
+current schema. Keep credential recovery separate.
 
 The LaunchAgent writes `nucleusd.stdout.log` and `nucleusd.stderr.log` under the
 private log directory. Use the host's private-log rotation policy. Nucleus has

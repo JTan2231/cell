@@ -1,30 +1,29 @@
 {
   "id": "conversations.installation.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Conversations",
-  "summary": "Install matching validated Conversations artifacts or select a verified retained release, then check runtime and published documentation.",
+  "summary": "Install, inspect, or recover Conversations programs and their provider selector. Installation performs setup and basic execution checks.",
   "use_when": [
-    "An explicitly authorized manual Conversations installation or retained-release recovery is needed."
+    "Conversations programs should be installed, inspected, or recovered."
   ],
   "do_not_use_when": [
     "Ordinary CI delivery, release publication, task mutation, authentication, or history retrieval is the request."
   ],
-  "outcome": "The intended verified binary and provider release are selected together, with a separate runtime readiness check.",
+  "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "effects": [
-    "Changes product binary and Chancery provider selectors; registers command inventory.",
-    "A separate doctor check launches App Server for metadata readiness without repair or turn reads."
+    "Copy supplied programs and documentation into retained releases and select owned public paths atomically. Preserve other product selectors and separate product data."
   ],
   "authority": [
-    "The operator authorizes installation or recovery. Conversations owns only its product paths and provider selector."
+    "Conversations owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
   ],
   "success": [
-    "Matching tested artifacts or a verified retained release are selected; usage inventory, doctor, and installed-document checks establish the intended selection and observed readiness."
+    "Owned command and provider selectors follow the installed release. Basic help/version invocations complete. No artifact-integrity, persistent-state, or operational-readiness gate is run."
   ],
   "failure_and_recovery": [
-    "Stop on stale or foreign selectors, failed integrity checks, or unverified restoration. Preserve diagnostics and selected releases before retrying deliberately."
+    "Refuse foreign public selectors or stale expected-current selections. File-operation or basic execution failures restore prior selectors when possible. Recovery selects retained program files and leaves product data unchanged."
   ],
   "privacy": [
     "Provider bundles and examples contain no real transcript or credential; diagnostics remain private.",
@@ -33,8 +32,8 @@
   "dependencies": [
     {
       "id": "conversations.runtime",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "session_surfaces": [
@@ -44,20 +43,20 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Read conversations.runtime and nucleus manual, select matching validated artifacts, and confirm installation authority.",
-    "Install with the tested installer, binary, and bundle, or recover a canonical verified retained release.",
-    "Register usage, run doctor in the operator environment, and inspect product/show/resolve through Chancery."
+    "Select the intended supplied binary and provider paths and the installation home.",
+    "Read the current selection and run install with any intended expected-current guard.",
+    "Register the installed command inventory separately and read installation metadata.",
+    "Recover a retained release when requested; keep diagnostics separate from installation."
   ],
   "checkpoints": [
-    "The selected binary and complete provider bundle agree.",
-    "No service starts, credentials are imported, transcripts are read, or foreign paths are replaced during installation.",
-    "Runtime readiness is checked separately; embedded consumers are rebuilt and deployed when library behavior changed."
+    "Owned selectors select the supplied program and provider release.",
+    "Setup and basic execution have completed. Program selection does not establish artifact integrity or live readiness."
   ],
   "adaptation": [
-    "Use an explicit expected-current guard for concurrent installation callers. Recovery supports both documented release formats."
+    "Use absolute paths and an intentional alternate home when required."
   ],
   "stop_when": [
-    "Ownership, release integrity, current-selection freshness, or restored selectors cannot be verified."
+    "Required files cannot be copied, a selector is foreign, the expected selection changed, or a required setup operation fails."
   ],
   "does_not_authorize": [
     "Release publication, CI submission, task mutation, transcript disclosure, authentication changes, or removal of foreign paths."
@@ -72,41 +71,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Matching tested binary, Rust installer, and complete bundle or a canonical owned retained release are available; installation authority is established."
+        "statement": "Supplied program and provider paths, an intended installation home, and authority to change owned selectors. Installation does not require a validation receipt."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Tested installer/binary/bundle paths or an absolute retained-release directory; optional expected-current absent or releases/HASH guard."
+        "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Verified product and provider selectors, command inventory registration, and separate runtime/document observations."
+        "statement": "Recorded release metadata and selected public paths, or an installation error. Inspection reports metadata without checking artifact integrity."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation publishes retained bytes and changes selectors. Doctor is a separate metadata-only readiness operation; Chancery reads documentation only."
+        "statement": "Program selection is installation state. It establishes neither database integrity nor dependency readiness nor domain success."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content-addressed release HASH identifies exact installed bytes; entry version and Codex version remain distinct."
-      },
-      {
-        "status": "not_applicable",
-        "statement": "This procedure defines no cost, schedule, or accounting unit."
+        "statement": "Release hashes name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Completion checks exact selected release, complete published bundle, and invocation-time App Server handshake. A declared upstream gap remains a gap, not an installation failure."
+        "statement": "Inspection reads current selectors and recorded installation metadata. It does not audit retained content or probe a live dependency."
       }
     ],
     "access": [
@@ -118,34 +113,31 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Required runtime guarantees supply locks, atomic publication, stale guards, verified restoration, and retained-release recovery. The operation starts no service and reads no transcript."
+        "statement": "Product and catalog locks serialize atomic publication. Expected-current guards detect changed selection. File-operation or basic execution failures restore the prior selection when possible. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Ordinary delivery remains the Cell CI manager route. Manual publication and CI submission are outside this installation procedure."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No manual installation duration or deployment schedule is promised."
+        "statement": "Installation copies files and performs required setup plus basic help/version execution checks. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The operation uses conversations.runtime contract 1 and supports verified previous shell releases and cell-install-v2 without executing retained installers for verification."
+        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Installation integrity and process/readiness semantics are owned by the required Conversations runtime feature.",
+        "statement": "Installation selection and process/readiness semantics are owned by the required Conversations runtime feature.",
         "target": "conversations",
         "kind": "authority",
         "contract": "conversations.runtime"
       }
     ]
   },
-  "manual": "manuals/installation-operate.md"
+  "manual": "manuals/installation-operate.md",
+  "interfaces": []
 }

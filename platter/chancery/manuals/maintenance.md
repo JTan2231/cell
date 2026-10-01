@@ -14,7 +14,7 @@ platter --json doctor --state-only
 platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
-CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
+CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate
 platter --json maintenance release OWNER
 platter schedule-definition
 ```
@@ -56,8 +56,7 @@ installer. The owned `current` selector publishes the matching
 `~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
 `providers/platter` selector together. Manifests contain no private domain
 content. Cell cleanup follows separate rules for unreferenced release history.
-Altered releases, foreign selectors or changed candidate identities stop
-publication. Product and catalog writer locks protect atomic selection and
+Foreign selectors stop publication; installation does not audit release bytes. Product and catalog writer locks protect atomic selection and
 file compensation.
 
 All durable runtime content and maintenance holds live in schema-seven
@@ -69,16 +68,14 @@ The database has private mode 0600 inside a private directory. SQLite recovery
 journals remain beside it. Disposable renderer files and caches are confined
 to that directory and removed after rendering; this is not memory-only LaTeX.
 
-Configuration, original template, captured inputs, compact execution records,
+Configuration, original templates, captured inputs, compact execution records,
 accepted artifacts, PDFs, frozen editions, explicit job eligibility, send
-receipts and hold owners are covered by a consistent SQLite backup. Platter
-retains no second tool-call ledger. Nucleus's evidence and credentials remain
-separate and are not part of a Platter backup.
+receipts and hold owners remain in SQLite. Platter retains no second tool-call
+ledger. Nucleus's evidence and credentials remain separately owned.
 
 Disposable Ashby board caches live outside SQLite under the same private runtime
-root. They are not required to restore packet history and are excluded from
-database backups. `platter.preparation` owns their freshness, size, failure,
-and download-time semantics.
+root. They are not required for packet history. `platter.preparation` owns their
+freshness, size, failure, and download-time semantics.
 
 ## Admission, drain, and migration
 
@@ -102,18 +99,15 @@ predecessor runner have settled. It creates no replacement jobs or synthetic
 domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
-For selected Platter, the coordinator can use its sealed candidate for
-maintenance before publication when a read-only check proves schema-seven state.
-This permits a corrected observer to replace a slow installed observer without
-changing the public selection first. The installer still proves ownership of
-the current installation before this choice. Foreign selectors, changed
-candidate bytes, and unsupported state stop the operation.
+For selected Platter, the coordinator uses its candidate for maintenance before
+publication. Affected-only Platter uses the installed command. This choice does
+not preflight database compatibility. Ordinary maintenance commands retain their
+admission rules.
 
 Candidate maintenance uses the existing protocol, durable owners, activity locks,
 and drain rules. It does not migrate state, prepare packets, or send mail. The
-same choice applies during recovery and release before publication. Supported
-predecessor schemas and existing affected-only Platter use the installed command.
-Actual installed-program identity and readiness remain required after publication.
+same choice applies during recovery and release before publication. Affected-only Platter uses the installed command. Installation does not require
+a post-publication readiness observation.
 
 Migration is an explicit one-way schema-one to schema-seven import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
@@ -123,18 +117,14 @@ ready. Test occurrences become edition rows without a type discriminator and
 do not determine job eligibility. Any remaining owned runtime files are
 retained as imported artifacts. Duplicate tool history is not imported.
 
-The import commits transactionally before filesystem cleanup. It then writes
-a complete schema-seven backup and records a hashed cleanup manifest. A missing,
-conflicting or changed source file stops import; backup or cleanup failure
-retains originals and recovery information. Reinvocation resumes cleanup only
-when the chosen backup and remaining source hashes still agree. Only manifest
-files are removed. A backup created here is a schema-seven recovery image, not an
-old-binary rollback image. No production migration is implied by a source edit.
+The import commits transactionally before filesystem cleanup. It records a
+hashed cleanup manifest in the same transaction. A missing, conflicting or
+changed source file stops import. Cleanup failure retains originals and recovery
+information. Reinvocation verifies every remaining source hash before removing
+only manifest files. No production migration is implied by a source edit.
 
-Old binaries cannot operate schema seven. Do not restore an old binary against
-the migrated database. Recovery after this boundary requires a compatible
-candidate or an explicitly selected complete predecessor database/files backup
-with its matching binary. Installation file compensation does not undo schema
+Old binaries cannot operate schema seven. Recovery after this boundary requires
+a compatible candidate. Installation file compensation does not undo schema
 migration. Preserve holds after unresolved recovery.
 
 Schema-two through schema-six migration adds ordered `edition_packets` records
@@ -142,38 +132,35 @@ from the existing attachment-to-run references and advances the database version
 It preserves exact selections, captured inputs, requests and artifact bytes. Existing runs
 keep their legacy workflow. The version guard prevents an older binary from
 interpreting a daily brief as a complete tailored packet or deriving packet
-selection from the shared attachment. Each
-migration retains a complete current-schema recovery backup. It does not create
-an old-binary rollback image or start model work. Select a new backup path
-when a retained backup uses a predecessor schema.
+selection from the shared attachment. Migration starts no model work.
 
 Migration verifies retained local state. It does not check dependency readiness
-before deployment updates the retained executable paths. The coordinator runs
-full readiness verification after configuration.
+before deployment updates the retained executable paths. The coordinator does not run full readiness verification after configuration.
 
 ## Interrupted migration completion
 
 To complete an interrupted migration with a corrected compatible Platter
-executable, retain the exact deployment owner, backup and private completion
-receipt path. Stop concurrent coordinator recovery through its deployment lock.
+executable, retain the exact deployment owner and private completion receipt
+path. Stop concurrent coordinator recovery through its deployment lock.
 Run the corrected command under the existing sole owner hold:
 
 ```sh
 CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
-  --backup /absolute/private/backup.sqlite3 \
   --completion-receipt /absolute/private/deployment/platter-migration.json
 ```
 
 The command requires drained work and the existing activity locks. It completes
 the migration and local state verification before it writes the coordinator's
-completion receipt. The receipt binds the exact backup path and digest. A repeat
-verifies that evidence and local state; changed evidence stops recovery. An
-existing backup remains unchanged. The command does not rebind dependencies,
-release holds or establish full deployment readiness. Resume coordinator recovery
-after the command succeeds. Omit `--completion-receipt` for ordinary migration.
+completion receipt. Repetition uses that receipt to avoid repeating completed
+migration. Existing schema-one completion receipts remain accepted without
+reading their former data-copy fields. The command checks local state but does
+not rebind dependencies, release holds or establish full deployment readiness.
+Resume coordinator recovery after the command succeeds. Omit
+`--completion-receipt` for ordinary migration.
 
-## Readiness and installation verification
+## Runtime diagnosis and installation inspection
 
+Installation does not invoke doctor. As a separate runtime diagnostic,
 `doctor` validates a configured resume override and checks retained state,
 Cast/Annals/Email/Weaver executable identities, Cast's exact
 job-URL command, Email's byte-payload interface, renderer availability and
@@ -188,17 +175,13 @@ Read-only installation interfaces remain:
 
 ```sh
 platter-install inspect
-platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
-platter-install verify-release /absolute/owned/release
 ```
 
-`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
-installed release with the candidate and executing installer. `verify-release`
-checks retained release integrity without changing selectors. The sealed version-one
+`inspect` accepts `--home ABSOLUTE_PATH` and reads installation metadata.
 `platter-install adapter OP` remains the coordinator boundary for inspect,
-hold, drain, apply, verify, release and recover. Apply requires exact run-owned
-maintenance. Candidate and source material are verified; affected-only products
-are not upgraded. Interrupted or unsafe recovery retains its owner hold.
+hold, drain, apply, configure, release, activate and recover. Apply requires
+run-owned maintenance. It does not audit candidate or installed bytes.
+Affected-only products are not upgraded. Interrupted or unsafe recovery retains its owner hold.
 
 Deployment initializes a missing resume only from an explicit setup path and
 creates or enables a missing binding only from explicit activation settings. It
@@ -215,6 +198,9 @@ binding changes and recovery. The `platter/daily` binding uses a daily local
 calendar trigger at 18:00, run-at-load false, and skip-on-overlap. The Platter
 configuration time zone determines the edition date; Clockwork's trigger
 follows the machine zone. Cell deployment updates an existing binding and preserves its activation intent.
+
+Deployment builds the schedule from selected release metadata and configuration.
+It does not invoke the public command's release-integrity check.
 
 `platter schedule-definition` prints the product-owned schema-two TOML from
 the verified selected executable and configuration. It declares the default
@@ -271,9 +257,10 @@ their schedule, arguments, renderer environment and output paths and select
 the new exact Platter program disabled. Final activation restores intent after
 all holds release. It never clears a Clockwork halt or reconciles a send.
 
-Each deployment retains its own migration backup. A new backup is selected
-only after any prior import cleanup completes and its retained backup digest
-remains valid. Repeating an interrupted run reuses its validated backup.
+Each deployment retains migration completion metadata. Repeating an interrupted
+installer run uses that receipt without repeating completed migration. If the
+receipt is absent, the product migration resumes its transaction and hashed
+source cleanup. Old data-copy files remain untouched.
 
 ## Weaver readiness boundary
 
@@ -300,8 +287,8 @@ Use the supported Bazaar update operation for text and selection publication.
 ## Privacy and limits
 
 Installation manifests contain executable/provider identity and local paths,
-not private resume bodies or provider credentials. Runtime state and backups
-remain private and separate from public immutable release material.
+not private resume bodies or provider credentials. Runtime state
+remains private and separate from public immutable release material.
 Installation does not establish send, recurring-delivery, or dependency-upgrade
 authority. There is no installation-latency guarantee, arbitrary incompatible
 rollback promise, future support interval, or deprecation window.

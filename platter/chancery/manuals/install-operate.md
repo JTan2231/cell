@@ -1,5 +1,10 @@
 # Install and maintain Platter
 
+Installation places resources and performs setup under the documented maintenance
+boundary. It does not gate completion on persistent-state validation, artifact
+integrity audits, or runtime readiness checks. The product's ordinary diagnostics
+and runtime checks remain available separately.
+
 Use this operation to inspect or change the matched Platter program/provider
 release, verify readiness, maintain admission, or migrate supported state.
 Platter owns domain state and compatibility. Cell coordinates selected releases;
@@ -8,7 +13,7 @@ Nucleus owns execution. Installation starts no preparation or email.
 Read `nucleus manual` before coordinated maintenance. Read
 `chancery resolve platter.install.operate` for this procedure and its required
 feature contracts. `platter.maintenance` owns installation, hold/drain,
-migration, backup, schedule-definition, and recovery guarantees.
+migration, schedule-definition, and recovery guarantees.
 `platter.materials` owns templates and configuration; `platter.preparation`
 owns readiness and prompt captures; `platter.editions` owns delivery authority.
 
@@ -18,7 +23,7 @@ owns readiness and prompt captures; `platter.editions` owns delivery authority.
 2. Inspect the canonical state root, current installation, required dependency
    releases, and maintenance owners.
 3. Select the supported Cell delivery route and applicable installation authority.
-4. Preserve private state and backups outside the source repository.
+4. Preserve private state outside the source repository.
 
 Use the CI manager for ordinary committed delivery:
 
@@ -59,23 +64,19 @@ entry does not prove live readiness or authorize dependency upgrades.
 
 ```sh
 platter-install inspect
-platter-install verify --binary /absolute/candidate/platter --bundle /absolute/cell/platter/chancery
-platter-install verify-release /absolute/owned/release
 platter --json doctor
 platter --json doctor --state-only
 ```
 
-`inspect` and `verify` accept `--home ABSOLUTE_PATH`. `verify` compares the
-installed release with the candidate and executing installer. `verify-release`
-checks integrity without changing selectors. Full doctor checks retained state,
+`inspect` accepts `--home ABSOLUTE_PATH` and reads release metadata. Installation
+does not run doctor or audit artifact integrity. Separately, full doctor checks retained state,
 configured PDF and documented command/runtime prerequisites. It collects no
 jobs, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
 Executable identity alone does not prove initialized Cast or Vita libraries.
 State-only verification needs no renderer or external service readiness.
 
-Stop for foreign selectors, changed candidate or release bytes, ambiguous state
-roots, unsupported schemas, invalid configuration, failed readiness, or unknown
-ownership. Do not bypass these conditions with another state directory.
+Stop for foreign selectors, ambiguous state roots, failed setup or migration,
+or unknown ownership. Do not bypass these conditions with another state directory.
 
 ## Hold, drain, migrate, and verify
 
@@ -85,19 +86,16 @@ Use one retained owner identity throughout the authorized maintenance run:
 platter --json maintenance status
 platter --json maintenance hold OWNER
 CELL_DEPLOYMENT_RUN_ID=OWNER platter --json maintenance drain
-CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup /absolute/private/backup.sqlite3
-platter --json doctor --state-only
-platter --json doctor
+CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate
 platter --json maintenance release OWNER
 ```
 
 1. Hold affected requester admission before holding Nucleus.
 2. Observe actual local and exact matching Nucleus/Weaver work drain.
 3. Require the sole matching owner and activity locks before migration or cutover.
-4. Run migration with its selected absolute private backup path.
-5. Verify retained local state before deployment rebinds dependency paths.
-6. Verify full held readiness after configuration and exact candidate publication.
-7. Release only this operation's hold and restore captured activation intent.
+4. Run migration under the sole matching owner hold.
+5. Configure dependency paths and publish the candidate.
+6. Release only this operation's hold and restore captured activation intent.
    Release Nucleus last.
 
 Holds are durable and do not expire. Foreign holds and incomplete or failed
@@ -111,27 +109,22 @@ the exact Weaver job IDs retained in Platter runs. It creates no replacement
 model attempt or synthetic domain record. Preserve holds if any matching job,
 local activity, or other owner remains unresolved.
 
-The coordinator can use a sealed selected candidate for maintenance only after
-current installation ownership and schema-seven state are proved read-only.
-Supported predecessor state and affected-only installations use the installed
-command. This choice does not migrate state or start domain work.
+The coordinator uses a selected candidate for maintenance. Affected-only
+installations use the installed command. It does not preflight state compatibility. This choice does not migrate state or start domain work.
 
-Schema-one import commits before backup and hashed file cleanup. Failure before
-commit leaves predecessor state; failure afterward retains new state, originals,
-and recovery information. Resume cleanup only with agreeing backup and source
-hashes. Schemas two through six migrate retained selections and advance to seven.
-Every migration preserves captured inputs, requests, artifacts, and delivery
-identities and retains a complete current-schema recovery backup.
+Schema-one import commits before hashed file cleanup. Failure before commit
+leaves predecessor state; failure afterward retains new state, originals, and
+recovery information. Resume cleanup only with agreeing source hashes. Schemas
+two through six migrate retained selections and advance to seven. Every
+migration preserves captured inputs, requests, artifacts, and delivery identities.
 
-A current-schema backup is not an old-binary rollback image. Older binaries
-cannot operate schema seven. Recovery needs a compatible candidate or an
-explicitly selected complete predecessor database/files backup and matching
-binary. File compensation does not undo migration. Do not copy an open main
-SQLite database without its journal or reset records to force success.
+Older binaries cannot operate schema seven. Recovery needs a compatible
+candidate. File compensation does not undo migration. Do not reset records to
+force success.
 
 ## Complete an interrupted migration
 
-1. Retain the exact deployment owner, chosen backup, corrected compatible
+1. Retain the exact deployment owner, corrected compatible
    executable, and private completion-receipt path.
 2. Stop concurrent coordinator recovery through its deployment lock.
 3. Require the existing sole hold, drained work, and activity locks.
@@ -139,17 +132,16 @@ SQLite database without its journal or reset records to force success.
 
 ```sh
 CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
-  --backup /absolute/private/backup.sqlite3 \
   --completion-receipt /absolute/private/deployment/platter-migration.json
 ```
 
 5. Resume coordinator recovery only after success.
 
-The receipt binds the exact backup path and digest. Repetition verifies that
-basis without changing an existing backup. Changed evidence stops recovery.
-This command does not rebind dependencies, release holds, or establish full
-readiness. Omit `--completion-receipt` for ordinary migration. Keep unresolved
-recovery held; do not perform a direct installer rollback or domain reset.
+The completion receipt prevents a resumed installer from repeating completed
+migration. Existing schema-one receipts remain accepted without reading their
+former data-copy fields. This command does not rebind dependencies, release
+holds, or establish full readiness. Omit `--completion-receipt` for ordinary
+migration. Keep unresolved recovery held; do not reset domain state.
 
 ## Configure future work and preserve activation intent
 
@@ -199,20 +191,20 @@ future activations while retaining history. After repair, explicitly resume the
 exact incident through Clockwork. Binding changes and deployment preserve halts;
 resume permits future scheduling without retrying preparation or uncertain mail.
 
-## Complete verification
+## Complete installation
 
-Verify exact program/provider selection, supported state, full held readiness,
-run-owned hold release, and captured activation intent. Retain the deployment's
-migration backup; interrupted runs reuse only the validated existing backup.
+Complete resource setup, migration, program/provider publication, run-owned
+hold release, and restoration of captured activation intent. Retain migration
+completion receipts for interrupted installer recovery.
 Register command inventory after installation or update:
 
 ```sh
 platter --register-usage
 ```
 
-This starts no product work. Treat state, configuration, logs, and backups as
-private. Platter backups contain its library; Nucleus evidence and credentials
-require separate backup and recovery. Domain artifacts have no automatic pruning.
+This starts no product work. Treat state, configuration, and logs as private.
+Nucleus evidence and credentials remain separately owned. Domain artifacts have
+no automatic pruning.
 No installation-latency or arbitrary incompatible rollback guarantee is supplied.
 
 ## Command usage

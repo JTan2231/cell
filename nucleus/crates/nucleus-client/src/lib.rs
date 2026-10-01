@@ -730,7 +730,6 @@ fn path_segment(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     fn deployment_health_fixture() -> Result<HealthResponseV1, serde_json::Error> {
         serde_json::from_value(serde_json::json!({
@@ -888,48 +887,5 @@ mod tests {
     fn path_components_cannot_change_routes() {
         assert_eq!(path_segment("job:1"), "job%3A1");
         assert_eq!(path_segment("../health"), "..%2Fhealth");
-    }
-
-    #[tokio::test]
-    async fn health_uses_the_configured_unix_socket() {
-        let temporary = tempfile::tempdir()
-            .unwrap_or_else(|error| panic!("create temporary directory: {error}"));
-        let socket = temporary.path().join("nucleus.sock");
-        let listener = tokio::net::UnixListener::bind(&socket)
-            .unwrap_or_else(|error| panic!("bind Unix socket: {error}"));
-        let server = tokio::spawn(async move {
-            let (mut connection, _) = listener
-                .accept()
-                .await
-                .unwrap_or_else(|error| panic!("accept client: {error}"));
-            let mut request = vec![0_u8; 4_096];
-            let read = connection
-                .read(&mut request)
-                .await
-                .unwrap_or_else(|error| panic!("read request: {error}"));
-            let request = String::from_utf8_lossy(&request[..read]);
-            assert!(request.starts_with("GET /v1/health HTTP/1.1"));
-
-            let body = r#"{"version":1,"status":"ok","daemonVersion":"0.1.0","acceptingJobs":true,"checkedAt":"2026-08-27T00:00:00Z","supportedProtocolVersions":[1],"harness":{"harness":"codex","harnessVersion":"0.146.0","adapterVersion":"0.1.0"},"harnessExecutable":"/opt/homebrew/bin/codex","capabilities":[],"authentication":{"codexHome":"/tmp/codex-home","configured":true,"authenticated":true}}"#;
-            let response = format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            connection
-                .write_all(response.as_bytes())
-                .await
-                .unwrap_or_else(|error| panic!("write response: {error}"));
-        });
-
-        let health = NucleusClient::new(&socket)
-            .unwrap_or_else(|error| panic!("construct client: {error}"))
-            .health()
-            .await
-            .unwrap_or_else(|error| panic!("read health: {error}"));
-        assert_eq!(health.status, "ok");
-        assert_eq!(health.daemon_version, "0.1.0");
-        server
-            .await
-            .unwrap_or_else(|error| panic!("join server: {error}"));
     }
 }

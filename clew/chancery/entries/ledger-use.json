@@ -1,6 +1,6 @@
 {
   "id": "clew.ledger.use",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -96,7 +96,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Schema-three JSON uses ok and data. Entries expose sequence, id, recorded_at, kind, status, notes, replaces, nullable thread {id,name}, and references {namespace,external_id,role}. Search returns matching history entries; entry reads return one history entry. History entries add superseded_by. Thread reads return thread, status, status_entry_id, and full history."
+        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Schema-three JSON uses ok and data. Entries expose sequence, id, recorded_at, kind, status, notes, replaces, nullable thread {id,name}, and references {namespace,external_id,role}. Search returns matching history entries; entry reads return one history entry. History entries add superseded_by. Thread reads return thread, status, status_entry_id, and full history. Human lists and search use summary rows. Entry, thread and application history reads preserve the full selected text."
       }
     ],
     "data_semantics": [
@@ -138,7 +138,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Ledger and JSON output schemas are three. Coordinated deployment migrates supported schema-one and schema-two ledgers with a consistent private backup, preserving write IDs, sequence, times, exact content, corrections, legacy aliases, and frozen email state. Migration creates no named threads or new reports. Ordinary operations refuse unsupported state. There is no automatic pruning or downgrade."
+        "statement": "Ledger and JSON output schemas are three. Coordinated deployment migrates supported schema-one and schema-two ledgers transactionally, preserving write IDs, sequence, times, exact content, corrections, legacy aliases, and frozen email state. Migration creates no named threads or new reports. Ordinary operations refuse unsupported state. There is no automatic pruning or downgrade."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 2 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

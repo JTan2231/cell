@@ -31,6 +31,10 @@ line `Semantics-Project: ID` in that folder's regular root `AGENTS.md`.
 Explain there that Semantics maintains terminology and history while source,
 tests, and product documentation own runtime behavior.
 
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific JSON schema. The typed client and pinned worker explicitly
+request JSON. Output selection changes no records, effects, or exit statuses.
+
 ## Registration and activation
 
 Registration binds the canonical root to one unique project identity and captures

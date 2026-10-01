@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 4,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -47,8 +47,8 @@
       "invocation": "paperboy-install inspect"
     },
     {
-      "label": "Take deployment backup",
-      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate --backup ABSENT_ABSOLUTE_PATH"
+      "label": "Initialize or open deployment state",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate"
     },
     {
       "label": "Maintain admission",
@@ -60,14 +60,14 @@
     }
   ],
   "effects": [
-    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state; backup preserves existing records.",
-    "Cell configuration initializes or backs up supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
+    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state or opens supported existing state without copying it.",
+    "Cell configuration initializes or opens supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
   ],
   "authority": [
     "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
   ],
   "success": [
-    "A report is generated when its summary is committed. A send succeeds when provider acceptance is retained. Installation succeeds after exact candidate readiness and release of run-owned holds. Schedule enable succeeds when Clockwork commits its binding."
+    "A report exists when its summary commits; a send succeeds when acceptance is retained. Installation succeeds after setup and release of run-owned holds, without artifact-integrity, state-integrity, or operational-readiness checks. Schedule enable succeeds when Clockwork commits its binding."
   ],
   "failure_and_recovery": [
     "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
@@ -84,8 +84,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.message.send",
@@ -94,8 +94,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -105,7 +105,7 @@
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -135,7 +135,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. Backups at the same run path must match every held retained row."
+        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. Completion receipts avoid repeating initialization and accept legacy schema-one receipts without reading former data-copy fields."
       },
       {
         "status": "declared",
@@ -187,11 +187,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The shared installer takes a supported database backup, selects immutable program/provider bytes, checks held readiness, then releases maintenance. Existing Clockwork selections remain unchanged until explicit schedule enable; disabled selections remain preserved."
+        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The installer selects program/provider bytes, initializes or opens supported state and releases maintenance. It does not invoke doctor. Existing schedule intent and halts are preserved."
       },
       {
         "status": "declared",
-        "statement": "Cell configuration initializes or backs up supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
+        "statement": "Cell configuration initializes or opens supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
       },
       {
         "status": "declared",

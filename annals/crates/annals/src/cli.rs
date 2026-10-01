@@ -77,8 +77,6 @@ pub enum Command {
     Graph(GraphArgs),
     /// Remove parent edges already implied by longer graph paths.
     Shake(ShakeArgs),
-    /// Create a consistent backup without replacing the destination.
-    Backup(BackupArgs),
     /// Retain and inspect immutable source works.
     #[command(subcommand)]
     Work(WorkCommand),
@@ -309,13 +307,6 @@ pub struct ShakeArgs {
     /// Apply without an interactive confirmation prompt.
     #[arg(long)]
     pub yes: bool,
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct BackupArgs {
-    /// Destination database path.
-    #[arg(value_name = "OUTPUT")]
-    pub output: PathBuf,
 }
 
 #[derive(Debug, Clone, Subcommand)]

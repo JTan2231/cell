@@ -263,10 +263,10 @@ with `revert_conflict`. Unrelated facts survive.
 
 ## Privacy, bounds, and compatibility
 
-The library and its backups retain sources, exact evidence, instruction
+The library retains sources, exact evidence, instruction
 revisions, reconciliation and examination provenance, and complete corpus
-history. Keep them private. Reading or validating does not authorize
-application, normalization, reversion, backup placement, or disclosure.
+history. Keep this data private. Reading or validating does not authorize
+application, normalization, reversion or disclosure.
 
 A bounded page does not bound replay cost. Revision N replays effects from
 1 through N, and the selected corpus state is held in memory. No corpus-size,

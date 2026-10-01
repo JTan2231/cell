@@ -1,6 +1,6 @@
 {
   "id": "nucleus.develop.change",
-  "contract_version": 2,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -27,27 +27,27 @@
   "success": [
     "Submit the committed change with `./ci.sh submit COMMIT` from the Cell root and verify the retained manager job outcome.",
     "Every changed public or operational fact is reflected in the owning feature contract and affected procedures; shared changes also update the ecosystem operator manual.",
-    "Deployment readiness confirms installed candidate identity and service health without synthetic model jobs or requester records."
+    "Deployment performs setup without artifact-integrity, state-integrity, or operational-readiness checks. It creates no synthetic model jobs or requester records."
   ],
   "failure_and_recovery": [
     "Do not attempt binary-only rollback after an incompatible store migration.",
-    "Do not replace the proved Codex executable without adapter inspection and compatibility tests.",
+    "Do not replace the proved Codex executable without adapter inspection and applicable in-memory compatibility checks.",
     "Preserve forward-only authentication separately from program or database rollback, including private staging and validated atomic promotion for every Codex credential-writing operation, supervised refresh and account reconciliation that survive requester cancellation, and attended-login exclusion from active job and account sessions."
   ],
   "privacy": [
-    "Development fixtures, logs, and backups may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
+    "Development fixtures and logs may contain complete prompts, model output, tool traffic, or credentials and must remain private.",
     "Deployment readiness does not create synthetic runtime or requester-domain records."
   ],
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "nucleus.jobs",
@@ -81,8 +81,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "session_surfaces": [
@@ -95,7 +95,7 @@
     "Run `nucleus manual` and classify the change as a routine patch, protocol/client change, execution-capacity change, store migration, exact Codex upgrade, requester contract change, or authentication/service change.",
     "Apply the smallest change in the owning Nucleus component and update all exact contracts and operator facts affected by it.",
     "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome, including affected requester validation.",
-    "For the manager deployment, preserve the required recovery material and verify requester quiescence, compatible deployment order, installed candidate identity, and service health."
+    "For the manager deployment, preserve the required recovery material and preserve requester quiescence, deployment order, configuration, and maintenance ownership."
   ],
   "checkpoints": [
     "The primary authority and every cross-system obligation are identified.",
@@ -181,7 +181,7 @@
       },
       {
         "status": "declared",
-        "statement": "Exact Codex changes stage the complete version-matched runtime, inspect its executable, model catalog and generated app-server schema, and prove a local command result through the actual tool path in isolated predeployment validation. Deployment readiness verifies sealed file identities without creating model jobs."
+        "statement": "Exact Codex changes stage the complete version-matched runtime, inspect its executable, model catalog and generated app-server schema, and prove a local command result through the actual tool path in isolated predeployment validation. Deployment does not verify runtime file identities or create model jobs; ordinary runtime checks remain separate."
       },
       {
         "status": "unspecified",
@@ -191,7 +191,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, backups, logs, credentials, and retained output stay within their documented private boundaries. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
+        "statement": "The operation uses the authorized local Nucleus source tree and shell surfaces; sensitive fixtures, logs, credentials, and retained output stay within their documented private boundaries. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."
       },
       {
         "status": "unsupported",

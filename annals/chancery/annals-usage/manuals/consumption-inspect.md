@@ -162,7 +162,7 @@ If an authority cannot be read, the command fails instead of returning stale
 retained output. A reported gap identifies missing authoritative coverage;
 inspect the underlying records through their owning interfaces. Historical
 recalculation requires the underlying Annals and Nucleus records to remain
-retained and compatible. Retain and back up those authorities when reports
+retained and compatible. Retain those authorities when reports
 must remain available.
 
 The report reads private local attribution and output metadata. Keep that

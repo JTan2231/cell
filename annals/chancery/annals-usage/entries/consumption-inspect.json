@@ -37,7 +37,7 @@
   ],
   "privacy": [
     "The report reads private Annals attribution and Nucleus output records, though it does not copy them into a new database.",
-    "Retain and back up the underlying authorities when historical recalculation must remain possible."
+    "Retain the underlying authorities when historical recalculation must remain possible."
   ],
   "interfaces": [
     {"label": "Recent delivery report", "invocation": "/Users/joey/.local/bin/annals-usage report"},
@@ -46,7 +46,7 @@
   "dependencies": [
     {"id": "annals.corpus.explore", "min_contract": 1, "max_contract_exclusive": 3},
     {"id": "annals-usage.execution.operate", "min_contract": 2, "max_contract_exclusive": 3},
-    {"id": "nucleus.execution.operate", "min_contract": 3, "max_contract_exclusive": 4}
+    {"id": "nucleus.execution.operate", "min_contract": 5, "max_contract_exclusive": 6}
   ],
   "does_not_authorize": [
     "Any Annals corpus or inbox mutation.",

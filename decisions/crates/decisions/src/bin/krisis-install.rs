@@ -32,9 +32,6 @@ enum Command {
     Install(Install),
     Uninstall(Control),
     Inspect(Home),
-    VerifyRelease {
-        release: PathBuf,
-    },
     #[command(hide = true)]
     Adapter {
         operation: cell_install::adapter::Operation,
@@ -102,10 +99,6 @@ fn dispatch(command: Command) -> Result<Value> {
             let paths = support::Paths::new(home(options.home)?)?;
             let snapshot = package::inspect(&paths)?;
             Ok(json!({"ok":true,"data":support::inspect_result(snapshot.current.as_ref())}))
-        }
-        Command::VerifyRelease { release } => {
-            let info = package::verify(&release, support::operator_uid()?)?;
-            Ok(json!({"ok":true,"data":info}))
         }
         Command::Adapter { operation } => adapter::execute(operation),
     }

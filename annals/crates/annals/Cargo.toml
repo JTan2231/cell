@@ -18,7 +18,7 @@ fs2 = { workspace = true }
 iatreion-api.workspace = true
 nucleus-client = { workspace = true }
 nucleus-core = { workspace = true }
-rusqlite = { workspace = true, features = ["backup"] }
+rusqlite.workspace = true
 rustix = { version = "1.1", features = ["fs", "process"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -29,7 +29,3 @@ time = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
 unicode-normalization = { workspace = true }
-
-[dev-dependencies]
-axum = { workspace = true }
-tempfile = { workspace = true }

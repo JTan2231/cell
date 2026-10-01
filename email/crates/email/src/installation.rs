@@ -19,7 +19,6 @@ pub fn lifecycle(
             .unwrap_or_else(|| serde_json::json!({})),
     )?;
     match operation {
-        Operation::Inspect => crate::settings::validate(&setup),
         Operation::Configure => crate::settings::configure(&setup),
         Operation::Recover
             if context

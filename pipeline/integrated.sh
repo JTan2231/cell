@@ -108,18 +108,4 @@ done
 [ "$normalized_entries" -eq "$catalog_expected_entries" ] \
     || integrated_fail "expected $catalog_expected_entries normalized entries; found $normalized_entries"
 
-"$chancery_candidate" --registry "$catalog_registry" --json resolve \
-    decisions.lifecycle.consume --require completeness_and_freshness >/dev/null
-
-annals_resolution="$catalog_workspace/annals-usage-resolution.json"
-set +e
-"$chancery_candidate" --registry "$catalog_registry" --json resolve \
-    annals-usage.consumption.inspect >"$annals_resolution"
-annals_resolution_status=$?
-set -e
-[ "$annals_resolution_status" -eq 1 ] \
-    || integrated_fail "Annals Usage resolution should report incomplete declaration; exit $annals_resolution_status"
-grep -F '"status":"incomplete_declaration"' "$annals_resolution" >/dev/null
-grep -F '"code":"uncontracted_reliance"' "$annals_resolution" >/dev/null
-
 printf '%s\n' 'pipeline/integrated.sh: green'

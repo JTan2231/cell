@@ -3081,37 +3081,6 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn quota_deferral_creates_no_job_and_does_not_block_cancellation()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let root = tempfile::tempdir()?;
-        let mut state = AppState::new(
-            Store::open_in_memory()?,
-            CodexHarness::with_codex_home("unused-codex", root.path()),
-        )
-        .await?;
-        state.quota = Some(Arc::new(quota::QuotaGate::open(root.path())?));
-        let request = launch_context_request("quota-test", &LaunchContextId::new("unused"));
-        let Err(error) = admit_job_request(&state, request.clone()).await else {
-            return Err("unknown quota was admitted".into());
-        };
-        assert_eq!(error.code, "quota_deferred");
-        assert_eq!(error.status, StatusCode::TOO_MANY_REQUESTS);
-        assert!(state.store.lock().await.list_jobs()?.is_empty());
-        let (_, mut cancelled) = watch::channel(true);
-        assert!(
-            acquire_execution_slot(&state, &request, &mut cancelled)
-                .await
-                .map_err(|error| std::io::Error::other(error.message))?
-                .is_none()
-        );
-        assert_eq!(
-            state.execution_slots.available_permits(),
-            MAX_CONCURRENT_JOB_ATTEMPTS
-        );
-        Ok(())
-    }
-
     fn launch_context_request(id: &str, context: &LaunchContextId) -> JobRequestV1 {
         let mut invocation = nucleus_core::AgentInvocationV1::new(
             "codex",

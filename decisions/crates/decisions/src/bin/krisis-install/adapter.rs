@@ -1,9 +1,9 @@
-//! Fixed coordinator protocol with Krisis-owned admission and readiness.
+//! Fixed coordinator protocol with Krisis-owned admission and configuration.
 use super::{
     Install, lifecycle, package,
     support::{
-        ACTIVE, Paths, Pins, args, binding, binding_receipt, checked, doctor, exists,
-        inspect_result, maintenance, require, switch,
+        ACTIVE, Paths, Pins, args, binding, binding_receipt, checked, exists, inspect_result,
+        maintenance, require, switch,
     },
 };
 use cell_install::adapter::{Context, Operation, reply};
@@ -296,51 +296,6 @@ impl Adapter {
         )?;
         Ok(value)
     }
-    fn readiness(&self, candidate: bool) -> Result<()> {
-        let info = self
-            .snapshot()?
-            .current
-            .ok_or_else(|| Error::new("Krisis is absent"))?;
-        let pins = lifecycle::pins_from_receipt(&self.paths, &self.clockwork, &info)?;
-        if candidate {
-            require(
-                pins == self.candidate_pins()?,
-                "candidate did not adopt exact Annals and Codex pins",
-            )?;
-        }
-        doctor(
-            &self.paths,
-            &package::root(&self.paths, &info).join("libexec/krisis"),
-            &pins,
-        )?;
-        Ok(())
-    }
-    fn verify(&self) -> Result<Value> {
-        self.clean()?;
-        let selected = self.context.selected();
-        let info = self
-            .snapshot()?
-            .current
-            .ok_or_else(|| Error::new("installed Krisis is absent"))?;
-        if selected {
-            package::matches_candidate(&self.paths, &info, &self.options()?)?;
-        } else {
-            self.check_prior()?;
-        }
-        for flag in ["--version", "--help"] {
-            checked(
-                &self.paths,
-                &self.payload()?,
-                &args(&[flag]),
-                &BTreeMap::new(),
-                30,
-            )?;
-        }
-        let mut result = inspect_result(Some(&info));
-        result["controls"] = self.require_disabled()?;
-        self.readiness(selected)?;
-        Ok(result)
-    }
     fn recover(&self) -> Result<Value> {
         lifecycle::recover_lock(&self.paths)?;
         let recovered_candidate = if lifecycle::no_unfinished_transaction(&self.paths).is_err() {
@@ -353,12 +308,6 @@ impl Adapter {
         let prior = observed["current"] == self.context.prior()?["current"];
         if prior {
             self.check_prior()?;
-        } else {
-            let info = self
-                .snapshot()?
-                .current
-                .ok_or_else(|| Error::new("candidate installation is absent"))?;
-            package::matches_candidate(&self.paths, &info, &self.options()?)?;
         }
         self.restore_controls(false)?;
         let recovery = self
@@ -374,13 +323,12 @@ impl Adapter {
             return Ok(json!({"safe_to_release":true,"installed":"prior"}));
         }
         let status = self.status("status")?;
-        let released = recovery["verified"] == true
+        let released = recovery["configured"] == true
             && (status["holds"] == json!([])
                 || status["holds"] == json!([self.context.request.run_id]));
         if !released {
             self.owned_status()?;
         }
-        self.readiness(!prior)?;
         Ok(json!({"safe_to_release":true,"installed":if candidate {"candidate"}else{"prior"}}))
     }
 }
@@ -458,10 +406,9 @@ pub fn execute(operation: Operation) -> Result<Value> {
         Operation::Configure => {
             if !adapter.context.selected() {
                 adapter.check_prior()?;
-                adapter.readiness(false)?;
                 return Ok(reply(
                     "configured",
-                    "Krisis retained configuration verified",
+                    "Krisis retained configuration kept",
                     json!({}),
                 ));
             }
@@ -481,11 +428,6 @@ pub fn execute(operation: Operation) -> Result<Value> {
                 inspect_result(adapter.snapshot()?.current.as_ref()),
             )
         }
-        Operation::Verify => (
-            "verified",
-            "Krisis installation, controls and readiness verified",
-            adapter.verify()?,
-        ),
         Operation::Release => {
             adapter.clean()?;
             adapter.require_disabled()?;
@@ -497,7 +439,7 @@ pub fn execute(operation: Operation) -> Result<Value> {
         }
         Operation::Recover => (
             "recovered",
-            "coherent Krisis generation verified without inferred database rollback",
+            "Krisis generation recovery completed without inferred database rollback",
             adapter.recover()?,
         ),
     };

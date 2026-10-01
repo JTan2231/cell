@@ -69,20 +69,6 @@ impl Layout {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn isolated(root: &Path) -> Self {
-        let root = root
-            .canonicalize()
-            .expect("canonicalize isolated layout root");
-        Self {
-            state_root: root.join("state"),
-            logs_root: root.join("logs"),
-            agents_root: root.join("agents"),
-            home: root.join("home"),
-            overridden: true,
-        }
-    }
-
     pub(crate) fn prepare(&self) -> Result<()> {
         ensure_private_directory(&self.state_root)?;
         ensure_private_directory(&self.locks_root())?;

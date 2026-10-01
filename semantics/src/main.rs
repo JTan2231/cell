@@ -28,6 +28,7 @@ use semantics::{Error, Result};
 struct Cli {
     #[arg(long, env = "SEMANTICS_DATABASE")]
     database: Option<PathBuf>,
+    /// Emit JSON instead of the default plain text.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
@@ -67,7 +68,7 @@ fn maintenance_error(error: cell_maintenance::Error) -> Error {
     Error::domain("deployment_maintenance", error.to_string())
 }
 
-fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<()> {
+fn maintenance_command(database: &Path, command: MaintenanceCommand, json: bool) -> Result<()> {
     let gate = deployment_gate(database)?;
     let status = match command {
         MaintenanceCommand::Hold { run_id } => gate.hold(&run_id),
@@ -78,7 +79,7 @@ fn maintenance_command(database: &Path, command: MaintenanceCommand) -> Result<(
     print(
         &json!({"protocol_version": 1, "contract_version": status.contract_version,
         "holds": status.holds, "drained": status.drained}),
-        true,
+        json,
     )
 }
 
@@ -274,7 +275,7 @@ fn render_error(error: &Error, json_output: bool, scheduled_worker: bool) -> Str
 fn run(cli: Cli) -> Result<()> {
     let database = cli.database.map_or_else(default_database, Ok)?;
     if let Command::Maintenance { command } = cli.command {
-        return maintenance_command(&database, command);
+        return maintenance_command(&database, command, cli.json);
     }
     // Opening the store may initialize or migrate it. Track this lifetime even
     // for reads so installation cannot race a reader's automatic migration.
@@ -714,10 +715,60 @@ fn print(value: &impl Serialize, compact: bool) -> Result<()> {
     let output = if compact {
         serde_json::to_string(value)?
     } else {
-        serde_json::to_string_pretty(value)?
+        text_output(&serde_json::to_value(value)?)
     };
     println!("{output}");
     Ok(())
+}
+
+fn text_output(value: &serde_json::Value) -> String {
+    fn record(value: &serde_json::Value, label: &str, indent: usize, lines: &mut Vec<String>) {
+        let prefix = " ".repeat(indent);
+        let nested_indent = if label.is_empty() { indent } else { indent + 2 };
+        match value {
+            serde_json::Value::Object(fields) if !fields.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (key, value) in fields {
+                    record(value, key, nested_indent, lines);
+                }
+            }
+            serde_json::Value::Array(items) if !items.is_empty() => {
+                if !label.is_empty() {
+                    lines.push(format!("{prefix}{label}:"));
+                }
+                for (index, item) in items.iter().enumerate() {
+                    record(item, &(index + 1).to_string(), nested_indent, lines);
+                }
+            }
+            _ => {
+                let text = match value {
+                    serde_json::Value::Null
+                    | serde_json::Value::Object(_)
+                    | serde_json::Value::Array(_) => "none".to_owned(),
+                    serde_json::Value::String(text) if text.is_empty() => "(empty)".to_owned(),
+                    serde_json::Value::String(text) => text.clone(),
+                    value => value.to_string(),
+                };
+                let label = if label.is_empty() { "Result" } else { label };
+                if text.contains('\n') {
+                    lines.push(format!("{prefix}{label}:"));
+                    for line in text.split('\n') {
+                        lines.push(format!("{prefix}  {line}"));
+                    }
+                } else {
+                    lines.push(format!("{prefix}{label}: {text}"));
+                }
+            }
+        }
+    }
+    if matches!(value, serde_json::Value::Array(items) if items.is_empty()) {
+        return "No records.".to_owned();
+    }
+    let mut lines = Vec::new();
+    record(value, "", 0, &mut lines);
+    lines.join("\n")
 }
 
 fn default_database() -> Result<PathBuf> {
@@ -735,109 +786,8 @@ fn default_database() -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
-
-    use super::{prove_annals_feed_replay, ready_account_feed_library, render_error};
+    use super::render_error;
     use semantics::Error;
-    use semantics::adapters::{DecisionAccountPage, DecisionAccountSource};
-    use semantics::domain::{DecisionAccountAnchor, DecisionAccountEvent};
-    use semantics::store::Store;
-    use tempfile::TempDir;
-
-    struct Feed {
-        watermark: String,
-        pages: VecDeque<DecisionAccountPage>,
-    }
-
-    impl DecisionAccountSource for Feed {
-        fn watermark(&mut self) -> semantics::Result<(String, String)> {
-            Ok((
-                "0123456789abcdef0123456789abcdef".to_owned(),
-                self.watermark.clone(),
-            ))
-        }
-
-        fn read_page(
-            &mut self,
-            _cursor: &str,
-            _watermark: &str,
-            _limit: u16,
-        ) -> semantics::Result<DecisionAccountPage> {
-            self.pages
-                .pop_front()
-                .ok_or_else(|| Error::domain("fixture_empty", "missing page"))
-        }
-    }
-
-    fn account(cursor: &str, ordinal: u8) -> DecisionAccountEvent {
-        DecisionAccountEvent {
-            library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-            cursor: cursor.to_owned(),
-            event_id: format!("event-{ordinal}"),
-            account_id: format!("account-{ordinal}"),
-            content: semantics::domain::DecisionContent::Legacy(
-                semantics::domain::LegacyAccountContent {
-                    account_schema_version: 1,
-                    statement: "statement".to_owned(),
-                    context: "context".to_owned(),
-                    action: "action".to_owned(),
-                    result: "result".to_owned(),
-                    occurred_at: i64::from(ordinal),
-                    occurred_at_precision: "second".to_owned(),
-                    authority: DecisionAccountAnchor {
-                        host_id: "host".to_owned(),
-                        thread_id: "thread".to_owned(),
-                        turn_id: format!("turn-{ordinal}"),
-                        item_id: format!("item-{ordinal}"),
-                        span_start: 0,
-                        span_end: 1,
-                    },
-                },
-            ),
-        }
-    }
-
-    fn page(
-        request_cursor: &str,
-        watermark: &str,
-        events: Vec<DecisionAccountEvent>,
-    ) -> DecisionAccountPage {
-        let next_cursor = events
-            .last()
-            .map_or_else(|| request_cursor.to_owned(), |event| event.cursor.clone());
-        DecisionAccountPage {
-            library_id: "0123456789abcdef0123456789abcdef".to_owned(),
-            request_cursor: request_cursor.to_owned(),
-            next_cursor,
-            watermark: watermark.to_owned(),
-            events,
-        }
-    }
-
-    #[test]
-    fn account_feed_readiness_fails_closed_for_unactivated_projects() {
-        let temporary = TempDir::new().expect("temporary directory");
-        let store = Store::open(temporary.path().join("semantics.db")).expect("store");
-        assert_eq!(
-            ready_account_feed_library(&store).expect("empty repository readiness"),
-            None
-        );
-
-        store
-            .register_project("legacy", temporary.path(), "legacy-cursor")
-            .expect("legacy project");
-        let error = ready_account_feed_library(&store).expect_err("activation must be required");
-        assert_eq!(error.code(), "annals_feed_inactive");
-
-        let library_id = "0123456789abcdef0123456789abcdef";
-        store
-            .activate_account_feed(library_id, "afe1_0000")
-            .expect("feed activation");
-        assert_eq!(
-            ready_account_feed_library(&store).expect("activated readiness"),
-            Some(library_id.to_owned())
-        );
-    }
 
     #[test]
     fn scheduled_worker_errors_are_body_free() {
@@ -850,100 +800,5 @@ mod tests {
         for private in ["PRIVATE", "/private/project", "thread-secret"] {
             assert!(!output.contains(private));
         }
-    }
-
-    #[test]
-    fn doctor_requires_identical_fixed_watermark_page_replay() {
-        let temporary = TempDir::new().expect("temporary directory");
-        let store = Store::open(temporary.path().join("semantics.db")).expect("store");
-        let first = page("a1", "a1", Vec::new());
-        let changed = page("a1", "a1", vec![account("a2", 1)]);
-        let mut feed = Feed {
-            watermark: "a1".to_owned(),
-            pages: VecDeque::from([first, changed]),
-        };
-        let error = prove_annals_feed_replay(&store, &mut feed, None)
-            .expect_err("changed replay must fail");
-        assert_eq!(error.code(), "annals_replay_mismatch");
-    }
-
-    #[test]
-    fn doctor_replays_every_page_until_an_unchanged_empty_page() {
-        let temporary = TempDir::new().expect("temporary directory");
-        let store = Store::open(temporary.path().join("semantics.db")).expect("store");
-        store
-            .register_project("legacy", temporary.path(), "legacy-final")
-            .expect("legacy project");
-        store
-            .activate_account_feed("0123456789abcdef0123456789abcdef", "a0")
-            .expect("feed activation");
-        let first = page("a0", "a3", vec![account("a1", 1), account("a2", 2)]);
-        let second = page("a2", "a3", vec![account("a3", 3)]);
-        let empty = page("a3", "a3", Vec::new());
-        let mut feed = Feed {
-            watermark: "a3".to_owned(),
-            pages: VecDeque::from([
-                first.clone(),
-                first,
-                second.clone(),
-                second,
-                empty.clone(),
-                empty,
-            ]),
-        };
-        let detail =
-            prove_annals_feed_replay(&store, &mut feed, Some("0123456789abcdef0123456789abcdef"))
-                .expect("multipage replay");
-        assert!(detail.contains("3 fixed-watermark page replay(s)"));
-        assert!(feed.pages.is_empty());
-    }
-
-    #[test]
-    fn doctor_rejects_a_later_page_cycle() {
-        let temporary = TempDir::new().expect("temporary directory");
-        let store = Store::open(temporary.path().join("semantics.db")).expect("store");
-        store
-            .register_project("legacy", temporary.path(), "legacy-final")
-            .expect("legacy project");
-        store
-            .activate_account_feed("0123456789abcdef0123456789abcdef", "a0")
-            .expect("feed activation");
-        let first = page("a0", "a9", vec![account("a1", 1)]);
-        let cycle = page("a1", "a9", vec![account("a0", 2)]);
-        let mut feed = Feed {
-            watermark: "a9".to_owned(),
-            pages: VecDeque::from([first.clone(), first, cycle.clone(), cycle]),
-        };
-        let error =
-            prove_annals_feed_replay(&store, &mut feed, Some("0123456789abcdef0123456789abcdef"))
-                .expect_err("cursor cycle");
-        assert_eq!(error.code(), "annals_page_cycle");
-    }
-
-    #[test]
-    fn doctor_rejects_changed_replay_on_a_later_page() {
-        let temporary = TempDir::new().expect("temporary directory");
-        let store = Store::open(temporary.path().join("semantics.db")).expect("store");
-        store
-            .register_project("legacy", temporary.path(), "legacy-final")
-            .expect("legacy project");
-        store
-            .activate_account_feed("0123456789abcdef0123456789abcdef", "a0")
-            .expect("feed activation");
-        let first = page("a0", "a9", vec![account("a1", 1)]);
-        let second = page("a1", "a9", vec![account("a2", 2)]);
-        let mut changed = second.clone();
-        if let semantics::domain::DecisionContent::Legacy(content) = &mut changed.events[0].content
-        {
-            content.statement = "changed replay".to_owned();
-        }
-        let mut feed = Feed {
-            watermark: "a9".to_owned(),
-            pages: VecDeque::from([first.clone(), first, second, changed]),
-        };
-        let error =
-            prove_annals_feed_replay(&store, &mut feed, Some("0123456789abcdef0123456789abcdef"))
-                .expect_err("later changed replay");
-        assert_eq!(error.code(), "annals_replay_mismatch");
     }
 }

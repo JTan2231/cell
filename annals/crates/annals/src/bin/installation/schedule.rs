@@ -110,7 +110,7 @@ pub(super) fn prove(
 ) -> Result<()> {
     if let Some(digest) = &control.digest {
         let info = info.ok_or_else(|| Error::new("Annals binding has no proved release"))?;
-        cell_install::verify_release_at(
+        cell_install::read_release_at(
             &release::layout(),
             &release::root(home, info),
             &release::legacy,
@@ -173,7 +173,7 @@ pub(super) fn selected_release(
             "selected Annals definition names a foreign release root",
         ));
     }
-    Ok(Some(cell_install::verify_release_at(
+    Ok(Some(cell_install::read_release_at(
         &release::layout(),
         &root,
         &release::legacy,

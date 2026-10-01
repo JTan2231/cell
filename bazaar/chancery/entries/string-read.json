@@ -1,6 +1,6 @@
 {
   "id": "bazaar.string.read",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -79,7 +79,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Get returns id, version, and exact content. History returns the ID and every retained version number in descending order. Rust methods return Record or Vec<i64> with typed errors. CLI results use schema-one JSON. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error."
+        "statement": "Get returns id, version, and exact content. History returns the ID and every retained version number in descending order. Rust methods return Record or Vec<i64> with typed errors. CLI reads use readable text by default. Global --json selects the existing schema-one JSON results. Text get includes complete content; history lists every retained version. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stdout with --json. Syntax errors remain Clap text on stderr with exit 2. Record has id: String, version: i64, and content: String; bazaar::api::Result<T> uses the public typed Error."
       }
     ],
     "completeness_and_freshness": [

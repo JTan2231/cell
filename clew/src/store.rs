@@ -288,17 +288,13 @@ impl Store {
     }
 
     /// Caller holds email admission and drains sends. Migration excludes old writers.
-    pub fn migrate(
-        root: &Path,
-        mappings: &BTreeMap<String, String>,
-        backup_path: &Path,
-    ) -> Result<()> {
-        migrate_ledger(root, 1, Some(mappings), backup_path)
+    pub fn migrate(root: &Path, mappings: &BTreeMap<String, String>) -> Result<()> {
+        migrate_ledger(root, 1, Some(mappings))
     }
 
     /// Schema two already retains all identities needed for the general ledger.
-    pub fn migrate_current(root: &Path, backup_path: &Path) -> Result<()> {
-        migrate_ledger(root, 2, None, backup_path)
+    pub fn migrate_current(root: &Path) -> Result<()> {
+        migrate_ledger(root, 2, None)
     }
 
     pub fn entry(&self, id: &str) -> Result<Option<Entry>> {
@@ -792,26 +788,6 @@ fn legacy_references(connection: &Connection) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-fn backup_locked(root: &Path, backup_path: &Path) -> Result<()> {
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(backup_path)
-        .context("migration backup must be a new private file")?
-        .sync_all()?;
-    let source = connect(root, false)?;
-    let mut destination = Connection::open(backup_path)?;
-    {
-        let backup = rusqlite::backup::Backup::new(&source, &mut destination)?;
-        backup.run_to_completion(128, std::time::Duration::from_millis(10), None)?;
-    }
-    destination.close().map_err(|(_, error)| error)?;
-    std::fs::File::open(backup_path)?.sync_all()?;
-    std::fs::File::open(backup_path.parent().context("backup parent is absent")?)?.sync_all()?;
-    Ok(())
-}
-
 struct OldEntry {
     sequence: i64,
     id: String,
@@ -864,14 +840,8 @@ fn migrate_ledger(
     root: &Path,
     version: i64,
     supplied_mappings: Option<&BTreeMap<String, String>>,
-    backup_path: &Path,
 ) -> Result<()> {
     private_directory(root)?;
-    ensure!(
-        backup_path.is_absolute(),
-        "migration backup must be absolute"
-    );
-    private_directory(backup_path.parent().context("backup parent is absent")?)?;
     let mut connection = connect(root, true)?;
     // The rebuilt table references itself. Check all foreign keys before commit.
     connection.pragma_update(None, "foreign_keys", false)?;
@@ -904,7 +874,6 @@ fn migrate_ledger(
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?
     };
-    backup_locked(root, backup_path)?;
     tx.execute_batch(
         "DROP TRIGGER entries_no_update; DROP TRIGGER entries_no_delete;
         DROP TRIGGER IF EXISTS entries_require_cast; DROP INDEX entries_job;

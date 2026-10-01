@@ -2,9 +2,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use emt::store::{Config, Store};
 use emt::{Result, fail};
 use serde_json::{Value, json};
-use std::fs::{self, File, OpenOptions};
-use std::io::{Read as _, Write as _};
-use std::os::unix::fs::OpenOptionsExt as _;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -66,10 +64,7 @@ enum Command {
         #[command(subcommand)]
         operation: MaintenanceOperation,
     },
-    Migrate {
-        #[arg(long)]
-        backup: PathBuf,
-    },
+    Migrate,
 }
 
 #[derive(Subcommand)]
@@ -272,7 +267,7 @@ async fn run(command: Command) -> Result<Value> {
             },
         ),
         Command::Maintenance { operation } => maintenance(&root, operation).await,
-        Command::Migrate { backup } => migrate(&root, &backup),
+        Command::Migrate => migrate(&root),
     }
 }
 
@@ -330,13 +325,7 @@ async fn maintenance(root: &Path, operation: MaintenanceOperation) -> Result<Val
     maintenance_status(root)
 }
 
-fn migrate(root: &Path, backup: &Path) -> Result<Value> {
-    if !backup.is_absolute()
-        || backup == root.join("emt.sqlite3")
-        || backup == root.join("config.json")
-    {
-        return Err(fail("backup must be a separate absolute path"));
-    }
+fn migrate(root: &Path) -> Result<Value> {
     let gate = emt::gate(root);
     let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
     let _admission = if let Some(owner) = &owner {
@@ -347,52 +336,11 @@ fn migrate(root: &Path, backup: &Path) -> Result<Value> {
     let _lock = emt::store::runner_lock(root)?;
     if !root.join("emt.sqlite3").exists() {
         Store::initialize(root)?;
-        return Ok(json!({"schema_version":1,"backup":null}));
+        return Ok(json!({"schema_version":1}));
     }
     let store = Store::open(root)?;
     if store.outstanding_work()? != 0 {
-        return Err(fail("backup requires drained exchanges"));
+        return Err(fail("migration requires drained exchanges"));
     }
-    drop(store);
-    emt::store::private_directory(
-        backup
-            .parent()
-            .ok_or_else(|| fail("backup has no parent"))?,
-    )?;
-    copy_backup(&root.join("emt.sqlite3"), backup)?;
-    copy_backup(
-        &root.join("config.json"),
-        &backup.with_extension("config.json"),
-    )?;
-    Ok(
-        json!({"schema_version":1,"backup":backup,"config_backup":backup.with_extension("config.json")}),
-    )
-}
-
-fn copy_backup(source: &Path, destination: &Path) -> Result<()> {
-    match OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(destination)
-    {
-        Ok(mut file) => {
-            std::io::copy(&mut File::open(source)?, &mut file)?;
-            file.flush()?;
-            file.sync_all()?;
-            File::open(
-                destination
-                    .parent()
-                    .ok_or_else(|| fail("backup has no parent"))?,
-            )?
-            .sync_all()?;
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            if fs::read(source)? != fs::read(destination)? {
-                return Err(fail("existing backup differs from current drained state"));
-            }
-        }
-        Err(error) => return Err(error.into()),
-    }
-    Ok(())
+    Ok(json!({"schema_version":1}))
 }

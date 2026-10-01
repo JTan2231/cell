@@ -20,9 +20,10 @@ clockwork [--json] notification show INCIDENT_ID
 clockwork [--json] notification claim INCIDENT_ID --delivery-id UUID
 ```
 
-Successful commands return an `ok:true` / `data` JSON envelope. `--json`
-selects compact output and coded `ok:false` / `error` failures on stderr with
-exit one; otherwise failures are human-readable.
+Commands print plain text by default. `--json` selects the existing compact
+`ok:true` / `data` JSON envelope. With that flag, coded `ok:false` / `error`
+failures go to stderr with exit one. Other failures are human-readable on
+stderr. Machine callers must pass `--json`.
 
 ## Basic eligibility and transport
 
@@ -115,9 +116,9 @@ contains no diagnostic text, received mail or credential. The schema-two
 database remains unchanged. The separate private `notification-checks.json`
 sidecar retains policy and incident notification-check progress. The schema-one
 `failure-checks.json` sidecar retains the immutable abend ledger cursor and
-pending per-key episodes and check progress. Back up and recover all three
-sidecars with the database; a database-only backup does not preserve pending
-failures, delegated ownership or alert progress.
+pending per-key episodes and check progress. Preserve all three sidecars with
+the database during recovery. They jointly retain pending failures, delegated
+ownership and alert progress.
 
 The first notification inspection or sender visit snapshots an eligible
 incident's Reply-To. Its basic-send grace deadline is 120 seconds after the
@@ -173,10 +174,9 @@ The schema-two database, schema-one failure-check sidecar, version-one routing
 sidecar, notification-check metadata, provider release, Email contract, and EMT
 contract are separate compatibility axes.
 Refresh pinned brokers before relying on check eligibility or delegated
-ownership. Older brokers ignore that metadata. Back up and restore database,
-all three sidecars, and EMT exchange evidence coherently. Losing a claim can
-duplicate
-an already accepted message. Do not erase sidecars to force a send.
+ownership. Older brokers ignore that metadata. Preserve database, all three
+sidecars, and EMT exchange evidence coherently during recovery. Losing a claim
+can duplicate an already accepted message. Do not erase sidecars to force a send.
 
 No independent timer, final delivery guarantee, service-check freshness
 objective, alert-latency bound, automatic pruning, or deprecation window is
@@ -187,5 +187,5 @@ EMT worker, whose timer delivery remains subject to launchd.
 
 Use `clockwork.schedule.operate` for procedure checkpoints. Read
 `clockwork.incidents` for halt meaning, `clockwork.installation` for broker
-cutover and backup, `email.message.send` for transport, and
+cutover and schema compatibility, `email.message.send` for transport, and
 `iatreion.status.inspect` for operational evidence.

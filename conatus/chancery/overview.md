@@ -13,6 +13,11 @@ instruction identities, evidence, concepts, revisions, interpretation and
 domain recovery. Associations express interpretation. They do not establish
 progress, enactment, completion, or current force.
 
+The `conatus` command prints readable text by default. Use `--json` for the
+existing machine response. Lists print summary rows; show reads preserve
+complete source text and available evidence. Email preview keeps its plain
+From, To, Subject and body format.
+
 Read `chancery show ID` for one feature or procedure. Read
 `chancery resolve ID` for its required contract reading and compatibility gaps.
 Read `chancery product conatus` for this overview and the inventory. Installed

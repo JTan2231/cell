@@ -24,7 +24,7 @@ if __package__ in (None, ""):
 
 from ci_broker.client import bootstrap_cargo_path, common_git_directory, git
 from ci_broker.broker import MINIMAL_ENVIRONMENT
-from deployment import candidate
+from deployment import candidate, signing
 from deployment.inventory import descriptor
 from ci_manager import workspace
 
@@ -35,7 +35,7 @@ CONFIG_ENV = ("AR", "CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "SDKROOT",
 
 
 class BuildError(RuntimeError):
-    """Selected release materials could not be built or verified."""
+    """Selected release materials could not be built."""
 
 
 def read_descriptor(source: Path, product: str) -> dict[str, str]:
@@ -143,27 +143,12 @@ def build_configuration(source: Path, cache: Path) -> tuple[dict[str, str], dict
     return environment, configuration
 
 
-def material_paths(source: Path, selected: dict[str, dict[str, Any]]) -> list[str]:
-    prefixes = ["deployment/"]
-    for item in selected.values():
-        directory = item["directory"]
-        prefixes.extend((f"{directory}/packaging/", f"{directory}/chancery",
-                         f"{directory}/provider/", f"{directory}/deployment/"))
-    paths = git(source, "ls-files", "--cached", "--others", "--exclude-standard", "-z").split(b"\0")
-    return sorted({os.fsdecode(path) for path in paths if path and os.fsdecode(path).startswith(tuple(prefixes))})
 
 
-def cache_verify(entry: Path, identity: dict[str, Any]) -> dict[str, Any]:
-    candidate.regular(entry / "manifest.json")
-    manifest = json.loads((entry / "manifest.json").read_text())
-    files = candidate.tree_files(entry)
-    files.pop("manifest.json")
-    if manifest.get("schema") != 1 or manifest.get("identity") != identity or manifest.get("files") != files:
-        raise BuildError("cached release materials changed")
-    return manifest
 
 
-def prepare(source: Path, products: list[str], output: Path, unit: str | None = None) -> dict[str, Any]:
+def prepare(source: Path, products: list[str], output: Path, unit: str | None = None, *,
+            signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     source = source.resolve()
     if not output.is_absolute() or output.is_symlink() or output == source or source in output.parents:
         raise BuildError("build output must be an absolute non-symbolic path outside the source worktree")
@@ -171,6 +156,11 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         raise BuildError("build output already exists")
     if not products:
         raise BuildError("at least one product is required")
+    policy = signing.load_policy() if signing_policy is None else signing_policy
+    if policy is not None:
+        signing.assert_current(policy)
+        signing.preflight(policy)
+    policy_digest = signing.policy_digest(policy) if policy is not None else None
     workspace.require_capacity()
     workspace.require_path(output)
     repository_key = hashlib.sha256(os.fsencode(str(common_git_directory(source)))).hexdigest()
@@ -180,12 +170,13 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
         raise BuildError("release cache must be an absolute non-symbolic directory")
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
     (cache / "entries").mkdir(mode=0o700, exist_ok=True)
-    source_key = candidate.content_source_key(source)
+    source_key = candidate.source_identity(source)
     environment, configuration = build_configuration(source, cache)
     metadata = json.loads(tool_output(source, environment, "cargo", "metadata", "--format-version", "1",
                                       "--no-deps", "--locked", "--manifest-path", str(source / "Cargo.toml")))
     selected = selection(source, products, unit, metadata)
-    identity = {"schema": 1, "source_key": source_key, "configuration": configuration, "selection": selected}
+    identity = {"schema": 1, "source_key": source_key, "configuration": configuration, "selection": selected,
+                "signing_policy": policy, "signing_policy_digest": policy_digest}
     build_key = hashlib.sha256(candidate.json_bytes(identity)).hexdigest()
     entry = cache / "entries" / build_key
     started = time.monotonic()
@@ -197,13 +188,11 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
     with lock_path.open("a+b") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         queue_seconds = time.monotonic() - started
-        if candidate.content_source_key(source) != source_key:
-            raise BuildError("source changed before release build")
         if entry.exists():
-            cache_verify(entry, identity)
             cache_hit = True
         else:
-            names = sorted({name for item in selected.values() for name in item["binaries"]})
+            owners = {name: product for product, item in selected.items() for name in item["binaries"]}
+            names = sorted(owners)
             packages = sorted({record["package"] for item in selected.values() for record in item["binaries"].values()})
             command = ["cargo", "build", "--release", "--locked", "--manifest-path", str(source / "Cargo.toml"),
                        "--target", configuration["target"], "--target-dir", str(cache / "target"),
@@ -223,29 +212,38 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
                 for name in names:
                     binary = cache / "target" / configuration["target"] / "release" / name
                     candidate.regular(binary)
-                    shutil.copyfile(binary, binaries / name)
-                    (binaries / name).chmod(0o555)
-                    expected = next(item["binaries"][name]["version"] for item in selected.values()
-                                    if name in item["binaries"])
-                    version = tool_output(source, environment, str(binaries / name), "--version")
-                    if version != expected:
-                        raise BuildError(f"{name} release version differs: expected {expected!r}, found {version!r}")
-                for relative in material_paths(source, selected):
-                    incoming = source / relative
-                    candidate.regular(incoming)
-                    destination = temporary / "materials" / relative
-                    destination.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(incoming, destination)
-                if candidate.content_source_key(source) != source_key:
-                    raise BuildError("source changed during release build")
-                manifest = {"schema": 1, "identity": identity, "files": candidate.tree_files(temporary),
-                            "build_seconds": build_seconds}
+                    staged = binaries / name
+                    shutil.copyfile(binary, staged)
+                    staged.chmod(0o755)
+                    if policy is not None:
+                        signing.sign(staged, policy, owners[name], name)
+                manifest = {"schema": 1, "identity": identity,
+                            "build_seconds": build_seconds,
+                            "binaries": {name: candidate.digest(binaries / name) for name in names}}
                 (temporary / "manifest.json").write_bytes(candidate.json_bytes(manifest))
                 candidate.seal_tree(temporary)
                 temporary.rename(entry)
             finally:
                 if temporary.exists():
                     candidate.remove_tree(temporary)
+        if entry.is_symlink() or not entry.is_dir():
+            raise BuildError("release cache entry must be a non-symbolic directory")
+        candidate.regular(entry / "manifest.json")
+        retained = json.loads((entry / "manifest.json").read_text())
+        if not isinstance(retained, dict) or retained.get("schema") != 1 or retained.get("identity") != identity:
+            raise BuildError("release cache metadata does not match the build")
+        recorded = retained.get("binaries")
+        names = {name for item in selected.values() for name in item["binaries"]}
+        if not isinstance(recorded, dict) or set(recorded) != names:
+            raise BuildError("release cache executable inventory changed")
+        for product, item in selected.items():
+            for name in item["binaries"]:
+                binary = entry / "binaries" / "release" / name
+                candidate.regular(binary)
+                if candidate.digest(binary) != recorded[name]:
+                    raise BuildError(f"release cache executable changed: {name}")
+                if policy is not None:
+                    signing.verify(binary, policy, product, name)
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
     try:
@@ -253,23 +251,17 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
             item = selected[product]
             manifest = candidate.stage_build(source, product, staging / "candidates" / product,
                                              item["binary_spec"], target=entry / "binaries", source_key=source_key,
-                                             expected_versions={name: record["version"] for name, record in item["binaries"].items()})
-            for relative, expected in manifest["source_inputs"].items():
-                material = entry / "materials" / relative
-                candidate.regular(material)
-                if candidate.digest(material) != expected:
-                    raise BuildError("cached packaging materials differ from candidate source")
+                                             signing_policy=policy)
             return product, {"candidate_id": manifest["candidate_id"], "source_key": manifest["source_key"],
                              "candidate_dir": str(output / "candidates" / product)}
 
         with ThreadPoolExecutor(max_workers=min(len(selected), 8)) as executor:
             candidates = dict(executor.map(assemble, selected))
-        if candidate.content_source_key(source) != source_key:
-            raise BuildError("source changed during release preparation")
         result = {"schema": 1, "state": "built", "source_key": source_key, "build_key": build_key,
                   "candidates": candidates, "cache_hit": cache_hit, "cache_entry": str(entry),
                   "build_seconds": build_seconds, "queue_seconds": queue_seconds,
-                  "elapsed_seconds": time.monotonic() - started}
+                  "elapsed_seconds": time.monotonic() - started,
+                  "signing_policy": policy, "signing_policy_digest": policy_digest}
         (staging / "result.json").write_bytes(candidate.json_bytes(result))
         staging.rename(output)
         return result
@@ -284,9 +276,21 @@ def main() -> int:
     parser.add_argument("--product", action="append", required=True)
     parser.add_argument("--unit")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
     arguments = parser.parse_args()
     try:
-        result = prepare(arguments.source_root, arguments.product, arguments.output, arguments.unit)
+        options = {}
+        if arguments.signing_policy_file is not None:
+            candidate.regular(arguments.signing_policy_file)
+            value = json.loads(arguments.signing_policy_file.read_text())
+            if value is None and sys.platform != "darwin":
+                policy = None
+            else:
+                policy = signing.validate_policy(value)
+            signing.assert_current(policy)
+            options["signing_policy"] = policy
+        result = prepare(arguments.source_root, arguments.product, arguments.output,
+                         arguments.unit, **options)
         print(json.dumps(result, sort_keys=True))
         return 0
     except (BuildError, candidate.CandidateError, OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

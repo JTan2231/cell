@@ -104,7 +104,7 @@ Verify concurrent account reads, serialized refresh, login exclusion,
 unsupported invocation combinations, and the absence of a hidden execution
 path. Verify requester ownership of work packets, write conflicts, and retries.
 
-Add requester observability, private-state handling, backup coverage, release
+Add requester observability, private-state handling, schema compatibility, release
 ordering, rollback boundaries, and operator documentation. Service readiness
 checks must not submit model jobs or create synthetic domain records.
 

@@ -54,8 +54,8 @@ cross-system integration, read:
    ```
 
    The manager integrates, validates, attempts bounded repairs, deploys, and
-   emails the outcome. Its Annals packaging checks use fake Clockwork and
-   launchctl surfaces in an isolated home, never live bindings.
+   emails the outcome. Retained Rust tests cover computations and in-memory
+   data. Tests that allocate files, processes, sockets, or threads are removed.
 5. Verify the retained manager outcome. Live migration remains a separate
    authorized operation.
 
@@ -73,15 +73,15 @@ Preserve exact domain results after later runtime failure and retain historical
 decoders where Nucleus records require them.
 
 Installation changes must respect scheduler quiescence, maintenance,
-transactional database backup, release selector rollback, and forward-only
+transactional in-place migration, compatible release selector rollback, and forward-only
 Nucleus authentication. Never edit the installed database or spool as an ad
 hoc migration.
 
 `annals/release.sh` commits, tags, and pushes; it is a publication command, not
 a test command. Development completion does not authorize it or installation.
 
-Source fixtures, experiment archives, libraries, spools, Nucleus output, and
-backups can contain private source and model context. Protect each according
+Source fixtures, experiment archives, libraries, spools, and Nucleus output
+can contain private source and model context. Protect each according
 to the most sensitive content it can retain.
 
 ## Library interpretation changes
@@ -95,7 +95,7 @@ Preserve committed results and unknown legacy provenance. A changed immutable
 tool definition needs a new registration identity; do not rewrite historical
 Nucleus schema or output records. Catalog, library schema, and provider contract
 versions remain separate identities. Installation must include registered
-libraries in its journaled backup, migration, and recovery scope without
+libraries in its migration and program-recovery scope without
 implicitly adding schedules or adopting operator paths.
 
 ## Command usage

@@ -1,11 +1,11 @@
 {
   "id": "clew.state",
-  "contract_version": 2,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect Clew private state and installation lifecycle",
-  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded migration to generic entries and named threads, and compatible backup and recovery.",
+  "summary": "Understand private ledger initialization and integrity, immutable program and provider selection, email maintenance, guarded migration to generic entries and named threads, and compatible program recovery.",
   "manual": "manuals/state.md",
   "use_when": [
     "Clew state, integrity observations, installation selection, maintenance, migration or recovery guarantees must be understood."
@@ -15,7 +15,7 @@
   ],
   "outcome": "An interpreted Clew state or installation observation and its supported lifecycle and recovery boundaries.",
   "effects": [
-    "Init creates empty ledger schema three or checks existing compatible state. Inspection and verification read selected files or local integrity without reports.",
+    "Init creates empty ledger schema three or checks existing compatible state. Installer inspection reads release metadata; ordinary doctor checks local integrity without reports.",
     "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one or schema-two ledger state to schema three while preserving schedule intent."
   ],
   "authority": [
@@ -23,14 +23,14 @@
     "Platter owns exact legacy opportunity mappings. Clockwork owns schedule selection and failure halts."
   ],
   "success": [
-    "Doctor establishes local schema-three ledger integrity at invocation. Release verification establishes selected file identity and integrity. Coordinated verification also reads the complete Cast snapshot."
+    "Doctor establishes local schema-three ledger integrity at invocation. Installation performs setup without artifact-integrity, ledger-integrity, or Cast readiness checks."
   ],
   "failure_and_recovery": [
     "Foreign selectors, changed bytes, stale expected selections, incompatible state, unsafe migration mappings and unresolved holds stop the operation. Preserve recovery evidence.",
-    "Program recovery preserves ledger and email state. Use matching programs and database versions, stop scheduling and commands for consistent backup, and reconcile uncertain writes and acceptance before replay."
+    "Program recovery preserves ledger and email state. Select programs compatible with the retained schema and reconcile uncertain writes and acceptance before replay."
   ],
   "privacy": [
-    "Keep ledger, frozen mail, maintenance state and backups private and outside source and release trees. State directories use mode 0700; database files use mode 0600."
+    "Keep ledger, frozen mail, maintenance state private and outside source and release trees. State directories use mode 0700; database files use mode 0600."
   ],
   "does_not_authorize": [
     "Installation, initialization or inspection does not authorize a report, employer contact, send, schedule enablement, incident approval, direct SQLite repair or deletion of history."
@@ -47,26 +47,18 @@
     {
       "label": "Inspect program selection",
       "invocation": "clew-install inspect"
-    },
-    {
-      "label": "Verify candidate",
-      "invocation": "clew-install verify --binary /absolute/candidate/clew --bundle /absolute/clew/chancery"
-    },
-    {
-      "label": "Verify retained release",
-      "invocation": "clew-install verify-release /absolute/owned/release"
     }
   ],
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "platter.opportunity.explore",
@@ -75,8 +67,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "promise": {
@@ -89,7 +81,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Local state must be private and compatible. Direct installation requires a sealed candidate and matching bundle. Coordinated configuration requires drained run-owned email maintenance; migration requires the sole hold. A nonempty schema-one migration additionally requires exact Platter mappings."
+        "statement": "Local state must be private and compatible. Direct installation selects supplied program and provider bytes. Coordinated configuration requires drained run-owned email maintenance; migration requires the sole hold. A nonempty schema-one migration additionally requires exact Platter mappings."
       }
     ],
     "inputs": [
@@ -101,7 +93,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Doctor returns local schema, integrity, and retained entry count. Inspection and verification identify selected program files. Coordinated older-ledger migration reports a new private original-schema backup and retains exact aliases and retry requests."
+        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration retains aliases and retry requests without a data copy."
       }
     ],
     "data_semantics": [
@@ -119,7 +111,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Doctor checks selected local ledger integrity and counts retained entries at invocation without probing Cast. File verification checks candidate or selected bytes. Coordinated verification additionally reads the complete retained Cast snapshot. Migration covers every legacy ledger reference; observations establish no future availability."
+        "statement": "Doctor checks local ledger integrity at invocation without probing Cast. Installation invokes neither doctor nor Cast snapshot reads. Migration covers every legacy ledger reference; observations establish no future availability."
       }
     ],
     "access": [
@@ -131,17 +123,21 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, creates a new private consistent backup of the original schema, and commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
+        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "State has no automatic pruning, general automatic backup or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
+        "statement": "State has no data backup, restore, automatic pruning or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
       },
       {
         "status": "unspecified",
         "statement": "No installation completion time, general database capacity, read latency, schedule latency or future availability guarantee is supplied."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Data backup and data restoration are not supplied. Existing backup files are left unchanged."
       }
     ],
     "compatibility_and_evolution": [
@@ -152,12 +148,16 @@
       {
         "status": "unspecified",
         "statement": "No future cross-release compatibility window or deprecation interval is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Coordinated verification reads the complete retained Cast snapshot through its supported public reader; doctor checks only local ledger state.",
+        "statement": "Application operations use the public Cast snapshot reader; installation does not probe it. Doctor checks only local ledger state.",
         "target": "cast",
         "kind": "readiness",
         "contract": "cast.discovery.explore"

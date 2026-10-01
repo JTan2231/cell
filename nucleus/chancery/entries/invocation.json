@@ -28,7 +28,7 @@
     "Correct unsupported policy deliberately; never replace a retained request under the same ID or use a hidden direct-Codex fallback."
   ],
   "privacy": [
-    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state, logs, and backups private."
+    "Nucleus private state can contain complete prompts, source content, tool arguments and results, exact harness output, and terminal diagnostics. Keep state and logs private."
   ],
   "interfaces": [
     {
@@ -157,7 +157,7 @@
       },
       {
         "status": "declared",
-        "statement": "The complete runtime includes codex, matching codex-code-mode-host, and nucleus-runtime.json with SHA-256 identities. Installation, health, and admission verify files; the manifest detects changes but does not independently authenticate origin."
+        "statement": "The complete runtime includes codex, matching codex-code-mode-host, and nucleus-runtime.json with SHA-256 identities. Normal health and admission verify files; installation does not; the manifest detects changes but does not independently authenticate origin."
       }
     ],
     "reliances": [

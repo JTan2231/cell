@@ -1,5 +1,10 @@
 # Operate Semantics projects and service
 
+Installation places resources and performs setup under the documented maintenance
+boundary. It does not gate completion on persistent-state validation, artifact
+integrity audits, or runtime readiness checks. The product's ordinary diagnostics
+and runtime checks remain available separately.
+
 Use this procedure to install, verify, register, seed, move, pause, retire,
 diagnose, recover, or uninstall Semantics. Semantics owns project state and
 semantic commits. Annals owns source bytes and feed identity; Nucleus owns
@@ -18,6 +23,10 @@ required contracts. Use `chancery show ID` for one subject:
 Read `nucleus manual` before shared maintenance. A contract or successful
 readiness observation does not authorize installation, a new model job, upstream
 mutation, or data removal by itself.
+
+The `semantics` CLI prints plain text by default. Pass `--json` for the existing
+command-specific JSON schema. The typed client and pinned worker explicitly
+request JSON. Output selection changes no records, effects, or exit statuses.
 
 ## Inspect before effects
 
@@ -44,43 +53,22 @@ whose retained recovery requires its contract.
 
 ## Install or update
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For an
-explicitly authorized manual installation or recovery, select matching artifacts
-from a validated source candidate:
+Use `cell-ci submit COMMIT` for ordinary delivery. For a separately authorized
+manual installation, select the binary, installer, provider bundle, and Clockwork:
 
 ```sh
-cargo build --release --locked --package semantics
-/absolute/path/to/target/release/semantics-install install \
-  --binary /absolute/path/to/target/release/semantics \
-  --bundle /absolute/path/to/cell/semantics/chancery \
-  --clockwork /absolute/path/to/clockwork
+semantics-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE --clockwork ABSOLUTE_CLOCKWORK
 ```
 
-1. Quiesce affected requesters and let admitted intake and Nucleus jobs settle.
-2. Capture selected definition, enabled state, project pauses, and existing holds.
-3. Use the Rust installer. It registers an inactive exact-release definition,
-   suspends public work, holds the worker lock, proves SQLite closed, and privately
-   backs up database plus sidecars before candidate doctor can migrate state.
-4. Stop on foreign artifacts, unsupported admission, changed ownership evidence,
-   failing doctor, or an unproved rollback. Preserve its retained transaction.
-5. Verify the selected installation before restoring only captured admission.
+The installer holds admission and the worker lock, suspends owned scheduling,
+preserves SQLite and sidecars, initializes or migrates state, publishes selectors,
+and restores captured activation intent. It does not run doctor, replay the
+Annals feed, check Nucleus readiness, or audit installed artifact bytes.
 
-```sh
-semantics --register-usage
-semantics --json doctor
-clockwork --json binding show semantics/worker
-clockwork --json history semantics/worker --limit 20
-chancery product semantics
-chancery show semantics.repository.explore
-chancery resolve semantics.project.operate
-```
-
-Require the expected command/provider release, exact definition and runner,
-intended enabled state, and green doctor. Chancery reads documentation only.
-Verification creates no project, semantic revision, or synthetic model job.
-The full release, rollback, marker, and retained-state rules are in
-`semantics.service`.
+Run `semantics --register-usage` after installation. Use `semantics --json doctor`
+separately when runtime diagnosis is wanted. Doctor retains its normal checks;
+its result is not an installation condition. Preserve retained transactions if
+resource setup, migration, publication, or recovery fails.
 
 ## Hold and drain coordinated deployment
 
@@ -92,8 +80,8 @@ semantics --database DATABASE --json maintenance release RUN_ID
 
 1. Acquire the deployment run's own hold and inspect its ownership.
 2. Drain live commands and separately prove durable intake and Nucleus jobs settled.
-3. Let the product adapter configure and verify with scheduling disabled.
-4. Release only this run's hold after group verification.
+3. Let the product adapter configure with scheduling disabled.
+4. Release only this run's hold after group configuration.
 5. Activate only captured enabled intent after all affected holds are released.
 
 A hold fences reads and doctor before SQLite access. Only controlled installer
@@ -205,7 +193,7 @@ requests and retries retain their frozen instructions.
    Finish pending/processing legacy work. Prove each retained job terminal with
    its exact request, or positively absent if never recorded as admitted.
 3. Hold external Krisis and Annals lifecycle gates. Disable the worker and public
-   command, prove SQLite closed, and privately back up database plus sidecars.
+   command, prove SQLite closed, and preserve the live database and sidecars.
 4. With the dedicated Annals library healthy and Krisis still gated, invoke the
    validated installer with the captured watermark and retained maintenance:
 
@@ -223,8 +211,7 @@ checks those legacy conditions and binds one Annals library/current watermark to
 all non-retired projects atomically. It imports no historical Decisions rows.
 There is no default activation. Ordinary later updates omit the watermark.
 
-5. Verify doctor, fixed feed replay, selected provider, and exact worker binding
-   before enabling scheduling. Enable Krisis last after cross-product readiness.
+5. Inspect the selected worker binding and restore captured scheduling intent. Enable Krisis last after cross-product readiness.
 6. Release only the authenticated Semantics hold with a successful invocation of
    that same installed release, omitting both cutover options:
 
@@ -235,10 +222,10 @@ There is no default activation. Ordinary later updates omit the watermark.
   --clockwork "$HOME/.local/bin/clockwork"
 ```
 
-Before the first new account, failure can restore the exact pre-cutover bytes,
-selectors, and scheduler. After any new account or account-derived revision
-commits, recover forward under maintenance; never run an old binary or discard
-new state. Stop on an unknown legacy cursor/job or changed ownership evidence.
+Preserve the activated database and committed revisions. Program rollback is
+limited to an unchanged schema. After a schema change, recover forward under
+maintenance with the retained candidate; never run an incompatible old binary
+or discard committed state. Stop on an unknown legacy cursor/job or changed ownership evidence.
 
 ## Recover installation or uninstall
 
@@ -254,11 +241,10 @@ current candidate installer for that transaction:
 
 A committed transaction resumes forward. A prior null selection requires
 explicit `recover --forward` for the same retained transaction. It proves exact
-candidate ownership and readiness while gated. It never chooses a legacy
-watermark. Unknown ownership, incomplete backup, foreign locks/artifacts, or
+candidate ownership and selection while gated. It never chooses a legacy
+watermark. Unknown ownership, incomplete transaction evidence, foreign locks/artifacts, or
 changed evidence keeps maintenance. Do not remove the gate to force progress.
-Verify doctor, exact selectors/binding, and captured intent before releasing
-outer holds. Follow `semantics.service` for complete rollback guarantees.
+Restore captured intent and release only the operation's outer holds. Follow `semantics.service` for complete rollback guarantees.
 
 For intended removal of installed commands and scheduling:
 
@@ -273,7 +259,7 @@ history, and logs. Retained-state deletion needs a separate destructive decision
 
 ## Privacy and command usage
 
-Keep private documents, repository meanings, paths, requests, and backups inside
+Keep private documents, repository meanings, paths and requests inside
 the local boundary. Inspect only necessary evidence. Routine logs contain
 counters, opaque IDs, and bounded product failures rather than source bodies,
 raw dependency diagnostics, paths, prompts, credentials, or tool values.

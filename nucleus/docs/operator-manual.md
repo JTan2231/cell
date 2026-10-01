@@ -12,7 +12,7 @@ without contacting the daemon.
 - [Add a requester](#add-a-new-requester).
 - [Diagnose a failure](#diagnosis-and-recovery).
 - Read `chancery show nucleus.execution.operate` for service setup,
-  authentication, backup, and restore. Use `chancery product nucleus` for its
+  authentication and service recovery. Use `chancery product nucleus` for its
   feature inventory and `chancery resolve ID` for required feature detail.
 
 ## Choose the system by the intended outcome
@@ -147,7 +147,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `emt/worker` | Treat ordinary dependency unavailability as waiting; retain exchange identities and use the basic path for its own halt. |
 
 Before migrating Clockwork runtime state, capture and disable existing bindings,
-settle activations, and use its explicit backup-bearing migration. Old schema-one
+settle activations, and use its explicit migration. Old schema-one
 definitions retain their historical policy until products generate and select
 schema-two definitions. Preserve each captured enabled state and operator pause
 when rebinding. Follow the Clockwork installation
@@ -199,7 +199,7 @@ late diagnostic follow-up. EMT's own failure uses Clockwork's basic path.
 
 Refresh every active pinned Clockwork broker before enabling EMT preference.
 Keep Clockwork's `failure-checks.json`, `notification-routing.json` and
-`notification-checks.json` with its incident database during backup and recovery.
+`notification-checks.json` with its incident database during maintenance and recovery.
 Refresh every enabled pinned broker to the new failure-check contract. Older
 brokers do not understand pending failure episodes and must not run while the
 new sidecar exists. Preserve that state during recovery; do not roll back to an
@@ -252,11 +252,8 @@ compatible, authenticated, and accepting jobs. Its execution fields report
 
 `authentication_busy` identifies credential-operation contention. An active
 job alone does not make an account read busy or prove a bad credential.
-The deployment health client accepts a healthy service with open admission or
-a reported quota pause. The installer reads `service status` for this runtime
-proof. When a hold exists, the client requires that exact owner's sole hold
-and complete drain. These checks preserve quota admission; ordinary health
-remains strict.
+Read `chancery show nucleus.service` for service status during quota pauses
+and maintenance. Installation does not use health as a completion gate.
 
 Do not maintain a dated installed-version table here. A source checkout or
 catalog entry does not establish the currently running release.
@@ -273,7 +270,7 @@ operator pause, or incident halt.
 EMT owns the shared condition notice through Email without a model job.
 Upgrade requester clients before enabling the gate and use coordinated
 maintenance. Retain the quota policy, state, and EMT notices in their private
-product backups. Read `chancery show nucleus.quota` for the complete Nucleus
+product state. Read `chancery show nucleus.quota` for the complete Nucleus
 policy, protocol, observation freshness, and recovery rules.
 
 ## Compatibility model
@@ -284,7 +281,7 @@ policy, protocol, observation freshness, and recovery rules.
 | Public invocation protocol | Deploy additive daemon support before requesters emit it. Use a new protocol for incompatible meaning. |
 | Capability contract | Version incompatible documented behavior and review consumer dependency bounds. |
 | Codex harness | Prove the exact adapter version before replacing the configured executable. |
-| Persistent schema | Back up and migrate explicitly. Restore only a compatible database and binary pair. |
+| Persistent schema | Migrate transactionally and select a program that supports the current schema. |
 | Immutable schemas and toolsets | Give changed meaning a new identity. Keep decoders for retained jobs. |
 | Requester client | Rebuild when consumed types or behavior change. Shared source does not require lockstep deployment. |
 
@@ -328,12 +325,12 @@ resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 
 Selected Rust tests run through one parallel nextest stage between the selected
 products' checks before and after tests. The broker retains one compiler writer;
-the test stage has a separate configurable test-process limit. Doctests and
-Python or shell suites remain required separate commands. Install the pinned
-runner on the external work volume before submitting a candidate that uses it.
-An active job keeps its committed candidate. Updating validation source does not
-replace the installed manager; manager replacement still requires the maintenance
-procedure below.
+the test stage has a separate configurable test-process limit. CI does not run
+doctests. Shared infrastructure Python suites remain separate checks. Install
+the pinned runner on the external work volume before submitting a candidate
+that uses it. An active job keeps its committed candidate. Updating validation
+source does not replace the installed manager; manager replacement still requires
+the maintenance procedure below.
 
 Git publication remains separate. A product release command changes versions,
 commits, tags, and pushes. CI makes private candidate commits and advances
@@ -354,19 +351,17 @@ The coordinator selects a local `main` commit and prepares immutable candidates.
 Product declarations order selected releases and identify affected installations
 to hold. The plan adds missing or incompatible runtime dependencies and declared
 installed companions, and reports each selection reason. Consumer-owned release
-bounds select compatible candidates; sealed product inspectors prove retained
-dependencies and their runtime prerequisites before maintenance.
+bounds select compatible candidates. Product installers read retained installation
+metadata before maintenance.
 Annals includes Usage; `decisions` aliases `krisis`.
 
-Selected Platter upgrades can use their sealed candidate for maintenance after
-the product proves compatibility with its retained state. This permits repair
-of a broken installed maintenance reader. Installation ownership, admission
-holds, drain, and installed readiness checks still apply. Read
-`chancery show platter.install.operate` for the compatibility boundary.
+Selected products use their supplied candidate for maintenance. Affected-only
+products use their installed command. Admission holds and drain still apply.
+Read each product's installation contract for its setup and recovery operations.
 
 The shared sequence is:
 
-1. Prepare and verify all selected candidates before maintenance.
+1. Prepare all selected candidates before maintenance.
 2. Hold and drain each affected consumer before its providers, so admitted work
    can finish using its dependencies.
 3. When replacing Nucleus, hold it after requester continuation work has finished.
@@ -374,19 +369,20 @@ The shared sequence is:
 4. Prepare selected releases, then configure affected products in dependency order.
    Products retain their atomic state-and-file transactions. Nucleus starts its
    replacement service under its hold before requesters configure against it.
-5. Verify selected candidate identity and affected-only installed readiness.
-6. Release requester holds, then release Nucleus last when it is held.
-7. Activate product schedules according to captured intent. Preserve existing
+5. Release requester holds, then release Nucleus last when it is held.
+6. Activate product schedules according to captured intent. Preserve existing
    pauses, disabled bindings and incident halts.
 
 A hold belongs to one run, survives process exit, and does not expire. Releasing
 it preserves other holds, operator pauses, and disabled schedules. Drain must
 include durable unfinished work and associated Nucleus jobs.
 
-Verification creates no model jobs or synthetic domain records. Recovery must
-establish a coherent prior or candidate installation before releasing admission.
-An uncertain apply is not repeated blindly. Matching files and health alone do
-not prove replacement of a resident Nucleus daemon.
+Installation performs resource setup, program selection, and required state
+initialization or migration. It does not run persistent-state integrity, artifact
+integrity, or operational-readiness checks. CI does not assert those removed
+installation checks. Ordinary product diagnostics and runtime guards remain.
+Recovery restores the recorded prior or candidate setup before releasing
+admission. An uncertain apply is not repeated blindly.
 
 Setup settings supply missing choices once through `--settings ABSOLUTE_JSON`.
 Product adapters reuse existing configuration, initialize missing state, update
@@ -400,14 +396,13 @@ recovery still reports the original deployment failure. Cleanup failure does not
 erase installation success. The coordinator's final result distinguishes these
 outcomes.
 
-Annals recovery restores and checkpoints each journaled library backup before
-declaring its installation safe. Copying progress does not consume its lock-wait
-allowance. A blocked restore or checkpoint retains the deployment hold.
+Annals recovery preserves current library state and verifies program/schema
+compatibility before releasing its deployment hold.
 
 The coordinator retains no public deployment history or resume interface.
 It retains an unresolved active transaction and uses it for recovery at the next
 ordinary deployment command. It removes the workspace only after resolution.
-Product holds and recovery backups remain until resolved. Release cleanup
+Product holds and migration receipts remain until resolved. Release cleanup
 preserves current releases and exact pins held by configuration, schedules, or
 processes. Unknown or incomplete pin inventories stop deletion.
 Cleanup reads configured pins through commands supported by retained products;
@@ -424,8 +419,8 @@ contract owns its state, migration, scheduler, and recovery procedure.
 An older executable may ignore a candidate's admission hold. Install a compatible
 maintenance-capable release through the product's existing procedure first.
 Capture enabled schedules and operator pauses before stopping admission.
-Settle domain work and Nucleus jobs, install the compatible release, and verify
-its maintenance interface. Restore only the captured enabled state after readiness.
+Settle domain work and Nucleus jobs, install the compatible release, and restore
+only the captured enabled state after setup completes.
 
 Adapters invoke product-owned initialization and local credential setup from
 supplied settings. External authentication still requires a valid supplied
@@ -504,6 +499,17 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
+Pass `--json` when a caller parses CLI output. Bazaar, Cast, Clew, Clockwork,
+Conatus, and Semantics use readable text by default. The flag selects each
+product's structured output. Export files and internal installation interfaces
+retain their documented formats.
+
+Install the CI manager consumer that requests Bazaar `--json` before selecting
+a Bazaar release with readable default output. Follow the paused, drained
+manager replacement procedure. Update Cast collection callers with the matching
+producer flag support during coordinated deployment. Cast installation uses the
+native store interface so recovery can retain an older CLI.
+
 ## Serial CI delivery
 
 Cell's CI manager, broker, compiler targets, release cache, and deployment
@@ -526,6 +532,15 @@ New submissions skip tests by default and retain other checks. Use
 `./ci.sh submit COMMIT --run-tests` to run the selected tests. Existing jobs
 retain their frozen test policy. Validation receipts and outcome emails state
 when tests were skipped.
+
+New macOS jobs freeze the persistent host signing policy and require verified
+native production candidates before source acceptance, including when tests are
+skipped. Builds, repair, installation and cache reuse preserve the selected
+certificate and stable product identifiers. Configure or rotate signing only
+with paused, settled CI and settled deployment and release operations. Read
+`chancery show ci-manager.signing.operate` for setup, exact certificate selection,
+key recovery and coverage; Python and standalone scripts retain their existing
+runtime identities. Jobs without a signing snapshot keep their earlier path.
 
 At dequeue, the manager records the current accepted commit as the job's base.
 It merges the submitted commit into a private candidate. Each repair produces
@@ -605,7 +620,7 @@ their wrappers, hooks, and pinned brokers when these rules change.
 
 Use `chancery usage commands` or `chancery usage events` to read recorded
 activity. The [usage contract](/Users/joey/rust/cell/chancery/provider/manuals/usage-record.md) owns schema, scope,
-registration, privacy, compatibility and backup behavior.
+registration, privacy and compatibility.
 
 ## Guarded change playbooks
 
@@ -620,8 +635,8 @@ shared facts or procedures change.
    them through the CI manager. Verify its validation and deployment outcome.
 3. Publish only when authorized. Release requires clean `main` synchronized
    with `origin/main` and creates the commit and tag.
-4. Verify runtime health and report requester admission after the manager
-   deployment. A quota pause can remain after successful installation.
+4. Read the retained manager deployment result and report requester admission.
+   Installation does not establish operational readiness.
    For a separate manual installation or recovery, quiesce affected work and
    deploy matching CLI and daemon candidates before restoring admission.
 
@@ -640,28 +655,18 @@ The adapter requires Codex `0.154.0-alpha.6.2`. Stage its complete runtime with
 CI submission. The source must include the matching `codex-code-mode-host`.
 The installer records both file identities and publishes the complete runtime
 under `~/Library/Application Support/Nucleus/harnesses/codex/VERSION/runtime/`.
-It refuses to overwrite a different staged runtime. See
+An existing staged directory is reused from its recorded manifest. See
 `chancery show nucleus.execution.operate` for the installation procedure and
 `chancery show nucleus.service` for source and recovery guarantees.
 
-Prove local tool execution during isolated predeployment validation. The
-compatibility test must observe a command's actual result through the adapter
-and exact Codex runtime. A completed turn or version check is insufficient.
-The Nucleus CI gate runs this test against the staged runtime, using a local
-mock model endpoint and temporary state. It uses no account credentials and
-creates no production jobs or emails. The test defaults to the staged runtime
-and fails if it is absent. For a direct development test, `NUCLEUS_TEST_CODEX`
-can select an explicit complete source runtime. Managed CI does not pass this
-override to the test, so validation uses the staged deployment candidate.
+Automated tests cover in-memory behavior. They do not execute the Codex runtime,
+launch a daemon, bind sockets, or create filesystem fixtures. Runtime execution
+and filesystem recovery are outside automated test coverage.
 
-Installation and live readiness check the runtime files and recorded identities
-without model calls. Every selected deployment requires the tested staged
-runtime. A configured runtime remains selected only when both file identities
-match that pair. A different or incomplete installation uses the staged replacement.
-The coordinator captures the candidate identities before maintenance and
-verifies them before cutover and after installation. Retain the previous runtime
-for supported recovery. A runtime upgrade does not clear requester failure
-halts or authorize retries.
+Installation copies and selects the configured runtime without using health or
+artifact-integrity checks as an installation gate. Ordinary runtime admission
+continues to enforce its harness and authentication requirements. A runtime
+upgrade does not clear requester failure halts or authorize retries.
 
 ### Public protocol or client change
 
@@ -673,14 +678,14 @@ examples, and contract checks together.
 ### Nucleus database schema change
 
 Provide a versioned migration from every supported prior version. Define the
-transaction boundary, post-commit maintenance, backup, and rollback procedure.
-Before cutover, settle requesters and pending calls, stop Nucleus, and take the
-required consistent backup. Validate retained jobs, output, and mailbox integrity.
+transaction boundary, post-commit maintenance, and program/schema compatibility.
+Before cutover, settle requesters and pending calls and stop Nucleus. Validate
+retained jobs, output, and mailbox integrity.
 
 Old binaries must not open an incompatible new database. Recovery across that
-boundary requires a matching database and binary pair. Read
+boundary requires a program that supports the current database schema. Read
 `chancery show nucleus.service` for schema recovery guarantees and
-`chancery show nucleus.execution.operate` for the restoration procedure.
+`chancery show nucleus.execution.operate` for the service recovery procedure.
 
 ### Requester schema, toolset, prompt, or permission change
 
@@ -741,9 +746,9 @@ private prompts, sources, and tool values.
 | Runtime completion without the required record | Follow the product's failure policy. |
 | Unresolved deployment hold | Use that product's retained recovery procedure. |
 
-After a shared change, verify matching programs, service status, exact harness,
-account access, and affected product readiness. Release only holds and pauses
-owned by the operation. Preserve pre-existing disabled schedules.
+After a shared change, read the retained installation outcome. Use product
+diagnostics separately when operational evidence is needed. Release only holds
+and pauses owned by the operation. Preserve pre-existing disabled schedules.
 
 ## Where facts and changes belong
 

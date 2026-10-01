@@ -1,6 +1,6 @@
 use super::{
-    DecisionsArgs, Duration, Error, InstallArgs, MINUTE, Path, PathBuf, Result, Value, agent,
-    annals, call, directory, environment, expected, fs, home, install_root, json, optional_private,
+    DecisionsArgs, Duration, Error, InstallArgs, Path, PathBuf, Result, Value, agent, annals, call,
+    directory, environment, expected, fs, home, install_root, json, optional_private,
     private_directory, private_file, release, schedule, state, toml_bytes, toml_value,
     write_private,
 };
@@ -27,10 +27,13 @@ struct Journal {
     config_after: Vec<u8>,
     usage_after: Option<Vec<u8>>,
     database_existed: bool,
-    backup_ready: bool,
-    backup_sha256: Option<String>,
+    #[serde(default, rename = "backup_ready", skip_serializing)]
+    _legacy_backup_ready: bool,
+    #[serde(default, rename = "backup_sha256", skip_serializing)]
+    _legacy_backup_sha256: Option<String>,
     mutation_started: bool,
-    fresh_state: bool,
+    #[serde(default, rename = "fresh_state", skip_serializing)]
+    legacy_fresh_state: bool,
     marker_created: bool,
     marker_owned: bool,
     hold_before: Option<Vec<u8>>,
@@ -54,7 +57,8 @@ struct NamedLibrary {
     kind: String,
     root: PathBuf,
     held: bool,
-    backup_sha256: Option<String>,
+    #[serde(default, rename = "backup_sha256", skip_serializing)]
+    _legacy_backup_sha256: Option<String>,
     mutation_started: bool,
 }
 
@@ -83,84 +87,11 @@ fn named_libraries(home: &Path) -> Result<Vec<NamedLibrary>> {
                 kind: entry.kind,
                 root: expected,
                 held: false,
-                backup_sha256: None,
+                _legacy_backup_sha256: None,
                 mutation_started: false,
             })
         })
         .collect()
-}
-
-fn verify_named_identity(home: &Path, library: &NamedLibrary) -> Result<()> {
-    if library.library_id.len() != 32
-        || !library
-            .library_id
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        || library.root != state(home).join("libraries").join(&library.library_id)
-    {
-        return Err(Error::new(
-            "invalid named Annals library identity or location",
-        ));
-    }
-    private_directory(&library.root, true)?;
-    let database = library.root.join("annals.db");
-    let config_path = library.root.join("config.toml");
-    private_file(&config_path)?;
-    let config = toml_value(&fs::read_to_string(config_path)?)?;
-    let configured_database = config
-        .get("library")
-        .and_then(toml::Value::as_str)
-        .map(PathBuf::from)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                library.root.join(path)
-            }
-        });
-    let configured_spool = config
-        .get("inbox")
-        .and_then(|inbox| inbox.get("root"))
-        .and_then(toml::Value::as_str)
-        .map(PathBuf::from)
-        .map(|path| {
-            if path.is_absolute() {
-                path
-            } else {
-                library.root.join(path)
-            }
-        });
-    if configured_database.as_ref() != Some(&database)
-        || configured_spool != Some(library.root.join("spool"))
-        || config
-            .get("expected_library_id")
-            .and_then(toml::Value::as_str)
-            != Some(library.library_id.as_str())
-    {
-        return Err(Error::new(
-            "named Annals configuration differs from its registered storage",
-        ));
-    }
-    private_file(&database)?;
-    for suffix in ["annals.db-wal", "annals.db-shm"] {
-        optional_private(&library.root.join(suffix))?;
-    }
-    let connection =
-        rusqlite::Connection::open_with_flags(database, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|error| Error::new(error.to_string()))?;
-    let identity: (String, String) = connection
-        .query_row(
-            "SELECT library_id, kind FROM library_identity CROSS JOIN library_profile",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .map_err(|error| Error::new(error.to_string()))?;
-    if identity != (library.library_id.clone(), library.kind.clone()) {
-        return Err(Error::new(
-            "named Annals database differs from its registered identity",
-        ));
-    }
-    Ok(())
 }
 
 fn named_call(journal: &Journal, library: &NamedLibrary, arguments: &[&str]) -> Result<Value> {
@@ -182,7 +113,6 @@ fn named_call(journal: &Journal, library: &NamedLibrary, arguments: &[&str]) -> 
 
 fn migrate_named_libraries(journal: &mut Journal, path: &Path) -> Result<()> {
     for index in 0..journal.named_libraries.len() {
-        verify_named_identity(&journal.home, &journal.named_libraries[index])?;
         journal.named_libraries[index].held = true;
         journal.save(path)?;
         let root = journal.named_libraries[index].root.clone();
@@ -194,49 +124,9 @@ fn migrate_named_libraries(journal: &mut Journal, path: &Path) -> Result<()> {
             "hold",
         )?;
         drained(&journal.payload(), &root, &journal.home, &journal.owner)?;
-        let backup = path.join(format!(
-            "{}.before.db",
-            journal.named_libraries[index].library_id
-        ));
-        named_call(
-            journal,
-            &journal.named_libraries[index],
-            &[
-                "backup",
-                backup
-                    .to_str()
-                    .ok_or_else(|| Error::new("invalid named library backup path"))?,
-            ],
-        )?;
-        private_file(&backup)?;
-        journal.named_libraries[index].backup_sha256 = Some(cell_install::file_digest(&backup)?);
         journal.named_libraries[index].mutation_started = true;
         journal.save(path)?;
         named_call(journal, &journal.named_libraries[index], &["migrate"])?;
-        named_call(journal, &journal.named_libraries[index], &["stats"])?;
-    }
-    Ok(())
-}
-
-fn finish_named_libraries(journal: &Journal, path: &Path, restore: bool) -> Result<()> {
-    for library in &journal.named_libraries {
-        verify_named_identity(&journal.home, library)?;
-        if restore && library.mutation_started {
-            drained(
-                &journal.payload(),
-                &library.root,
-                &journal.home,
-                &journal.owner,
-            )?;
-            let backup = path.join(format!("{}.before.db", library.library_id));
-            private_file(&backup)?;
-            if library.backup_sha256.as_ref() != Some(&cell_install::file_digest(&backup)?) {
-                return Err(Error::new("named Annals library backup changed"));
-            }
-            restore_database(&backup, &library.root.join("annals.db"))?;
-        } else if !restore {
-            named_call(journal, library, &["stats"])?;
-        }
     }
     Ok(())
 }
@@ -288,6 +178,21 @@ fn capture(path: &Path) -> Result<Option<Vec<u8>>> {
     } else {
         Ok(None)
     }
+}
+
+fn require_uninitialized_library(library: &Path) -> Result<()> {
+    for name in ["annals.db", "annals.db-wal", "annals.db-shm", "spool"] {
+        match fs::symlink_metadata(library.join(name)) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+            Ok(_) => {
+                return Err(Error::new(
+                    "Annals initialization requires an absent database, sidecars and spool",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn config(
@@ -381,7 +286,6 @@ fn private_state(library: &Path, decisions: bool) -> Result<()> {
         library.to_owned(),
         library.join("spool"),
         library.join("log"),
-        library.join("backups"),
     ] {
         private_directory(&dir, decisions)?;
     }
@@ -422,15 +326,10 @@ pub(super) fn hold(
     owner: &str,
     operation: &str,
 ) -> Result<Value> {
-    let config = library.join("config.toml");
-    let mut args = if config.exists() {
-        vec!["--config".into(), config.into_os_string()]
-    } else {
-        vec![
-            "--library".into(),
-            library.join("annals.db").into_os_string(),
-        ]
-    };
+    let mut args = vec![
+        "--library".into(),
+        library.join("annals.db").into_os_string(),
+    ];
     args.extend(["--json".into(), "maintenance".into(), operation.into()]);
     if operation != "status" {
         args.push(owner.into());
@@ -504,9 +403,7 @@ fn initialize(
     decisions: bool,
 ) -> Result<Vec<u8>> {
     directory(library)?;
-    for name in ["log", "backups"] {
-        directory(&library.join(name))?;
-    }
+    directory(&library.join("log"))?;
     let result = call(
         payload,
         &[
@@ -563,67 +460,6 @@ fn initialize(
     Ok(config)
 }
 
-fn restore_database(backup: &Path, database: &Path) -> Result<()> {
-    restore_database_with_lock_wait(backup, database, MINUTE)
-}
-
-fn restore_database_with_lock_wait(
-    backup: &Path,
-    database: &Path,
-    lock_wait: Duration,
-) -> Result<()> {
-    private_file(backup)?;
-    private_file(database)?;
-    let source =
-        rusqlite::Connection::open_with_flags(backup, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-            .map_err(|_| Error::new("cannot read Annals backup"))?;
-    let mut destination = rusqlite::Connection::open_with_flags(
-        database,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
-    )
-    .map_err(|_| Error::new("cannot open Annals database for recovery"))?;
-    crate::sqlite::persist_wal(&destination)
-        .map_err(|_| Error::new("cannot preserve Annals WAL files during recovery"))?;
-    let backup = rusqlite::backup::Backup::new(&source, &mut destination)
-        .map_err(|_| Error::new("cannot start Annals database recovery"))?;
-    let mut blocked_since = None;
-    loop {
-        match backup
-            .step(128)
-            .map_err(|_| Error::new("Annals database recovery failed"))?
-        {
-            rusqlite::backup::StepResult::Done => break,
-            rusqlite::backup::StepResult::More => blocked_since = None,
-            rusqlite::backup::StepResult::Busy | rusqlite::backup::StepResult::Locked => {
-                let since = blocked_since.get_or_insert_with(Instant::now);
-                if since.elapsed() >= lock_wait {
-                    return Err(Error::new(
-                        "Annals recovery could not acquire database access",
-                    ));
-                }
-                std::thread::sleep(Duration::from_millis(20));
-            }
-            _ => {
-                return Err(Error::new(
-                    "Annals database recovery returned an unknown state",
-                ));
-            }
-        }
-    }
-    drop(backup);
-    // The backup API does not run the usual write-side automatic checkpoint.
-    // Complete the restored database before another recovery can copy it again.
-    let busy: i64 = destination
-        .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| row.get(0))
-        .map_err(|_| Error::new("cannot checkpoint the restored Annals database"))?;
-    if busy != 0 {
-        return Err(Error::new(
-            "Annals database was restored but its checkpoint remains blocked",
-        ));
-    }
-    Ok(())
-}
-
 pub(super) fn install(args: &InstallArgs) -> Result<Value> {
     let (owner, outer) = owner();
     install_owned(args, &owner, outer)
@@ -644,7 +480,6 @@ pub(super) fn install_owned(args: &InstallArgs, owner: &str, outer: bool) -> Res
         owner,
         outer,
         false,
-        args.fresh_state,
         args.no_start,
         args.migration_clockwork_handoff,
         false,
@@ -660,15 +495,7 @@ pub(super) fn provision(args: &DecisionsArgs) -> Result<Value> {
 pub(super) fn provision_owned(args: &DecisionsArgs, owner: &str, outer: bool) -> Result<Value> {
     let home = home(args.home.home.clone())?;
     let info =
-        cell_install::verify_release_at(&release::layout(), &args.release_root, &release::legacy)?;
-    if info.format != cell_install::TRANSACTION_FORMAT
-        || cell_install::file_digest(&std::env::current_exe()?)?
-            != cell_install::file_digest(&args.release_root.join("bin/annals-install"))?
-    {
-        return Err(Error::new(
-            "decisions provisioner must be this exact immutable release's installer",
-        ));
-    }
+        cell_install::read_release_at(&release::layout(), &args.release_root, &release::legacy)?;
     let candidate = PreparedRelease {
         root: args.release_root.clone(),
         info,
@@ -684,7 +511,6 @@ pub(super) fn provision_owned(args: &DecisionsArgs, owner: &str, outer: bool) ->
         owner,
         outer,
         true,
-        false,
         false,
         false,
         args.keep_maintenance,
@@ -708,7 +534,6 @@ fn deploy_library(
     owner: &str,
     outer_hold: bool,
     decisions: bool,
-    fresh_state: bool,
     no_start: bool,
     handoff: bool,
     keep_maintenance: bool,
@@ -761,6 +586,9 @@ fn deploy_library(
     )?;
     let config_before = capture(&library.join("config.toml"))?;
     let database_existed = optional_private(&library.join("annals.db"))?;
+    if !database_existed {
+        require_uninitialized_library(&library)?;
+    }
     if decisions && library.exists() && (!database_existed || config_before.is_none()) {
         return Err(Error::new("dedicated decisions state is incomplete"));
     }
@@ -832,7 +660,7 @@ fn deploy_library(
     };
     directory(&journal_path)?;
     let mut journal = Journal {
-        schema: 1,
+        schema: 2,
         home: home.to_owned(),
         owner: owner.into(),
         outer_hold,
@@ -846,10 +674,10 @@ fn deploy_library(
         config_after,
         usage_after,
         database_existed,
-        backup_ready: false,
-        backup_sha256: None,
+        _legacy_backup_ready: false,
+        _legacy_backup_sha256: None,
         mutation_started: false,
-        fresh_state,
+        legacy_fresh_state: false,
         marker_created: false,
         marker_owned,
         hold_before,
@@ -905,6 +733,9 @@ fn apply_library(
     let library = journal.library();
     let decisions = journal.key == "annals/decisions-inbox";
     let payload = journal.payload();
+    if !journal.database_existed {
+        require_uninitialized_library(&library)?;
+    }
     migrate_named_libraries(journal, path)?;
     if journal.database_existed {
         private_state(&library, decisions)?;
@@ -961,8 +792,8 @@ fn apply_library(
     }
     journal.mutation_started = true;
     journal.save(path)?;
-    if journal.fresh_state || !journal.database_existed {
-        let stage = path.join("fresh-state");
+    if !journal.database_existed {
+        let stage = path.join("new-library");
         initialize(&payload, &journal.home, &stage, socket, decisions)?;
         let staged_config = toml_value(&fs::read_to_string(stage.join("config.toml"))?)?;
         let id = staged_config
@@ -976,97 +807,25 @@ fn apply_library(
             journal.config_before.as_deref(),
             id,
         )?;
+        require_uninitialized_library(&library)?;
         journal.marker_created = true;
         journal.marker_owned = true;
         journal.save(path)?;
-        if decisions && !journal.database_existed {
+        if decisions {
             write_private(&stage.join("config.toml"), &journal.config_after, true)?;
             fs::rename(&stage, &library)?;
         } else {
             directory(&library)?;
-            directory(&path.join("prior-generation"))?;
             for name in ["annals.db", "annals.db-wal", "annals.db-shm", "spool"] {
-                if fs::symlink_metadata(library.join(name)).is_ok() {
-                    fs::rename(library.join(name), path.join("prior-generation").join(name))?;
-                }
                 if fs::symlink_metadata(stage.join(name)).is_ok() {
                     fs::rename(stage.join(name), library.join(name))?;
                 }
             }
-            for name in ["log", "backups"] {
-                directory(&library.join(name))?;
-            }
+            directory(&library.join("log"))?;
             write_private(&library.join("config.toml"), &journal.config_after, true)?;
         }
         hold(&payload, &library, &journal.home, &journal.owner, "hold")?;
-        if journal.fresh_state {
-            annals(
-                &payload,
-                &library.join("config.toml"),
-                &["inbox", "pause"],
-                &journal.home,
-                Some(&journal.owner),
-            )?;
-            let old_spool = path.join("prior-generation/spool");
-            let old_spool_str = old_spool
-                .to_str()
-                .ok_or_else(|| Error::new("invalid backlog path"))?;
-            let result = annals(
-                &payload,
-                &library.join("config.toml"),
-                &["inbox", "import-backlog", "--from", old_spool_str],
-                &journal.home,
-                Some(&journal.owner),
-            )?;
-            if !result.get("imported").is_some_and(Value::is_u64) {
-                return Err(Error::new("Annals backlog import returned invalid receipt"));
-            }
-            let status = annals(
-                &payload,
-                &library.join("config.toml"),
-                &["inbox", "status"],
-                &journal.home,
-                Some(&journal.owner),
-            )?;
-            if status.get("queued") != result.get("imported")
-                || status.get("processing") != Some(&json!(0))
-                || status.get("paused") != Some(&json!(true))
-                || status.get("maintenance") != Some(&json!(true))
-            {
-                return Err(Error::new(
-                    "fresh Annals backlog failed gated count verification",
-                ));
-            }
-            annals(
-                &payload,
-                &library.join("config.toml"),
-                &["inbox", "resume"],
-                &journal.home,
-                Some(&journal.owner),
-            )?;
-        }
     } else {
-        let backup = path.join("library.before.db");
-        let source = journal.prior.current.as_ref().map_or_else(
-            || payload.clone(),
-            |info| release::root(&journal.home, info).join("libexec/annals"),
-        );
-        annals(
-            &source,
-            &library.join("config.toml"),
-            &[
-                "backup",
-                backup
-                    .to_str()
-                    .ok_or_else(|| Error::new("invalid backup path"))?,
-            ],
-            &journal.home,
-            Some(&journal.owner),
-        )?;
-        private_file(&backup)?;
-        journal.backup_ready = true;
-        journal.backup_sha256 = Some(cell_install::file_digest(&backup)?);
-        journal.save(path)?;
         annals(
             &payload,
             &library.join("config.toml"),
@@ -1086,35 +845,8 @@ fn apply_library(
         )?);
         journal.save(path)?;
     }
-    let smoke = annals(
-        &payload,
-        &library.join("config.toml"),
-        &["inbox", "run"],
-        &journal.home,
-        Some(&journal.owner),
-    )?;
-    if smoke.get("stopped_for_maintenance") != Some(&json!(true)) {
-        return Err(Error::new("Annals candidate did not honor maintenance"));
-    }
-    readiness(
-        &payload,
-        &library,
-        &journal.home,
-        Some(&journal.owner),
-        decisions,
-    )?;
     if let Some(config) = &journal.usage_after {
         write_private(&state(&journal.home).join("usage.toml"), config, true)?;
-        cell_install::command::checked(
-            &release::root(&journal.home, &journal.candidate).join("libexec/annals-usage"),
-            &[
-                "doctor".into(),
-                "--config".into(),
-                state(&journal.home).join("usage.toml").into_os_string(),
-            ],
-            &environment(&journal.home, Some(&journal.owner)),
-            MINUTE * 3,
-        )?;
     }
     if !decisions {
         journal.publication = Some(
@@ -1139,13 +871,7 @@ fn apply_library(
                             )?;
                         }
                     }
-                    readiness(
-                        &journal.home.join(".local/bin/annals"),
-                        &library,
-                        &journal.home,
-                        Some(&journal.owner),
-                        false,
-                    )
+                    Ok(())
                 },
             )?,
         );
@@ -1195,7 +921,6 @@ fn apply_library(
     }
     journal.committed = true;
     journal.save(path)?;
-    finish_named_libraries(journal, path, false)?;
     if !handoff && !journal.keep_maintenance && journal.marker_owned {
         private_file(&library.join("spool/.maintenance"))?;
         fs::remove_file(library.join("spool/.maintenance"))?;
@@ -1223,48 +948,6 @@ fn apply_library(
             json!(install_root(&journal.home).join("clockwork-handoff.toml"));
     }
     Ok(json!({"ok":true,"data":data}))
-}
-
-pub(super) fn readiness(
-    payload: &Path,
-    library: &Path,
-    home: &Path,
-    owner: Option<&str>,
-    decisions: bool,
-) -> Result<()> {
-    annals(
-        payload,
-        &library.join("config.toml"),
-        &["stats"],
-        home,
-        owner,
-    )?;
-    annals(
-        payload,
-        &library.join("config.toml"),
-        &["inbox", "status"],
-        home,
-        owner,
-    )?;
-    if decisions {
-        let expected = toml_value(&fs::read_to_string(library.join("config.toml"))?)?
-            .get("decision_feed")
-            .and_then(|v| v.get("expected_library_id"))
-            .and_then(toml::Value::as_str)
-            .map(str::to_owned)
-            .ok_or_else(|| Error::new("decisions library identity missing"))?;
-        let watermark = annals(
-            payload,
-            &library.join("config.toml"),
-            &["decision-feed", "watermark"],
-            home,
-            owner,
-        )?;
-        if watermark.get("library_id") != Some(&json!(expected)) {
-            return Err(Error::new("decisions feed library identity differs"));
-        }
-    }
-    Ok(())
 }
 
 fn restore_file(path: &Path, prior: Option<&[u8]>, candidate: Option<&[u8]>) -> Result<()> {
@@ -1295,7 +978,6 @@ fn rollback(
         ));
     }
     let library = journal.library();
-    finish_named_libraries(journal, path, true)?;
     if !journal.no_start {
         let observed = schedule::inspect(&journal.home, &journal.clockwork, &journal.key)?;
         if observed.digest != journal.prior_control.digest
@@ -1307,46 +989,14 @@ fn rollback(
         }
         schedule::disable(&journal.home, &journal.clockwork, &journal.key, &observed)?;
     }
-    if journal.mutation_started {
-        if journal.fresh_state || !journal.database_existed {
-            if journal.key == "annals/decisions-inbox" && !journal.database_existed {
-                if library.exists() {
-                    fs::rename(&library, path.join("failed-new-state"))?;
-                }
-            } else {
-                directory(&path.join("failed-generation"))?;
-                for name in ["annals.db", "annals.db-wal", "annals.db-shm", "spool"] {
-                    let prior = path.join("prior-generation").join(name);
-                    if prior.exists() {
-                        if library.join(name).exists() {
-                            fs::rename(
-                                library.join(name),
-                                path.join("failed-generation").join(name),
-                            )?;
-                        }
-                        fs::rename(prior, library.join(name))?;
-                    } else if !journal.database_existed && library.join(name).exists() {
-                        fs::rename(
-                            library.join(name),
-                            path.join("failed-generation").join(name),
-                        )?;
-                    }
-                }
-            }
-        } else if journal.backup_ready {
-            if journal.backup_sha256.as_ref()
-                != Some(&cell_install::file_digest(&path.join("library.before.db"))?)
-            {
-                return Err(Error::new("Annals retained database backup changed"));
-            }
-            restore_database(&path.join("library.before.db"), &library.join("annals.db"))?;
-        }
+    verify_prior_state(journal)?;
+    if journal.database_existed {
+        restore_file(
+            &library.join("config.toml"),
+            journal.config_before.as_deref(),
+            Some(&journal.config_after),
+        )?;
     }
-    restore_file(
-        &library.join("config.toml"),
-        journal.config_before.as_deref(),
-        Some(&journal.config_after),
-    )?;
     if journal.key == "annals/inbox" {
         restore_file(
             &state(&journal.home).join("usage.toml"),
@@ -1388,21 +1038,77 @@ fn rollback(
     if journal.marker_created && optional_private(&library.join("spool/.maintenance"))? {
         fs::remove_file(library.join("spool/.maintenance"))?;
     }
-    if !journal.outer_hold && journal.database_existed {
-        hold(
+    if !journal.outer_hold {
+        let status = hold(
             &journal.payload(),
             &library,
             &journal.home,
             &journal.owner,
-            "release",
+            "status",
         )?;
+        if status["holds"]
+            .as_array()
+            .is_some_and(|holds| holds.contains(&json!(journal.owner)))
+        {
+            hold(
+                &journal.payload(),
+                &library,
+                &journal.home,
+                &journal.owner,
+                "release",
+            )?;
+        }
     }
     release_named_libraries(journal)?;
     archive(journal, path)
 }
 
+fn verify_prior_state(journal: &Journal) -> Result<()> {
+    let Some(prior) = &journal.prior.current else {
+        return Ok(());
+    };
+    let root = release::root(&journal.home, prior);
+    // Compatibility recovery may use the recorded prior signer, but only its
+    // exact retained bytes may run before the prior program is restored.
+    if cell_install::transaction::verify_release_at(&release::layout(), &root, &release::legacy)?
+        != *prior
+    {
+        return Err(Error::new("recorded prior Annals release changed"));
+    }
+    let payload = root.join("libexec/annals");
+    let mut libraries = vec![journal.library().join("annals.db")];
+    libraries.extend(
+        journal
+            .named_libraries
+            .iter()
+            .map(|library| library.root.join("annals.db")),
+    );
+    for database in libraries {
+        if !database.exists() {
+            continue;
+        }
+        let result = call(
+            &payload,
+            &[
+                "--library".into(),
+                database.into_os_string(),
+                "--json".into(),
+                "stats".into(),
+            ],
+            &journal.home,
+            Some(&journal.owner),
+        );
+        if result.is_err() {
+            return Err(Error::new(
+                "prior Annals release cannot read current library state; data and maintenance are retained",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn archive(journal: &Journal, path: &Path) -> Result<()> {
-    let parent = state(&journal.home).join("backups/deployments");
+    let parent = install_root(&journal.home).join("transactions");
     directory(&parent)?;
     let name = path
         .file_name()
@@ -1430,7 +1136,7 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
     private_directory(path, true)?;
     private_file(&path.join("journal.json"))?;
     let mut journal: Journal = serde_json::from_slice(&fs::read(path.join("journal.json"))?)?;
-    if journal.schema != 1
+    if !matches!(journal.schema, 1 | 2)
         || journal.home != home
         || !matches!(
             journal.key.as_str(),
@@ -1439,11 +1145,17 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
     {
         return Err(Error::new("foreign Annals recovery transaction"));
     }
-    cell_install::verify_release_at(
+    if journal.legacy_fresh_state && !journal.committed {
+        return Err(Error::new(
+            "legacy fresh-state transaction requires its exact retained installer; current data and recovery files are unchanged",
+        ));
+    }
+    cell_install::read_release_at(
         &release::layout(),
         &release::root(home, &journal.candidate),
         &release::legacy,
     )?;
+    cell_install::signing::verify_native("annals", "annals", &journal.payload())?;
     let layout = release::layout();
     let mut tx = cell_install::lock_installation(&layout, home, &release::legacy)?;
     let _catalog_lock = annals::api::lock_library_catalog(&state(home))
@@ -1490,13 +1202,6 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         {
             drained(&journal.payload(), &journal.library(), home, &journal.owner)?;
         }
-        readiness(
-            &journal.payload(),
-            &journal.library(),
-            home,
-            Some(&journal.owner),
-            journal.key == "annals/decisions-inbox",
-        )?;
         if !journal.keep_maintenance
             && journal.marker_owned
             && optional_private(&journal.library().join("spool/.maintenance"))?
@@ -1508,7 +1213,6 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
                 fs::remove_file(journal.library().join(".provision-maintenance.json"))?;
             }
         }
-        finish_named_libraries(&journal, path, false)?;
         if !journal.outer_hold {
             hold(
                 &journal.payload(),
@@ -1524,200 +1228,4 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         rollback(&mut journal, path, &mut tx)?;
     }
     Ok(json!({"ok":true,"data":{"recovered":true,"committed":journal.committed}}))
-}
-
-#[cfg(test)]
-mod inbox_wait_tests {
-    use super::{Duration, fs, wait_inbox_lock, write_private};
-
-    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
-
-    #[test]
-    fn idle_wait_preserves_an_unmigrated_database() -> TestResult {
-        let root = tempfile::tempdir()?;
-        let database = root.path().join("annals.db");
-        let connection = rusqlite::Connection::open(&database)?;
-        connection.execute_batch(
-            "PRAGMA user_version=5;
-             CREATE TABLE retained_source(content TEXT NOT NULL);
-             INSERT INTO retained_source VALUES ('Exact retained source.');",
-        )?;
-        drop(connection);
-        let before = fs::read(&database)?;
-        wait_inbox_lock(root.path(), Duration::ZERO)?;
-        write_private(&root.path().join("spool/.run.lock"), b"", false)?;
-        wait_inbox_lock(root.path(), Duration::ZERO)?;
-        assert_eq!(fs::read(database)?, before);
-        Ok(())
-    }
-
-    #[test]
-    fn active_inbox_must_release_its_lock_before_migration() -> TestResult {
-        let root = tempfile::tempdir()?;
-        let lock = root.path().join("spool/.run.lock");
-        write_private(&lock, b"", false)?;
-        let running = fs::OpenOptions::new().read(true).write(true).open(lock)?;
-        fs2::FileExt::lock_exclusive(&running)?;
-        assert!(wait_inbox_lock(root.path(), Duration::ZERO).is_err());
-        drop(running);
-        wait_inbox_lock(root.path(), Duration::ZERO)?;
-        Ok(())
-    }
-
-    #[test]
-    fn unsafe_inbox_lock_is_not_treated_as_idle() -> TestResult {
-        let root = tempfile::tempdir()?;
-        write_private(&root.path().join("other-lock"), b"", false)?;
-        fs::create_dir(root.path().join("spool"))?;
-        std::os::unix::fs::symlink(
-            root.path().join("other-lock"),
-            root.path().join("spool/.run.lock"),
-        )?;
-        assert!(wait_inbox_lock(root.path(), Duration::ZERO).is_err());
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod recovery_tests {
-    use super::{Duration, fs, restore_database_with_lock_wait};
-    use rusqlite::Connection;
-    use std::os::unix::fs::PermissionsExt;
-
-    type TestResult = std::result::Result<(), Box<dyn std::error::Error>>;
-
-    #[test]
-    fn restoration_progress_does_not_consume_lock_wait() -> TestResult {
-        let root = tempfile::tempdir()?;
-        let source_path = root.path().join("before.db");
-        let destination_path = root.path().join("library.db");
-        let source = Connection::open(&source_path)?;
-        source.execute_batch(
-            "CREATE TABLE retained(content BLOB NOT NULL);
-             INSERT INTO retained VALUES (zeroblob(2097152));
-             PRAGMA user_version=5;",
-        )?;
-        drop(source);
-        let destination = Connection::open(&destination_path)?;
-        destination.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             CREATE TABLE candidate_only(value INTEGER);
-             PRAGMA user_version=6;",
-        )?;
-        crate::sqlite::persist_wal(&destination)?;
-        drop(destination);
-        for path in [&source_path, &destination_path] {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-        }
-        let original_backup = fs::read(&source_path)?;
-        // More than one batch must complete even with no lock-wait allowance.
-        for _ in 0..2 {
-            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)?;
-            let reader = Connection::open_with_flags(
-                &destination_path,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )?;
-            assert_eq!(
-                reader.query_row("SELECT length(content) FROM retained", [], |row| row
-                    .get::<_, i64>(0))?,
-                2_097_152
-            );
-            assert_eq!(
-                reader.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))?,
-                5
-            );
-            assert_eq!(
-                reader.query_row(
-                    "SELECT count(*) FROM sqlite_master WHERE name='candidate_only'",
-                    [],
-                    |row| row.get::<_, i64>(0)
-                )?,
-                0
-            );
-            assert!(destination_path.with_extension("db-shm").is_file());
-            assert_eq!(
-                fs::metadata(destination_path.with_extension("db-wal"))?.len(),
-                0
-            );
-        }
-        assert_eq!(fs::read(source_path)?, original_backup);
-        Ok(())
-    }
-
-    #[test]
-    fn blocked_restoration_preserves_the_live_database() -> TestResult {
-        let root = tempfile::tempdir()?;
-        let source_path = root.path().join("before.db");
-        let destination_path = root.path().join("library.db");
-        let source = Connection::open(&source_path)?;
-        source.execute_batch("CREATE TABLE retained(value INTEGER);")?;
-        drop(source);
-        let writer = Connection::open(&destination_path)?;
-        writer.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             CREATE TABLE retained(value INTEGER);
-             INSERT INTO retained VALUES (7);
-             BEGIN IMMEDIATE;",
-        )?;
-        for path in [&source_path, &destination_path] {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-        }
-        let Err(error) =
-            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
-        else {
-            return Err("an active writer must prevent restoration".into());
-        };
-        assert!(error.message.contains("could not acquire database access"));
-        assert_eq!(
-            writer.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
-            7
-        );
-        writer.execute_batch("ROLLBACK;")?;
-        Ok(())
-    }
-
-    #[test]
-    fn checkpoint_contention_requires_recovery_to_continue() -> TestResult {
-        let root = tempfile::tempdir()?;
-        let source_path = root.path().join("before.db");
-        let destination_path = root.path().join("library.db");
-        let source = Connection::open(&source_path)?;
-        source.execute_batch(
-            "CREATE TABLE retained(value INTEGER); INSERT INTO retained VALUES (11);",
-        )?;
-        drop(source);
-        let reader = Connection::open(&destination_path)?;
-        reader.execute_batch(
-            "PRAGMA journal_mode=WAL;
-             CREATE TABLE retained(value INTEGER);
-             INSERT INTO retained VALUES (7);
-             BEGIN;",
-        )?;
-        assert_eq!(
-            reader.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
-            7
-        );
-        for path in [&source_path, &destination_path] {
-            fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
-        }
-        let Err(error) =
-            restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)
-        else {
-            return Err("a retained reader must prevent the final checkpoint".into());
-        };
-        assert!(error.message.contains("checkpoint remains blocked"));
-        assert!(source_path.is_file());
-        reader.execute_batch("ROLLBACK;")?;
-        drop(reader);
-        restore_database_with_lock_wait(&source_path, &destination_path, Duration::ZERO)?;
-        let restored = Connection::open_with_flags(
-            &destination_path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
-        assert_eq!(
-            restored.query_row("SELECT value FROM retained", [], |row| row.get::<_, i64>(0))?,
-            11
-        );
-        Ok(())
-    }
 }

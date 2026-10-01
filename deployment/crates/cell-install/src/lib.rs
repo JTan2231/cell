@@ -7,15 +7,16 @@ pub mod command;
 mod installation;
 pub mod legacy;
 pub mod migration;
+pub mod signing;
 pub mod simple;
 pub mod transaction;
 
 pub use transaction::*;
 
 pub use artifact::{
-    FileEntry, Manifest, ReleaseInput, file_digest, provider_inventory, verify_release,
+    FileEntry, Manifest, ReleaseInput, file_digest, provider_inventory, read_release,
 };
-pub use installation::{inspect, install, recover_installation, restore, verify_candidate};
+pub use installation::{inspect, install, recover_installation, restore};
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -31,14 +32,22 @@ pub struct InstallSpec {
     pub provider: &'static str,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Installation {
     pub current: String,
     pub release_id: String,
     pub version: String,
     pub format: String,
-    pub manifest_sha256: String,
 }
+
+// Installation concurrency concerns the selected release, not its recorded metadata.
+impl PartialEq for Installation {
+    fn eq(&self, other: &Self) -> bool {
+        self.current == other.current
+    }
+}
+
+impl Eq for Installation {}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -33,7 +33,7 @@
     "A retained condition notice ends transport when Email returns provider acceptance. This is not a final-delivery or requester-work success assertion."
   ],
   "failure_and_recovery": [
-    "Preserve the frozen record and exact key through restarts and private backups. Keep exhausted ambiguity uncertain; do not delete records or create another send identity to retry."
+    "Preserve the frozen record and exact key through restarts. Keep exhausted ambiguity uncertain; do not delete records or create another send identity to retry."
   ],
   "privacy": [
     "Condition notice records are private and retained separately from incident/exchange tables. EMT stores no Email credentials; providers retain independent copies."
@@ -44,8 +44,8 @@
   "dependencies": [
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.message.send",

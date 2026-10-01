@@ -1,6 +1,6 @@
 # Operate an Annals library
 
-Use this operation to create or configure a library, inspect or back up its
+Use this operation to create or configure a library, inspect its
 state, or make an explicitly authorized corpus-history change. Read the required
 `annals.libraries` and `annals.corpus.change` feature contracts for selection,
 stored data, reconciliation format, limits, consistency, and recovery meaning.
@@ -9,8 +9,8 @@ This procedure invokes no AI reader and does not operate the inbox.
 Select a registered library with `annals library NAME COMMAND` or an explicit
 operator config or path. Verify its identity and immutable kind before mutation.
 Read operations need readable prepared state and never create or repair missing
-sidecars or locks. Initialization and backup require absent destinations.
-Keep libraries, source text, instruction history, model context, and backups private.
+sidecars or locks. Initialization requires an absent destination.
+Keep libraries, source text, instruction history, and model context private.
 
 ## Create or select a library
 
@@ -54,7 +54,7 @@ Keep libraries, source text, instruction history, model context, and backups pri
    changes no corpus revision, and rewrites no history. Review pending
    reconciliations separately; a changed selection can make them stale.
 
-## Initialize, migrate, inspect, or back up
+## Initialize, migrate, or inspect
 
 1. Select the exact target. Confirm an absent path for initialization and the
    intended immutable kind. Confirm initialized private Bazaar state and a
@@ -66,15 +66,13 @@ Keep libraries, source text, instruction history, model context, and backups pri
    annals init [--kind general|decisions]
    annals migrate
    annals stats
-   annals backup /absolute/absent-backup.db
    ```
 
-3. Verify the command's library identity, kind, schema, statistics, or backup
+3. Verify the command's library identity, kind, schema or statistics
    result. Migration supports schemas 3 through 6 to schema 7 transactionally,
    preserves source and corpus history, and leaves unknown historical
-   instruction provenance null. Stop on unsupported state. Initialization and
-   backup refuse replacement. A destructive fresh-state cutover requires its
-   separately authorized installation procedure.
+   instruction provenance null. Stop on unsupported state. Initialization refuses
+   replacement. The installer has no data reset mode.
 
 ## Submit and apply a direct reconciliation
 
@@ -153,10 +151,9 @@ Initialization relies on the complete Bazaar selection described by
 Stop on conflicting identities, unsupported schemas, missing prepared read state,
 stale reconciliation or shake context, failed invariants, or a revert conflict.
 Use the owning feature and installation recovery route. Do not edit databases,
-catalogs, spool receipts, or history directly. Do not overwrite backups or infer
-application authority from read access. This operation authorizes only its
+catalogs, spool receipts, or history directly. Do not infer application authority from read access. This operation authorizes only its
 selected effects, not external disclosure or storage cleanup.
 
 CLI usage recording follows `annals.libraries`; recording errors preserve results.
 Feature contracts expose unspecified capacity, latency, compatibility-window,
-and backup-retention promises rather than supplying additional guarantees here.
+promises rather than supplying additional guarantees here.

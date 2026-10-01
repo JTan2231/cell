@@ -11,15 +11,14 @@ for script_path in \
     ci.sh \
     pipeline/lib.sh \
     pipeline/ci.sh \
+    pipeline/clippy.sh \
     pipeline/release.sh \
     pipeline/generate.sh \
     pipeline/test.sh \
     pipeline/check.sh \
     pipeline/integrated.sh \
     pipeline/recognition.sh \
-    pipeline/platform.sh \
-    pipeline/extras/decisions-catalog.sh \
-    pipeline/extras/semantics-catalog.sh
+    pipeline/platform.sh
 do
     sh -n "$PIPELINE_ROOT/$script_path"
 done

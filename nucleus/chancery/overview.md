@@ -25,7 +25,7 @@ publication. They do not contact Nucleus, establish readiness, or authorize work
 ## Operations
 
 Use `nucleus.execution.operate` to inspect or operate jobs, authentication, or
-the service, including installation, backup, and recovery. This broad operating
+the service, including installation and recovery. This broad operating
 contract keeps its existing identity and contract version. Its required feature
 contracts supply the full behavioral explanations.
 

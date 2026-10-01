@@ -1,83 +1,57 @@
-# Install or recover Conversations
+# Conversations program installation
 
-Use this operation for an explicitly authorized manual installation or recovery
-from validated artifacts. Ordinary delivery uses `cell-ci submit COMMIT` and
-the installed manager. This procedure does not authorize release publication,
-CI submission, task mutation, transcript disclosure, or Codex authentication changes.
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-Read `conversations.runtime` for installed paths, content identity, lock and
-selector behavior, failure recovery, and the embedded-consumer boundary.
-Read `nucleus manual` for shared maintenance and coordination.
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
 
-## Install validated artifacts
+The default installation root is
+`~/Library/Application Support/Conversations/install`. Releases are retained beneath
+`releases/HASH`; `current` selects the program and provider together and `previous`
+retains the superseded selection. Public commands are `~/.local/bin/conversations` and
+`~/.local/bin/conversations-install`. The provider selector is
+`~/Library/Application Support/Chancery/providers/conversations`.
 
-1. Select the matching tested binary, Rust installer, and complete provider bundle.
-2. Confirm authority for the installation and the expected current selection.
-3. Install the validated candidate:
+```sh
+conversations-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
+conversations-install inspect
+conversations-install recover --release ABSOLUTE_RELEASE_DIRECTORY
+```
 
-   ```sh
-   <TESTED_CONVERSATIONS_INSTALL> install \
-     --binary <TESTED_CONVERSATIONS_BINARY> \
-     --bundle <TESTED_CONVERSATIONS_BUNDLE>
-   ```
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery reads
+retained metadata and selects a release in that home's installation directory.
+It does not rebuild the release or restore product data. There is no installer
+`verify` or `verify-release` command. Ordinary runtime checks keep their existing
+behavior.
 
-4. Register command usage inventory:
+## Deliver programs
 
-   ```sh
-   conversations --register-usage
-   ```
+Use `cell-ci submit COMMIT` for ordinary committed-source delivery. The manager
+owns integration, validation, deployment, and its outcome email. Inspect the
+retained manager result. Manual installation and recovery use the supplied
+program artifacts under the applicable user authority.
 
-5. Check the selected path, version, and App Server handshake in the operator's normal environment:
+1. Select the intended absolute binary and provider paths.
+2. Run the install command above.
+3. Run `conversations --register-usage` to register command inventory separately.
+4. Read `conversations-install inspect` to see the selected release.
 
-   ```sh
-   conversations doctor
-   chancery product conversations
-   chancery show conversations.history.explore
-   chancery resolve conversations.installation.operate
-   ```
+## Recover a release
 
-Installation changes the binary and provider selectors. It starts no service,
-imports no credential, and reads no transcript. Registration records command
-inventory without reading history. The separate doctor check reads metadata
-without repair or turn content. Chancery reads only installed documentation;
-a declared upstream reliance or unspecified promise remains a documented gap.
+1. Resolve the retained release under the product installation root.
+2. Run a trusted installer with `recover --release ABSOLUTE_RELEASE_DIRECTORY`.
+3. Read the installation metadata and register the selected command inventory.
 
-Use `--expected-current absent` for an explicit fresh-install guard or
-`--expected-current releases/HASH` for an explicit update guard. Stop on a
-stale selection, foreign selector, invalid retained release, or unverified
-restoration. Do not force selectors or bypass integrity checks. Preserve failure
-diagnostics and inspect the retained selection before retrying deliberately.
+Catalog publication and program selection do not establish domain readiness.
+Use ordinary diagnostic commands separately when diagnosis is requested.
 
-## Recover a retained release
-
-1. Resolve `install/previous` to its canonical owned release directory under the product installation root documented in `conversations.runtime`.
-2. Select a trusted tested Rust installer.
-3. Recover the verified release:
-
-   ```sh
-   <TESTED_CONVERSATIONS_INSTALL> recover --release ABSOLUTE_RELEASE_DIRECTORY
-   ```
-
-4. Register usage and repeat the doctor and installed-document checks above.
-
-Recovery changes selectors after complete retained-release verification.
-It supports the previous shell-installed format and `cell-install-v2`.
-It does not run a retained installer to verify the release. Keep the candidate
-and diagnostics when verification or restoration fails. Stop if ownership or
-integrity is unknown. Do not remove or replace a foreign path.
-
-## Verify completion
-
-Confirm the intended CLI and provider bundle are selected together. Verify the
-expected release and the separate App Server handshake. An installed bundle
-alone does not prove runtime compatibility. Rebuild and deploy affected embedded
-consumers when library behavior changed; replacing the CLI does not update them.
-
-## Privacy and command usage
-
-Keep diagnostics private; App Server stderr can contain operational context.
-No real transcript or credential belongs in a provider bundle or example.
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
+Installation reads no history, starts no service, and changes no authentication.
+App Server doctor is a separate diagnostic operation.

@@ -25,7 +25,7 @@ There is no daemon, model call, network service, or represented execution path.
 Use `chancery.provider.publish` to author and publish a supported product
 contract through its owning release. Use `chancery.installation.operate` to
 install or recover the Chancery reader. Use `chancery.usage.operate` to register
-program inventories, inspect journal state, or back up and restore usage.
+program inventories and inspect journal state.
 
 ## How the features work together
 

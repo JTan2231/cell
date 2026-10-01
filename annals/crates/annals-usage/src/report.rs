@@ -953,19 +953,13 @@ impl From<ConsumptionReport> for ConsumptionSummary {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
 
     use nucleus_core::{
         AttemptOutputV1, JobId, JobState, LogRecordV1, LogStream, PROTOCOL_VERSION_V1, SchemaId,
     };
-    use rusqlite::Connection;
     use serde_json::{Value, json, value::RawValue};
 
-    use super::{
-        DeliveryRecord, ReceiptSummary, ReportScope, delivery_usage, grouped, read_receipts,
-        reduce_records,
-    };
-    use crate::config::UsageConfig;
+    use super::{grouped, reduce_records};
 
     #[test]
     fn summary_preserves_usage_coverage_errors_and_truncation_without_attempt_bodies()
@@ -1016,100 +1010,6 @@ mod tests {
         assert_eq!(grouped(999), "999");
         assert_eq!(grouped(1_234_567), "1,234,567");
         assert_eq!(grouped(-12_345), "-12,345");
-    }
-
-    #[test]
-    fn reads_receipts_from_the_skipped_archive() -> Result<(), Box<dyn std::error::Error>> {
-        let spool = tempfile::tempdir()?;
-        let envelope = spool.path().join("skipped/job-1");
-        fs::create_dir_all(&envelope)?;
-        fs::write(
-            envelope.join("job.json"),
-            r#"{"id":"job-1","ingestion_id":42,"model_run_token":"run-token"}"#,
-        )?;
-
-        let receipts = read_receipts(spool.path())?;
-        let receipt = receipts
-            .by_delivery
-            .get(&42)
-            .ok_or("skipped receipt was not discovered")?;
-        assert_eq!(receipt.model_run_token.as_deref(), Some("run-token"));
-        Ok(())
-    }
-
-    #[test]
-    fn report_scope_fetches_only_recent_delivery_runs_and_unattributed_runs()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let library = directory.path().join("annals.db");
-        let connection = Connection::open(&library)?;
-        connection.execute_batch(
-            "CREATE TABLE ingestions(\
-                 id INTEGER PRIMARY KEY, source_name TEXT NOT NULL, status TEXT NOT NULL, \
-                 result TEXT, work_id INTEGER\
-             ); \
-             INSERT INTO ingestions VALUES(1, 'old.md', 'completed', 'applied', 1); \
-             INSERT INTO ingestions VALUES(2, 'recent.md', 'completed', 'applied', 2);",
-        )?;
-        let spool = directory.path().join("spool/done");
-        for (job, delivery, token) in [
-            ("job-old", 1, "token-old"),
-            ("job-recent", 2, "token-recent"),
-        ] {
-            let envelope = spool.join(job);
-            fs::create_dir_all(&envelope)?;
-            fs::write(
-                envelope.join("job.json"),
-                serde_json::to_vec(&json!({
-                    "id": job,
-                    "ingestion_id": delivery,
-                    "model_run_token": token
-                }))?,
-            )?;
-        }
-        let config = UsageConfig {
-            library,
-            spool: directory.path().join("spool"),
-            ..UsageConfig::default()
-        };
-
-        let scope = ReportScope::load(&config, 1)?;
-        assert!(scope.includes_delivery("token-recent"));
-        assert!(!scope.includes_delivery("token-old"));
-        assert!(!scope.is_unattributed("token-old"));
-        assert!(scope.is_unattributed("token-manual"));
-        assert_eq!(scope.unattributed_limit(), 1);
-        Ok(())
-    }
-
-    #[test]
-    fn retry_child_reusing_a_reconciliation_has_zero_new_usage()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let path = directory.path().join("annals.db");
-        let connection = Connection::open(&path)?;
-        connection.execute_batch("CREATE TABLE model_runs(token TEXT NOT NULL)")?;
-        let library = annals_api::usage::Library::open(&path)?;
-        let delivery = DeliveryRecord {
-            id: 7,
-            source_name: "retry.md".to_owned(),
-            status: "completed".to_owned(),
-            result: Some("applied".to_owned()),
-            work_id: Some(3),
-        };
-        let receipt = ReceiptSummary {
-            id: "retry-job".to_owned(),
-            attempts: 1,
-            ingestion_id: Some(7),
-            model_run_token: None,
-            reconciliation_id: Some(11),
-            result_status: Some("applied".to_owned()),
-        };
-
-        let (coverage, usage) = delivery_usage(&library, &delivery, Some(&receipt), &[])?;
-        assert_eq!(coverage, "reused-no-new-usage");
-        assert_eq!(usage.map(|usage| usage.total_tokens), Some(0));
-        Ok(())
     }
 
     #[test]

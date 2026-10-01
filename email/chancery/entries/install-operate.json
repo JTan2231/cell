@@ -1,18 +1,18 @@
 {
   "id": "email.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Email",
-  "summary": "Deliver a committed candidate through Cell or select matching tested Email artifacts and a verified retained release, with separate authority for any real-send verification.",
+  "summary": "Install, inspect, or recover Email programs and their provider selector. Installation performs setup and basic execution checks.",
   "use_when": [
-    "Email needs ordinary Cell delivery or an explicitly authorized manual program installation or recovery."
+    "Email programs should be installed, inspected, or recovered."
   ],
   "do_not_use_when": [
     "The task only needs credential/domain selection, live mail inspection, or an unauthorized verification send."
   ],
-  "outcome": "Verified selected Email programs and matching installed documentation, or an explicit installation/recovery failure.",
+  "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "interfaces": [
     {
       "label": "Submit ordinary Cell delivery",
@@ -28,20 +28,16 @@
     }
   ],
   "effects": [
-    "Cell submission authorizes the installed manager delivery workflow and its outcome email. Manual installation or recovery selects Email programs and the matching provider bundle.",
-    "Program probes and registration read/send no mail. A separately authorized validation send discloses its subject/body to Resend and Gmail."
+    "Copy supplied programs and documentation into retained releases and select owned public paths atomically. Preserve other product selectors and separate product data."
   ],
   "authority": [
-    "The operator authorizes manual installation/recovery and selects tested matching artifacts. Email owns program selectors and integrity.",
-    "The CI manager owns ordinary committed-candidate delivery. The user or authorized caller owns any real-send authority."
+    "Email owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
   ],
   "success": [
-    "Verify the retained manager outcome for ordinary delivery, or selected help/version and provider publication for manual installation/recovery.",
-    "A separately authorized send verifies Resend acceptance; Gmail receipt requires separate observation."
+    "Owned command and provider selectors follow the installed release. Basic help/version invocations complete. No artifact-integrity, persistent-state, or operational-readiness gate is run."
   ],
   "failure_and_recovery": [
-    "Stop on foreign selector ownership, unverified artifacts or missing canonical owned previous release. Preserve errors and verify restored selectors after a failed post-switch check.",
-    "Recover with a trusted tested installer; keep private account setup and uncertain mail acceptance under their owning procedures."
+    "Refuse foreign public selectors or stale expected-current selections. File-operation or basic execution failures restore prior selectors when possible. Recovery selects retained program files and leaves product data unchanged."
   ],
   "privacy": [
     "Keep credentials and private account settings separate from artifact selection. Probes read/send no mail; an authorized real send discloses exact content to Resend/Gmail."
@@ -52,8 +48,8 @@
   "dependencies": [
     {
       "id": "email.installation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "email.account",
@@ -76,37 +72,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Use a validated candidate and matching trusted tested binary, Rust installer and complete bundle. Manual actions need explicit authorization; real sends need separate send authority and configured access."
+        "statement": "Supplied program and provider paths, an intended installation home, and authority to change owned selectors. Installation does not require a validation receipt."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Ordinary delivery names a committed source candidate. Manual installation names matching tested binary/bundle paths; recovery names the canonical owned retained release."
+        "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Retained manager outcome or verified selected program/version and matching provider publication. A real-send receipt, when separately authorized, reports Resend acceptance only."
+        "statement": "Recorded release metadata and selected public paths, or an installation error. Inspection reports metadata without checking artifact integrity."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation evidence describes selected program artifacts. Provider publication describes their documentation. Neither grants credential, mail-read or send authority."
+        "statement": "Program selection is installation state. It establishes neither database integrity nor dependency readiness nor domain success."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Commit IDs select Cell candidates; content hashes identify immutable Email releases. previous must resolve to its canonical owned release directory."
+        "statement": "Release hashes name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Verify the selected program and publication after installation/recovery. Resolve gaps remain explicit; catalog validation establishes no live Resend/Gmail readiness."
+        "statement": "Inspection reads current selectors and recorded installation metadata. It does not audit retained content or probe a live dependency."
       }
     ],
     "access": [
@@ -118,19 +114,19 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The installed manager owns ordinary delivery. Manual post-switch failure restores selectors; supported recovery verifies an owned retained release before selecting it. Account settings remain separately selected."
+        "statement": "Product and catalog locks serialize atomic publication. Expected-current guards detect changed selection. File-operation or basic execution failures restore the prior selection when possible. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Program verification uses help/version and usage registration with no mail access. Real-send checks are separate authorized operations and Gmail receipt is observed separately."
+        "statement": "Installation copies files and performs required setup plus basic help/version execution checks. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "This operation publishes existing CI, installation and verified legacy/cell-install-v2 recovery routes; it changes no executable or public send/receive behavior."
+        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
       }
     ],
     "reliances": [
@@ -150,23 +146,19 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Select the authorized validated candidate or matching tested artifacts.",
-    "Submit ordinary delivery or perform explicitly authorized manual selection.",
-    "Register usage and verify selected help/version and provider publication.",
-    "Recover only a verified canonical owned retained release; authorize any real-send check separately."
+    "Select the intended supplied binary and provider paths and the installation home.",
+    "Read the current selection and run install with any intended expected-current guard.",
+    "Register the installed command inventory separately and read installation metadata.",
+    "Recover a retained release when requested; keep diagnostics separate from installation."
   ],
   "checkpoints": [
-    "Programs and matching documentation select one verified release.",
-    "No credential or mail access occurs during program probes.",
-    "Manager success, program selection, Resend acceptance and Gmail delivery remain separate evidence."
+    "Owned selectors select the supplied program and provider release.",
+    "Setup and basic execution have completed. Program selection does not establish artifact integrity or live readiness."
   ],
   "adaptation": [
-    "Use Cell submission for ordinary delivery and the tested installer only for explicitly authorized manual installation/recovery.",
-    "Keep private account settings correction under email.account.operate."
+    "Use absolute paths and an intentional alternate home when required."
   ],
   "stop_when": [
-    "Artifact or selector ownership cannot be verified.",
-    "A required previous release or action authority is missing.",
-    "Program verification or retained manager delivery reports failure."
+    "Required files cannot be copied, a selector is foreign, the expected selection changed, or a required setup operation fails."
   ]
 }

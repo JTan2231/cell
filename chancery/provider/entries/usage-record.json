@@ -1,6 +1,6 @@
 {
   "id": "chancery.usage.record",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -25,7 +25,7 @@
   ],
   "failure_and_recovery": [
     "Recording returns an error after bounded SQLite contention; the observe adapter emits a bounded diagnostic and preserves the product command result.",
-    "No automatic append retry, migration, update, delete or pruning. Preserve compatible private backups and database-local cursor scope."
+    "No automatic append retry, migration, update, delete or pruning. Preserve database-local cursor scope."
   ],
   "privacy": [
     "Retains opaque system, command and Codex thread identities, invocation IDs, and observation times in a private current-user database. New invocations require thread attribution; existing unattributed rows remain readable. The journal excludes arguments, credentials, output, and model context. It makes no network requests."

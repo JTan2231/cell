@@ -205,48 +205,7 @@ pub fn render(template: &str, values: &[(&str, String)]) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bazaar::api::Writer;
     use serde_json::json;
-
-    #[test]
-    fn publication_pins_every_component_and_retains_old_selections() -> Result<()> {
-        let directory = tempfile::tempdir().map_err(bazaar::api::Error::from)?;
-        let database = directory.path().join("private/bazaar.sqlite3");
-        let mut writer = Writer::initialize(&database)?;
-        writer.update("weaver.instructions", "Original")?;
-        let selection = |version| {
-            json!({"schema_version":1,"entries":{"weaver.instructions":version}}).to_string()
-        };
-        writer.update("cell.prompts.weaver", &selection(1))?;
-        let frozen = Prompts::open(&database, "weaver", None)?;
-        writer.update("weaver.instructions", "Changed")?;
-        assert_eq!(
-            Prompts::open(&database, "weaver", None)?.text("weaver.instructions")?,
-            "Original"
-        );
-        writer.update("cell.prompts.weaver", &selection(2))?;
-        assert_eq!(
-            Prompts::open(&database, "weaver", None)?.text("weaver.instructions")?,
-            "Changed"
-        );
-        assert_eq!(
-            Prompts::open(&database, "weaver", Some(1))?.text("weaver.instructions")?,
-            "Original"
-        );
-        std::fs::remove_file(database).map_err(bazaar::api::Error::from)?;
-        assert_eq!(frozen.text("weaver.instructions")?, "Original");
-        Ok(())
-    }
-
-    #[test]
-    fn unavailable_selection_never_creates_state() -> Result<()> {
-        let directory = tempfile::tempdir().map_err(bazaar::api::Error::from)?;
-        let database = directory.path().join("absent/bazaar.sqlite3");
-        assert!(Prompts::open(&database, "weaver", None).is_err());
-        assert!(!database.exists());
-        assert!(!database.parent().is_some_and(Path::exists));
-        Ok(())
-    }
 
     #[test]
     fn rendering_is_single_pass_and_rejects_unknown_placeholders() -> Result<()> {

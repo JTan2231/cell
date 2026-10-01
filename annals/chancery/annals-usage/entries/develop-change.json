@@ -40,7 +40,7 @@
     "Do not add Semantics repository output to an Annals liaison prompt."
   ],
   "dependencies": [
-    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "semantics.repository.explore", "min_contract": 2, "max_contract_exclusive": 4},
     {"id": "annals-usage.consumption.inspect", "min_contract": 2, "max_contract_exclusive": 3},
     {"id": "annals-usage.execution.operate", "min_contract": 2, "max_contract_exclusive": 3}
   ],

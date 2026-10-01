@@ -9,42 +9,36 @@ Bazaar is an on-demand CLI and in-process Rust library. It installs no daemon,
 schedule, network listener, or model requester. The current user owns its
 programs and private SQLite state. There is no application-level authentication.
 
-## Program publication and verification
+## Program publication
 
-The immutable release contains `bazaar`, `bazaar-install`, its recovery
-installer, and the matching Chancery provider. Releases live under
-`~/Library/Application Support/Bazaar/install/releases/HASH`. The shared
-`cell-install-v2` transaction selects public commands under `~/.local/bin`
-and the Bazaar provider under Chancery. The provider follows program selection
-and retained-release recovery. Its installed pages require no source checkout.
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-Direct installation accepts a sealed matching candidate:
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
+
+The release contains `bazaar`, `bazaar-install`, its recovery installer, and the
+Bazaar provider. Releases live under
+`~/Library/Application Support/Bazaar/install/releases/HASH`.
 
 ```sh
-bazaar-install install --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
+bazaar-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
 bazaar-install inspect
-bazaar-install verify --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery
-bazaar-install verify-release /absolute/owned/release
-bazaar-install recover --release /absolute/owned/release
+bazaar-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-The installer accepts `--home ABSOLUTE_PATH` and
-`--expected-current absent|releases/HASH`. Foreign selectors, changed release
-bytes, and stale expected selections stop publication. Preserve unresolved
-installation evidence after failure. Never edit a retained release in place or
-take over another owner's selector.
-
-Direct installation selects programs only. It does not initialize or replace
-the database. The Cell coordinator owns deployment ordering. Bazaar accepts
-no deployment settings or runtime service dependencies. Coordinated configure
-initializes an empty default database or checks its existing schema. Verification
-checks program identity and database integrity. Neither appends a string or
-migrates a caller. Program installation remains useful without the Chancery
-executable; the catalog is not a Bazaar runtime dependency.
-
-The coordinator reliance applies only to coordinated deployment. Direct
-installation and core state operations work independently. No dedicated installed
-Chancery contract covers the shared coordinator; resolution exposes that gap.
+Direct installation selects programs only. Coordinated configure initializes the
+default database through `Writer::initialize`; it adds no integrity or readiness
+gate. Initialization's ordinary state and schema rules still apply. The separate
+`bazaar doctor` command remains available for an explicit diagnostic request.
+The coordinator controls ordering; it has no dedicated installed contract.
 
 ## State identity and access
 
@@ -86,10 +80,12 @@ string versions and validates no stored content format.
 
 Doctor opens state read-only and checks database identity and SQLite
 `quick_check`. It returns no stored content. It establishes neither the meaning
-of stored text nor future availability. Init and doctor return schema-one JSON;
-operational errors use `ok:false` with `error.detail` and exit 1. Invalid command
-syntax uses the Clap stderr diagnostic and exit 2. The optional `--json` flag
-does not change output.
+of stored text nor future availability. Init and doctor print short readable
+results by default. Use the global `--json` flag for their existing schema-one
+JSON on stdout. With that flag, operational errors use `ok:false` with
+`error.detail` on stdout and exit 1. Without it, operational errors use a text
+diagnostic on stderr and exit 1. Invalid command syntax uses Clap's stderr
+diagnostic and exit 2 in both modes. Rust state operations remain unchanged.
 
 Rust programs import `bazaar::api::{Reader, Writer, Error}` and use
 `bazaar::api::Result<T>` for typed results:
@@ -119,14 +115,10 @@ or rewrites string versions. Compatible commands can finish across program
 selection. A program rollback does not restore older data or make unsupported
 state compatible.
 
-Every committed string version remains retained. There is no automatic backup,
-pruning, deletion, or restore command. For a filesystem backup, stop writers,
-let current operations finish, and retain the database and any SQLite sidecars
-together in private storage. Restore only a compatible complete backup under
-exclusive access. Restoring older history can reuse later version numbers;
-reconcile caller references before resuming.
+Every committed string version remains retained. There is no pruning, deletion,
+or data restoration command.
 
-Content and backups stay outside source and release files. Installation,
+Content stays outside source and release files. Installation,
 initialization, inspection, and usage registration authorize no content update,
 caller migration, external send, or agent execution. `bazaar --register-usage`
 separately registers command identities in Chancery and creates no strings.

@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 11,
+  "contract_version": 13,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -15,7 +15,7 @@
     "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
     "The caller expects arbitrary direct rollback, a schema reset or implicit installation of dependencies."
   ],
-  "outcome": "A verified installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
+  "outcome": "An installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
   "interfaces": [
     {
       "label": "Plan coordinated installation",
@@ -28,14 +28,6 @@
     {
       "label": "Inspect owned installation",
       "invocation": "platter-install inspect [--home ABSOLUTE_PATH]"
-    },
-    {
-      "label": "Verify exact installed candidate",
-      "invocation": "platter-install verify --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--home ABSOLUTE_PATH]"
-    },
-    {
-      "label": "Verify retained release integrity",
-      "invocation": "platter-install verify-release ABSOLUTE_RELEASE_DIRECTORY"
     },
     {
       "label": "Inspect maintenance",
@@ -62,8 +54,8 @@
       "invocation": "platter --json doctor --state-only"
     },
     {
-      "label": "Validate supported state and take deployment backup",
-      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate --backup ABSOLUTE_PATH [--completion-receipt ABSOLUTE_PATH]"
+      "label": "Migrate supported state",
+      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER platter --json migrate [--completion-receipt ABSOLUTE_PATH]"
     },
     {
       "label": "Print the selected release daily failure policy without activation",
@@ -72,48 +64,48 @@
   ],
   "effects": [
     "Coordinated installation publishes matched runtime/installer/provider bytes through owned selectors. It starts no packet preparation or email.",
-    "Durable owner holds fence new mutations while exact admitted work drains. Explicit migration preserves retained identities, creates a current-schema backup, and removes only hashed legacy files after successful import/backup.",
-    "Read-only checks inspect installation/state/dependency readiness without domain work. Explicit supplied setup can initialize missing templates or activation intent. Existing schedules are retargeted disabled and captured intent is restored only after holds release."
+    "Durable owner holds fence new mutations while exact admitted work drains. Explicit migration preserves retained identities and removes only hashed legacy files after transactional import.",
+    "Read-only checks inspect installation/state/dependency readiness without domain work. Explicit supplied setup can initialize missing templates or activation intent. Existing schedules are retargeted disabled and captured intent is restored only after holds release.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
-    "Cell coordinates selected product installation and maintenance; the shared installer owns artifact integrity, owned selectors, writer locks and file compensation.",
+    "Cell coordinates selected product installation and maintenance; the shared installer owns release metadata, owned selectors, writer locks and file compensation.",
     "Catalog presence, a successful build or stored delivery time grants no installation, send, recurring-delivery or dependency-upgrade authority."
   ],
   "success": [
-    "Installation succeeds only after exact candidate selection, state and local prerequisites are verified while held and run-owned maintenance is released.",
-    "Inspection and doctor report the installation, configuration and dependency readiness checks they perform."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves retained state, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
-    "Stop and retain evidence for unknown ownership, foreign selectors/holds, altered release/candidate bytes, ambiguous roots, unsupported state, incomplete drain, or readiness failure.",
-    "Use the exact retained owner, compatible candidate, selected backup, and completion evidence for interrupted migration/coordinator recovery. Do not perform direct installer rollback, reset domain state, or release unrelated holds.",
-    "Schema-seven state cannot use an older incompatible binary. Recover with a compatible candidate or explicitly selected complete predecessor data/files backup and matching binary; file compensation does not undo migration.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate.",
+    "Use the exact retained owner, compatible candidate, and completion evidence for interrupted migration/coordinator recovery. Do not perform direct installer rollback, reset domain state, or release unrelated holds.",
+    "Schema-seven state cannot use an older incompatible binary. Recover with a compatible candidate; file compensation does not undo migration.",
     "Preserve Clockwork halts and uncertain sends through deployment. Binding continuation does not authorize a preparation retry or ambiguous resend."
   ],
   "privacy": [
-    "Private state and backup files contain career history, original resume and packet/send metadata. They remain separate from immutable public installation material and source control.",
+    "Private state contains career history, original resume and packet/send metadata. It remains separate from immutable public installation material and source control.",
     "Installation manifests retain executable/provider identity and local paths, never private resume bodies or provider keys. Model and email disclosures belong only to separately authorized runtime operations."
   ],
   "dependencies": [
     {
       "id": "platter.maintenance",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.collect",
       "min_contract": 5,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.message.send",
@@ -122,8 +114,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.corpus.explore",
@@ -138,7 +130,7 @@
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -156,37 +148,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Use exact committed source, an owned verified candidate, compatible maintenance interfaces across affected requesters, the sole matching hold, and proved drain. Read platter.maintenance for admission, dependency readiness, candidate maintenance, and state compatibility. Unselected dependencies are not implicitly upgraded."
+        "statement": "Use exact committed source, an owned candidate, compatible maintenance interfaces across affected requesters, the sole matching hold, and proved drain. Read platter.maintenance for admission, dependency readiness, candidate maintenance, and state compatibility. Unselected dependencies are not implicitly upgraded."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Retain exact owner/candidate identity, absolute backup and optional recovery-receipt paths, and explicit supplied template/projects-template/activation setup when intended. Use the fixed Vita selection and complete Bazaar prompt prerequisites defined by required features."
+        "statement": "Retain exact owner/candidate identity, optional absolute recovery-receipt path, and explicit supplied template/projects-template/activation setup when intended. Use the fixed Vita selection and complete Bazaar prompt prerequisites defined by required features."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Inspection/readiness outcomes, coherent matched runtime/installer/provider selectors, and maintained backup/cleanup/recovery evidence. Required features own exact release and state meaning."
+        "statement": "Inspection/readiness outcomes, coherent matched runtime/installer/provider selectors, and maintained cleanup/completion evidence. Required features own exact release and state meaning."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Use platter.maintenance for release, canonical schema-seven state, hold/drain, backup, migration, and incident meaning. Platter state and Nucleus evidence/credentials remain separately owned."
+        "statement": "Use platter.maintenance for release, canonical schema-seven state, hold/drain, migration, and incident meaning. Platter state and Nucleus evidence/credentials remain separately owned."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Preserve the run-owned hold and exact committed candidate, backup digest, and recovery evidence. Maintain retained packet/request/edition/send identities under platter.maintenance without treating hold identity as process liveness."
+        "statement": "Preserve the run-owned hold and exact committed candidate and completion evidence. Maintain retained packet/request/edition/send identities under platter.maintenance without treating hold identity as process liveness."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Require complete bounded drain and the documented readiness observation before cutover/release. Unknown or incomplete evidence cannot establish success. Doctor starts no domain work and does not prove initialized source libraries or actual external binding readiness."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       }
     ],
     "access": [
@@ -198,7 +190,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Hold/drain requesters before Nucleus; perform only authorized maintenance, verify the exact held candidate and supported state, restore captured activation intent, and release only the operation's hold with Nucleus last. Retain migration recovery evidence and all preexisting halts/pauses."
+        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
       }
     ],
     "operational_limits": [
@@ -214,7 +206,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Keep the existing operation ID/version and coordinator/recovery routes. Required features own supported state migration and binary/data pairing; no file compensation undoes a schema migration or restores older Nucleus credentials."
+        "statement": "Operation contract 13 retains the stable operation ID and coordinator/recovery routes. Required features own supported in-place state migration and compatible program selection; no file compensation undoes a schema migration or restores older Nucleus credentials."
       }
     ],
     "reliances": [
@@ -233,7 +225,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, coordinator sequencing, artifact integrity and file compensation. Their source operational manual remains the authority; this entry does not claim an independent installed Cell capability contract.",
+        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, coordinator sequencing, release metadata and file compensation. Their source operational manual remains the authority; this entry does not claim an independent installed Cell capability contract.",
         "target": "cell-deployment",
         "kind": "control"
       },
@@ -275,26 +267,26 @@
   ],
   "steps": [
     "Inspect exact installed identity, canonical state, dependency compatibility, and maintenance ownership.",
-    "Select the authorized committed Cell candidate and prepare verified matching program/provider bytes.",
+    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
     "Hold and drain affected requesters, then Nucleus, under the retained run owner.",
-    "Apply supported migration/cutover with a private consistent backup and exact recovery evidence.",
-    "Verify supported local state, exact installed program/provider identity, and full held readiness.",
+    "Apply supported transactional migration/cutover under the sole matching owner hold.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate.",
     "Release only the operation's holds with Nucleus last and restore only captured activation intent; retain all incident halts."
   ],
   "checkpoints": [
     "The sole retained owner and complete bounded drain are proved before migration/cutover.",
-    "Selected release and backup/recovery evidence remain exact and owned.",
+    "Selected release and completion evidence remain exact and owned.",
     "Migration/local state verification precedes dependency rebinding and full readiness.",
-    "Full held readiness and coherent program/provider selection precede release/activation."
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "adaptation": [
     "Use read-only inspection/state-only readiness without requiring domain execution.",
-    "Use sealed candidate maintenance only after ownership and read-only schema-seven proof; predecessor/affected-only cases retain installed maintenance.",
-    "Resume interrupted migration or coordinator recovery from exact owner/backup/receipt evidence rather than a direct installer rollback."
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate.",
+    "Resume interrupted migration or coordinator recovery from exact owner/source/receipt evidence rather than a direct installer rollback."
   ],
   "stop_when": [
-    "Ownership, sole hold, complete drain, candidate integrity, state compatibility, or readiness is absent or unknown.",
-    "Migration source/backup/receipt evidence changed or a binary-only rollback would cross incompatible state.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate.",
+    "Migration source/receipt evidence changed or a binary-only rollback would cross incompatible state.",
     "Recovery would reset domain history, resend uncertain mail, release a foreign hold, upgrade an unselected dependency, or clear a Clockwork halt."
   ]
 }

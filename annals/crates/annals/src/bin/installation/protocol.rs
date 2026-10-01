@@ -1,7 +1,7 @@
 use super::{
-    BTreeMap, DecisionsArgs, Error, HomeArgs, InstallArgs, MINUTE, Operation, Path, PathBuf,
-    Result, VERSION, Value, call, environment, fs, install_root, json, lifecycle, optional_private,
-    release, schedule, state, toml_value,
+    BTreeMap, DecisionsArgs, Error, HomeArgs, InstallArgs, Operation, Path, PathBuf, Result,
+    VERSION, Value, call, fs, install_root, json, lifecycle, optional_private, release, schedule,
+    state, toml_value,
 };
 use cell_install::InstallSnapshot;
 use cell_install::adapter::{Context, reply};
@@ -239,107 +239,6 @@ fn drain(context: &Context, snapshot: &InstallSnapshot) -> Result<bool> {
     Ok(true)
 }
 
-fn verify(context: &Context, snapshot: &InstallSnapshot, candidate: bool) -> Result<()> {
-    no_installer_hold(&context.home)?;
-    let info = snapshot
-        .current
-        .as_ref()
-        .ok_or_else(|| Error::new("Annals is absent"))?;
-    let root = release::root(&context.home, info);
-    if candidate {
-        release::exact_candidate(
-            info,
-            &root,
-            &context.binary("annals")?,
-            &context.binary("annals-usage")?,
-        )?;
-        let mut expected_paths: std::collections::BTreeSet<String> = [
-            "libexec/annals",
-            "libexec/annals-usage",
-            "bin/annals",
-            "bin/annals-inbox",
-            "bin/annals-install",
-            "package/install",
-        ]
-        .into_iter()
-        .map(str::to_owned)
-        .collect();
-        for name in ["annals", "annals-usage"] {
-            let bundle = context
-                .request
-                .source_root
-                .join("annals/chancery")
-                .join(name);
-            let spec = cell_install::InstallSpec {
-                product: name,
-                application: "Annals",
-                commands: &["annals"],
-                provider: name,
-            };
-            for (path, file) in cell_install::provider_inventory(&bundle, &spec)? {
-                let relative = format!("share/chancery/{name}/{path}");
-                if info.files.get(&relative) != Some(&file) {
-                    return Err(Error::new(
-                        "installed Annals contract differs from candidate source",
-                    ));
-                }
-                expected_paths.insert(relative);
-            }
-        }
-        if info
-            .files
-            .keys()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>()
-            != expected_paths
-        {
-            return Err(Error::new("Annals candidate exact file inventory differs"));
-        }
-    }
-    let observed = controls(
-        &context.home,
-        snapshot,
-        &context.dependency_binary("clockwork")?,
-    )?;
-    if observed.values().any(|control| control.enabled) {
-        return Err(Error::new(
-            "Annals schedule activated before final activation",
-        ));
-    }
-    let prior_pauses: BTreeMap<String, bool> =
-        serde_json::from_value(context.prior()?["operator_pauses"].clone())?;
-    let observed_pauses = pauses(&context.home)?;
-    if prior_pauses
-        .iter()
-        .any(|(path, paused)| *paused && observed_pauses.get(path) != Some(&true))
-    {
-        return Err(Error::new("Annals operator pause was cleared"));
-    }
-    for library in libraries(&context.home)? {
-        let decisions = toml_value(&fs::read_to_string(library.join("config.toml"))?)?
-            .get("decision_feed")
-            .is_some();
-        lifecycle::readiness(
-            &root.join("libexec/annals"),
-            &library,
-            &context.home,
-            Some(&context.request.run_id),
-            decisions,
-        )?;
-    }
-    cell_install::command::checked(
-        &root.join("libexec/annals-usage"),
-        &[
-            "doctor".into(),
-            "--config".into(),
-            state(&context.home).join("usage.toml").into_os_string(),
-        ],
-        &environment(&context.home, Some(&context.request.run_id)),
-        MINUTE * 3,
-    )?;
-    Ok(())
-}
-
 fn socket(home: &Path) -> Result<PathBuf> {
     let config = state(home).join("config.toml");
     if optional_private(&config)? {
@@ -495,10 +394,9 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
         }
         Operation::Configure => {
             if !context.selected() {
-                verify(&context, &snapshot, false)?;
                 return Ok(reply(
                     "configured",
-                    "Annals retained configuration verified",
+                    "Annals retained configuration kept",
                     json!({}),
                 ));
             }
@@ -548,20 +446,6 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                 json!({"installed":installed,"current":selection(&installed)}),
             ))
         }
-        Operation::Verify => {
-            let selected = context.selected();
-            if !selected && snapshot != prior(&context)? {
-                return Err(Error::new(
-                    "unselected Annals installation changed since inspection",
-                ));
-            }
-            verify(&context, &snapshot, selected)?;
-            Ok(reply(
-                "verified",
-                "Annals installation and both library readiness boundaries verified",
-                json!({"installed":snapshot}),
-            ))
-        }
         Operation::Recover => {
             no_installer_hold(&context.home)?;
             let before = prior(&context)?;
@@ -586,13 +470,12 @@ pub(super) fn run(operation: Operation) -> Result<Value> {
                             &context.home,
                             &context.request.run_id,
                         )?;
-                    } else if recovery["verified"] != true {
+                    } else if recovery["configured"] != true {
                         return Err(Error::new(
-                            "Annals recovery lacks sole hold or completed verification",
+                            "Annals recovery lacks sole hold or completed configuration",
                         ));
                     }
                 }
-                verify(&context, &snapshot, !is_prior)?;
             }
             Ok(reply(
                 "recovered",
@@ -656,7 +539,6 @@ fn install_args(context: &Context, snapshot: &InstallSnapshot) -> Result<Install
             home: Some(context.home.clone()),
         },
         expected_current: Some(selection(snapshot)),
-        fresh_state: false,
         no_start: false,
         migration_clockwork_handoff: false,
         launchctl: "/bin/launchctl".into(),

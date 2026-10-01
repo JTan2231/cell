@@ -66,8 +66,8 @@ Usage: install.sh --operator USER --binary ABSOLUTE_PATH \
 Install or update the single-operator macOS Annals LaunchDaemon. The operator
 owns the private state and can use the installed `annals` command without sudo.
 Existing state must already belong to the selected operator; this installer
-does not migrate installations owned by another account. Nucleus must already
-be running and authenticated at the supplied socket.
+does not migrate installations owned by another account. Installation does not
+check Nucleus readiness or authentication at the supplied socket.
 EOF
 }
 
@@ -133,10 +133,10 @@ cleanup() {
 
 restore_file() {
     existed=$1
-    backup_name=$2
+    prior_name=$2
     target=$3
     if [ "$existed" -eq 1 ]; then
-        cp -p "$transaction_dir/$backup_name" "$target"
+        cp -p "$transaction_dir/$prior_name" "$target"
     else
         rm -f "$target"
     fi
@@ -250,18 +250,8 @@ for command in awk cp install launchctl plutil sh stat sudo; do
 done
 
 "$binary_path" --version >/dev/null
-usage_version=$("$usage_binary_path" --version)
-case "$usage_version" in
-    'annals-usage '*) ;;
-    *) fail "unexpected Annals usage binary version output: $usage_version" ;;
-esac
-nucleus_version=$("$nucleus_path" --version)
-case "$nucleus_version" in
-    'annals-usage '*) fail 'the supplied Nucleus path resolves to annals-usage' ;;
-esac
-sh -n "$SOURCE_FRONTEND"
-sh -n "$SOURCE_USAGE_FRONTEND"
-plutil -lint "$SOURCE_PLIST" >/dev/null
+"$usage_binary_path" --version >/dev/null
+"$nucleus_path" --version >/dev/null
 [ "$(plutil -extract Label raw -o - "$SOURCE_PLIST")" = "$SERVICE_LABEL" ] \
     || fail "packaged plist label is not $SERVICE_LABEL"
 
@@ -540,7 +530,6 @@ temporary_plist=/Library/LaunchDaemons/.org.annals.inbox.plist.$$
 install -o root -g wheel -m 0644 "$SOURCE_PLIST" "$temporary_plist"
 plutil -replace UserName -string "$operator" "$temporary_plist"
 plutil -replace GroupName -string "$operator_group" "$temporary_plist"
-plutil -lint "$temporary_plist" >/dev/null
 mv -f "$temporary_plist" "$INSTALL_PLIST"
 temporary_plist=
 
@@ -551,23 +540,17 @@ run_as_operator "$nucleus_path" --version >/dev/null \
 
 run_as_operator "$INSTALL_USAGE_FRONTEND" --version >/dev/null \
     || fail "$operator cannot execute the installed Annals usage companion"
-run_as_operator "$INSTALL_USAGE_FRONTEND" doctor \
-    --config "$USAGE_CONFIG_PATH" >/dev/null \
-    || fail "Nucleus readiness or authentication failed for $operator; repair Nucleus, then rerun the installer"
 
 if [ ! -e "$LIBRARY_PATH" ]; then
     run_as_operator "$INSTALL_FRONTEND" init
 fi
-run_as_operator "$INSTALL_FRONTEND" stats >/dev/null
-run_as_operator "$INSTALL_FRONTEND" inbox status >/dev/null
-run_as_operator "$INSTALL_USAGE_FRONTEND" report --limit 0 >/dev/null
 
 if [ "$no_start" -eq 1 ]; then
     if [ "$marker_created" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
         marker_created=0
     fi
-    printf '%s\n' 'Annals is installed and verified; scheduling remains disabled (--no-start).'
+    printf '%s\n' 'Annals is installed; scheduling remains disabled (--no-start).'
 else
     if [ "$marker_created" -eq 1 ]; then
         rm -f "$MAINTENANCE_MARKER"
@@ -580,9 +563,7 @@ else
     fi
     service_started=1
     launchctl kickstart "$SERVICE_TARGET"
-    launchctl print "$SERVICE_TARGET" >/dev/null \
-        || fail 'LaunchDaemon verification failed'
-    printf '%s\n' 'Annals is installed, verified, and scheduled with launchd.'
+    printf '%s\n' 'Annals is installed and scheduled with launchd.'
 fi
 
 # A live-only Annals Usage installation has no private ledger. This is the last

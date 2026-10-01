@@ -1,6 +1,6 @@
 {
   "id": "conatus.digest.email",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -66,13 +66,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "conatus.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "promise": {
@@ -97,7 +97,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Text preview prints From, To, Subject and body; --json returns data.digest with want_count, context_available and context_revision. Send returns occurrence and accepted_id or an error."
+        "statement": "Commands print readable text by default. --json selects the existing {ok:true,data:...} machine response. Human and JSON errors go to stderr with a nonzero exit; JSON errors retain {ok:false,error:string}. Text preview prints From, To, Subject and body; --json previews return data.digest with want_count, context_available and context_revision. Send returns occurrence and accepted_id or an error."
       }
     ],
     "data_semantics": [
@@ -144,6 +144,10 @@
       {
         "status": "unspecified",
         "statement": "No general cross-release support interval or external-provider retention guarantee is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 5 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

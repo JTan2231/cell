@@ -32,6 +32,9 @@ conditions that pause the queue.
 Read [external work storage](STORAGE.md) for drive preparation, cache locations,
 the build write boundary, and recovery after drive loss.
 
+Read [macOS signing](chancery/manuals/signing-operate.md) to create or select the
+persistent certificate required by new CI jobs and production preparation.
+
 The root and product `ci.sh` wrappers use this manager. Bare invocations and
 direct validation flags are unsupported. The manager invokes the internal
 validator against its committed candidate and fixed accepted base.

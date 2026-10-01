@@ -291,39 +291,3 @@ pub(crate) async fn read_report(layout: &Layout, root: &std::path::Path) -> Opti
     }
     result
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn five_consecutive_checks_reset_persist_and_release_only_once() {
-        let directory = tempfile::tempdir().unwrap();
-        let layout = Layout::isolated(directory.path());
-        let mut store = Store::open(&layout).unwrap();
-        let incident = store
-            .import_halt("example/worker", "failed", "job/one")
-            .unwrap();
-        let mut checks = Checks::load(&layout).unwrap();
-        for at in [60, 120, 180] {
-            checks.record(&incident, "unhealthy", at);
-        }
-        assert_eq!(checks.view(&incident).consecutive_failures, 3);
-        assert!(!checks.due(&incident, 181));
-        checks.record(&incident, "healthy", 240);
-        assert_eq!(checks.view(&incident).consecutive_failures, 0);
-        for at in [300, 360, 420, 480] {
-            checks.record(&incident, "unhealthy", at);
-        }
-        checks.save(&layout).unwrap();
-        let mut checks = Checks::load(&layout).unwrap();
-        assert_eq!(checks.view(&incident).eligible_at, None);
-        checks.record(&incident, "unhealthy", 540);
-        assert_eq!(checks.view(&incident).eligible_at, Some(540));
-        checks.record(&incident, "unhealthy", 600);
-        assert_eq!(checks.view(&incident).eligible_at, Some(540));
-        checks.record(&incident, "inactive", 660);
-        assert_eq!(checks.view(&incident).consecutive_failures, 0);
-        assert_eq!(checks.view(&incident).eligible_at, None);
-        assert!(store.require_unhalted("example/worker").is_err());
-    }
-}

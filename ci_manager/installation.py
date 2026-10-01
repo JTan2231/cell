@@ -19,6 +19,7 @@ import time
 import uuid
 
 from ci_manager.storage import ManagerError, Store, home, lock, private_directory, state_root
+from ci_manager.process import validation_exited
 
 
 LABEL = "dev.cell.ci-manager"
@@ -156,7 +157,6 @@ def _selected_release(paths: dict[str, Path]) -> Path | None:
     if not re.fullmatch(r"releases/[0-9a-f]{64}", target):
         raise ManagerError("foreign CI manager current selector")
     release = paths["programs"] / target
-    _verify_release(release)
     return release
 
 
@@ -187,7 +187,6 @@ def _check_plist(path: Path) -> bytes | None:
         release = wrapper.parent.parent
         if arguments != _launch_arguments(release):
             raise ValueError("unexpected LaunchAgent command")
-        _verify_release(release)
     except (ValueError, TypeError, KeyError, plistlib.InvalidFileException) as error:
         raise ManagerError("foreign CI manager LaunchAgent") from error
     return raw
@@ -241,32 +240,7 @@ def _cancelled_validation_exited(store: Store, job: dict) -> bool:
             or job.get("acceptance_intent") or job.get("deployment_request")
             or job.get("deployment_result") or store.get("recovery_request")):
         return False
-    directory = store.root / "jobs" / job["id"]
-    worktree = directory / "worktree"
-    name = f"validation-{len(job.get('validations', []))}"
-    request_path = directory / f"{name}.request.json"
-    try:
-        request = json.loads(request_path.read_text())
-        result = json.loads((directory / f"{name}.result.json").read_text())
-        if not isinstance(request, dict) or not isinstance(result, dict):
-            return False
-        command = request["command"]
-        expected = [str(worktree / "pipeline/select_changes.py"), "run",
-                    "--base", job["base_commit"],
-                    "--candidate", job["candidate_commit"], "--json"]
-        if job.get("skip_tests", False):
-            expected.append("--skip-tests")
-        return (isinstance(command, list) and len(command) == len(expected) + 1
-                and isinstance(command[0], str) and Path(command[0]).is_absolute()
-                and command[1:] == expected
-                and request["cwd"] == str(worktree)
-                and all(request[key] == str(directory / f"{name}.{suffix}")
-                        for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
-                                            ("started", "started.json"), ("result", "result.json")))
-                and result["request"] == str(request_path)
-                and type(result.get("exit_code")) is int)
-    except (OSError, ValueError, KeyError, TypeError):
-        return False
+    return validation_exited(store.root / "jobs" / job["id"], job)
 
 
 def _require_idle(store: Store, *, allow_cancelled_validation: bool = False) -> None:
@@ -295,6 +269,21 @@ def _prepare_release(source: Path, python: Path) -> Path:
         mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
         contents[name] = content
         records[name] = {"sha256": _digest(content), "mode": mode}
+    # Host preparation uses pinned code from this manager release. Candidate
+    # worktrees supply data and compiler inputs, never the signing implementation.
+    shared_modules = (
+        "deployment/__init__.py", "deployment/signing.py", "deployment/build.py",
+        "deployment/candidate.py", "deployment/inventory.py", "ci_broker/__init__.py",
+        "ci_broker/client.py", "ci_broker/broker.py",
+    )
+    for name in shared_modules:
+        path = source.parent / name
+        if path.is_symlink() or not path.is_file():
+            raise ManagerError(f"CI manager host preparation module is missing or symbolic: {name}")
+        content = path.read_bytes()
+        mode = 0o555 if path.stat().st_mode & 0o111 else 0o444
+        contents[name] = content
+        records[name] = {"sha256": _digest(content), "mode": mode}
     recipe = {
         "schema_version": FORMAT, "product": "cell-ci", "entry": "ci_manager/client.py",
         "program_root": str(program_root()), "python": str(python), "files": records,
@@ -305,7 +294,6 @@ def _prepare_release(source: Path, python: Path) -> Path:
     private_directory(releases)
     release = releases / identity
     if release.exists() or release.is_symlink():
-        _verify_release(release)
         return release
     stage = Path(tempfile.mkdtemp(prefix=".stage-", dir=releases))
     try:
@@ -325,7 +313,6 @@ def _prepare_release(source: Path, python: Path) -> Path:
             for directory in [stage, *(path for path in stage.rglob("*") if path.is_dir())]:
                 os.chmod(directory, 0o700)
             shutil.rmtree(stage)
-    _verify_release(release)
     return release
 
 
@@ -421,7 +408,11 @@ def service(action: str) -> dict:
         raise ManagerError("CI manager service operations require macOS launchd")
     paths = _paths()
     release = _selected_release(paths)
+    if release is not None:
+        _verify_release(release)
     plist = _check_plist(paths["plist"])
+    if plist is not None:
+        _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
     if action == "status":
         return {"installed": release is not None, "release": release.name if release else None,
                 "loaded": _loaded(), "service": LABEL}
@@ -429,7 +420,11 @@ def service(action: str) -> dict:
         raise ManagerError("CI manager service is not installed")
     with lock(state_root() / "admission.lock"):
         release = _selected_release(paths)
+        if release is not None:
+            _verify_release(release)
         plist = _check_plist(paths["plist"])
+        if plist is not None:
+            _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
         if release is None or plist is None:
             raise ManagerError("CI manager service is not installed")
         store = Store(state_root())

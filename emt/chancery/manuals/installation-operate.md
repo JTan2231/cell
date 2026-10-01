@@ -1,7 +1,7 @@
 # Install and operate EMT
 
 Use this operation to install matched EMT bytes, configure an installation,
-activate its worker, inspect readiness, take a drained backup or recover a
+activate its worker, inspect readiness or recover a
 coordinated update. EMT owns its configuration, correspondence, maintenance
 holds and installation. Clockwork owns the worker schedule and failure halt;
 Nucleus owns jobs; Email owns transport and credentials.
@@ -79,7 +79,7 @@ updates; direct initialized selector recovery is unsupported.
 
 The worker may read accounts, start authorized agents and submit email. EMT
 stores no credentials. Worker output uses counts and bounded waiting codes;
-explicit exchange reads expose private correspondence. Keep state and backups private.
+explicit exchange reads expose private correspondence. Keep state private.
 
 ## Inspect, pause or recover a worker
 
@@ -102,7 +102,7 @@ affected product state before repeating an external action. Do not create an
 automatic replacement job or a new mail identity. Keep frozen quota-notice
 records; deleting one to retry delivery is unsupported.
 
-## Maintain and back up
+## Maintain and migrate
 
 1. Validate configuration and capture current pause, schedule and failure-halt
    intent before maintenance.
@@ -110,19 +110,15 @@ records; deleting one to retry delivery is unsupported.
 3. Run `emt maintenance drain` and inspect `emt maintenance status`. Drain
    advances existing exchanges without discovering new incidents or mail.
    Require `drained` and known outstanding counts; unknown is not zero.
-4. Run `emt migrate --backup /absolute/private/emt-backup.sqlite3`. Select a
-   destination separate from the live database and configuration. Preserve the
-   database and companion `.config.json`; existing destinations must match and
-   are never overwritten. With no database, migration initializes paused state
-   and reports `backup:null`.
+4. Run `emt migrate` to check drained schema-one state or initialize absent
+   paused state. Migration copies no database or configuration.
 5. Preserve `quota-notifications/` and Clockwork's `failure-checks.json`,
-   `notification-checks.json`, routing metadata and incident database with their
-   private backups. Do not run an older broker while the new sidecar exists. EMT
-   backups do not restore Nucleus or Email records.
+   `notification-checks.json`, routing metadata and incident database. Do not
+   run an older broker while the new sidecar exists.
 6. Release only this operation's hold with `emt maintenance release OWNER`
    after verification. Recheck the captured operator intent and exact halt.
 
-Stop on unsupported schema, failed backup verification, unknown drain,
+Stop on unsupported schema, unknown drain,
 unestablished hold ownership or unresolved external effects. Never release
 another owner's hold or silently resume a halt. Nucleus restart cannot resume
 old agent processes.
@@ -132,24 +128,22 @@ old agent processes.
 1. Run the authorized initialized update through `./deploy.sh emt`. The
    coordinator captures configuration and worker intent, disables the worker,
    holds and drains EMT, records migration evidence, installs matched bytes,
-   selects a disabled exact definition and verifies readiness before release.
+   selects a disabled exact definition and releases its own holds after setup.
 2. Supply setup configuration or `enabled` and `paused` intent only when
-   authorized. Omitted settings preserve saved values. Fresh valid deployment
-   defaults to activation after verification; an existing absent binding remains
+   authorized. Omitted settings preserve saved values. Fresh deployment
+   defaults to activation after configuration; an existing absent binding remains
    absent unless activation is explicitly requested. Incoming-mail progress
    changes are not setup inputs.
 3. Verify the retained coordinator migration receipt, completed schema and
-   original backup digests. Confirm restored pause, enabled state and existing
+   deployment owner. Confirm restored pause, enabled state and existing
    failure-halt evidence. A requester-only update leaves Nucleus admission open;
    Nucleus replacement waits for EMT exchanges before holding the service.
 4. Run the next authorized ordinary `./deploy.sh emt` command after an
    interrupted phase to let the coordinator recover its retained transaction.
-   Read `nucleus manual` for shared coordination. Reuse the original verified
-   backup and captured configuration. Restore a disabled exact
-   definition before release, then apply captured operator intent. Do not replace
-   the original backup with already configured state.
-5. Run `emt --register-usage` and verify matched binary and installed provider
-   publication after installation or update.
+   Read `nucleus manual` for shared coordination. Reuse the original migration
+   receipt and captured configuration. Restore a disabled exact definition
+   before release, then apply captured operator intent.
+5. Run `emt --register-usage` and inspect installed release metadata after installation or update.
 
 Retain unresolved holds when recovery evidence cannot be established. Stop an
 initialized direct-selector recovery attempt. Installation, initialization,
@@ -157,9 +151,10 @@ configuration, admission and scheduling remain separate effects.
 
 ## Verify the endpoint
 
-Require the selected program and provider to match, configuration and schema to
-be valid, maintenance counts to be known, and schedule, pause and halt intent to
-match the authorized operation. Interpret each operation receipt separately.
+Installation performs setup without artifact-integrity, state-integrity, or
+operational-readiness checks. Require known maintenance counts and preserve the
+authorized schedule, pause, and halt intent. Ordinary doctor and worker checks
+remain separate. Interpret each operation receipt separately.
 Email acceptance proves submission to the provider; product evidence establishes
 intervention success. Receiving authorization and final delivery require their
 own evidence. No timer, model accuracy or final-delivery deadline is promised.

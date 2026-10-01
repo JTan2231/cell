@@ -67,11 +67,8 @@ enum Commands {
         #[command(flatten)]
         source: SourceArgs,
     },
-    /// Initialize schema one or preserve a complete deployment backup.
-    Migrate {
-        #[arg(long)]
-        backup: PathBuf,
-    },
+    /// Initialize or verify schema-one state under deployment maintenance.
+    Migrate,
     /// Hold, drain, inspect, or release requester admission.
     Maintenance {
         #[arg(value_parser=["hold","drain","status","release"])]
@@ -164,7 +161,7 @@ async fn execute(cli: &Cli) -> Result<Value> {
         Commands::Doctor { source } => {
             paperboy::operations::doctor(&root, &source.options(None)).await
         }
-        Commands::Migrate { backup } => paperboy::operations::migrate(&root, backup),
+        Commands::Migrate => paperboy::operations::migrate(&root),
         Commands::Maintenance { operation, owner } => {
             paperboy::operations::maintenance(&root, operation, owner.as_deref()).await
         }

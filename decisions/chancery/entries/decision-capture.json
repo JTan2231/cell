@@ -54,8 +54,8 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "annals.decision-account.exchange",
@@ -64,13 +64,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "interfaces": [

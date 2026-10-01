@@ -15,7 +15,6 @@ CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=conatus
 CARGO_OFFLINE=0
 CI_SHELL_CHECKS='sh|conatus/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='conatus|Conatus|package|conatus/Cargo.toml|conatus-|1'
 RELEASE_METADATA_NO_DEPS=1

@@ -1,6 +1,6 @@
 {
   "id": "clew.application.track",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -55,7 +55,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Schema-three JSON with ok and data returns generic ledger entries, current job records, complete histories, or candidate search results. Entries expose nullable thread and reference associations. The canonical cast.job association with role application_report marks a job report; role link is contextual only. Existing find/list/show remain job-specific views."
+        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Schema-three JSON with ok and data returns generic ledger entries, current job records, complete histories, or candidate search results. Entries expose nullable thread and reference associations. The canonical cast.job association with role application_report marks a job report; role link is contextual only. Existing find/list/show remain job-specific views. Human lists and search use summary rows. Entry, thread and application history reads preserve the full selected text."
       }
     ],
     "data_semantics": [
@@ -97,7 +97,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive write boundary and private backup. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
+        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive transactional write boundary. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [
@@ -113,13 +117,13 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     }
   ],
   "use_when": [

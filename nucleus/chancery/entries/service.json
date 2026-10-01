@@ -1,13 +1,13 @@
 {
   "id": "nucleus.service",
-  "contract_version": 1,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect and maintain the Nucleus service",
-  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, backup, and recovery guarantees.",
+  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, and recovery guarantees.",
   "use_when": [
-    "Nucleus health, service selection, admission holds, drain, installation, backup, restore, restart, or removal must be understood or operated."
+    "Nucleus health, service selection, admission holds, drain, installation, restart, or removal must be understood or operated."
   ],
   "do_not_use_when": [
     "The actual question is requester-domain success, permission to retry lost work, or authority to clear another owner's hold."
@@ -15,23 +15,25 @@
   "outcome": "The service state, owned maintenance condition, or installation/recovery evidence is observed through supported interfaces.",
   "effects": [
     "Health and service reads expose runtime state. Maintenance creates or releases durable run-owned holds.",
-    "Restart terminates the daemon; startup marks unfinished attempts lost. Installation can replace programs and service configuration or migrate state; uninstall retains state and logs."
+    "Restart terminates the daemon; startup marks unfinished attempts lost. Installation can replace programs and service configuration or migrate state; uninstall retains state and logs.",
+    "macOS service installation verifies the supplied native CLI and daemon under the configured Cell certificate and permanent code identifiers before copying, then verifies the installed copies before launchd bootstrap. It does not sign or change the signing policy."
   ],
   "authority": [
     "Nucleus owns its current-user service, socket, state, runtime readiness, and maintenance holds.",
     "Requesters own workflow settlement, domain evidence, and retry decisions; a coordinator releases only its own holds."
   ],
   "success": [
-    "The requested supported service response proves the observed condition. Installation requires matching programs, exact harness/authentication/protocol readiness, and applicable owned drain proof.",
+    "Installation checks native program signatures under Cell's configured signing policy and completes program, provider, and service setup under the applicable owned hold and drain. Persistent-state validation and operational readiness remain separate diagnostics.",
     "Requester admission is reported separately because a quota pause can remain after successful installation."
   ],
   "failure_and_recovery": [
     "Quiesce requesters before interruptions when admitted work must finish. Preserve named holds and recovery evidence when ownership or drain is unproved.",
-    "Use the retained cutover journal and exact candidate for supported recovery; never roll credentials or an incompatible database backward."
+    "Use the retained cutover journal and exact candidate for supported recovery; never roll credentials or an incompatible database backward.",
+    "Missing or invalid signing configuration, unsigned or ad hoc native input, a different certificate, a wrong code identifier, or failed installed-copy verification stops service installation. It selects no alternative signer and does not re-sign input. Existing program compensation retains its captured prior-program recovery rules."
   ],
   "privacy": [
-    "Service state, credentials, logs, cutover journals, quota files, and backups are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
-    "Credential backup/recovery remains separate from database and program rollback; a Nucleus backup does not replace requester backups."
+    "Service state, credentials, logs, cutover journals, and quota files are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
+    "Credential recovery remains separate from program recovery. Program selection preserves current data."
   ],
   "interfaces": [
     {
@@ -67,7 +69,13 @@
     "Interrupting active attempts without task authority, deleting retained data, retrying requester work, or clearing another hold or failure halt.",
     "Restoring an older credential or incompatible database/binary pair."
   ],
-  "dependencies": [],
+  "dependencies": [
+    {
+      "id": "ci-manager.signing.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
   "promise": {
     "consumers": [
       {
@@ -78,11 +86,15 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Service changes use matching sealed programs and documentation, the exact staged Codex runtime, and supported private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
+        "statement": "Service changes select programs, documentation, a Codex runtime path, and private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
       },
       {
         "status": "declared",
         "statement": "Requesters must finish admitted multi-job workflows before Nucleus is held; a free process list alone does not prove durable settlement."
+      },
+      {
+        "status": "declared",
+        "statement": "macOS service installation requires Cell's persistent signing policy and native CLI and daemon signatures from its exact configured certificate. Code identifiers use the configured namespace and permanent nucleus/nucleus and nucleus/nucleusd product/artifact keys."
       }
     ],
     "inputs": [
@@ -92,7 +104,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation and recovery select exact sealed program, provider-bundle, harness, and retained journal identities."
+        "statement": "Installation and recovery select program, provider-bundle, harness path, and retained journal metadata. Native CLI and daemon input must satisfy Cell's configured signing policy; installation does not validate provider-bundle or Codex-runtime integrity."
       }
     ],
     "outputs": [
@@ -128,7 +140,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Readiness reflects the live runtime at observation time. Deployment proof accepts a healthy quota-paused service but rejects an unexplained pause; a hold requires its sole matching owner and complete drain."
+        "statement": "Readiness reflects the live runtime at observation time. Installation does not invoke health. A deployment hold still requires its sole matching owner and complete drain."
       },
       {
         "status": "unspecified",
@@ -156,7 +168,7 @@
       },
       {
         "status": "declared",
-        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Controlled restart establishes the resident executable; successful recovery removes the journal only after held live health and exact-copy checks."
+        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Recovery reinstalls and starts the recorded candidate; successful setup removes the journal after native signature checks without invoking health."
       },
       {
         "status": "declared",
@@ -166,7 +178,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Deployment checks run no model jobs or synthetic requester records. Service installation waits up to two minutes for migration, compaction, and health. There is no automatic backup/restore command or general output pruning."
+        "statement": "Deployment runs no model jobs or synthetic requester records. Service installation starts the daemon without waiting for migration, compaction, or health. There is no data restoration command or general output pruning."
       },
       {
         "status": "unspecified",
@@ -176,11 +188,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. The complete Codex runtime is staged and sealed by both file hashes; selected upgrades reuse a configured runtime only when both identities match the tested staged pair."
+        "statement": "Matched CLI, daemon, installer and provider releases retain independent protocol/store/adapter/harness meanings. Staging records runtime file hashes for ordinary admission checks without validating them. Selected upgrades use the staged runtime unless settings provide codex_bin."
       },
       {
         "status": "declared",
-        "statement": "Schema-two cutover preserves jobs/attempts/registrations/cancellation/terminal state, discards old mixed logs and historical answered mailbox rows, and blocks on live pending calls. Pending compaction marker 1000002 becomes 2 only after successful VACUUM and truncating checkpoint; incompatible recovery needs a matching database/binary pair."
+        "statement": "Schema-two cutover preserves jobs/attempts/registrations/cancellation/terminal state, discards old mixed logs and historical answered mailbox rows, and blocks on live pending calls. Pending compaction marker 1000002 becomes 2 only after successful VACUUM and truncating checkpoint. Recovery requires a program that supports the current database schema."
       },
       {
         "status": "declared",
@@ -190,7 +202,14 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Live installation and admission readiness rely on the exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
+        "statement": "Native service installation relies on Cell's persistent signing policy for exact certificate selection and permanent product/artifact identifiers. Installation reads that policy and never creates or rotates an identity.",
+        "target": "ci-manager",
+        "kind": "authority",
+        "contract": "ci-manager.signing.operate"
+      },
+      {
+        "status": "declared",
+        "statement": "Live admission readiness relies on the exact adapter-proved Codex runtime and its account service; no installed Chancery contract covers that external behavior.",
         "target": "codex",
         "kind": "external"
       },

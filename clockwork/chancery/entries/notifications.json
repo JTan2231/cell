@@ -1,6 +1,6 @@
 {
   "id": "clockwork.notifications",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -72,8 +72,8 @@
   "dependencies": [
     {
       "id": "clockwork.incidents",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "email.message.send",
@@ -106,6 +106,10 @@
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json."
+      },
       {
         "status": "declared",
         "statement": "Show returns basic subject/body, saved Reply-To, optional delivery UUID and health_check threshold/count/last_checked_at/condition/eligible_at, including sub-threshold progress. Incident status pending/accepted/uncertain and attempt counts describe Clockwork transport only; send reports attempted invocations. Check returns existing policy/incident fields plus a failures map keyed by binding with pending event and check progress. New pending episodes have no incident ID; incident show selects confirmed halts."
@@ -162,7 +166,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema-two store, schema-one failure-check sidecar, version-one routing, notification-check metadata, feature/provider release, Email contract and pinned broker remain independent. Refresh every enabled broker before relying on the new delay. Older brokers must not run while failure-checks.json exists or with delegated ownership present. Backups preserve all three sidecars plus database and EMT exchange state."
+        "statement": "Schema-two store, schema-one failure-check sidecar, version-one routing, notification-check metadata, feature/provider release, Email contract and pinned broker remain independent. Refresh every enabled broker before relying on the new delay. Older brokers must not run while failure-checks.json exists or with delegated ownership present. Recovery preserves all three sidecars plus database and EMT exchange state."
       },
       {
         "status": "unspecified",

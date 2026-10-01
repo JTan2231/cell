@@ -18,15 +18,12 @@ email = { path = "../email/crates/email" }
 fs2.workspace = true
 iatreion-api.workspace = true
 platter = { path = "../platter" }
-rusqlite = { workspace = true, features = ["backup"] }
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
 
 [lints]
 workspace = true

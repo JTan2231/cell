@@ -9,17 +9,15 @@ compatibility with persistent history.
 Annals, and the dedicated Annals config. The decisions-library ID must contain
 exactly 32 lowercase hexadecimal characters. The selected Codex path is recorded
 in the immutable Clockwork definition
-and used unchanged for final-cutover doctor and scheduled Conversations reads;
+and used unchanged for scheduled Conversations reads;
 the observer does not discover another Codex installation at runtime.
 Interactive source-reading commands must receive that same path through
 `CONVERSATIONS_CODEX` because the installed command does not inherit
 Clockwork's observer environment; doctor and process also require the complete
-explicit Annals configuration. The default operation prepares and verifies a
-content-addressed release and Clockwork definition while retaining the
+explicit Annals configuration. The default operation prepares a content-addressed release and Clockwork definition while retaining the
 maintenance gate; it does not select or activate them. After the outer cutover
 has separately proved its Annals and semantic prerequisites, `--final-cutover`
-performs writer shutdown, quiescent backup, migration, doctor, baseline
-activation, selector/hook publication, and schedule handoff. Clockwork process state
+performs writer shutdown, quiescence, migration, baseline activation, selector/hook publication, and schedule handoff. Clockwork process state
 is not cross-system proof.
 
 Every selected definition and legacy plist is inspected and attributed before
@@ -28,18 +26,21 @@ restores exact prior selectors and enabled state; a prior null Clockwork
 selection that cannot be restored leaves the owned candidate disabled with the
 maintenance gate and transaction evidence retained.
 
-After a separately authorized final cutover, verify the baseline, doctor, exact
-hook trust, private observer ownership receipt, `krisis/observer` history,
+After a separately authorized final cutover, verify the baseline, exact hook trust, private observer ownership receipt, `krisis/observer` history,
 retired binding state, and body-free logs. Uninstall disables only the
 exact owned active binding and retains the database, receipt ledger, releases,
 logs, scheduler history, and legacy history.
 
+Installation does not validate persistent-state compatibility, audit release
+integrity, or check dependency readiness. Its setup operations still create and
+migrate state, maintain holds, and publish the requested
+configuration. Ordinary product commands retain their runtime checks.
+
 ## Run-owned deployment admission
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
+The coordinator's `apply` phase stages release files.
+`configure` runs product configuration, migration and selector publication with
+scheduling disabled. `release` removes only the named admission hold.
 After every affected hold is released, `activate` restores the captured enabled
 state of the current selected definition. An originally disabled binding stays
 disabled. Clockwork incident halts and product pauses remain in force.
@@ -79,8 +80,7 @@ The sealed Rust `krisis-install adapter OP` boundary composes preparation and ex
 preserving captured schedule enabled booleans and baseline identity. It does
 not infer a legacy Semantics activation watermark. An ordinary Annals binary
 or config pin update proves the prior definition against its release and old
-receipt target, requires the same persistent decisions-library ID, then
-validates the new target with candidate doctor. A foreign receipt or changed
+receipt target, requires the same persistent decisions-library ID, then records the new target. A foreign receipt or changed
 library ID stops the transition.
 
 Coordinated inspection requires maintenance support from installed public
@@ -91,24 +91,19 @@ maintenance or an unfinished product transaction and leaves the outer hold
 for the existing recovery procedure. It never deletes those markers or
 another owner's hold to force progress.
 
-The deployment adapter verifies the installed dependency configuration with
-doctor. Verification does not create observations or submit Nucleus jobs.
-When Krisis is selected for upgrade, verification requires the exact admitted
-candidate and candidate dependency pins. When it participates only in
-maintenance, verification requires the unchanged captured installation and
-checks readiness with its retained dependency pins.
+Installation and coordinated deployment do not run doctor or audit artifact
+bytes. They prepare the requested files, configuration, migration and activation
+baseline under maintenance. Runtime doctor remains available separately.
 
 The package builds both `krisis` and `krisis-install`. New releases retain the
 exact Rust helper at `bin/krisis-install` and `package/install`, with a complete
 `cell-install-v2` artifact manifest. Static frontend and observer scripts remain
-release data. The shared Rust library verifies artifacts and owns selector
-transactions; Krisis owns hook, database, admission, and scheduler lifecycle.
-`krisis-install verify-release ABSOLUTE_RELEASE` is read-only integrity proof.
+release data. The shared Rust library copies artifacts and owns selector transactions; Krisis owns hook, database, admission, and scheduler lifecycle.
 `krisis-install inspect` checks the selected installation. Retained
 `package/install install` uses its sibling package data and explicit exact
 payload/dependency pins. Source invocation supplies `--source-root` for the
 absolute Decisions product source directory. Legacy formats 2, 3, and 4 remain
-validated migration inputs; archived shell deployers do not install the new
+readable migration inputs; archived shell deployers do not install the new
 manifest. Uninstall uses `krisis-install uninstall --clockwork ABSOLUTE_PATH` and
 retains current/previous, releases, private state, receipts, and maintenance.
 
@@ -161,7 +156,8 @@ same document key and bytes. No failed observation is selected automatically.
 Schema 5-to-6 adds worker activity and failure history without requeuing work.
 The migration copies currently failed observations into history and cannot
 reconstruct older overwritten errors. Preserve the database and document runs
-in the quiescent backup; restore the compatible database and binary together.
+through quiescent migration. Program rollback preserves data and requires an
+unchanged schema. Recover forward with the retained candidate after a schema change.
 
 ## Scheduled failure policy
 
@@ -193,9 +189,14 @@ failed observations remain terminal history; cutover does not re-alert or retry
 them. The retired Decisions schedules remain disabled. Schema-one definitions
 keep their old policy until a schema-two definition is explicitly selected.
 
-Coordinated recovery restores the exact recorded product transaction before it
-checks readiness. Its private journal binds the deployment owner, home, prior
-selection and candidate release to captured database, hook and schedule state.
+Coordinated recovery restores the exact recorded product transaction before it releases its hold. Its private journal binds the deployment owner, home, prior
+selection and candidate release to the prior database schema, hook and schedule state.
+Forward recovery opens and migrates retained local state through the exact
+candidate's `observe status` command. It does not check dependency readiness.
+An absent or invalid observer baseline stops recovery before hook publication
+or maintenance release. Keep the exact transaction and maintenance. Explicitly
+activate the observer through the retained candidate with the same deployment
+owner, then retry recovery. Recovery does not choose or replay that baseline.
 It does not reclassify observations or run `observe activate` again. Evidence
 from another owner or an older journal without that identity stays retained
 for explicit recovery. Normal deployment preserves the existing Annals library
@@ -205,7 +206,7 @@ Deployment settings accept only `codex_bin` and `enabled`. `enabled` must be a b
 Set `codex_bin` to an absolute executable path to replace an existing reader pin.
 Omit it to retain the installed pin. For the current ChatGPT app layout, use
 `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex`.
-The installer verifies the replacement and records it in the observer definition.
+The installer records the replacement in the observer definition.
 The observer continues to use only that recorded path.
 An unavailable prior Codex executable does not prevent replacement when its
 retained receipt and exact observer definition still prove ownership.

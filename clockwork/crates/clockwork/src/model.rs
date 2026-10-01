@@ -33,9 +33,6 @@ impl From<&BindingRecord> for clockwork::api::BindingRecord {
     }
 }
 
-#[cfg(test)]
-pub(crate) use clockwork::api::{Authority, Output, OverlapPolicy};
-
 // A transition owns selection and launchd projection only. It never snapshots
 // or restores failure state, which is retained independently in incidents.
 impl PartialEq for BindingRecord {

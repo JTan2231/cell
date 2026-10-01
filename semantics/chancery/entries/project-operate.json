@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 9,
+  "contract_version": 11,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -19,7 +19,8 @@
   "outcome": "A managed installation and explicit project registry whose repositories are maintained by agents interpreting post-activation documents from one Annals decisions library.",
   "effects": [
     "Authorized procedures can change project/intake state, prepare a restricted reconciliation job, or install/migrate/publish the matching product release. Required features own the detailed effect and consistency guarantees.",
-    "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state."
+    "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state.",
+    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
@@ -27,8 +28,7 @@
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
-    "Verify the selected project or intake result in Semantics records; require green doctor and exact owned command/provider/binding selection for installation.",
-    "Preserve captured schedule intent and all unrelated pauses, incident halts, and holds."
+    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
   ],
   "failure_and_recovery": [
     "Stop on failing prerequisites, active or unproved prior jobs, foreign artifacts, changed ownership evidence, or unproved recovery.",
@@ -36,7 +36,7 @@
     "Resolve product work separately from explicit approval to resume a Clockwork incident."
   ],
   "privacy": [
-    "Treat selected source/repository/job evidence, paths, state, and backups as private. Required features define each exposure and retention boundary.",
+    "Treat selected source/repository/job evidence, paths and state as private. Required features define each exposure and retention boundary.",
     "Inspect body-free logs and bounded runtime metadata; keep source bodies and raw dependency diagnostics out of service logs."
   ],
   "dependencies": [
@@ -47,38 +47,38 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     },
     {
       "id": "semantics.repository.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.projects",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "semantics.reconciliation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "session_surfaces": [
@@ -97,7 +97,7 @@
   "checkpoints": [
     "Registration and moves require an exact line in a regular root AGENTS.md; nested or approximate markers do not participate.",
     "Registration captures the current Annals watermark; moves preserve cursor histories. Each new document becomes separate intake for each participating project after its own activation point, with relevance decided by its agent.",
-    "Before candidate access, verify owned release/selector/marker/log evidence, suspend public work and scheduling, hold the worker flock, prove SQLite closed, and privately back up database plus sidecars. Retain authenticated holds and recovery evidence under the semantics.service rules.",
+    "Before candidate access, verify owned release/selector/marker/log evidence, suspend public work and scheduling, hold the worker flock, prove SQLite closed, and preserve the live database and sidecars. Retain authenticated holds and recovery evidence under the semantics.service rules.",
     "Nucleus receives the handed document and repository with workspace none, no shell, and no web. No additional source lookup or metadata is required. Semantics owns the commit transaction.",
     "Retirement requires a paused project. Pending or paused intake with zero attempts and no retained Nucleus request becomes ignored with reason project_retired in the same transaction. Other unresolved intake blocks retirement without changing state. Source bytes, repository history, and cursors remain retained; the old folder may be absent."
   ],
@@ -166,10 +166,14 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Inputs are the intended authorized action, exact selected project/intake/installation, matching validated candidate artifacts, captured admission intent, run ID, or retained recovery transaction. Explicit legacy cutover additionally requires its captured final watermark and external gates."
+        "statement": "Inputs are the intended authorized action, exact selected project/intake/installation, supplied candidate artifacts, captured admission intent, run ID, or retained recovery transaction. Explicit legacy cutover additionally requires its captured final watermark and external gates."
       }
     ],
     "outputs": [
+      {
+        "status": "declared",
+        "statement": "The semantics CLI prints plain text by default. --json selects the existing compact command-specific JSON schema and coded failures on stderr. The typed client and pinned worker explicitly request JSON; machine callers must pass --json. Output schemas, retained state, effects and exit statuses are unchanged."
+      },
       {
         "status": "declared",
         "statement": "Output is the selected operation receipt, project/intake/repository result, readiness report, or exact installation/recovery evidence interpreted under the required feature contracts."
@@ -218,7 +222,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 9 and existing operating routes are unchanged. Required features consolidate the previously distributed explanation; provider release, persistent schema, immutable requests, and entry contracts retain separate versions."
+        "statement": "Operation contract 11 retains stable operating routes, requires explicit JSON for machine reads, and uses retained-state forward recovery. Provider release, persistent schema, immutable requests, and entry contracts retain separate versions."
       }
     ],
     "reliances": [

@@ -86,8 +86,11 @@ An unknown entry or thread fails explicitly. Reads return the complete selected
 records without paging or automatic pruning. Each generic read uses one ledger
 snapshot; successive commands can observe different appends.
 
-Commands return JSON with `ok`, `schema_version: 3`, and `data`, or a nonzero
-exit with an error detail. `--json` is accepted for explicit callers. Entries expose `sequence`, `id`, `recorded_at`, `kind`, `status`, `notes`,
+Commands print readable text by default. Search prints a summary row for each
+matching entry. Entry and thread reads include the full selected text. Use
+`--json` for machine reads and writes. JSON success retains `ok`,
+`schema_version: 3`, and `data`. Human errors go to stderr. JSON errors retain
+`ok: false` and `error.detail` on stdout, with a nonzero exit. Entries expose `sequence`, `id`, `recorded_at`, `kind`, `status`, `notes`,
 `replaces`, `thread`, and `references`. Thread is null or `{id, name}`. Each
 reference has `namespace`, `external_id`, and `role`, which is `link` or
 `application_report`. Search and entry reads also expose `superseded_by`.
@@ -135,7 +138,7 @@ migrate state implicitly.
 Use initialized ledger schema three at `~/.local/share/clew/ledger.sqlite3`, or
 select an independent private ledger with global `--state-dir ABSOLUTE_PATH`.
 The directory has mode 0700 and the database is a regular file with mode 0600.
-Read `chancery show clew.state` for initialization, migration, backup, and
+Read `chancery show clew.state` for initialization, migration, and
 compatible recovery. Never repair an entry by editing SQLite.
 
 Keep supplied notes, status, thread names, and links private. These operations

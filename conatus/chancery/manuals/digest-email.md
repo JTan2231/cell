@@ -37,7 +37,10 @@ conatus email send
 conatus email send --scheduled
 ```
 
-Preview reads current state and prints From, To, Subject and body. JSON returns
+Preview reads current state and prints From, To, Subject and body. Send prints
+a readable acceptance receipt or maintenance skip. Use `--json` for either
+command's machine response. Human and JSON errors go to stderr with a nonzero
+exit; JSON errors retain `{ "ok": false, "error": "..." }`. JSON preview returns
 `data.digest` with subject, body, want count, context availability and the Annals
 revision when available. Preview changes no domain state and sends nothing.
 It does not authorize sending. Manual send requires explicit authorization.

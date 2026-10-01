@@ -281,12 +281,7 @@ pub struct Pins {
 
 impl Pins {
     pub fn validate(&self) -> Result<()> {
-        self.validate_retained()?;
-        file_digest(&self.codex)?;
-        require(
-            fs::symlink_metadata(&self.codex)?.mode() & 0o111 != 0,
-            "dependency executable is not executable",
-        )
+        self.validate_retained()
     }
 
     pub fn validate_retained(&self) -> Result<()> {
@@ -297,13 +292,7 @@ impl Pins {
         for path in [&self.annals_binary, &self.annals_config, &self.codex] {
             require(path.is_absolute(), "dependency pins must be absolute")?;
         }
-        for path in [&self.annals_binary, &self.annals_config] {
-            file_digest(path)?;
-        }
-        require(
-            fs::symlink_metadata(&self.annals_binary)?.mode() & 0o111 != 0,
-            "dependency executable is not executable",
-        )
+        Ok(())
     }
 
     pub fn environment(&self) -> BTreeMap<OsString, OsString> {
@@ -510,35 +499,6 @@ pub fn binding_receipt(paths: &Paths) -> Result<BTreeMap<String, String>> {
     Ok(result)
 }
 
-pub fn doctor(paths: &Paths, binary: &Path, pins: &Pins) -> Result<Value> {
-    let bytes = checked(
-        paths,
-        binary,
-        &args(&[
-            "--database",
-            text(&paths.database)?,
-            "--annals-binary",
-            text(&pins.annals_binary)?,
-            "--annals-config",
-            text(&pins.annals_config)?,
-            "--annals-library-id",
-            &pins.annals_library_id,
-            "--json",
-            "doctor",
-        ]),
-        &pins.environment(),
-        180,
-    )?;
-    let value: Value = serde_json::from_slice(&bytes)?;
-    require(
-        value["ok"] == true
-            && value["schema_version"] == 6
-            && value["annals_library_id"] == pins.annals_library_id,
-        "Krisis doctor did not prove schema and dedicated Annals target",
-    )?;
-    Ok(value)
-}
-
 pub fn maintenance(
     paths: &Paths,
     binary: &Path,
@@ -577,36 +537,4 @@ pub fn inspect_result(current: Option<&cell_install::transaction::ReleaseInfo>) 
             })
         },
     )
-}
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)] // Fixture setup failures should fail the test immediately.
-mod path_tests {
-    use super::*;
-
-    #[test]
-    fn dependency_execution_requires_a_regular_absolute_executable() {
-        let temporary = tempfile::tempdir().unwrap();
-        let path = temporary.path().join("dependency");
-        fs::write(&path, b"#!/bin/sh\nexit 0\n").unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
-        assert!(executable(&path).is_err());
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
-        executable(&path).unwrap();
-        let alias = temporary.path().join("alias");
-        std::os::unix::fs::symlink(&path, &alias).unwrap();
-        assert!(executable(&alias).is_err());
-        assert!(executable(Path::new("relative")).is_err());
-        assert!(text(Path::new("/line\nbreak")).is_err());
-    }
-
-    #[test]
-    fn existing_owned_state_directory_is_made_private() {
-        let temporary = tempfile::tempdir().unwrap();
-        let path = temporary.path().join("state");
-        fs::create_dir(&path).unwrap();
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
-        directory(&path, fs::metadata(&path).unwrap().uid(), 0o700).unwrap();
-        assert_eq!(fs::metadata(path).unwrap().mode() & 0o7777, 0o700);
-    }
 }

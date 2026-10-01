@@ -37,7 +37,10 @@ clew email send
 clew email send --scheduled
 ```
 
-Preview prints From, To, Subject and body. JSON returns `data.digest` with
+Preview prints From, To, Subject and body. Send prints a readable acceptance
+receipt or maintenance skip. Use `--json` for either command's machine response.
+Human errors go to stderr. JSON errors retain `ok: false` and `error.detail` on
+stdout, with a nonzero exit. JSON preview returns `data.digest` with
 `subject`, `body`, `application_count`, `context_available` and
 `ledger_sequence`. The sequence is the last ledger append observed, including
 corrections; it is null for an empty ledger. Context is available when every
@@ -56,8 +59,7 @@ Clew retains an exact message, a random stable idempotency key, first-attempt
 time and acceptance receipt in private `email.sqlite3` beside `ledger.sqlite3`.
 The email database is schema one and is created on the first send; it does not
 change the schema-three ledger. Files use mode 0600 under the private
-0700 state directory. Records have no automatic pruning. Back up both databases
-and their sidecars together while commands and scheduling are stopped.
+0700 state directory. Records have no automatic pruning. Clew supplies no data backup or restore.
 
 Sends hold product admission and a separate email lock. A manual occurrence is
 `manual/UUIDv7`. A scheduled occurrence is `daily/YYYY-MM-DD` for the most recent

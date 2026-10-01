@@ -1,6 +1,5 @@
 use super::{
-    BTreeMap, Duration, Error, InstallArgs, Path, PathBuf, Result, VERSION, environment,
-    install_root,
+    BTreeMap, Duration, Error, InstallArgs, Path, PathBuf, Result, environment, install_root,
 };
 use cell_install::legacy::{LegacyProof, LegacyProvider, LegacySpec};
 use cell_install::{
@@ -121,7 +120,7 @@ pub(super) fn legacy(root: &Path) -> Result<ReleaseInfo> {
         .get("format")
         .ok_or_else(|| Error::new("legacy Annals format missing"))?;
     if format == "4" {
-        cell_install::legacy::verify(
+        cell_install::legacy::read(
             root,
             &LegacySpec {
                 format: "4",
@@ -164,7 +163,7 @@ pub(super) fn legacy(root: &Path) -> Result<ReleaseInfo> {
                 paths: &["package/deploy-user.sh"],
             },
         ];
-        cell_install::legacy::verify(
+        cell_install::legacy::read(
             root,
             &LegacySpec {
                 format: "3",
@@ -182,6 +181,7 @@ pub(super) fn legacy(root: &Path) -> Result<ReleaseInfo> {
 }
 
 fn version(binary: &Path, name: &str, home: &Path) -> Result<String> {
+    cell_install::signing::verify_native("annals", name, binary)?;
     let output = cell_install::command::checked(
         binary,
         &["--version".into()],
@@ -193,9 +193,6 @@ fn version(binary: &Path, name: &str, home: &Path) -> Result<String> {
         .trim()
         .strip_prefix(&format!("{name} "))
         .ok_or_else(|| Error::new("invalid Annals program version"))?;
-    if name == "annals" && version != VERSION {
-        return Err(Error::new("Annals installer and candidate versions differ"));
-    }
     cell_install::command::checked(
         binary,
         &["--help".into()],
@@ -301,28 +298,4 @@ pub(super) fn prepare(args: &InstallArgs, home: &Path) -> Result<PreparedRelease
 
 pub(super) fn root(home: &Path, info: &ReleaseInfo) -> PathBuf {
     install_root(home).join("releases").join(&info.release_id)
-}
-
-pub(super) fn exact_candidate(
-    info: &ReleaseInfo,
-    root: &Path,
-    binary: &Path,
-    usage: &Path,
-) -> Result<()> {
-    for (relative, source) in [
-        ("libexec/annals", binary),
-        ("libexec/annals-usage", usage),
-        ("bin/annals-install", std::env::current_exe()?.as_path()),
-    ] {
-        if info.files.get(relative).map(|entry| &entry.sha256)
-            != Some(&cell_install::file_digest(source)?)
-            || cell_install::file_digest(&root.join(relative))?
-                != cell_install::file_digest(source)?
-        {
-            return Err(Error::new(
-                "installed Annals program differs from admitted candidate",
-            ));
-        }
-    }
-    Ok(())
 }

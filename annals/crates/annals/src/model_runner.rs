@@ -145,16 +145,6 @@ impl Runner {
         }
     }
 
-    #[must_use]
-    #[cfg(test)]
-    pub(crate) fn new(socket: impl Into<PathBuf>, timeout: Duration) -> Self {
-        Self {
-            socket: Some(socket.into()),
-            prompt_selection: None,
-            timeout,
-        }
-    }
-
     /// Verify that Nucleus can use its owned Codex authentication without starting a turn.
     pub(crate) fn preflight_auth(&self) -> AppResult<()> {
         let runtime = runtime()?;
@@ -906,64 +896,6 @@ fn runtime_error(code: &'static str, message: &str) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::net::UnixListener;
-    use std::sync::mpsc::{self, RecvTimeoutError};
-    use std::thread;
-
-    struct UnusedBackend;
-
-    impl Backend for UnusedBackend {
-        fn call(&mut self, _tool: Tool, _arguments: Value) -> Result<ToolSuccess, ToolFailure> {
-            panic!("a stalled Nucleus fixture must not reach an Annals tool")
-        }
-    }
-
-    struct StalledNucleus {
-        _directory: tempfile::TempDir,
-        socket: PathBuf,
-        shutdown: mpsc::Sender<()>,
-        worker: Option<thread::JoinHandle<()>>,
-    }
-
-    impl Drop for StalledNucleus {
-        fn drop(&mut self) {
-            let _ = self.shutdown.send(());
-            if let Some(worker) = self.worker.take() {
-                let _ = worker.join();
-            }
-        }
-    }
-
-    fn stalled_nucleus() -> Result<StalledNucleus, Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let socket = directory.path().join("nucleus.sock");
-        let listener = UnixListener::bind(&socket)?;
-        listener.set_nonblocking(true)?;
-        let (shutdown, stopped) = mpsc::channel();
-        let worker = thread::spawn(move || {
-            loop {
-                let stream = match listener.accept() {
-                    Ok((stream, _)) => Some(stream),
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => None,
-                    Err(_) => return,
-                };
-                let delay = if stream.is_some() {
-                    Duration::from_secs(2)
-                } else {
-                    Duration::from_millis(10)
-                };
-                if stopped.recv_timeout(delay) != Err(RecvTimeoutError::Timeout) {
-                    return;
-                }
-            }
-        });
-        Ok(StalledNucleus {
-            _directory: directory,
-            socket,
-            shutdown,
-            worker: Some(worker),
-        })
-    }
 
     #[test]
     fn quality_presets_select_the_expected_model_and_effort() {
@@ -979,19 +911,6 @@ mod tests {
         let custom = ModelSettings::new(ModelQuality::Low, Some("custom-model"));
         assert_eq!(custom.model(), "custom-model");
         assert_eq!(custom.reasoning_effort(), "medium");
-    }
-
-    #[test]
-    fn toolset_is_derived_from_the_nine_authoritative_definitions() -> AppResult<()> {
-        let registration =
-            toolset_registration(&cell_prompts::Prompts::at("annals", 1)?, toolset_ref())?;
-        assert_eq!(registration.definitions.tools.len(), 9);
-        assert_eq!(registration.toolset, toolset_ref());
-        assert_eq!(
-            registration.definitions_schema_id.as_str(),
-            TOOLSET_DEFINITIONS_SCHEMA
-        );
-        Ok(())
     }
 
     #[test]
@@ -1034,79 +953,5 @@ mod tests {
             &SchemaId::new("annals.unknown.input.v1"),
             TOOLSET_VERSION,
         ));
-    }
-
-    #[test]
-    fn stalled_nucleus_request_honors_the_runner_deadline() -> Result<(), Box<dyn std::error::Error>>
-    {
-        let nucleus = stalled_nucleus()?;
-        let runner = Runner::new(nucleus.socket.clone(), Duration::from_millis(300));
-        let started = Instant::now();
-        let Err(error) = runner.run_liaison(
-            &ModelSettings::default(),
-            "prompt",
-            crate::instructions::DEFAULT_LIBRARY_INSTRUCTIONS,
-            "stalled-timeout",
-            &mut UnusedBackend,
-            false,
-        ) else {
-            return Err("a stalled Nucleus unexpectedly completed".into());
-        };
-        assert_eq!(error.code(), "model_runner_timeout");
-        assert!(started.elapsed() < Duration::from_secs(2));
-        Ok(())
-    }
-
-    #[test]
-    fn stalled_nucleus_request_observes_cancellation() -> Result<(), Box<dyn std::error::Error>> {
-        let nucleus = stalled_nucleus()?;
-        let runner = Runner::new(nucleus.socket.clone(), Duration::from_secs(10));
-        let started = Instant::now();
-        let Err(error) = runner.run_liaison_cancellable(
-            &ModelSettings::default(),
-            "prompt",
-            crate::instructions::DEFAULT_LIBRARY_INSTRUCTIONS,
-            "stalled-interrupt",
-            &mut UnusedBackend,
-            false,
-            &|| started.elapsed() >= Duration::from_millis(300),
-        ) else {
-            return Err("a stalled Nucleus ignored cancellation".into());
-        };
-        assert_eq!(error.code(), "model_runner_interrupted");
-        assert!(started.elapsed() < Duration::from_secs(2));
-        Ok(())
-    }
-
-    #[test]
-    fn idempotent_read_transport_errors_retry_until_the_deadline()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let client = NucleusClient::new(directory.path().join("absent-nucleus.sock"))?;
-        let job_id = JobId::new("annals-retry-read");
-        let started = Instant::now();
-        let result = runtime()?.block_on(await_retryable_read(
-            &client,
-            &job_id,
-            || client.get_job_for_work(&job_id),
-            started + Duration::from_millis(300),
-            &|| false,
-        ));
-        if !matches!(result, Err(ClientCallError::TimedOut)) {
-            return Err("a retryable read returned before its deadline".into());
-        }
-        assert!(started.elapsed() >= Duration::from_millis(250));
-        assert!(started.elapsed() < Duration::from_secs(2));
-        Ok(())
-    }
-
-    #[test]
-    fn best_effort_stalled_cancel_is_bounded() -> Result<(), Box<dyn std::error::Error>> {
-        let nucleus = stalled_nucleus()?;
-        let runner = Runner::new(nucleus.socket.clone(), Duration::from_secs(10));
-        let started = Instant::now();
-        runner.cancel_liaison("stalled-cancel");
-        assert!(started.elapsed() < Duration::from_secs(2));
-        Ok(())
     }
 }

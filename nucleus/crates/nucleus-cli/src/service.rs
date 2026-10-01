@@ -21,12 +21,16 @@ pub enum ServiceError {
     DaemonNotFound,
     #[error("unable to locate Codex; pass --codex or set NUCLEUS_CODEX")]
     CodexNotFound,
-    #[error("Codex runtime is incomplete or changed: {0}")]
-    InvalidCodexRuntime(String),
     #[error("Codex home must be an existing absolute directory: {0}")]
     InvalidCodexHome(PathBuf),
     #[error("a loaded {SERVICE_LABEL} service has no managed plist at {0}")]
     UnmanagedLoadedService(PathBuf),
+    #[error("Cell signature verification failed for {path}: {source}")]
+    Signing {
+        path: PathBuf,
+        #[source]
+        source: cell_install::Error,
+    },
     #[error("{operation} failed for {path}: {source}")]
     Io {
         operation: &'static str,
@@ -53,7 +57,7 @@ pub enum ServiceError {
         source: rusqlite::Error,
     },
     #[error(
-        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and restore a matching pre-cutover database only as an explicit recovery operation"
+        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and current data for forward recovery"
     )]
     SchemaRollbackUnsafe {
         before: Option<i64>,
@@ -120,14 +124,6 @@ pub struct InstallResult {
     pub paths: ServicePaths,
     pub codex: PathBuf,
     pub codex_home: PathBuf,
-    previous: PreviousInstallation,
-    target: String,
-}
-
-impl InstallResult {
-    pub fn rollback(&self) -> Result<(), ServiceError> {
-        self.previous.restore(&self.paths, &self.target, true)
-    }
 }
 
 #[derive(Debug)]
@@ -266,13 +262,12 @@ pub fn install(
     codex_home_source: Option<&Path>,
 ) -> Result<InstallResult, ServiceError> {
     require_macos()?;
-    paths.create_directories()?;
-
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
+    verify_cell_signature(&cli_source, "nucleus")?;
+    verify_cell_signature(&daemon_source, "nucleusd")?;
+    paths.create_directories()?;
     let codex = find_codex(codex_source)?;
-    nucleus_codex::runtime_bundle::verify_runtime(&codex)
-        .map_err(|error| ServiceError::InvalidCodexRuntime(error.to_string()))?;
     let source_codex_home = find_codex_home(codex_home_source)?;
     let target = service_target()?;
     let was_loaded = launchctl([OsStr::new("print"), OsStr::new(&target)])?
@@ -293,9 +288,10 @@ pub fn install(
         if cli_source != paths.cli {
             copy_executable(&cli_source, &paths.cli)?;
         }
+        verify_cell_signature(&paths.cli, "nucleus")?;
+        verify_cell_signature(&paths.daemon, "nucleusd")?;
         let plist = render_plist(&paths, &codex);
         atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
-        validate_plist(&paths.launch_agent)?;
         command_success(
             "/bin/launchctl",
             &launchctl([OsStr::new("enable"), OsStr::new(&target)])?,
@@ -308,7 +304,7 @@ pub fn install(
         // Credential authority may be refreshed by a running daemon. Import it
         // only after the previous service is fully stopped. Authentication is
         // deliberately excluded from rollback so later refreshes remain
-        // authoritative even if bootstrap or the health check fails.
+        // authoritative even if bootstrap fails.
         prepare_owned_codex_home(&paths.codex_home, source_codex_home.as_deref())?;
         command_success(
             "/bin/launchctl",
@@ -340,8 +336,6 @@ pub fn install(
         paths,
         codex,
         codex_home: owned_codex_home,
-        previous,
-        target,
     })
 }
 
@@ -685,6 +679,15 @@ fn copy_executable(source: &Path, destination: &Path) -> Result<(), ServiceError
     atomic_write(destination, &bytes, 0o755)
 }
 
+fn verify_cell_signature(path: &Path, artifact: &str) -> Result<(), ServiceError> {
+    cell_install::signing::verify_native("nucleus", artifact, path).map_err(|source| {
+        ServiceError::Signing {
+            path: path.to_owned(),
+            source,
+        }
+    })
+}
+
 fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, ServiceError> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -721,19 +724,6 @@ fn restore_file(path: &Path, snapshot: Option<&FileSnapshot>) -> Result<(), Serv
     } else {
         remove_installed_file(path)
     }
-}
-
-fn validate_plist(path: &Path) -> Result<(), ServiceError> {
-    let output = Command::new("/usr/bin/plutil")
-        .arg("-lint")
-        .arg(path)
-        .output()
-        .map_err(|source| ServiceError::Io {
-            operation: "validate LaunchAgent plist",
-            path: path.to_path_buf(),
-            source,
-        })?;
-    command_success("/usr/bin/plutil", &output)
 }
 
 fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<(), ServiceError> {
@@ -874,63 +864,9 @@ fn xml_escape(input: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    trait TestValueExt<T> {
-        fn or_panic(self, context: &str) -> T;
-    }
-
-    impl<T, E> TestValueExt<T> for std::result::Result<T, E>
-    where
-        E: std::fmt::Debug,
-    {
-        fn or_panic(self, context: &str) -> T {
-            match self {
-                Ok(value) => value,
-                Err(error) => panic!("{context}: {error:?}"),
-            }
-        }
-    }
-
-    impl<T> TestValueExt<T> for Option<T> {
-        fn or_panic(self, context: &str) -> T {
-            match self {
-                Some(value) => value,
-                None => panic!("{context}"),
-            }
-        }
-    }
-
-    #[test]
-    fn offline_recovery_does_not_create_or_migrate_a_database() {
-        let temporary = tempfile::tempdir().or_panic("create fixture");
-        let path = temporary.path().join("nucleus.db");
-        assert!(settled_database(&path).or_panic("inspect absent state"));
-        assert!(!path.exists());
-        let database = rusqlite::Connection::open(&path).or_panic("create fixture database");
-        database.execute_batch("PRAGMA user_version=987; CREATE TABLE jobs (state TEXT); CREATE TABLE attempts (state TEXT, completed_at TEXT); INSERT INTO jobs VALUES ('completed'); INSERT INTO attempts VALUES ('completed', 'retained');").or_panic("prepare fixture");
-        assert!(settled_database(&path).or_panic("inspect terminal records"));
-        database
-            .execute("INSERT INTO attempts VALUES ('pending', NULL)", [])
-            .or_panic("queue attempt");
-        assert!(!settled_database(&path).or_panic("inspect pending attempt"));
-        database
-            .execute("DELETE FROM attempts WHERE state = 'pending'", [])
-            .or_panic("remove fixture attempt");
-        database
-            .execute("INSERT INTO jobs VALUES ('waiting_on_requester')", [])
-            .or_panic("retain waiting job");
-        assert!(!settled_database(&path).or_panic("inspect waiting job"));
-        assert_eq!(
-            database
-                .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
-                .or_panic("read version"),
-            987
-        );
-    }
 
     #[test]
     fn service_paths_are_per_user_and_absolute() {
@@ -989,299 +925,5 @@ mod tests {
         assert!(plist.contains(
             "<string>/Users/example/Library/Application Support/Nucleus/codex-home</string>"
         ));
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn rendered_plist_is_valid_for_plutil() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(Path::new("/Users/example"));
-        let plist = temporary.path().join("org.nucleus.daemon.plist");
-        atomic_write(
-            &plist,
-            render_plist(&paths, Path::new("/opt/homebrew/bin/codex")).as_bytes(),
-            0o600,
-        )
-        .or_panic("write plist");
-
-        validate_plist(&plist).or_panic("plist should pass plutil");
-    }
-
-    #[test]
-    fn installed_plist_is_user_only() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let plist = temporary.path().join("org.nucleus.daemon.plist");
-        atomic_write(&plist, b"plist", 0o600).or_panic("write plist");
-
-        let mode = plist
-            .metadata()
-            .or_panic("read plist metadata")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600);
-    }
-
-    #[test]
-    fn existing_private_directory_is_secured() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let state = temporary.path().join("state");
-        fs::create_dir(&state).or_panic("create state directory");
-        fs::set_permissions(&state, fs::Permissions::from_mode(0o755))
-            .or_panic("make state directory broad");
-
-        create_private_dir(&state).or_panic("secure state directory");
-        let mode = state
-            .metadata()
-            .or_panic("read state metadata")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o700);
-    }
-
-    #[test]
-    fn file_snapshot_restores_bytes_and_mode() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let executable = temporary.path().join("nucleusd");
-        atomic_write(&executable, b"old", 0o700).or_panic("write old executable");
-        let snapshot = snapshot_file(&executable)
-            .or_panic("snapshot executable")
-            .or_panic("snapshot should exist");
-
-        atomic_write(&executable, b"new", 0o755).or_panic("write new executable");
-        restore_file(&executable, Some(&snapshot)).or_panic("restore executable");
-
-        assert_eq!(fs::read(&executable).or_panic("read executable"), b"old");
-        let mode = executable
-            .metadata()
-            .or_panic("read executable metadata")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o700);
-    }
-
-    #[test]
-    fn explicit_codex_home_is_absolute_existing_and_canonical() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let codex_home = temporary.path().join("codex-home");
-        fs::create_dir(&codex_home).or_panic("create Codex home");
-        let noncanonical = codex_home.join("..").join("codex-home");
-
-        assert_eq!(
-            find_codex_home(Some(&noncanonical)).or_panic("resolve Codex home"),
-            Some(fs::canonicalize(&codex_home).or_panic("canonical Codex home"))
-        );
-        assert_eq!(find_codex_home(None).or_panic("omit Codex home"), None);
-        assert!(matches!(
-            find_codex_home(Some(Path::new("relative/codex-home"))),
-            Err(ServiceError::InvalidCodexHome(_))
-        ));
-        assert!(matches!(
-            find_codex_home(Some(&temporary.path().join("missing"))),
-            Err(ServiceError::InvalidCodexHome(_))
-        ));
-    }
-
-    #[test]
-    fn imports_authentication_into_private_nucleus_owned_home() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let source = temporary.path().join("annals-codex-home");
-        let destination = temporary.path().join("nucleus-codex-home");
-        let authentication = br#"{"tokens":{"access_token":"header.e30.signature","refresh_token":"refresh","account_id":"account"}}"#;
-        fs::create_dir(&source).or_panic("create source Codex home");
-        fs::set_permissions(&source, fs::Permissions::from_mode(0o700))
-            .or_panic("secure source Codex home");
-        let source_auth = source.join("auth.json");
-        fs::write(&source_auth, authentication).or_panic("write source authentication");
-        fs::set_permissions(&source_auth, fs::Permissions::from_mode(0o600))
-            .or_panic("secure source authentication");
-
-        prepare_owned_codex_home(&destination, Some(&source)).or_panic("import authentication");
-
-        assert_eq!(
-            fs::read(destination.join("auth.json")).or_panic("read imported authentication"),
-            authentication
-        );
-        assert_eq!(
-            fs::read_to_string(destination.join("config.toml")).or_panic("read managed config"),
-            "cli_auth_credentials_store = \"file\"\n"
-        );
-        assert_eq!(
-            destination
-                .metadata()
-                .or_panic("inspect owned Codex home")
-                .permissions()
-                .mode()
-                & 0o777,
-            0o700
-        );
-        for file in ["config.toml", "auth.json"] {
-            assert_eq!(
-                destination
-                    .join(file)
-                    .metadata()
-                    .or_panic("inspect owned credential file")
-                    .permissions()
-                    .mode()
-                    & 0o777,
-                0o600
-            );
-        }
-    }
-
-    #[test]
-    fn invalid_authentication_import_preserves_authoritative_file() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(temporary.path());
-        paths
-            .create_directories()
-            .or_panic("create installation directories");
-        let authoritative = br#"{"OPENAI_API_KEY":"authoritative"}"#;
-        atomic_write(&paths.codex_home.join("auth.json"), authoritative, 0o600)
-            .or_panic("write authoritative authentication");
-        let source = temporary.path().join("invalid-source");
-        create_private_dir(&source).or_panic("create source home");
-        atomic_write(&source.join("auth.json"), br#"{"tokens":"#, 0o600)
-            .or_panic("write truncated source authentication");
-
-        let result = prepare_owned_codex_home(&paths.codex_home, Some(&source));
-        assert!(result.is_err(), "truncated authentication must be rejected");
-
-        assert_eq!(
-            fs::read(paths.codex_home.join("auth.json"))
-                .or_panic("read authoritative authentication"),
-            authoritative
-        );
-    }
-
-    #[test]
-    fn installation_rollback_preserves_refresh_after_static_snapshot() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(temporary.path());
-        paths
-            .create_directories()
-            .or_panic("create installation directories");
-        atomic_write(
-            &paths.codex_home.join("auth.json"),
-            br#"{"OPENAI_API_KEY":"before-snapshot"}"#,
-            0o600,
-        )
-        .or_panic("write initial authentication");
-        let previous =
-            PreviousInstallation::capture(&paths, false).or_panic("snapshot static installation");
-        let refreshed = br#"{"OPENAI_API_KEY":"old-daemon-refresh"}"#;
-        atomic_write(&paths.codex_home.join("auth.json"), refreshed, 0o600)
-            .or_panic("simulate refresh before bootout");
-
-        previous
-            .restore(&paths, "unused-test-target", false)
-            .or_panic("restore static installation");
-
-        assert_eq!(
-            fs::read(paths.codex_home.join("auth.json")).or_panic("read refreshed auth"),
-            refreshed
-        );
-    }
-
-    #[test]
-    fn installation_rollback_preserves_refresh_after_replacement_bootstrap() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(temporary.path());
-        paths
-            .create_directories()
-            .or_panic("create installation directories");
-        atomic_write(
-            &paths.codex_home.join("auth.json"),
-            br#"{"OPENAI_API_KEY":"before-install"}"#,
-            0o600,
-        )
-        .or_panic("write initial authentication");
-        let previous =
-            PreviousInstallation::capture(&paths, false).or_panic("snapshot static installation");
-        atomic_write(
-            &paths.codex_home.join("auth.json"),
-            br#"{"OPENAI_API_KEY":"imported"}"#,
-            0o600,
-        )
-        .or_panic("simulate authentication import");
-        let refreshed = br#"{"OPENAI_API_KEY":"replacement-daemon-refresh"}"#;
-        atomic_write(&paths.codex_home.join("auth.json"), refreshed, 0o600)
-            .or_panic("simulate refresh after bootstrap");
-
-        previous
-            .restore(&paths, "unused-test-target", false)
-            .or_panic("restore static installation");
-
-        assert_eq!(
-            fs::read(paths.codex_home.join("auth.json")).or_panic("read refreshed auth"),
-            refreshed
-        );
-    }
-
-    #[test]
-    fn installation_rollback_refuses_to_cross_a_database_schema_cutover() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(temporary.path());
-        paths
-            .create_directories()
-            .or_panic("create installation directories");
-        let connection =
-            rusqlite::Connection::open(&paths.database).or_panic("create version-one database");
-        connection
-            .pragma_update(None, "user_version", 1)
-            .or_panic("set version-one schema");
-        drop(connection);
-        let previous =
-            PreviousInstallation::capture(&paths, false).or_panic("snapshot version one");
-        let connection =
-            rusqlite::Connection::open(&paths.database).or_panic("open migrated database");
-        connection
-            .pragma_update(None, "user_version", 2)
-            .or_panic("set version-two schema");
-        drop(connection);
-
-        assert!(matches!(
-            previous.restore(&paths, "unused-test-target", false),
-            Err(ServiceError::SchemaRollbackUnsafe {
-                before: Some(1),
-                after: Some(2)
-            })
-        ));
-    }
-
-    #[test]
-    fn installation_snapshot_restores_prior_codex_home_plist() {
-        let temporary = tempfile::tempdir().or_panic("create temporary directory");
-        let paths = ServicePaths::under_home(temporary.path());
-        paths
-            .create_directories()
-            .or_panic("create installation directories");
-        let original = render_plist(&paths, Path::new("/usr/local/bin/codex"));
-        atomic_write(&paths.launch_agent, original.as_bytes(), 0o600)
-            .or_panic("write original plist");
-        let previous =
-            PreviousInstallation::capture(&paths, false).or_panic("snapshot original installation");
-
-        let replacement = render_plist(&paths, Path::new("/usr/local/bin/codex"));
-        atomic_write(&paths.launch_agent, replacement.as_bytes(), 0o600)
-            .or_panic("write replacement plist");
-        previous
-            .restore(&paths, "unused-test-target", false)
-            .or_panic("restore original installation");
-
-        assert_eq!(
-            fs::read_to_string(&paths.launch_agent).or_panic("read restored plist"),
-            original
-        );
-        let mode = paths
-            .launch_agent
-            .metadata()
-            .or_panic("read restored plist metadata")
-            .permissions()
-            .mode()
-            & 0o777;
-        assert_eq!(mode, 0o600);
     }
 }

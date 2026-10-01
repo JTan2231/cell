@@ -162,7 +162,6 @@ pub fn run(cli: &Cli, config: &Config, path: &Path) -> AppResult<CommandOutput> 
         },
         Command::Graph(args) => graph(path, args),
         Command::Shake(args) => shake(path, args, cli.json),
-        Command::Backup(args) => backup(path, &args.output),
         Command::Work(command) => match command {
             WorkCommand::Add(args) => {
                 reject_direct_decision_ingress(config)?;
@@ -249,8 +248,8 @@ fn require_selected_identity(cli: &Cli, config: &Config, path: &Path) -> AppResu
         .as_ref()
         .or(config.expected_library_id.as_ref());
     if let Some(expected) = expected {
-        let connection = if matches!(cli.command, Command::Migrate | Command::Backup(_)) {
-            db::open_backup_source(path)?
+        let connection = if matches!(cli.command, Command::Migrate) {
+            db::open_migration_source(path)?
         } else {
             db::open_read(path)?
         };
@@ -531,18 +530,6 @@ fn stats(path: &Path) -> Result<CommandOutput, AppError> {
         value.database_size_bytes
     );
     Ok(CommandOutput::new(to_value(&value)?, human))
-}
-
-fn backup(path: &Path, output: &Path) -> Result<CommandOutput, AppError> {
-    let connection = db::open_backup_source(path)?;
-    db::backup(&connection, output)?;
-    Ok(CommandOutput::new(
-        json!(api::BackupResult {
-            output: output.display().to_string()
-        }),
-        format!("Backed up {} to {}", path.display(), output.display()),
-    )
-    .mutation())
 }
 
 fn add_work(path: &Path, args: &WorkAddArgs) -> Result<CommandOutput, AppError> {

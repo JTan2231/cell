@@ -16,7 +16,6 @@ CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|conversations/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='conversations|Conversations|package|conversations/crates/conversations/Cargo.toml|conversations-|1'
 RELEASE_METADATA_NO_DEPS=1

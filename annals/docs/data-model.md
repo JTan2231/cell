@@ -5,7 +5,7 @@ consistency, and recovery:
 
 | Records | Authoritative explanation |
 | --- | --- |
-| Catalog, library profile, instruction revisions, and backups | [Libraries](../chancery/annals/manuals/libraries.md) |
+| Catalog, library profile, instruction revisions | [Libraries](../chancery/annals/manuals/libraries.md) |
 | Immutable works, source deliveries, and lifecycle times | [Retained sources](../chancery/annals/manuals/work-retain.md) |
 | Concepts, explicit edges, evidence occurrences, and replay-backed reads | [Corpus reading](../chancery/annals/manuals/corpus-explore.md) |
 | Model runs, tool audit, and reconciliation drafts | [Interpretation](../chancery/annals/manuals/work-integrate.md) |

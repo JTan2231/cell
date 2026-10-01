@@ -10,8 +10,6 @@ schedule registration and activation are separate effects.
 ```sh
 conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
 conatus-install inspect
-conatus-install verify --binary ABS_BINARY --bundle ABS_BUNDLE
-conatus-install verify-release ABS_RELEASE
 conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
 ```
 
@@ -20,14 +18,14 @@ Packaging commands accept `--home ABS_HOME`. The default installation root is
 content-addressed executable release and its matching Chancery bundle, then
 selects that candidate. Upgrade uses the observed `releases/HASH` in place of
 `absent`. The complete provider bundle includes the overview, indexed entries
-and complete manuals; its bytes participate in release identity and integrity.
+and complete manuals; its bytes participate in release identity.
 The provider selector follows the product's selected release.
 
 Direct installation starts no model, initializes no runtime state and changes
 no active schedule. Recovery selects an exact retained release. It does not
 revert Conatus state, Annals libraries, frozen email occurrences or Clockwork
-bindings. Selection and integrity checks do not establish dependency readiness
-or domain success.
+bindings. Installation does not check artifact integrity, persistent-state
+integrity, or operational readiness. Ordinary product checks remain separate.
 
 Want lifecycle remains in schema-one current state without a migration. Older
 releases ignore archive markers and can include archived wants in default lists
@@ -95,6 +93,10 @@ conatus maintenance hold OWNER
 conatus maintenance drain
 conatus maintenance release OWNER
 ```
+
+Config and maintenance commands print readable labeled results by default.
+Use `--json` for their existing machine responses. Human and JSON errors go to
+stderr with a nonzero exit; JSON errors retain `{ "ok": false, "error": "..." }`.
 
 Config reads persistent dependency and library selections only. Maintenance
 exposes owner-scoped durable admission holds and drain. Holds survive interruption.

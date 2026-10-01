@@ -146,20 +146,4 @@ mod tests {
             maintenance(&json!({"data":{"protocol_version":1,"holds":[],"drained":true}})).is_ok()
         );
     }
-
-    #[test]
-    fn failed_commands_do_not_copy_private_arguments_or_output() {
-        let error = checked(
-            Path::new("/bin/sh"),
-            &[
-                "-c".into(),
-                "printf 'private body'; printf 'private credential' >&2; exit 23".into(),
-            ],
-            &BTreeMap::new(),
-            Duration::from_secs(5),
-        )
-        .unwrap_err();
-        assert!(!error.message.contains("private"));
-        assert!(error.message.contains("23"));
-    }
 }

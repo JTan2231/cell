@@ -1,39 +1,39 @@
-# Email installation and recovery guarantees
+# Email program installation
 
-Email is a current-user macOS command. It submits or reads mail during an
-invocation and has no daemon, delivery database, scheduler, or queue. Email
-owns immutable installed releases, their selectors, and separately retained
-private account settings. Requesters own schedules, occurrences, message
-rendering, and standing authority.
+The installer copies the supplied programs and provider bundle into a retained
+release and selects their owned public paths together. It creates required
+installation directories and uses product and catalog locks with atomic selector
+updates. `--expected-current absent|releases/HASH` guards the selected release.
+Foreign public selectors are refused. File-operation or basic execution failures
+restore the prior selectors when possible.
 
-Read `chancery show email.install.operate` for installation and rollback steps.
-Read `chancery show email.account` for credential and domain-setting semantics.
+Release hashes name the staged files. Installation and recovery do not compare
+artifact hashes, component versions, or retained file inventories. They do not
+run database integrity checks, dependency probes, or readiness checks. Basic
+`--help` and `--version` execution checks remain. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
 
-## Installed layout
+The default installation root is
+`~/Library/Application Support/Email/install`. Releases are retained beneath
+`releases/HASH`; `current` selects the program and provider together and `previous`
+retains the superseded selection. Public commands are `~/.local/bin/email` and
+`~/.local/bin/email-install`. The provider selector is
+`~/Library/Application Support/Chancery/providers/email`.
 
-```text
-~/.local/bin/email -> Email's current release wrapper
-~/.local/bin/email-install -> Email's current Rust installer
-~/Library/Application Support/Email/install/
-  releases/<content-hash>/
-    bin/email
-    libexec/email
-    bin/email-install
-    package/install
-    package/email
-    share/chancery/email/
-    manifest.json  (cell-install-v2)
-  current -> releases/<content-hash>
-  previous -> releases/<content-hash>
-~/Library/Application Support/Chancery/providers/
-  email -> Email's current release share/chancery/email
+```sh
+email-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
+email-install inspect
+email-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-The release identity covers the payload, wrapper, Rust installer, public layout,
-and complete Chancery provider bundle. Documentation follows the program
-selection. Account settings under
-`~/Library/Application Support/Email/settings` are separate from immutable
-program releases. Program selection does not imply account or network readiness.
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery reads
+retained metadata and selects a release in that home's installation directory.
+It does not rebuild the release or restore product data. There is no installer
+`verify` or `verify-release` command. Ordinary runtime checks keep their existing
+behavior.
+
+Private account settings remain outside program releases. Email installs no daemon,
+schedule, queue, remote account, or key.
 
 ## Wrapper and credential boundaries
 
@@ -49,53 +49,11 @@ directly. Installation and recovery use only those probes. They do not load
 transport credentials, read account mail, send messages, or prove Resend/Gmail
 readiness. The credential fallback remains supported alongside explicit setup.
 
-## Publication and selector consistency
+## Usage and recovery
 
-Ordinary delivery uses Cell's CI manager with a committed source candidate.
-An explicitly authorized manual installation or recovery uses trusted tested
-installer and binary artifacts plus their matching provider bundle:
+Run `email --register-usage` separately after installation. It reads or sends no
+mail. Program recovery preserves private account settings. Read `email.account`
+for account setup and `email.message.send` for sending behavior.
 
-```sh
-<TESTED_EMAIL_INSTALL> install --binary <TESTED_EMAIL_BINARY> --bundle <TESTED_EMAIL_BUNDLE>
-```
-
-The installer validates an existing immutable release before reuse, retains the
-superseded release through `previous`, and rejects a provider selector owned by
-another installation. A failed post-switch check restores all selectors.
-Identical artifacts reuse the same content-addressed release.
-
-The installer creates Email's provider selector even when Chancery is absent.
-Email remains usable without the Chancery binary or registry. Chancery reads
-the installed release's documentation without loading credentials, probing
-providers, or performing the documented command.
-
-`email --register-usage` registers the command inventory after installation or
-update. Registration reads or sends no mail and does not establish readiness.
-
-## Recovery and limits
-
-The supported rollback selects the canonical owned release named by
-`install/previous` through a trusted tested installer:
-
-```sh
-<TESTED_EMAIL_INSTALL> recover --release ABSOLUTE_RELEASE_DIRECTORY
-```
-
-The installer verifies the retained legacy or `cell-install-v2` release before
-selection. Do not execute an unverified retained installer. Retain selector and
-verification errors and follow the procedure instead of rewriting release files
-or taking over foreign selectors.
-
-Email retains no message history to recover after a send or receiving read.
-Private account settings have their own atomic selection and recovery boundary.
-Resend acceptance and Gmail delivery must be observed separately from installer
-success. No installation-time account readiness, final-delivery guarantee,
-release-retention horizon, or general cross-release support interval is promised.
-
-## Related contracts
-
-- Read `chancery show email.install.operate` for installation and recovery steps.
-- Read `chancery show email.account` for separately retained settings.
-- Read `chancery show email.message.send` for send results and ambiguous failures.
-- Read `chancery show email.message.receive` for receiving observations.
-- Read `chancery show ci-manager.queue.operate` for ordinary Cell delivery.
+No installation-time account readiness, final-delivery guarantee, retention
+horizon, or general cross-release support interval is promised.

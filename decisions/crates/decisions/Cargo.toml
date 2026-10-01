@@ -36,6 +36,3 @@ time = { workspace = true, features = ["local-offset"] }
 toml.workspace = true
 tokio.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true

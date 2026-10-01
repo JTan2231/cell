@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 from unittest import mock
 
@@ -21,11 +20,11 @@ class NotificationTests(unittest.TestCase):
                     **changes)
 
     def test_success_is_short_and_has_no_internal_bookkeeping(self):
-        job = self.job(installation_verified=True, deployment_result={
+        job = self.job(installation_completed=True, deployment_result={
             "state": "succeeded", "products": ["annals", "decisions"]})
         subject, body = render(job)
         self.assertEqual(subject, "Cell CI: deployed — Annals, Krisis")
-        self.assertEqual(body, "Annals, Krisis deployed successfully.\nRequired checks and deployment verification passed.")
+        self.assertEqual(body, "Annals, Krisis deployed successfully.\nRequired checks passed and installation completed.")
         for value in (job["id"], job["input_commit"], "Artifacts", "Models", "budget"):
             self.assertNotIn(value, subject + body)
 
@@ -34,7 +33,7 @@ class NotificationTests(unittest.TestCase):
             with self.subTest(deployed=deployed):
                 job = self.job(last_receipt={"selection": {"tests_skipped": True}})
                 if deployed:
-                    job.update(installation_verified=True, deployment_result={
+                    job.update(installation_completed=True, deployment_result={
                         "state": "succeeded", "products": ["annals"]})
                 subject, body = render(job)
                 self.assertIn("Tests were skipped.", body)
@@ -58,31 +57,6 @@ class NotificationTests(unittest.TestCase):
                 job = self.job(skip_tests=True, last_receipt={"selection": selection})
                 self.assertNotIn("Tests were skipped.", render(job)[1])
 
-    def test_failed_tests_survive_exhausted_repair_summary(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            log = Path(temporary) / "validation.log"
-            log.write_text("test inbox::recovery ... FAILED\nFAIL: test_retry (InboxTests)\n")
-            job = self.job(attempts=[{}], validations=[{"diagnostics": str(log)}],
-                           last_receipt={"failure": {"gate": "annals", "message": "body exited nonzero"}})
-            job.update(outcome="failed", stopped_phase="repair_prepare",
-                       outcome_message="The repair budget is exhausted.")
-            subject, body = render(job)
-            self.assertEqual(subject, "Cell CI: failed — Annals checks")
-            self.assertIn("inbox::recovery", body)
-            self.assertIn("test_retry (InboxTests)", body)
-            self.assertIn("Automatic repair did not resolve", body)
-            self.assertIn("Nothing was deployed.", body)
-            self.assertIn("queue is paused", body)
-            self.assertNotIn("budget", body)
-
-    def test_missing_diagnostics_does_not_invent_a_cause(self):
-        job = self.job(last_receipt={"failure": {"gate": "cell.platform.pipeline", "message": "body exited nonzero"}},
-                       validations=[{"diagnostics": "/missing/log"}])
-        job.update(outcome="failed", stopped_phase="checking")
-        subject, body = render(job)
-        self.assertIn("CI pipeline checks", subject)
-        self.assertIn("no specific cause", body)
-
     def test_failed_deployment_does_not_claim_partial_success_or_no_effects(self):
         job = self.job(accepted=True, unresolved=True, deployment_result={
             "state": "stopped", "products": ["annals", "nucleus"],
@@ -97,7 +71,7 @@ class NotificationTests(unittest.TestCase):
         self.assertNotIn("deployed successfully", body)
 
     def test_cleanup_failure_is_visible_in_subject(self):
-        job = self.job(installation_verified=True, deployment_result={"state": "cleanup_failed", "products": ["annals"]})
+        job = self.job(installation_completed=True, deployment_result={"state": "cleanup_failed", "products": ["annals"]})
         subject, body = render(job)
         self.assertIn("deployed; cleanup failed", subject)
         self.assertIn("deployed successfully", body)

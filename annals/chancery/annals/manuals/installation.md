@@ -10,8 +10,8 @@ activation and process-history service.
 
 The primary deployer also discovers registered named libraries in Annals'
 `catalog.db`. It records identity and paths, fences new command admission,
-drains admitted work, takes consistent per-library backups, and journals
-schema migrations. Rollback restores each changed library from its own backup.
+drains admitted work, and performs transactional schema migrations in place.
+Program recovery preserves current data and requires compatible prior programs.
 Supported migration preserves source, graph, admission kind, spool, and instruction
 history. Read `annals.libraries` for schema and legacy instruction provenance. Registered names are not evidence of runtime readiness.
 
@@ -22,12 +22,12 @@ its separate admission and binding authority.
 
 ## Release selection and recovery
 
-The deployer stages a complete content-addressed release and checks candidate
-programs and the Nucleus boundary. It starts Annals maintenance, drains
+The deployer stages a content-addressed release without artifact or dependency
+readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
-and exact Clockwork definition digest, and checks the installed commands.
+and exact Clockwork definition digest, and publishes the installed commands.
 The definition is first registered inactive. Before the deployer disables or
-replaces a binding, it verifies the current release and compares every stored
+replaces a binding, it reads current release metadata and compares every stored
 executable-definition field with it. A foreign definition with the same key
 stays untouched. The first handoff similarly removes only an exactly owned
 legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
@@ -49,8 +49,7 @@ Annals-owned log bodies.
 The inbox storage gate is not a deployment lock. A closed gate does not by
 itself reject an Annals deployment, globally stop the Nucleus service or
 independent Nucleus jobs, or block another product's deployment. The deployer
-still needs enough physical capacity to stage the release and write its backup,
-migration, and rollback artifacts; any of those writes can fail
+still needs enough physical capacity to stage the release and write migration and control artifacts; any of those writes can fail
 when the shared filesystem is actually full. A probe error is distinct from a
 measured closed gate and can fail deployment status inspection with
 `storage_probe_failed`. A deployment request authorizes only the deployer's
@@ -59,8 +58,9 @@ as separate storage remediation or to lower or disable the reserve. Either
 action remains a user decision requiring explicit consent for the exact target
 and scope.
 
-An ordinary pre-commit failure restores the captured release, configuration,
-library, and spool, then restores the exact prior Clockwork definition only if
+An ordinary pre-commit failure preserves current library and spool data.
+It restores compatible program and configuration selections, then restores
+the exact prior Clockwork definition only if
 its binding was enabled, or restores the legacy LaunchAgent, never both. A
 previously absent or disabled binding stays disabled without transient
 activation; its inactive selected digest may remain the candidate digest. If
@@ -70,17 +70,15 @@ private recovery material. Do not remove maintenance markers, edit
 receipts, or swap database files manually after interruption. Run the exact retained
 `annals-install recover TRANSACTION_PATH`; it proves the product journal and
 release evidence before restoring pre-commit state or completing a committed
-operation. Recovery material is retained in `backups/deployments/`.
-
-Database restoration copies each retained backup through SQLite. Copying progress
-does not consume the one-minute lock-wait allowance. Recovery stops if database
-access remains blocked for that interval. After a copy completes, recovery
-checkpoints the restored database and retains its WAL coordination files. A
-blocked checkpoint retains maintenance and the transaction for recovery.
+operation. Completed control journals are retained in `install/transactions/`.
+No data backup or restoration is supplied. Older backup files remain unchanged.
 
 The attended migration from the former system LaunchDaemon uses a narrower
-handoff. Its child fresh-state deploy keeps Annals maintenance in place and
-renders the exact Clockwork definition, but does not register or select it.
+handoff. It can restore the system installation only before child installation
+begins. Phase `installing`, or `rewritten` with child evidence, retains moved state
+and outer and child recovery evidence instead of moving state back. Its child
+in-place deploy keeps Annals maintenance in place and renders the exact Clockwork
+definition, but does not register or select it.
 The outer migration verifies that inert file and durably records its committed phase
 before registration or binding selection, so the definition never points at a
 state root that rollback can move away. RunAtLoad remains maintenance-gated
@@ -98,10 +96,9 @@ not ownership, and an extra launchd key is treated as foreign.
 
 ## Dedicated decisions installation
 
-The Rust provisioner is the exact release-local installer in the strict
-`cell-install-v2` file inventory. Its configuration and native definition
-rendering are compiled into those admitted bytes. A source sibling, mutable
-selector, or tampered executable is rejected before state or binding mutation.
+The Rust provisioner uses release metadata and compiled configuration and
+definition rendering. It does not compare its executing bytes with the retained
+installer or audit the release inventory.
 
 This authorizes creation or supported migration only under
 `$HOME/Library/Application Support/Annals/decisions` and registration or
@@ -110,17 +107,15 @@ change Nucleus, or inspect or mutate the primary `annals/inbox` binding. It
 shares Annals' product-wide `install/.update-lock`, so it cannot race the
 primary deployer.
 
-The provisioner validates the complete release and selected prior definition.
+The provisioner reads release metadata and attributes the selected prior definition.
 It creates and binds fresh state outside live paths, then starts maintenance
 before a run-at-load definition can be selected. It registers the candidate
-inactive, drains an enabled owned prior binding, and takes a consistent backup
-before migration. It checks inbox and feed readiness, then switches the exact
-definition.
+inactive, drains an enabled owned prior binding, and migrates existing state
+transactionally in place. It switches the exact definition after setup and migration.
 
-Fresh state has the immutable `decisions` role. A `general` database fails
-readiness even if its persistent ID matches the config. Foreign or
-concurrently changed state stops the operation. A pre-commit failure restores
-captured state and the exact prior selection and enabled state. A previously
+Fresh state has the immutable `decisions` role. Ordinary Annals commands retain their library-role checks. Foreign or
+concurrently changed state stops the operation. A pre-commit failure preserves current data and restores compatible program,
+configuration and prior schedule selection and enabled state. A previously
 disabled schedule stays disabled throughout recovery. If exact restoration
 cannot be proved, the library retains maintenance. The provisioner disables
 only an attributable candidate and reports retained transaction material for
@@ -142,10 +137,9 @@ maintenance gate remains engaged.
 
 ## Deployment admission and coordination
 
-The coordinator's `apply` phase stages and verifies immutable release files.
-`configure` runs the product-owned configuration, migration and selector
-transaction with its schedule disabled. `verify` checks the installed result
-without starting product work. `release` removes only the named admission hold.
+The coordinator's `apply` phase stages release files.
+`configure` runs product configuration, migration and selector publication with
+scheduling disabled. `release` removes only the named admission hold.
 After every affected hold is released, `activate` restores the captured enabled
 state of the current selected definition. An originally disabled binding stays
 disabled. Clockwork incident halts and product pauses remain in force.
@@ -189,42 +183,37 @@ requires maintenance support from the installed CLI. Unsupported old binaries
 stop coordinated inspection before effects and need one compatibility update
 through the existing deployers and quiescence procedure; the new candidate
 cannot fence an old binary. Recovery invokes each retained product transaction with the matching outer
-run owner before it verifies the recovered installation. Unknown ownership,
+run owner before it releases the recovered installation. Unknown ownership,
 changed evidence, or incomplete recovery retains the outer hold.
 
-## Destructive replacement
+## Data preservation
 
-Fresh-state replacement moves the active library and spool into one retained
-rollback generation. It imports only the uncompleted backlog in preserved
-lane order and resumes after verification. It requires explicit destructive
-authority and a verified backlog and recovery plan. Read `annals.install.operate`
-for the procedure.
+The installer migrates supported libraries in place and preserves current library
+and spool data. It has no data backup, data restore, or reset mode. Unsupported
+schemas stop deployment. Existing data backup artifacts remain unchanged.
 
 ## Verification, privacy, and retirement
 
-Installed libraries, spools, rollback generations, logs, and Nucleus output
+Installed libraries, spools, existing prior data artifacts, logs, and Nucleus output
 may contain complete private source and model context. Preserve private
 ownership and permissions. Deployment does not authorize
-`annals/release.sh`, deletion of prior recovery material, or a fresh-state
-replacement.
+`annals/release.sh`, deletion of prior recovery material, or a data reset.
 
 There is no supported raw path-only retirement sequence. A shared Clockwork
 key, launchd label, command pathname, or provider pathname is not ownership;
 leave it intact unless a product-owned operation has proved the exact current
 definition, fully rendered legacy plist, and selector targets before mutation.
 
-The deployment adapter verifies library statistics, inbox status, the decisions
-feed watermark, and Annals Usage doctor while preserving operator pauses.
-When Annals is selected for upgrade, verification requires the exact admitted
-candidate. When it participates only in maintenance, verification requires its
-installed release to remain identical to the captured inspection baseline.
-Verification does not create works, reconciliations, or Nucleus jobs.
+Installation does not run library statistics, inbox status, Annals Usage doctor,
+or an inbox maintenance smoke check. It reads library identity where setup needs
+it, preserves operator pauses, and performs the requested initialization,
+migration and publication. Runtime diagnostics remain separate.
 
 ## Configuration and limits
 
 The macOS state root is `~/Library/Application Support/Annals`. It contains
 `config.toml`, `usage.toml`, the primary `annals.db`, `spool/`, `log/`,
-`backups/`, and immutable releases under `install/releases/`. Public commands
+and immutable releases under `install/releases/`. Public commands
 in `~/.local/bin/` and both Chancery selectors follow the same `current` release.
 Annals Usage is independently versioned and is installed with Annals. The joint
 cutover preserves `usage.toml` and pins both configs to the selected Nucleus
@@ -242,8 +231,8 @@ program. Product runtime does not invoke Chancery.
 The default inbox-lock wait is 3,900 seconds. `ANNALS_UPDATE_WAIT_SECONDS`
 accepts a nonnegative replacement. It is not an overall deployment timeout:
 Clockwork disable can wait for its child, which has no activation timeout.
-`--no-start` verifies installation without changing scheduler state. It does
-not complete scheduled installation and cannot be combined with `--fresh-state`.
+`--no-start` installs files and state without changing scheduler state. It does
+not complete scheduled installation.
 
 Annals installs only its own bindings and selectors. A closed inbox storage
 gate is independent of deployment admission. There is no maximum installed

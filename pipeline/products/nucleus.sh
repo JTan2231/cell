@@ -20,14 +20,10 @@ CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|nucleus/release.sh'
-CI_RUN_CHECKS=
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='nucleus|Nucleus|workspace-package|Cargo.toml|nucleus-|1'
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus
-nucleus|target/release/nucleusd|nucleusd
-nucleus|target/release/nucleus-install|nucleus-install'
-CI_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus
 nucleus|target/release/nucleusd|nucleusd
 nucleus|target/release/nucleus-install|nucleus-install'
 PROVIDERS='nucleus|nucleus|nucleus/chancery|10'

@@ -10,6 +10,8 @@ use conatus::{
     store::{Store, WantState},
 };
 
+mod output;
+
 #[derive(Parser)]
 #[command(
     version,
@@ -18,14 +20,14 @@ use conatus::{
 struct Cli {
     #[arg(long, global = true)]
     state_dir: Option<PathBuf>,
-    /// Select JSON, including for the otherwise plain-text email preview.
+    /// Print the machine JSON response instead of readable text.
     #[arg(long, global = true)]
     json: bool,
     #[command(subcommand)]
     command: Command,
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum Command {
     /// Initialize library selections or rebind Annals while preserving existing intake.
     Init {
@@ -81,7 +83,7 @@ enum Command {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum WantCommand {
     /// Capture source wording exactly without invoking a model.
     Add(WantArgs),
@@ -104,7 +106,7 @@ enum WantCommand {
     Show { id: String },
 }
 
-#[derive(Args)]
+#[derive(Clone, Args)]
 #[command(group(ArgGroup::new("input").required(true).args(["wording", "file", "stdin"])))]
 struct WantArgs {
     wording: Option<String>,
@@ -117,7 +119,7 @@ struct WantArgs {
     source: String,
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum ReadCommand {
     List {
         #[arg(long, default_value_t = 20)]
@@ -128,7 +130,7 @@ enum ReadCommand {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum InstructionsCommand {
     Show,
     /// Select exact UTF-8 instructions; existing sources are not reexamined.
@@ -138,7 +140,7 @@ enum InstructionsCommand {
     },
 }
 
-#[derive(Subcommand)]
+#[derive(Clone, Subcommand)]
 enum EmailCommand {
     Preview {
         /// Read an exact retained email instead of rendering current state.
@@ -302,25 +304,23 @@ fn main() -> ExitCode {
         return ExitCode::SUCCESS;
     }
     let cli = chancery_usage::cli::parse::<Cli>("conatus", "");
-    let text_preview =
-        !cli.json && matches!(&cli.command, Command::Email(EmailCommand::Preview { .. }));
+    let json_output = cli.json;
+    let command = cli.command.clone();
     match execute(cli) {
         Ok(data) => {
-            if text_preview {
-                println!(
-                    "From: {}\nTo: {}\nSubject: {}\n\n{}",
-                    data["from"].as_str().unwrap_or_default(),
-                    data["to"].as_str().unwrap_or_default(),
-                    data["digest"]["subject"].as_str().unwrap_or_default(),
-                    data["digest"]["body"].as_str().unwrap_or_default()
-                );
-            } else {
+            if json_output {
                 println!("{}", json!({"ok":true,"data":data}));
+            } else {
+                print!("{}", output::render(&command, &data));
             }
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("{}", json!({"ok":false,"error":error.to_string()}));
+            if json_output {
+                eprintln!("{}", json!({"ok":false,"error":error.to_string()}));
+            } else {
+                eprintln!("Error: {error:#}");
+            }
             ExitCode::FAILURE
         }
     }

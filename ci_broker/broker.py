@@ -41,7 +41,6 @@ DEFAULT_LIGHT_SLOTS = 2
 DEFAULT_CARGO_JOBS = 2
 DEFAULT_HEARTBEAT_TIMEOUT = 15.0
 DEFAULT_POLL_INTERVAL = 0.25
-SOURCE_CHECK_TIMEOUT = 30.0
 MAX_TERMINAL_EXECUTIONS = 256
 TERMINAL_MAX_AGE_SECONDS = 14 * 24 * 60 * 60
 MAX_DIAGNOSTIC_BYTES = 8 * 1024 * 1024
@@ -214,7 +213,6 @@ class Identity:
     toolchain_key: str
     environment_key: str
     command_key: str
-    source_check_key: str
     lane: str
 
     def execution_key(self, host_id: str) -> str:
@@ -229,7 +227,6 @@ class Identity:
                 "toolchain_key": self.toolchain_key,
                 "environment_key": self.environment_key,
                 "command_key": self.command_key,
-                "source_check_key": self.source_check_key,
                 "lane": self.lane,
             }
         )
@@ -239,7 +236,6 @@ class Identity:
 class Invocation:
     cwd: Path
     command: tuple[str, ...]
-    source_check: tuple[str, ...]
     environment: Mapping[str, str]
     share_clean_candidate: bool
     attribution_json: str
@@ -299,18 +295,6 @@ def canonical_attribution(raw: str | None) -> str:
     if len(encoded.encode("utf-8")) > 16 * 1024:
         raise BrokerError("--attribution-json is larger than 16 KiB")
     return encoded
-
-
-def parse_json_argv(label: str, raw: str) -> tuple[str, ...]:
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise BrokerError(f"invalid {label}: {error}") from error
-    if not isinstance(value, list) or not value:
-        raise BrokerError(f"{label} must be a non-empty JSON string array")
-    if not all(isinstance(item, str) and item and "\x00" not in item for item in value):
-        raise BrokerError(f"{label} must be a non-empty JSON string array")
-    return tuple(value)
 
 
 def parse_environment_assignments(assignments: Iterable[str]) -> dict[str, str]:
@@ -889,7 +873,7 @@ class Broker:
                                     identity.toolchain_key,
                                     identity.environment_key,
                                     identity.command_key,
-                                    identity.source_check_key,
+                                    "",  # Reserved for existing schema-1 journals.
                                     now,
                                     now,
                                 ),
@@ -933,74 +917,6 @@ class Broker:
             raise BrokerError(f"cannot submit broker request: {error}") from error
 
         return Submission(execution_id, request_id, joined, runner_nonce)
-
-    def record_initial_stale(
-        self,
-        identity: Identity,
-        invocation: Invocation,
-        detail: str,
-    ) -> dict[str, Any]:
-        """Journal a candidate that was already stale before admission."""
-
-        now = time.time()
-        execution_id = uuid.uuid4().hex
-        request_id = uuid.uuid4().hex
-        pid = os.getpid()
-        token = process_token(pid)
-        if token is None:
-            raise BrokerError("cannot establish a process identity for broker ownership")
-        try:
-            with contextlib.closing(self._connect()) as connection:
-                self._transaction(connection)
-                try:
-                    connection.execute(
-                        "INSERT INTO executions("
-                        "id, execution_key, shareable, lane, state, source_key, gate, "
-                        "gate_version, toolchain_key, environment_key, command_key, "
-                        "source_check_key, created_at, queued_at, finished_at, detail"
-                        ") VALUES (?, ?, 0, ?, 'stale', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            execution_id,
-                            identity.execution_key(self.scope.host_id),
-                            identity.lane,
-                            identity.source_key,
-                            identity.gate,
-                            identity.gate_version,
-                            identity.toolchain_key,
-                            identity.environment_key,
-                            identity.command_key,
-                            identity.source_check_key,
-                            now,
-                            now,
-                            now,
-                            detail,
-                        ),
-                    )
-                    self._event(connection, execution_id, "stale", now, detail)
-                    connection.execute(
-                        "INSERT INTO requests("
-                        "id, execution_id, pid, process_token, nonce, submitted_at, "
-                        "heartbeat_at, finished_at, result_state, joined, attribution_json"
-                        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'stale', 0, ?)",
-                        (
-                            request_id,
-                            execution_id,
-                            pid,
-                            token,
-                            uuid.uuid4().hex,
-                            now,
-                            now,
-                            now,
-                            invocation.attribution_json,
-                        ),
-                    )
-                    connection.execute("COMMIT")
-                except Exception:
-                    connection.execute("ROLLBACK")
-                    raise
-        except sqlite3.Error as error:
-            raise BrokerError(f"cannot journal stale request: {error}") from error
-        return self.receipt(execution_id, request_id, False, local_state="stale")
 
     def _try_claim(self, submission: Submission, lane: str) -> bool:
         now = time.time()
@@ -1349,22 +1265,12 @@ class Broker:
                 self.recover()
                 state = self.execution_state(submission.execution_id)
                 if state in TERMINAL_STATES:
-                    local_state = state
-                    if state == "passed":
-                        source_ok, _ = check_source(
-                            invocation.cwd,
-                            invocation.source_check,
-                            invocation.environment,
-                            identity.source_key,
-                        )
-                        if not source_ok:
-                            local_state = "stale"
-                    self._finish_local_request(submission.request_id, local_state)
+                    self._finish_local_request(submission.request_id, state)
                     return self.receipt(
                         submission.execution_id,
                         submission.request_id,
                         submission.joined,
-                        local_state=local_state,
+                        local_state=state,
                     )
 
                 if state == "queued" and self._try_claim(submission, identity.lane):
@@ -1394,16 +1300,6 @@ class Broker:
         *,
         verbose: bool = False,
     ) -> None:
-        source_ok, source_detail = check_source(
-            invocation.cwd,
-            invocation.source_check,
-            invocation.environment,
-            identity.source_key,
-        )
-        if not source_ok:
-            self._finish(submission, "stale", None, source_detail)
-            return
-
         if os.name != "posix":
             self._finish(
                 submission,
@@ -1519,16 +1415,7 @@ class Broker:
                     select.select([child.stdout], [], [], delay)
 
             exit_code = child.returncode
-            source_ok, source_detail = check_source(
-                invocation.cwd,
-                invocation.source_check,
-                invocation.environment,
-                identity.source_key,
-            )
-            if not source_ok:
-                state = "stale"
-                detail = source_detail
-            elif exit_code == 0:
+            if exit_code == 0:
                 state = "passed"
                 detail = None
             else:
@@ -1553,31 +1440,6 @@ class Broker:
                         os.close(write_fd)
                 for signum, handler in previous_handlers.items():
                     signal.signal(signum, handler)
-
-
-def check_source(
-    cwd: Path,
-    command: Sequence[str],
-    environment: Mapping[str, str],
-    expected_source_key: str,
-) -> tuple[bool, str | None]:
-    try:
-        result = subprocess.run(
-            command,
-            cwd=cwd,
-            env=dict(environment),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=SOURCE_CHECK_TIMEOUT,
-        )
-    except (OSError, subprocess.SubprocessError) as error:
-        return False, f"source check failed: {error.__class__.__name__}"
-    if result.returncode != 0:
-        return False, "source check exited nonzero"
-    if result.stdout.strip() != expected_source_key:
-        return False, "source identity changed"
-    return True, None
 
 
 def receipt_exit_code(receipt: Mapping[str, Any]) -> int:
@@ -1643,11 +1505,6 @@ def parser() -> argparse.ArgumentParser:
         help="normalize worktree-local command paths against this root",
     )
     run.add_argument(
-        "--source-check-json",
-        required=True,
-        help="JSON argv that prints the current source key",
-    )
-    run.add_argument(
         "--environment-mode", choices=("full", "minimal"), default="full"
     )
     run.add_argument("--inherit-env", action="append", default=[])
@@ -1705,7 +1562,6 @@ def run_command(arguments: argparse.Namespace) -> int:
     except ValueError as error:
         raise BrokerError("working directory must be inside the identity root") from error
     command = strip_separator(arguments.command)
-    source_check = parse_json_argv("--source-check-json", arguments.source_check_json)
     environment = build_environment(
         arguments.environment_mode,
         arguments.inherit_env,
@@ -1726,33 +1582,15 @@ def run_command(arguments: argparse.Namespace) -> int:
                 "cwd": identity_cwd.as_posix() or ".",
             }
         ),
-        source_check_key=digest_json(normalize_argv(source_check, identity_root)),
         lane=arguments.lane,
     )
     invocation = Invocation(
         cwd=cwd,
         command=command,
-        source_check=source_check,
         environment=environment,
         share_clean_candidate=arguments.share_clean_candidate,
         attribution_json=canonical_attribution(arguments.attribution_json),
     )
-
-    source_ok, source_detail = check_source(
-        invocation.cwd,
-        invocation.source_check,
-        invocation.environment,
-        identity.source_key,
-    )
-    if not source_ok:
-        receipt = broker.record_initial_stale(
-            identity, invocation, source_detail or "source identity changed"
-        )
-        broker.report(
-            receipt, verbose_receipt=arguments.verbose_receipt,
-            quiet_success=arguments.quiet_success,
-        )
-        return receipt_exit_code(receipt)
 
     broker.recover()
     submission = broker.submit(identity, invocation)

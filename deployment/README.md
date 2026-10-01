@@ -22,11 +22,10 @@ dependency candidate. Incompatible committed candidates stop before maintenance.
 Installed companions receive matching candidates, including consumers that embed
 the provider's Rust libraries. The plan reports each addition's reason.
 
-Retained dependencies receive a read-only inspection from their sealed owning
-installer before maintenance and after configuration. Installation remnants,
-including broken selectors, are inspected rather than treated as absence.
-Version compatibility does not establish product readiness; adapters also check
-their supported runtime interfaces and configuration.
+Retained dependencies receive a metadata inspection from their owning installer
+before maintenance. Installation remnants, including broken selectors, are
+inspected rather than treated as absence. Installation does not probe dependency
+health or run product diagnostics.
 Consumers can also require an explicitly indexed installed interface contract.
 For example, EMT requires Email's account setup and discovery operation.
 An older Email release with the same release number but without that operation
@@ -102,7 +101,7 @@ temporary active workspace. The coordinator records the installation outcome
 there before removing active evidence. A crash during cleanup does not authorize
 another installation. Reconciliation completes or reports cleanup using the
 recorded outcome. Receipts and request identities are retained without automatic
-pruning. Keep them with deployment state backups. Their absence is not proof
+pruning. Keep them with deployment state. Their absence is not proof
 that an operation never ran if storage was removed or restored incompletely.
 
 CI owns its validation receipt and checks the exact source commit before this
@@ -120,8 +119,7 @@ release builder once for selected products, the maintenance closure, and retaine
 dependencies. Preparing an inspector does not select its product for upgrade.
 
 Complete the relevant CI checks during development. Deployment does not run CI
-or require a CI receipt. Preparation builds production binaries and checks
-versions, hashes, and source material. Tests, formatting, Clippy, documentation
+or require a CI receipt. Preparation builds production binaries and packages the selected files. Tests, formatting, Clippy, documentation
 builds, recognition gates, and generator CI remain development checks.
 
 The builder uses one release-profile Cargo invocation for the selected packages
@@ -129,17 +127,36 @@ and binaries, then seals independent product candidates in parallel. It keeps
 a persistent target and file lock per logical Git repository, separate from
 the CI broker and target. Cargo defaults to the logical CPU count capped at
 eight; `CELL_RELEASE_BUILD_JOBS` accepts a positive override. Completed build
-bundles persist in a content-addressed cache; preparation reuses a matching
-bundle only after checking its exact material and executable integrity.
+bundles persist in a cache keyed by the clean Git commit, build inputs, and the
+frozen macOS signing policy. Preparation verifies cached native signatures and
+hashes before reuse.
 
-Source bytes and build inputs determine build identity. Git HEAD does not.
-Publication can therefore build updated versions and reuse those artifacts
-after the same bytes are committed. A schema-one candidate records executable
-hashes and versions, plus packaging and adapter source hashes. Source paths
-follow the product descriptor's `PRODUCT_DIR`. Deployment matches the source
-material, binds the candidate to its selected commit, and
-retains a separate build receipt. It deploys sealed executable copies without
-reading a later Cargo target. Build records do not record CI success.
+The full Git commit ID identifies clean source. Each preparation of dirty source
+gets a new identity and builds a fresh cache entry. A build from uncommitted
+version edits is not reused after commit. Preparation does not hash source files.
+
+A schema-one candidate records the source identity, selected commit, and
+executable hashes and versions. Deployment retains a separate build receipt.
+It deploys sealed executable copies without reading a later Cargo target.
+Build records do not record CI success.
+
+### macOS signing
+
+Cell uses one current-user signing policy outside the repository. The shared
+builder signs staged native runtime and installer executables before it computes
+candidate hashes. Each executable keeps a permanent code identifier under the
+configured namespace and its canonical product descriptor. Independent release
+units do not change that product namespace. Compiler outputs remain unchanged.
+
+Deployment captures the policy at admission and refuses policy changes before
+publication or activation. Product publication verifies the expected certificate
+and identifier and preserves signed bytes. Signature checks are new publication
+requirements; they do not establish product readiness or grant macOS permissions.
+Shell and Python assets remain release resources with their existing interpreters.
+
+Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md) for explicit
+identity setup, Keychain access, and full-inventory rotation.
+Signing setup never occurs during an ordinary build, upgrade, or repair.
 
 The same builder can prepare candidates without publication or installation:
 
@@ -166,10 +183,15 @@ All candidates are prepared before maintenance begins. The coordinator then:
    transactions stage releases during apply and commit that transaction during
    configure. Nucleus starts its replacement service under its existing hold so
    requester configuration can use it.
-4. Checks installed candidate identity and service readiness while every
-   affected product remains held. No model jobs or synthetic records are created.
-5. Releases requester holds only after all readiness checks pass, then releases
-   Nucleus last. Activation follows release of all holds.
+4. Releases requester holds after configuration completes, then releases Nucleus
+   last. Activation follows release of all holds.
+
+Installers perform resource setup, program selection, configuration, and required
+state initialization or migration. They verify configured macOS signatures on
+native production code. They do not run persistent-state integrity or operational
+readiness validation. Product diagnostics and
+checks used during ordinary application work remain separate. CI does not assert
+the removed installation validation behavior.
 
 Replacing Nucleus holds its installed requesters, as declared by each product's
 `requester_service`. Replacing one requester leaves Nucleus admission open.
@@ -181,18 +203,13 @@ only its own CI hold after product activation or coherent recovery. This shared
 infrastructure hook does not install or update the CI manager. Explicit manager
 upgrades must preserve its captured command during a deployment.
 
-Affected-only installations must provide compatible maintenance operations.
-A selected product can explicitly permit its sealed candidate to perform
-maintenance after a read-only product check proves compatible current state.
-The adapter must first prove the current installation's ownership. Platter uses
-this route only for schema-six state; its predecessor schemas and existing
-affected-only installations keep the installed maintenance command. Candidate
-maintenance preserves owned holds and drain checks without migration or early publication.
-Post-publication verification still proves the actual installed programs.
+Selected products use their supplied candidate for maintenance. Affected-only
+products use their installed command. These operations preserve owned holds and
+drain admitted work without migration or early publication.
 
 EMT captures worker intent during inspection, suspends its binding,
 selects a disabled definition during configuration, and restores enabled state
-after verification and hold release. Existing pauses and incidents remain.
+after configuration and hold release. Existing pauses and incidents remain.
 EMT resolves receiving configuration before maintenance. Conatus
 preserves library identities and its cursor while rebinding Annals. Paperboy and
 Platter reselect existing schedules with the installed program's exact pins.
@@ -202,11 +219,11 @@ bindings through its current broker. Custom bindings and incident halts survive.
 
 The coordinator owns the operation sequence and temporary execution state.
 Product adapters own configuration discovery, admission, quiescence, migration,
-service control, readiness, and recovery. The shared transaction library owns
+service control, and recovery. The shared transaction library owns
 immutable artifact manifests, public file selection, writer locks, attribution
 checks, and file compensation.
 
-Products own runtime state, admission holds, database backups, schedules,
+Products own runtime state, admission holds, schema migrations, schedules,
 services, and recovery decisions. Prove database recovery before restoring public
 commands. Nucleus's guarded service installer owns copied executables and
 authentication state.
@@ -228,11 +245,10 @@ and deployer inherits the same lock. A surviving child therefore keeps another
 deployment out even if its supervisors exit. Existing product locks and
 admission gates remain necessary for coexistence with direct commands.
 
-Success requires all readiness checks to pass and all run-owned holds to be
-released. After a completed failure, the same invocation uses product recovery
-operations. Recovery must establish a coherent prior or candidate installation
-before releasing holds. Each release requires proof that it is safe; Nucleus
-releases last. Recovery never repeats an uncertain apply or clears another
+Success requires setup and configuration to complete and all run-owned holds to
+be released. After a completed failure, the same invocation uses product recovery
+operations. Recovery restores the recorded prior or candidate installation
+before releasing holds. Nucleus releases last. Recovery never repeats an uncertain apply or clears another
 owner's hold. Successful recovery does not change a failed deployment result.
 If recovery cannot safely release a hold, it retains that hold and reports its
 owner and error for product recovery.
@@ -269,13 +285,13 @@ for installed releases and the temporary workspace. Outstanding maintenance
 lists its owner and each affected product as `retained` or `uncertain`. A lost
 hold or release reply is uncertain until a successful release is captured.
 Successful recovery still returns deployment failure, with explicit released
-maintenance. Cleanup failure preserves the verified installation outcome.
+maintenance. Cleanup failure preserves the completed installation outcome.
 
 Product command failures retain bounded execution status. The shared adapter
 does not relay arbitrary child messages, arguments, credentials, or domain
 bodies. Unrecognized failures retain the executable and exit status.
 
-After successful readiness and release, the coordinator removes unreferenced
+After successful configuration and release, the coordinator removes unreferenced
 installed Cell release history under the same global lock. It preserves current
 releases and releases pinned by selected schedules (including disabled ones),
 service definitions, current product receipts/configuration, and running
@@ -288,10 +304,8 @@ The cleanup reader accepts complete legacy Clockwork binding arrays. For
 version-two selections, it reads pages until the inventory is complete. An
 unknown or incomplete inventory stops cleanup before deletion.
 
-Nucleus retains its cutover journal and uses its service-owned recovery procedure
-to establish the resident generation. Matching files, declared versions, and
-health alone cannot prove that an old resident daemon was replaced. An unproved
-cutover retains the hold and recovery evidence.
+Nucleus retains its cutover journal. Its service-owned recovery procedure
+restarts the recorded candidate when replacement was interrupted.
 
 ## Product adapter protocol, version 1
 
@@ -318,7 +332,7 @@ object. Cleanup inspects that object, not status history or diagnostics. Use
 commands supported by retained releases; Conatus provides them through `status`.
 Build, deployment and cleanup read the same
 literal product inventory. The adapter accepts one fixed operation argument:
-`inspect`, `hold`, `drain`, `apply`, `configure`, `verify`, `release`, `activate`,
+`inspect`, `hold`, `drain`, `apply`, `configure`, `release`, `activate`,
 or `recover`. It accepts
 no caller-supplied command or workflow body. Standard input is one JSON object:
 
@@ -328,14 +342,14 @@ no caller-supplied command or workflow body. Standard input is one JSON object:
 - optional product `settings`, direct `dependency_settings`, and sealed
   `dependency_candidates` for read-only discovery before a first installation;
 - `prior`, the opaque data captured by that product's inspection;
-- `recovery`, the captured operation and hold/application/verification progress
+- `recovery`, the captured operation and hold/application/configuration progress
   during recovery within the active invocation.
 
 `candidate_dir` and `candidate` identify a sealed candidate for selected and
 affected products. Binaries reside at `candidate_dir/bin/COMMAND`; the manifest
 records each path, SHA-256 and version plus exact packaging/provider source
 hashes. The adapter executes `PRODUCT-install adapter OP` from the candidate,
-checks the source and its own bytes, and refuses `apply` for an affected-only
+reads its package metadata and refuses `apply` for an affected-only
 product. A declared `maintenance_products` closure makes these executables
 available before inspection and before any hold.
 
@@ -347,7 +361,7 @@ standard error:
 ```
 
 The expected statuses, respectively, are `ready`, `held`, `drained`, `applied`,
-`configured`, `verified`, `released`, `activated` and `recovered`. A drain may
+`configured`, `released`, `activated` and `recovered`. A drain may
 return `waiting`; the coordinator waits and retries that phase in the same run.
 Waiting has no deployment-duration cutoff. Nonzero exits, `stopped`, invalid replies,
 unknown statuses and outputs above 1 MiB stop the run. `inspect` data may declare
@@ -390,27 +404,26 @@ The library has no separate product identity or release publication.
 
 Usher retains the `cell-install-v1` format. See
 [Usher installation](../usher/chancery/manuals/install-operate.md) for its
-commands, verification and supported legacy recovery. Other products use
+commands and supported legacy recovery. Other products use
 `cell-install-v2`. Its manifest records exact file digests and modes, independent
 executable/provider versions, public entry mappings and a stable content identity.
 The immutable tree retains `package/install` for supported recovery. Legacy
-formats are accepted only through the product's explicit complete byte proof.
+formats are read through the owning product's metadata reader.
 
 Conversations, Chancery, Email, Cast, Clockwork and Platter use the common
 program-selection entry point. Their product specifications supply the layout,
-legacy proof and runtime frontend where needed. Clockwork additionally validates
-its provider with the supplied Chancery reader; its runtime recognizes its own
-fully verified version-two release when pinning schedule definitions.
+legacy metadata reader and runtime frontend where needed. Runtime schedule
+operations retain their own release checks when pinning definitions.
 Stateful products provide typed lifecycle code around the same file transaction.
 See each installed product's installation contract for its exact arguments and
 recovery limits.
 
 Platter permits mutating installation and recovery only through coordinated
 deployment. See [Platter installation](../platter/chancery/manuals/install-operate.md)
-for its admission, migration, backup and activation rules.
+for its admission, migration and activation rules.
 
 Publication rechecks the captured selection under the product lock and holds
-the Chancery writer lock through validation and compensation. Suspended public
+the Chancery writer lock through publication and compensation. Suspended public
 commands stay absent during state rollback. Explicit interrupted-publication
 recovery accepts only absent entries or entries attributable to the captured
 prior release and exact candidate; foreign replacements are retained and stop
@@ -418,13 +431,13 @@ recovery. Directory locks preserve the legacy mkdir protocol and reclaim only a
 recognized private owner marker whose process is proven dead. Empty legacy locks
 and unknown or live owners require product/operator recovery.
 
-After coordinated success, cleanup uses the supplied sealed candidate installers
-for read-only `verify-release` checks. If a product has no such verifier, cleanup
-retains all its history. It completes every live-reference, receipt,
-transaction-marker, and release check before deletion. Current releases and
-selected schedule pins, including disabled bindings, remain protected. Cleanup
-never uses retained release executables as its authority.
+After coordinated success, cleanup reads current selections and live references,
+then removes unreferenced release directories only for the prepared products
+selected for cleanup. Other products retain their history. It does not invoke installer
+validation commands or audit release contents. Current releases and selected
+schedule pins, including disabled bindings, remain protected. Active transaction
+markers and unknown reference inventories stop deletion.
 
-Platter participates in this release-history cleanup through its sealed
-installer and PID-aware file lock. Its private packet state and database
-backups remain outside the installation tree and are retained.
+Platter participates in release-history cleanup under its PID-aware file lock.
+Its private packet state remains outside the installation
+tree and are retained.

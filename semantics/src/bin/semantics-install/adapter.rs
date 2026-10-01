@@ -186,12 +186,6 @@ fn controls(context: &Context, activate: bool) -> Result<Value> {
     Ok(lifecycle::inspect(&home(context)?)?["controls"].clone())
 }
 
-fn readiness(context: &Context) -> Result<()> {
-    let paths = lifecycle::Paths::new(&home(context)?)?;
-    paths.doctor(&paths.payload(), None, Some(&context.request.run_id))?;
-    Ok(())
-}
-
 pub(super) fn run(operation: &str) -> Result<Value> {
     let operation: Operation = operation.parse()?;
     let context = Context::read(
@@ -256,10 +250,9 @@ pub(super) fn run(operation: &str) -> Result<Value> {
         Operation::Configure => {
             if !context.selected() {
                 same_prior(&context)?;
-                readiness(&context)?;
                 return Ok(reply(
                     "configured",
-                    "Semantics retained configuration verified",
+                    "Semantics retained configuration kept",
                     json!({}),
                 ));
             }
@@ -295,22 +288,6 @@ pub(super) fn run(operation: &str) -> Result<Value> {
             controls(&context, false)?;
             ("configured", lifecycle::inspect(&home(&context)?)?)
         }
-        Operation::Verify => {
-            let args = candidate(&context)?;
-            let installed = lifecycle::inspect(&home(&context)?)?;
-            if context.selected()
-                && installed["installed"]["current"]["release_id"]
-                    != lifecycle::prepare(&args)?.info.release_id
-            {
-                return fail("Semantics installed artifacts differ from the candidate");
-            }
-            if !context.selected() {
-                same_prior(&context)?;
-            }
-            require_disabled(&context)?;
-            readiness(&context)?;
-            ("verified", installed)
-        }
         Operation::Release => {
             require_disabled(&context)?;
             ("released", maintenance(&context, "release")?)
@@ -337,13 +314,12 @@ pub(super) fn run(operation: &str) -> Result<Value> {
             controls(&context, false)?;
             if !(prior && evidence["configure_started"] != true) {
                 let maintenance = maintenance(&context, "status")?;
-                if evidence["verified"] != true
+                if evidence["configured"] != true
                     && (maintenance["holds"] != json!([context.request.run_id])
                         || maintenance["drained"] != true)
                 {
                     return fail("Semantics recovery requires drained owned admission");
                 }
-                readiness(&context)?;
             }
             (
                 "recovered",
@@ -383,8 +359,14 @@ fn recover_transactions(context: &Context) -> Result<Option<bool>> {
             "--home".into(),
             context.home.clone().into_os_string(),
         ];
-        let forward = transaction["candidate_selected"] == true
-            && transaction["binding"]["definition_digest"].is_null();
+        let migrated = transaction["database_touched"] == true
+            && (transaction["version"] == 1
+                || serde_json::to_value(lifecycle::database_schema(&paths)?)?
+                    != transaction["prior_database_schema"]);
+        let forward = transaction["committed"] == true
+            || migrated
+            || (transaction["candidate_selected"] == true
+                && transaction["binding"]["definition_digest"].is_null());
         if forward {
             arguments.push("--forward".into());
         }

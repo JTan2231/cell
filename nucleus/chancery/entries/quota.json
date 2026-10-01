@@ -29,7 +29,7 @@
     "Do not edit quota-state.json to simulate recovery or clear unrelated holds, pauses, or failure halts."
   ],
   "privacy": [
-    "quota-policy.json and quota-state.json are private mode-0600 regular files beside nucleus.db and belong in Nucleus backups.",
+    "quota-policy.json and quota-state.json are private mode-0600 regular files beside nucleus.db.",
     "Retained quota state includes an account-identity digest, allowance observations, timestamps, and condition identity."
   ],
   "interfaces": [
@@ -141,7 +141,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Policy and state must be private regular files mode 0600; invalid files prevent startup and both belong in private backups."
+        "statement": "Policy and state must be private regular files mode 0600; invalid files prevent startup."
       },
       {
         "status": "unsupported",

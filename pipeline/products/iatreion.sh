@@ -17,13 +17,10 @@ CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|iatreion/release.sh'
-CI_RUN_CHECKS=''
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='iatreion|Iatreion|package|iatreion/crates/iatreion/Cargo.toml|iatreion-|1'
 RELEASE_COMPANION_MANIFESTS='iatreion|iatreion/crates/iatreion-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='iatreion|target/release/iatreion|iatreion
-iatreion|target/release/iatreion-install|iatreion-install'
-CI_BINARY_CHECKS='iatreion|target/release/iatreion|iatreion
 iatreion|target/release/iatreion-install|iatreion-install'
 PROVIDERS='iatreion|iatreion|iatreion/chancery|3'

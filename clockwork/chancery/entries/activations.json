@@ -1,6 +1,6 @@
 {
   "id": "clockwork.activations",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -48,7 +48,7 @@
     },
     {
       "label": "Read-only snapshot",
-      "invocation": "clockwork status-snapshot --json"
+      "invocation": "clockwork [--json] status-snapshot"
     }
   ],
   "does_not_authorize": [
@@ -57,23 +57,23 @@
   "dependencies": [
     {
       "id": "clockwork.definitions",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.bindings",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.incidents",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clockwork.notifications",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -102,7 +102,11 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Run/reads use ok/data JSON; compact coded failures on --json stderr exit one. Durable exited/signaled/timed_out returns ok:true and broker exit zero irrespective of child exit. Manual overlap is activation_busy, exit one, with skipped_overlap history. History uses output version two with items/has_more, default 20, positive limit and details for definition/process identities."
+        "statement": "Public commands print plain text by default. --json selects the existing compact ok:true/data JSON envelope and coded ok:false/error JSON on stderr with exit one. Machine callers must pass --json. The status-snapshot --json interface retains its raw Iatreion snapshot schema; without the flag it prints a plain-text view of the same snapshot. Private broker receipts retain their existing JSON."
+      },
+      {
+        "status": "declared",
+        "statement": "With --json, run/reads use ok/data JSON; compact coded failures on --json stderr exit one. Durable exited/signaled/timed_out returns ok:true and broker exit zero irrespective of child exit. Manual overlap is activation_busy, exit one, with skipped_overlap history. History uses output version two with items/has_more, default 20, positive limit and details for definition/process identities."
       }
     ],
     "data_semantics": [

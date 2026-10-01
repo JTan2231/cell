@@ -17,15 +17,9 @@ CLIPPY_KEEP_GOING=0
 TEST_NO_FAIL_FAST=0
 CI_SHELL_CHECKS='sh|semantics/release.sh
 sh|semantics/packaging/macos/semantics
-sh|semantics/packaging/macos/test-frontend.sh
-sh|semantics/packaging/macos/test-worker-runner.sh
-sh|semantics/packaging/macos/test-deploy-user.sh
 sh|semantics/packaging/macos/semantics-worker'
-CI_RUN_CHECKS='always|semantics/packaging/macos/test-frontend.sh
-always|semantics/packaging/macos/test-worker-runner.sh'
 CI_PLIST_CHECKS='always|lint|semantics/packaging/macos/org.semantics.worker.plist'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-CI_EXTRA_BEFORE_RUST=pipeline/extras/semantics-catalog.sh
 RELEASE_UNITS='semantics|Semantics|package|semantics/Cargo.toml|semantics-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='semantics|target/release/semantics|semantics

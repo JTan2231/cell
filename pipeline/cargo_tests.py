@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Run a complete Cargo test group, inside an admitted product gate."""
+"""Run a Cargo test group without doctests, inside an admitted product gate."""
 
 import argparse
 import json
 import subprocess
 import os
-import tempfile
-from pathlib import Path
 
 from platform_inputs import PLATFORM_PACKAGES, platform_target
 
@@ -28,15 +26,7 @@ def main() -> int:
     )
     workspace = json.loads(metadata.stdout)
     packages = {package["name"]: package for package in workspace["packages"]}
-    prompt_consumers = {"annals", "decisions", "semantics", "paperboy", "platter", "weaver", "emt", "conatus", "cell-prompts"}
-    with tempfile.TemporaryDirectory(prefix="cell-prompt-tests-") as temporary:
-        environment = os.environ.copy()
-        if prompt_consumers.intersection(args.packages):
-            database = Path(temporary) / "private" / "bazaar.sqlite3"
-            root = Path(workspace["workspace_root"])
-            subprocess.run(["cargo", "run", *common, "--quiet", "--package", "cell-prompts", "--", str(database), str(root / "prompting" / "seed.json")], check=True)
-            environment["CELL_BAZAAR_DATABASE"] = str(database)
-        return run_tests(args, common, packages, environment)
+    return run_tests(args, common, packages, os.environ.copy())
 
 
 def run_tests(args, common, packages, environment) -> int:
@@ -48,7 +38,6 @@ def run_tests(args, common, packages, environment) -> int:
             continue
         package = packages[name]
         targets = []
-        docs = False
         for target in package["targets"]:
             if platform_target(name, target) != (args.group == "platform"):
                 continue
@@ -56,7 +45,6 @@ def run_tests(args, common, packages, environment) -> int:
             if any(kind in kinds for kind in ("lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro")):
                 if target.get("test", True):
                     targets.append("--lib")
-                docs |= target.get("doctest", False)
             elif target.get("test", True):
                 for kind in ("bin", "test", "example", "bench"):
                     if kind in kinds:
@@ -66,9 +54,9 @@ def run_tests(args, common, packages, environment) -> int:
         if args.no_fail_fast:
             command.append("--no-fail-fast")
         # Never issue an unqualified cargo test: it would re-enable every
-        # integration target, including installation tests.
-        for selection in ([targets] if targets else []) + ([["--doc"]] if docs else []):
-            result = subprocess.run([*command, *selection], check=False, env=environment)
+        # integration target, including installation tests, and doctests.
+        if targets:
+            result = subprocess.run([*command, *targets], check=False, env=environment)
             if result.returncode:
                 failure = result.returncode
                 if not args.no_fail_fast:

@@ -88,7 +88,7 @@ Ashby board downloads have no byte cap. The 30-second HTTP timeout and the
 1,000,000-byte limit on each selected posting remain. Other posting responses
 retain their 4,000,000-byte cap. Cached posting timestamps report the board's
 download time, not the time it was read from disk. The cache is disposable and
-is excluded from SQLite backups. Remove a board's cache file to force its next
+is disposable. Remove a board's cache file to force its next
 retrieval to download again. This does not change existing captured packets.
 
 ## Tailored preparation

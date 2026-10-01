@@ -52,15 +52,16 @@ automatic redaction.
 - The `heavy` lane has exactly one slot. The production `light` lane has two
   slots. Light bodies must not invoke Cargo or otherwise consume the shared
   heavy resource.
-- The client hashes tracked files and untracked files that Git does not ignore.
-  Only a Git-clean candidate can join an identical queued or running execution.
+- The client uses the full Git commit ID as source identity. It does not hash
+  source files or run source-check commands. Only a Git-clean candidate can
+  join an identical queued or running execution.
   Dirty candidates always get separate executions. The broker does not reuse
   passed results after execution ends.
 - Execution identity includes host, logical repository, source, gate and gate
   version, toolchain, sanitized body environment, lane, body command and
-  worktree-relative working directory, and source-check command.
+  worktree-relative working directory.
 - `--expected-source-key KEY` (or `CELL_CI_EXPECTED_SOURCE_KEY`) binds a child
-  gate to its root plan's initial snapshot. On a mismatch, the client reports
+  gate to its root plan's commit. On a mismatch, the client reports
   stale state and returns `75` before submission. The client consumes this value
   without adding it to the gate environment. An otherwise identical direct
   call can therefore join the same execution.
@@ -83,7 +84,7 @@ recent executions and is removed after 14 days. Active and newly finished work
 is never pruned.
 
 The `cell.tests.rust` gate identifies the pinned nextest executable by path,
-version, and hash in addition to the compiler toolchain. Its command records
+and configured version in addition to the compiler toolchain. Its command records
 the selected product and platform scope and the test worker limit. Tests share
 one admitted heavy body but execute concurrently within that body. The heavy
 lane still permits only one compiler writer. Test workers can create further
@@ -109,7 +110,9 @@ It records an expired runner as lost.
 Root and product `ci.sh` wrappers route to the installed CI manager. Its
 internal dispatcher selects relevant product and platform tests and always
 invokes this client. Product checks before and after tests, shared check suites,
-and the parallel Rust test stage have separate queue entries. Selection and
+the combined Clippy stage, and the parallel Rust test stage have separate queue
+entries. The Clippy stage holds one heavy lease for the selected product and
+shared-library package set. Selection and
 phase are part of the brokered command identity. The shared `pipeline/ci.sh`
 body is internal. It is not a second CI submission path, and callers cannot use
 it to bypass admission.

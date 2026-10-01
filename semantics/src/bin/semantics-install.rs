@@ -31,12 +31,8 @@ struct Cli {
 enum Action {
     Install(Candidate),
     Inspect(HomeArgs),
-    Verify(Candidate),
-    VerifyRelease {
-        release: PathBuf,
-    },
     Uninstall(HomeArgs),
-    /// Recover the exact private backup of an interrupted installer transaction.
+    /// Recover an interrupted installer transaction without replacing retained data.
     Recover {
         #[arg(long)]
         transaction: PathBuf,
@@ -80,11 +76,7 @@ struct Candidate {
 fn run(action: Action) -> Result<Value> {
     match action {
         Action::Adapter { operation } => adapter::run(&operation),
-        Action::VerifyRelease { release } => {
-            Ok(json!({"ok":true,"data":lifecycle::verify_release(&release)?}))
-        }
         Action::Install(args) => Ok(json!({"ok":true,"data":lifecycle::install(&args)?})),
-        Action::Verify(args) => Ok(json!({"ok":true,"data":lifecycle::verify(&args)?})),
         Action::Inspect(home) => Ok(json!({"ok":true,"data":lifecycle::inspect(&home)?})),
         Action::Uninstall(home) => {
             lifecycle::uninstall(&home)?;

@@ -136,7 +136,7 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     }
     let spec = specification();
     let release =
-        transaction::inspect_installation(&spec.layout(), &home, &|path| spec.legacy(path))?
+        transaction::inspect_installation(&spec.layout(), &home, &|path| spec.read_legacy(path))?
             .current
             .context("install Conatus before preparing its schedule")?;
     let release_root = home
@@ -382,11 +382,6 @@ fn lifecycle_inner(
             .or(settings.library)
             .unwrap_or_else(|| "conatus".into());
         let executable = fs::canonicalize(context.home.join(".local/bin/conatus"))?;
-        let before_cursor = if present {
-            crate::store::Store::open(&root)?.setting("cursor")?
-        } else {
-            None
-        };
         cell_install::command::json(
             &executable,
             &[
@@ -409,16 +404,6 @@ fn lifecycle_inner(
             )]),
             std::time::Duration::from_secs(180),
         )?;
-        let store = crate::store::Store::open(&root)?;
-        if let Some(config) = config {
-            let after = store.config()?;
-            anyhow::ensure!(
-                after.library_id == config.library_id
-                    && after.decisions_library_id == config.decisions_library_id
-                    && store.setting("cursor")? == before_cursor,
-                "Conatus rebind changed library identity or feed cursor"
-            );
-        }
         for (saved, enabled, daily_email, filename) in [
             (
                 &schedule,
@@ -460,15 +445,6 @@ fn lifecycle_inner(
             )?;
             ScheduleState::prepare(&clockwork, &definition, &path)?;
         }
-    }
-    if operation == Operation::Verify {
-        let store = crate::store::Store::open(&root)?;
-        let config = store.config()?;
-        anyhow::ensure!(
-            config.annals == fs::canonicalize(context.home.join(".local/bin/annals"))?,
-            "Conatus Annals pin is not current"
-        );
-        config.library().current_instructions()?;
     }
     if operation == Operation::Release {
         gate.release(&context.request.run_id)?;

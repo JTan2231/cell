@@ -1,18 +1,18 @@
 {
   "id": "emt.service",
-  "contract_version": 2,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Operate EMT worker and retained installation state",
-  "summary": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, backups and matched installation recovery.",
+  "summary": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, matched installation recovery.",
   "use_when": [
-    "EMT configuration, worker admission, readiness, installation guarantees, backups or coordinated recovery must be understood."
+    "EMT configuration, worker admission, readiness, installation guarantees, or coordinated recovery must be understood."
   ],
   "do_not_use_when": [
     "The goal is a product-domain intervention result or Nucleus execution authority itself."
   ],
-  "outcome": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, backups and matched installation recovery.",
+  "outcome": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, matched installation recovery.",
   "interfaces": [
     {
       "label": "Initialize paused state",
@@ -47,8 +47,8 @@
       "invocation": "emt maintenance hold|status|drain|release"
     },
     {
-      "label": "Back up drained state",
-      "invocation": "emt migrate --backup ABS"
+      "label": "Migrate drained state",
+      "invocation": "emt migrate"
     },
     {
       "label": "Install uninitialized program",
@@ -59,16 +59,16 @@
     "Configuration, admission, scheduling, maintenance, installation and activation are separate effects. Worker activation can read accounts, start authorized agent work and submit mail. Installation before initialization only installs bytes."
   ],
   "authority": [
-    "EMT owns private configuration, incident and exchange state, admission, holds, backups and matched publication. Clockwork owns scheduling and failure halts; Nucleus owns jobs; Email owns credentials and transport."
+    "EMT owns private configuration, incident and exchange state, admission, holds, matched publication. Clockwork owns scheduling and failure halts; Nucleus owns jobs; Email owns credentials and transport."
   ],
   "success": [
     "Verify matched program/provider, valid configuration, known drain counts and the selected schedule, pause, hold and exact halt intent. Doctor observations do not prove receiving access or delivery."
   ],
   "failure_and_recovery": [
-    "Retain original migration receipt, verified private backup and captured operator intent. Release only the exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
+    "Retain the original migration receipt, and captured operator intent. Release only the exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
   ],
   "privacy": [
-    "Correspondence, Nucleus references, quota records and backups remain private and retained without automatic deletion. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
+    "Correspondence, Nucleus references and quota records remain private and retained without automatic deletion. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
   ],
   "does_not_authorize": [
     "Unrequested activation, account reads, mail, another owner's hold release, implicit failure-halt approval or direct initialized selector recovery."
@@ -76,13 +76,13 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "email.account.operate",
@@ -115,13 +115,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Configuration accepts the receiving domain, absolute stable Cell root, agent cwd, model and provider executable paths. Maintenance identifies the exact hold owner; migration takes a separate absolute private backup destination."
+        "statement": "Configuration accepts the receiving domain, absolute stable Cell root, agent cwd, model and provider executable paths. Maintenance identifies the exact hold owner; migration requires drained work."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Doctor returns bounded local and dependency observations with receiving permission and final delivery not_probed. Status reports retained counts. Maintenance status reports protocol_version, holds, drained and outstanding exchanges; migration returns backup evidence or backup:null when state was absent."
+        "statement": "Doctor returns bounded local and dependency observations with receiving permission and final delivery not_probed. Status reports retained counts. Maintenance status reports protocol_version, holds, drained and outstanding exchanges; migration returns the current schema version and initializes paused state when absent."
       }
     ],
     "data_semantics": [
@@ -149,7 +149,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Supported current-user CLI and matched installer operations govern private state under ~/Library/Application Support/EMT. Explicit exchange reads and backups can expose correspondence; live activation requires separate account, investigation and email authority."
+        "statement": "Supported current-user CLI and matched installer operations govern private state under ~/Library/Application Support/EMT. Explicit exchange reads can expose correspondence; live activation requires separate account, investigation and email authority."
       }
     ],
     "lifecycle_and_consistency": [
@@ -159,11 +159,11 @@
       },
       {
         "status": "declared",
-        "statement": "The worker skips overlap and does not wait for model completion. Coordinated updates capture operator intent, hold and drain, retain verified migration evidence, install matched bytes and restore intent after readiness checks. Existing pauses and failure halts survive."
+        "statement": "The worker skips overlap and does not wait for model completion. Coordinated updates capture intent, hold and drain, retain migration evidence, install bytes and restore intent after configuration. Installation does not perform artifact-integrity, state-integrity or readiness checks. Existing pauses and failure halts survive."
       },
       {
         "status": "declared",
-        "statement": "Migration copies drained schema-one state and companion configuration without overwriting unmatched destinations. Recovery reuses the original backup and captured intent; direct initialized selector recovery is unsupported."
+        "statement": "Migration copies drained schema-one state and companion configuration without overwriting unmatched destinations. Recovery reuses the original receipt and captured intent; direct initialized selector recovery is unsupported."
       }
     ],
     "operational_limits": [

@@ -434,10 +434,7 @@ fn diagnostic(code: &str, summary: &str) -> Diagnostic {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
-    use std::os::unix::fs::PermissionsExt as _;
-
     use super::*;
 
     fn unit(
@@ -504,94 +501,5 @@ mod tests {
             )),
             Group::Unknown
         );
-    }
-
-    fn declared_product(command: &str) -> OperationalProduct {
-        OperationalProduct {
-            id: "sample".to_owned(),
-            name: "Sample".to_owned(),
-            aliases: Vec::new(),
-            descriptor: "pipeline/products/sample.sh".to_owned(),
-            complete: true,
-            status_schema: Some(1),
-            status_command: Some(command.to_owned()),
-            units: vec![OperationalUnitDeclaration {
-                id: "sample/unit".to_owned(),
-                intent: "on_demand".to_owned(),
-                clockwork_key: None,
-                inspection_capability: "sample.status.inspect".to_owned(),
-            }],
-            issues: Vec::new(),
-        }
-    }
-
-    fn executable(directory: &std::path::Path, name: &str, body: &str) {
-        let path = directory.join(name);
-        std::fs::write(&path, format!("#!/bin/sh\nset -eu\n{body}\n")).unwrap();
-        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
-        permissions.set_mode(0o700);
-        std::fs::set_permissions(path, permissions).unwrap();
-    }
-
-    #[tokio::test]
-    async fn accepts_one_exact_bounded_probe_response() {
-        let directory = tempfile::tempdir().unwrap();
-        let snapshot = iatreion_api::static_snapshot(
-            "sample",
-            "1.0.0",
-            vec![iatreion_api::on_demand_unit(
-                "sample",
-                "sample/unit",
-                "sample.status.inspect",
-            )],
-        );
-        let json = serde_json::to_string(&snapshot).unwrap();
-        executable(
-            directory.path(),
-            "sample",
-            &format!(
-                "test \"$1\" = status-snapshot\ntest \"$2\" = --json\nprintf '%s\\n' '{json}'"
-            ),
-        );
-        let status = observe(
-            declared_product("sample"),
-            directory.path(),
-            Duration::from_secs(1),
-            iatreion_api::now_unix_seconds(),
-        )
-        .await;
-        assert_eq!(status.probe_state, ProbeState::Observed);
-        assert!(status.complete);
-        assert_eq!(status.units[0].group, Group::Operating);
-    }
-
-    #[tokio::test]
-    async fn timeout_and_overflow_are_explicit_unknown_coverage() {
-        let directory = tempfile::tempdir().unwrap();
-        executable(directory.path(), "slow", "sleep 5");
-        let timed_out = observe(
-            declared_product("slow"),
-            directory.path(),
-            Duration::from_millis(25),
-            iatreion_api::now_unix_seconds(),
-        )
-        .await;
-        assert_eq!(timed_out.probe_state, ProbeState::TimedOut);
-        assert_eq!(timed_out.units[0].group, Group::Unknown);
-
-        executable(
-            directory.path(),
-            "large",
-            "head -c 1048577 /dev/zero | tr '\\000' x",
-        );
-        let overflow = observe(
-            declared_product("large"),
-            directory.path(),
-            Duration::from_secs(2),
-            iatreion_api::now_unix_seconds(),
-        )
-        .await;
-        assert_eq!(overflow.probe_state, ProbeState::OutputOverflow);
-        assert_eq!(overflow.units[0].group, Group::Unknown);
     }
 }

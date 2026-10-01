@@ -5,6 +5,10 @@ in an append-only history. Entries can stand alone, belong to a named thread,
 and link to stable identities outside Clew. It also maintains an explicit
 application-report view for Cast jobs and an optional daily application email.
 
+The `clew` command prints readable text by default. Use `--json` for the
+schema-three machine response. Entry and history reads keep the full supplied
+text; search and application lists print summary rows.
+
 Read `chancery show ID` for one feature or procedure. Read
 `chancery resolve ID` for its required contracts and compatibility gaps. These
 commands read the installed publication. They do not check live readiness or
@@ -17,10 +21,10 @@ authorize a note, report, send, schedule, or installation.
 | `clew.ledger.use` | Supplied notes, optional status, named threads, optional external links, local search, entry reads, exact retries, corrections, and retractions. |
 | `clew.application.track` | Explicit Cast job reports, retained-job search, supplied application status, job history, and the boundary between application reports and plain job links. |
 | `clew.digest.email` | Application selection, copied notes, missing job context, frozen occurrences, send authority, uncertain submission, and scheduling failures. |
-| `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration, backup, and compatible recovery. |
+| `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration and compatible program recovery. |
 
-Use `clew.install.operate` for installation, verification, guarded migration,
-schedule preparation, backup, and recovery procedures. Its required feature
+Use `clew.install.operate` for installation, guarded migration,
+schedule preparation and program recovery procedures. Its required feature
 contracts supply the detailed behavior.
 
 ## How the features work together

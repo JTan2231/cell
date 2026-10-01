@@ -64,7 +64,7 @@
     "Sending or publishing exported transcript text, or interpreting it with a model."
   ],
   "dependencies": [
-    {"id": "conversations.runtime", "min_contract": 1, "max_contract_exclusive": 2}
+    {"id": "conversations.runtime", "min_contract": 2, "max_contract_exclusive": 3}
   ],
   "promise": {
     "consumers": [

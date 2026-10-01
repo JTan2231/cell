@@ -35,7 +35,18 @@ cast source disable SOURCE_ID
 cast --state-dir /absolute/private/state config show
 ```
 
-`config show` returns the complete selected configuration. `config set --file`
+State commands print readable results by default. Init prints the selected
+state directory. Doctor and config show label configuration and budget units.
+Configuration and source writes print short receipts. Ownership repair labels
+its result counts. Use the global `--json` flag for existing machine success
+results. It is accepted before or after any state command.
+
+Operational errors exit 1 and use a text diagnostic on stderr by default.
+With `--json`, stderr contains a schema-one object with `ok:false` and
+`error.detail`. Invalid command syntax uses Clap's text diagnostic on stderr
+and exit 2 in both modes.
+
+`config show --json` returns the complete selected machine configuration. `config set --file`
 validates and replaces that complete configuration. Inspect the current values
 before editing them so that the replacement preserves intended queries,
 intervals, adapter parameters, and caps. Changes affect later collection; they
@@ -103,7 +114,7 @@ affected search-candidate names to their domains. It applies current adapter
 rules to shared recruiting hosts and clears their company domains, website
 URLs, and identity aliases.
 
-The JSON result reports `moved_sources`, `moved_jobs`, `quarantined_jobs`,
+The result reports `moved_sources`, `moved_jobs`, `quarantined_jobs`,
 `renamed_candidates`, and `cleared_shared_identities`. These counts describe
 the selected repair, not external coverage. Source and job IDs, paid request
 accounting, run history, query coverage, and cursors remain intact. Changed jobs
@@ -117,8 +128,6 @@ attribution, availability, and revisions.
 
 ## Recovery and privacy
 
-Before state recovery, stop all callers using the selected directory and make
-a private consistent SQLite backup, including live sidecars when relevant.
 Installation state and discovery state are different recovery units. Restoring
 an older program alone cannot restore newer domain state or configuration.
 

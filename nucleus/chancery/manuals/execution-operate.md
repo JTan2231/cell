@@ -133,8 +133,7 @@ Stage the complete supported Codex runtime before installation:
 ```
 
 The selected source directory must contain `codex` and the matching
-`codex-code-mode-host`. Retain the previous runtime for recovery. Staging checks
-and seals the pair; it does not select a service runtime or import credentials.
+`codex-code-mode-host`. Retain the previous runtime for recovery. Staging copies the pair and records a manifest for normal runtime checks; it does not select a service runtime or import credentials.
 The operator selects the source release. File digests do not authenticate its
 origin. See `nucleus.invocation` for the exact supported harness and
 `nucleus.service` for staging paths and installation guarantees.
@@ -145,7 +144,7 @@ Nucleus owns its resulting private credential. Preserve existing owned
 credentials. Never put credential bytes in deployment settings.
 
 Use coordinated maintenance when replacing a daemon could lose work. The
-installer allows up to two minutes for migration, compaction, and health.
+installer starts the service without waiting for health, migration, or compaction.
 A failed cutover can restore captured programs only when the database schema
 is unchanged. A schema change prevents binary-only rollback. Authentication
 is excluded from program and database rollback.
@@ -159,11 +158,11 @@ nucleus health
 nucleus account --wait 0
 ```
 
-Verify the expected CLI, daemon, exact harness, protocol, and account before
-restoring requester admission. Deployment readiness permits a reported quota
-pause but still requires runtime readiness; a held service requires the run's
-sole drained hold. Successful installation does not reopen quota admission.
-No readiness check should submit a synthetic model job.
+Installation performs no artifact-integrity, persistent-state-integrity, or
+operational-readiness checks. The commands above are separate diagnostics.
+Ordinary daemon startup and admission keep their runtime checks. A held service
+still requires the run's sole drained hold. Installation does not reopen quota
+admission or submit a synthetic model job.
 
 ## Recover interrupted cutover
 
@@ -182,8 +181,8 @@ do not prove which executable is resident. It does not cancel or retry work,
 roll back a database, or restore an older credential. Authentication import is
 allowed only when the owned file is absent and the source was recorded.
 
-Keep the journal and candidate on failure. Verify held live health and exact
-program copies before considering recovery complete. Follow the shared manual
+Keep the journal and candidate on failure. Recovery completes after the recorded
+service setup operation succeeds. Follow the shared manual
 for group release; release no unrelated pause or failure halt.
 
 ## Recover authentication
@@ -203,41 +202,6 @@ refresh tokens to requesters or replace credentials because a read is busy.
 pauses created for this recovery. Never restore an older `auth.json` as a side
 effect of program or database rollback.
 
-## Back up and restore state
-
-Nucleus has no automatic backup or restore command. Select a private destination.
-
-1. Quiesce requesters and wait for jobs to become terminal.
-2. Record the Nucleus version, health, and exact Codex executable.
-3. Stop the user service:
-
-   ```sh
-   launchctl bootout "gui/$(id -u)/org.nucleus.daemon"
-   ```
-
-4. Create a SQLite-aware backup of `nucleus.db`. Other copy methods must preserve
-   the database and any WAL sidecars as one consistent set.
-5. Back up the credential home separately only when credential recovery is required.
-6. Include `quota-policy.json` and `quota-state.json` beside the database. Include
-   logs, service configuration, and requester state as needed.
-7. Start the same service and check readiness:
-
-   ```sh
-   launchctl bootstrap "gui/$(id -u)" \
-     "$HOME/Library/LaunchAgents/org.nucleus.daemon.plist"
-   nucleus health
-   ```
-
-A live copy of only the main database is incomplete. A Nucleus backup does not
-replace requester backups. Use `nucleus.service` for default paths, retained
-state, schema-cutover guarantees, and recovery limits.
-
-Perform restoration with an operator present. Quiesce requesters and stop the
-service. Save current state before restoring a compatible database and binary
-pair. Version-one binaries cannot open schema 2. Do not bypass pending
-compaction or migration failures. Verify health and retained job and output
-reads before resuming. Recover credentials through their separate procedure.
-
 ## Restart or remove the service
 
 Quiesce first when active attempts must finish. `nucleus service restart`
@@ -253,7 +217,7 @@ or individual credential-home files to limit storage.
 
 ## Privacy and command usage
 
-Treat state, logs, and backups as private. They can contain complete prompts,
+Treat state and logs as private. They can contain complete prompts,
 source text, tool arguments and results, exact harness output, and credentials.
 Socket ownership and filesystem permissions are the trust boundary; there is no
 application-level authentication. Read only the records needed for the task.

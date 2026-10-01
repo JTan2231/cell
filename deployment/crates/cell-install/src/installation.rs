@@ -1,9 +1,9 @@
 use crate::artifact::{
-    copy_file, current_uid, digest, inventory, provider_files, provider_version, regular,
-    valid_hash, validate_spec, version, write_manifest,
+    copy_file, current_uid, inventory, provider_files, regular, valid_hash, validate_spec,
+    write_manifest,
 };
 use crate::{
-    Disposition, Error, FORMAT, InstallSpec, Installation, ReleaseInput, Result, verify_release,
+    Disposition, Error, FORMAT, InstallSpec, Installation, ReleaseInput, Result, read_release,
 };
 use std::collections::BTreeMap;
 use std::fs;
@@ -173,7 +173,7 @@ fn inspect_with(spec: &InstallSpec, paths: &Paths) -> Result<Option<Installation
         return Ok(None);
     };
     let selected = release_selector(selected)?;
-    let release = verify_release(spec, &paths.install.join(selected))?;
+    let release = read_release(spec, &paths.install.join(selected))?;
     owned_directory(&paths.install.join(selected), paths.uid)?;
     for (path, target) in desired_public(spec, paths, &release) {
         if current[&path] != target {
@@ -182,7 +182,7 @@ fn inspect_with(spec: &InstallSpec, paths: &Paths) -> Result<Option<Installation
     }
     if let Some(previous) = &current[&paths.install.join("previous")] {
         let previous = paths.install.join(release_selector(previous)?);
-        verify_release(spec, &previous)?;
+        read_release(spec, &previous)?;
         owned_directory(&previous, paths.uid)?;
     }
     Ok(Some(release))
@@ -204,7 +204,7 @@ fn recovery_view(spec: &InstallSpec, paths: &Paths) -> Result<(View, Option<Inst
     let mut selected = None;
     for name in ["current", "previous"] {
         if let Some(value) = &current[&paths.install.join(name)] {
-            let release = verify_release(spec, &paths.install.join(release_selector(value)?))?;
+            let release = read_release(spec, &paths.install.join(release_selector(value)?))?;
             if name == "current" {
                 selected = Some(release);
             }
@@ -213,7 +213,7 @@ fn recovery_view(spec: &InstallSpec, paths: &Paths) -> Result<(View, Option<Inst
     Ok((current, selected))
 }
 
-/// Read installed selectors and complete content integrity without running code.
+/// Read installed selectors and release metadata without running code.
 ///
 /// # Errors
 /// Returns an error for foreign or incoherent selectors, unsafe ownership,
@@ -276,9 +276,12 @@ impl Drop for Lock {
 }
 
 fn command(program: &Path, argument: &str, home: &Path) -> Result<String> {
-    regular(program)?;
+    // Installed commands use owned public selectors; supplied sources were
+    // checked as literal regular files before reaching this helper.
+    let program = fs::canonicalize(program)?;
+    regular(&program)?;
     let output = tempfile::tempfile()?;
-    let mut child = Command::new(program)
+    let mut child = Command::new(&program)
         .arg(argument)
         .env("HOME", home)
         .stdin(Stdio::null())
@@ -342,6 +345,7 @@ fn versions(
         ));
     }
     let mut versions = BTreeMap::new();
+    let mut signing = crate::signing::Verifier::default();
     for name in spec.commands {
         let path = &input.binaries[*name];
         if !path.is_absolute() || regular(path)?.mode() & 0o111 == 0 {
@@ -349,11 +353,9 @@ fn versions(
                 "candidate must be an absolute executable regular file",
             ));
         }
+        signing.verify(spec.product, name, path)?;
         let result = command(path, "--version", home)?;
-        let value = result
-            .strip_prefix(&format!("{name} "))
-            .filter(|v| version(v))
-            .ok_or_else(|| Error::new("candidate reported an unexpected version"))?;
+        let value = result.strip_prefix(&format!("{name} ")).unwrap_or(&result);
         versions.insert((*name).to_owned(), value.to_owned());
         command(path, "--help", home)?;
     }
@@ -362,10 +364,11 @@ fn versions(
             "recovery installer must be an absolute executable regular file",
         ));
     }
-    provider_files(&input.provider_dir, spec)?;
-    if versions[spec.commands[0]] != provider_version(&input.provider_dir)? {
-        return Err(Error::new("provider and candidate version disagree"));
-    }
+    signing.verify(
+        spec.product,
+        &format!("{}-install", spec.product),
+        &input.installer,
+    )?;
     Ok(versions)
 }
 
@@ -385,10 +388,17 @@ fn stage(
     let root = stage.path();
     fs::create_dir(root.join("bin"))?;
     fs::create_dir(root.join("package"))?;
+    let mut signing = crate::signing::Verifier::default();
     for (name, source) in &input.binaries {
         copy_file(source, &root.join("bin").join(name), 0o755)?;
+        signing.verify(spec.product, name, &root.join("bin").join(name))?;
     }
     copy_file(&input.installer, &root.join("package/install"), 0o755)?;
+    signing.verify(
+        spec.product,
+        &format!("{}-install", spec.product),
+        &root.join("package/install"),
+    )?;
     let bundle = root.join(format!("share/chancery/{}", spec.provider));
     fs::create_dir_all(bundle.join("entries"))?;
     fs::create_dir(bundle.join("manuals"))?;
@@ -399,9 +409,6 @@ fn stage(
             &bundle.join(relative),
             0o444,
         )?;
-    }
-    if provider_files(&input.provider_dir, spec)? != source_files {
-        return Err(Error::new("provider input changed during staging"));
     }
     for dir in inventory(root)?.1 {
         fs::set_permissions(root.join(dir), fs::Permissions::from_mode(0o755))?;
@@ -561,27 +568,63 @@ fn validate_scratch_tree(
 }
 
 fn smoke(spec: &InstallSpec, paths: &Paths, release: &Installation) -> Result<()> {
-    let root = paths.install.join(&release.current);
-    let checks: Vec<_> = if release.format == FORMAT {
-        let manifest: crate::Manifest =
-            serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
+    let commands = if release.format == FORMAT {
         spec.commands
-            .iter()
-            .map(|name| ((*name).to_owned(), manifest.versions[*name].clone()))
-            .collect()
     } else {
-        vec![(spec.commands[0].to_owned(), release.version.clone())]
+        &spec.commands[..1]
     };
-    for (name, version) in checks {
-        let cli = paths.home.join(".local/bin").join(&name);
-        // Integrity was checked through the owned selector immediately before this call.
-        let executable = fs::canonicalize(cli)?;
-        if command(&executable, "--version", &paths.home)? != format!("{name} {version}") {
-            return Err(Error::new("installed version check failed"));
-        }
+    for name in commands {
+        let executable = paths.home.join(".local/bin").join(name);
+        command(&executable, "--version", &paths.home)?;
         command(&executable, "--help", &paths.home)?;
     }
     Ok(())
+}
+
+fn release_files(
+    spec: &InstallSpec,
+    paths: &Paths,
+    release: &Installation,
+) -> Result<BTreeMap<String, crate::FileEntry>> {
+    let root = paths.install.join(&release.current);
+    if release.format == FORMAT {
+        let manifest: crate::Manifest =
+            serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
+        if manifest.release_id != release.release_id
+            || crate::artifact::identity(&manifest)? != release.release_id
+        {
+            return Err(Error::new("recorded signing release identity changed"));
+        }
+        Ok(manifest.files)
+    } else {
+        let manifest = crate::legacy::manifest(&root.join("manifest.txt"))?;
+        let sha256 = manifest
+            .get("binary_sha256")
+            .filter(|hash| valid_hash(hash))
+            .ok_or_else(|| Error::new("legacy signing recovery digest missing"))?;
+        Ok(BTreeMap::from([(
+            format!("bin/{}", spec.commands[0]),
+            crate::FileEntry {
+                sha256: sha256.clone(),
+                mode: 0o755,
+            },
+        )]))
+    }
+}
+
+fn verify_signing(
+    spec: &InstallSpec,
+    paths: &Paths,
+    release: &Installation,
+    recorded_recovery: bool,
+) -> Result<()> {
+    let root = paths.install.join(&release.current);
+    let files = release_files(spec, paths, release)?;
+    if recorded_recovery {
+        crate::signing::verify_recorded_files(&root, &files)
+    } else {
+        crate::signing::verify_files(spec.product, &root, &files)
+    }
 }
 
 fn publish(
@@ -589,6 +632,7 @@ fn publish(
     paths: &Paths,
     target: &Installation,
     before: &View,
+    recorded_recovery: bool,
     check: impl FnOnce() -> Result<()>,
 ) -> Result<Installation> {
     let _catalog = Lock::acquire(paths.catalog.join(".catalog-update-lock"), paths.uid)?;
@@ -598,6 +642,15 @@ fn publish(
             "stale deployment: selectors changed before publication",
         ));
     }
+    verify_signing(spec, paths, target, recorded_recovery)?;
+    let recorded_prior = before[&paths.install.join("current")]
+        .as_ref()
+        .map(|selected| -> Result<_> {
+            let root = paths.install.join(selected);
+            let release = read_release(spec, &root)?;
+            Ok((root, release_files(spec, paths, &release)?))
+        })
+        .transpose()?;
     let mut after = before.clone();
     if before[&paths.install.join("current")] != Some(PathBuf::from(&target.current)) {
         after.insert(
@@ -634,6 +687,7 @@ fn publish(
                 "installed release differs from the prepared candidate",
             ));
         }
+        verify_signing(spec, paths, target, recorded_recovery)?;
         smoke(spec, paths, target)?;
         check()?;
         Ok(installed)
@@ -641,7 +695,7 @@ fn publish(
     match result {
         Ok(installed) => Ok(installed),
         Err(mut error) => {
-            error.disposition = compensate(paths, before, &after);
+            error.disposition = compensate(paths, before, &after, recorded_prior.as_ref());
             if error.disposition == Disposition::Restored && inspect_with(spec, paths).is_err() {
                 error.disposition = Disposition::Uncertain;
             }
@@ -650,7 +704,17 @@ fn publish(
     }
 }
 
-fn compensate(paths: &Paths, before: &View, after: &View) -> Disposition {
+fn compensate(
+    paths: &Paths,
+    before: &View,
+    after: &View,
+    recorded_prior: Option<&(PathBuf, BTreeMap<String, crate::FileEntry>)>,
+) -> Disposition {
+    if recorded_prior
+        .is_some_and(|(root, files)| crate::signing::verify_recorded_files(root, files).is_err())
+    {
+        return Disposition::Uncertain;
+    }
     let Ok(actual) = view(paths) else {
         return Disposition::Uncertain;
     };
@@ -726,86 +790,18 @@ pub fn install(
     let destination = paths.releases.join(&id);
     match fs::symlink_metadata(&destination) {
         Ok(_) => {
-            verify_release(spec, &destination)?;
+            read_release(spec, &destination)?;
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             fs::rename(staged.path(), &destination)?;
         }
         Err(e) => return Err(e.into()),
     }
-    let prepared = verify_release(spec, &destination)?;
-    prove_input(spec, &destination, input)?;
-    publish(spec, &paths, &prepared, &before, || {
-        prove_input(spec, &destination, input)
-    })
+    let prepared = read_release(spec, &destination)?;
+    publish(spec, &paths, &prepared, &before, false, || Ok(()))
 }
 
-fn prove_input(spec: &InstallSpec, release: &Path, input: &ReleaseInput) -> Result<()> {
-    let installed = verify_release(spec, release)?;
-    if installed.format != FORMAT {
-        return Err(Error::new(
-            "candidate verification requires the successor release format",
-        ));
-    }
-    for name in spec.commands {
-        if digest(&release.join("bin").join(name))?
-            != digest(
-                input
-                    .binaries
-                    .get(*name)
-                    .ok_or_else(|| Error::new("candidate executable is missing"))?,
-            )?
-        {
-            return Err(Error::new(
-                "installed binary differs from selected candidate",
-            ));
-        }
-    }
-    if digest(&release.join("package/install"))? != digest(&input.installer)? {
-        return Err(Error::new(
-            "installed recovery tool differs from selected candidate",
-        ));
-    }
-    let source = provider_files(&input.provider_dir, spec)?;
-    let actual = provider_files(
-        &release.join(format!("share/chancery/{}", spec.provider)),
-        spec,
-    )?;
-    if source
-        .iter()
-        .map(|(p, f)| (p, &f.sha256))
-        .collect::<BTreeMap<_, _>>()
-        != actual.iter().map(|(p, f)| (p, &f.sha256)).collect()
-    {
-        return Err(Error::new(
-            "installed provider differs from selected source",
-        ));
-    }
-    Ok(())
-}
-
-/// Prove all installed payloads match the exact supplied candidate and source.
-///
-/// # Errors
-/// Returns an error for unsafe or changed installation state, candidate mismatch,
-/// or failed installed version/help checks.
-pub fn verify_candidate(
-    spec: &InstallSpec,
-    home: &Path,
-    input: &ReleaseInput,
-) -> Result<Installation> {
-    let paths = Paths::new(spec, home)?;
-    let installed =
-        inspect_with(spec, &paths)?.ok_or_else(|| Error::new("installed release is absent"))?;
-    prove_input(spec, &paths.install.join(&installed.current), input)?;
-    smoke(spec, &paths, &installed)?;
-    if inspect_with(spec, &paths)? != Some(installed.clone()) {
-        return Err(Error::new("installation changed during verification"));
-    }
-    Ok(installed)
-}
-
-/// Restore one validated retained program release. The caller owns any
+/// Restore one retained program release. The caller owns any
 /// necessary runtime/state compatibility decision. Legacy extra commands detach.
 ///
 /// # Errors
@@ -829,8 +825,8 @@ pub fn restore(
     if recovery_view(spec, &paths)? != (before.clone(), observed) {
         return Err(Error::new("stale recovery: inspected installation changed"));
     }
-    let target = verify_release(spec, &paths.install.join(target_selector))?;
-    publish(spec, &paths, &target, &before, || Ok(()))
+    let target = read_release(spec, &paths.install.join(target_selector))?;
+    publish(spec, &paths, &target, &before, false, || Ok(()))
 }
 
 /// Repair an interrupted selector-only publication using the captured prior
@@ -844,7 +840,7 @@ pub fn restore(
 pub fn recover_installation(
     spec: &InstallSpec,
     home: &Path,
-    input: &ReleaseInput,
+    _input: &ReleaseInput,
     prior: Option<&Installation>,
 ) -> Result<Option<Installation>> {
     let paths = Paths::new(spec, home)?;
@@ -858,15 +854,7 @@ pub fn recover_installation(
         ));
     }
     if let Some(selected) = observed {
-        if prior != Some(&selected) {
-            prove_input(spec, &paths.install.join(&selected.current), input)?;
-        }
-        let result = publish(spec, &paths, &selected, &before, || {
-            if prior != Some(&selected) {
-                prove_input(spec, &paths.install.join(&selected.current), input)?;
-            }
-            Ok(())
-        })?;
+        let result = publish(spec, &paths, &selected, &before, true, || Ok(()))?;
         return Ok(Some(result));
     }
     if prior.is_some() || before[&paths.install.join("previous")].is_some() {

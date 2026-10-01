@@ -1,6 +1,6 @@
 {
   "id": "clew.digest.email",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -60,13 +60,13 @@
   "dependencies": [
     {
       "id": "clew.application.track",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "email.message.send",
@@ -75,8 +75,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "promise": {
@@ -95,13 +95,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "email preview accepts --occurrence ID. email send accepts either --scheduled or --retry ID. Global --state-dir selects private state and --json selects JSON previews."
+        "statement": "email preview accepts --occurrence ID. email send accepts either --scheduled or --retry ID. Global --state-dir selects private state and --json selects JSON previews and send receipts."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Text previews show From, To, Subject and body. JSON returns data.digest with application_count, context_available and ledger_sequence. Send returns occurrence and accepted_id or an error."
+        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Text previews show From, To, Subject and body. With --json, previews return data.digest with application_count, context_available and ledger_sequence. Send returns occurrence and accepted_id or an error."
       }
     ],
     "data_semantics": [
@@ -144,6 +144,10 @@
       {
         "status": "declared",
         "statement": "Ledger and CLI JSON schemas are three; email storage remains schema one. Migration from supported ledger schemas preserves frozen payload bytes, send keys, occurrence identity, and acceptance receipts. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 5 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
       }
     ],
     "reliances": [

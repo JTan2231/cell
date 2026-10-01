@@ -1,6 +1,6 @@
 {
   "id": "semantics.develop.change",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -22,13 +22,13 @@
     "The shared Nucleus operator manual owns cross-product requester and service-maintenance procedures."
   ],
   "success": [
-    "Internal Semantics tests pass with isolated fixtures. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
-    "Schema and effect changes retain historical replay or add explicit migration and rollback proofs.",
+    "Retained Semantics tests pass with synthetic in-memory values. Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.",
+    "Schema and effect changes retain historical replay or add explicit migration and retained-state recovery proofs.",
     "Changed registered tool meaning uses a new immutable schema ID or toolset version and old correlations remain recoverable."
   ],
   "failure_and_recovery": [
-    "Do not deploy a failing candidate or change persistent bytes without a quiescent backup and tested rollback.",
-    "Use synthetic upstreams, fake Nucleus mailbox transport, fake Clockwork, fake binaries, and fake launchctl in tests.",
+    "Do not deploy a failing candidate or change persistent bytes without quiescence and proved retained-state recovery.",
+    "Keep retained tests in memory; resource-dependent transport, worker, storage, and packaging fixtures are removed.",
     "Preserve the same job and requester identity across ambiguous submission or result transport."
   ],
   "privacy": [
@@ -47,38 +47,38 @@
     },
     {
       "id": "nucleus.execution.operate",
+      "min_contract": 5,
+      "max_contract_exclusive": 6
+    },
+    {
+      "id": "nucleus.requester.integrate",
       "min_contract": 3,
       "max_contract_exclusive": 4
     },
     {
-      "id": "nucleus.requester.integrate",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
-    },
-    {
       "id": "clockwork.schedule.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.projects",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "semantics.reconciliation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "semantics.service",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "session_surfaces": [
@@ -99,12 +99,12 @@
     "Supplied new document grounding names its exact Annals library/event/document; historical account and legacy admission/review effects retain exact provenance and remain decodable.",
     "Nucleus has a neutral cwd, workspace none, no shell/web, one immutable managed tool, and no authority outside Semantics validation and transaction.",
     "Mailbox commit/receipt is atomic, redelivery is idempotent, conflicting replay is rejected, and unsafe retry is refused.",
-    "Internal product and packaging tests are offline, use fakes, and produce body-free logs. The manager owns bounded repair, deployment, and the outcome email."
+    "Retained product tests use in-memory data and produce body-free logs. Resource-dependent packaging and transport tests are removed. The manager owns bounded repair, deployment, and the outcome email."
   ],
   "adaptation": [
     "Publish a new immutable schema or toolset version whenever registered meaning changes.",
-    "Add a versioned SQLite migration and full database-plus-sidecars rollback proof for schema changes.",
-    "Scale account fixtures across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding when those boundaries change."
+    "Add a versioned SQLite migration and prove retained-state forward recovery for schema changes.",
+    "Review account changes across watermark activation, fixed pages, duplicates, identity conflicts, moves, pauses, routing failure, transport ambiguity, and legacy decoding. Retain in-memory checks where applicable."
   ],
   "stop_when": [
     "An upstream fact cannot be obtained through its published read-only contract.",
@@ -180,7 +180,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Follow the service feature for state migration/rollback and the reconciliation feature for immutable requests, receipts, and recovery. Add explicit proofs for changed boundaries before submission."
+        "statement": "Follow the service feature for state migration and retained-state recovery and the reconciliation feature for immutable requests, receipts, and recovery. Add explicit proofs for changed boundaries before submission."
       }
     ],
     "operational_limits": [
@@ -192,7 +192,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Keep operation contract 3 and stable public routes. Update owning feature contracts, compatibility bounds, and retained decoding for an incompatible successor."
+        "statement": "Operation contract 4 retains stable public routes and uses retained-state forward recovery. Update owning feature contracts, compatibility bounds, and retained decoding for an incompatible successor."
       }
     ],
     "reliances": [

@@ -61,18 +61,18 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
-    },
-    {
-      "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
     },
     {
+      "id": "cast.discovery.explore",
+      "min_contract": 2,
+      "max_contract_exclusive": 4
+    },
+    {
       "id": "cast.discovery.collect",
       "min_contract": 5,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.corpus.explore",
@@ -86,13 +86,13 @@
     },
     {
       "id": "nucleus.execution.operate",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "bazaar.string.read",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {

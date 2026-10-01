@@ -12,14 +12,14 @@ to select products. The routine `check.sh` body checks descriptor shape,
 provider counts, shell syntax, and generated wrapper drift in the light lane.
 It does not run regression suites or invoke Cargo. The `test.sh` wrapper uses
 the same manager command path as root and product `ci.sh` wrappers. Focused
-fixture tests remain development checks, not CI submission.
+unit tests remain development checks, not CI submission.
 
 Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
 shell and packaging checks, provider bundles, independently versioned release
 units, CI resource class, release branch, deployment profile, and conservative
-deployment conflict keys. Product-specific catalog regressions remain small
-scripts under `extras/`; arbitrary release or deployment hooks are not part of
-the shared format.
+deployment conflict keys. The shared format has no product-specific script
+hooks. CI keeps common verification stages and the standard Rust test suites;
+it does not add bespoke shell, Python, or catalog assertions for one product.
 
 `RELEASE_COMPANION_MANIFESTS` optionally lists `release-unit|package-manifest`
 rows for provider-owned libraries released at their owner's version. Annals'
@@ -45,8 +45,7 @@ arguments, and direct validation flags are not supported CI entry points.
 
 New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
 to run selected tests. `--skip-tests` selects the default explicitly. The
-validator retains syntax, formatting, lint, provider, documentation, build,
-version, and candidate checks. It skips Rust tests and Python and shell regression
+validator retains syntax, formatting, lint, provider, documentation and build checks. It skips Rust tests and shared Python regression
 suites. The receipt records `selection.tests_skipped`; product selection still
 controls automatic deployment.
 
@@ -59,15 +58,16 @@ parallel Rust test stage:
 python3 pipeline/nextest_tool.py install
 ```
 
-The installer selects nextest 0.9.146 from its fixed upstream macOS archive.
-It verifies the archive and executable hashes and stores the executable on the
-configured external work volume. Validation checks those bytes before admission.
-It does not download a runner during a CI gate or select a runner from `PATH`.
+The installer selects nextest 0.9.146 from its fixed upstream macOS archive and
+stores the executable on the configured external work volume. It runs `--version`
+to check basic execution. CI requires the configured executable path. It does not
+audit archive or executable bytes, download a runner during a gate, or select a
+runner from `PATH`.
 
 Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
 limit. The default is four concurrent test processes. The dispatcher records
 the limit in the gate command. This limit is separate from the broker's compiler
-job limit. Tests can create additional threads or child processes.
+job limit. All selected tests use the configured worker limit.
 
 ### Change CI while a job is active
 
@@ -99,50 +99,65 @@ changed paths, platform classification, and descriptor introductions and
 removals. Each repair is committed before validation, and the base stays fixed,
 so selection includes the submitted changes and every retained repair.
 
-There are two test groups:
+There are two target groups:
 
-- Product tests cover product commands, APIs, records, rules, and ordinary
-  persistence. Every selected product runs these tests, including library and
-  binary unit tests, ordinary integration targets, and doctests. Nucleus API
-  tests belong here too.
-- Platform tests cover installation, upgrades, packaging, maintenance,
-  recovery, and shared CI/release/deployment machinery. Cargo integration
-  targets named `install` or `maintenance`, installer binary unit tests, and
-  the `cell-install` and `cell-maintenance` packages belong here. Shell frontend
-  and runner regressions and product catalog regressions also belong here.
+- The product group selects library and command unit tests and remaining
+  integration targets.
+- The platform group selects installer binary unit tests and the shared
+  `cell-install` and `cell-maintenance` packages. Its target convention also
+  recognizes integration targets named `install` or `maintenance`.
+
+The test suite uses in-memory inputs and has no filesystem, process, socket,
+thread, or lock fixtures. The test runners and build tools still use
+operating-system resources.
 
 `parallel_tests.py` selects Cargo targets from metadata inside one admitted
 heavy gate. The plan identifies each allowed package, target kind, and target
 name. Nextest runs all ordinary, non-ignored tests in these targets through one
 parallel scheduler. It does not select individual test functions by relevance.
 Library targets that mix product and lifecycle behavior remain complete targets.
-Compilation can include other targets from the selected packages; execution
-uses the exact allowed target filter. Shared dependencies use Cargo's combined
-feature selection.
+The Cargo command selects library and named targets from this plan. It does not
+use `--all-targets`. Cargo can still compile prerequisite binaries and targets
+with matching names in other selected packages. Execution uses the exact allowed
+target filter. Shared dependencies use Cargo's combined feature selection.
 
-Product checks run in two phases around this test gate. The first phase runs
-shell and packaging checks, applicable provider checks, formatting, and Clippy.
-The second runs applicable provider checks, documentation, release builds,
-binary version checks, and candidate staging. Selected shared Rust suites retain
-their formatting and Clippy checks but execute their tests in the shared test
-gate. Python and shell regression suites remain separate required checks.
+Development and test builds retain line-table debug information for workspace
+packages. Dependency builds omit debug information. Panic backtraces retain
+workspace file and line locations. Full debugger inspection requires an override
+of these profile settings. Release profile settings are unchanged.
+
+Product checks run in two phases. The first phase runs shell and packaging
+checks, applicable provider checks, and formatting. One heavy `cell.clippy`
+gate then runs Clippy for the combined Cargo package set from selected products
+and shared Rust suites. It keeps all target checks and the strict lint rules.
+The shared test gate follows Clippy when tests are enabled. The second product
+phase runs applicable provider checks, documentation and release builds. Shared infrastructure Python regression
+suites remain separate required checks.
+
+The Clippy command lists each selected package once and uses Cargo's combined
+dependency feature selection. `CARGO_BUILD_WARNINGS=deny` rejects warnings without
+the cache invalidation from `-D warnings`. The remaining strict lint flags stay
+enabled. It does not prove each product's isolated feature configuration.
+It uses offline mode if any selected product requires offline
+Cargo access, as the shared test gate does. Missing cached dependencies then
+fail without a download. It keeps going after compiler errors if any selected
+product requests that behavior; any lint or compiler failure still fails the
+gate. Clippy runs when tests are skipped. The receipt records its selected
+products and shared suites in the gate command and records its timing separately.
 
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or
 shared suite. The run uses no automatic retries and continues after test
-failures. Doctests use separate Cargo commands after nextest, including when
-ordinary tests fail. The test gate fails after these commands finish. Build or
-discovery failure does not establish completed test coverage.
+failures. CI does not run doctests. Build or discovery failure does not establish
+completed test coverage.
 
 `platform_inputs.py` is the explicit platform input map. Product installer
 sources, packaging, migrations, schemas, maintenance modules, selected runtime
 command files, and operational descriptor edits select that product's platform
 tests. Non-version Cargo manifest edits select their owner's platform tests;
-root build inputs select the shared build suite. Shared installer changes
-select all installer consumers; its common integration fixture selects only
-the products that use that fixture. Shared maintenance changes select its
-declared consumers. Broker, pipeline,
-deployment, build, cleanup, and catalog changes select their own shared suites.
+shared installer changes select all installer consumers. Shared maintenance
+changes select its declared consumers. Pipeline and catalog changes select
+their own shared suites.
 A descriptor absent from the job base selects the new product's platform
 tests, the shared pipeline introduction checks, and integrated catalog
 validation.
@@ -158,20 +173,22 @@ that boundary. When adding or moving a platform input or target, update this
 map in the same change.
 
 Shared platform inputs can add their affected consumers. There is no general
-dependency expansion. The shared suite names are `pipeline`, `broker`,
-`deployment`, `build`, `cleanup`, `install`, `maintenance`, `prompts`, and
-`catalog`. A validation with no selected products still checks structure and
+dependency expansion. The shared suite names are `pipeline`, `install`,
+`maintenance`, `prompts`, and `catalog`. A validation with no selected products
+still checks structure and
 recognition. Its success does not establish full repository validation.
 
-Changes to the parallel runner or its pinned tool selector select all current
-products' product and platform tests and all
-three shared Rust suites. This validates the common executor across its complete
-target inventory. Test-only and documentation edits do not select this expansion.
+Changes to the shared Clippy runner, parallel test runner, or pinned test tool
+selector select all current products and all three shared Rust suites. When tests
+are enabled, this includes product and platform tests. This validates the common
+executors across their complete target inventory. Test-only and documentation
+edits do not select this expansion.
 
-The validator binds selection and every gate to one source candidate. It
-rejects source, Git status, or HEAD changes during planning or execution as
-stale. The manager's fixed base controls product, platform, and new-product
-selection.
+The validator binds selection and every gate to one candidate commit. It
+checks HEAD and Git status during planning and after execution. A changed
+commit or a dirty committed candidate is stale. CI does not hash source files
+or run source-check commands for individual gates. The manager's fixed base
+controls product, platform, and new-product selection.
 
 The plan names that baseline and reports platform run/skip reasons. Usher reads
 the descriptors' literal assignments without executing them. It checks each
@@ -181,19 +198,30 @@ candidate before the selected product gates. Full Chancery validation remains
 in the existing product and integrated catalog gates.
 
 Recognition does not run shared library tests. The `install` and `maintenance`
-check gates format and lint those libraries separately. Their tests run in the
-parallel Rust gate. They are infrastructure, with no separate product identity
-or release unit.
+check gates format those libraries. Their lint checks join the shared Clippy
+gate, and their tests run in the parallel Rust gate. They are infrastructure,
+with no separate product identity or release unit.
+
+The `pipeline` suite checks signing-policy and job-signing logic with in-memory
+mocks. These tests do not create files, subprocesses, locks, or live Keychain
+state.
 
 The internal dispatcher in `select_changes.py` requests broker admission for
-each product phase, shared check suite, and the parallel Rust test stage. The
+each product phase, shared check suite, shared Clippy stage, and parallel Rust
+test stage. The
 broker schedules execution; it does not decide relevance. Product bodies receive
 `--tests product|all|none` and their phase in the brokered command identity. The Rust
 test command records all selected products, platform products, shared Rust
 suites, and its worker limit. Its toolchain identity includes the pinned nextest
-path, version, and executable hash. An inherited flag cannot bypass admission.
-The manager validates before acceptance and deployment; release and deployment
-preparation do not rerun validation.
+path and configured version. An inherited flag cannot bypass admission.
+The manager validates source before acceptance and deployment. New jobs also
+freeze the host signing policy and prepare signed production candidates through
+the installed manager's shared builder before source acceptance. This step runs
+when tests are skipped. A signing configuration failure stops acceptance without
+model repair. Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md).
+CI does not run installation persistent-state, general artifact-integrity, or operational-readiness
+checks, or retain test assertions requiring those removed checks. Ordinary
+product behavior and setup operations remain in their applicable test suites.
 
 The broker captures build and test transcripts. The dispatcher reports
 selection before execution and retains the completed product and platform
@@ -204,15 +232,16 @@ log path. The transcript identifies the failed stage. See
 The manager requests one aggregate JSON receipt on stdout. Progress and
 diagnostics remain on stderr. The receipt uses `schema_version: 1` and contains
 `state`, `base_commit`, `candidate_commit`, `observed_head`, `source_key`,
-`selection`, `gates`, and `failure`. Fields that could not be established are
-null. The base and candidate fields name the manager's exact committed range.
+`selection`, `gates`, and `failure`. The `source_key` field contains the full
+candidate commit ID. Fields that could not be established are null. The base
+and candidate fields name the manager's exact committed range.
 
 The selection records its change mode, coverage mode, product tests, platform
 products, shared suites, selection reasons, and ordered `required_gates`.
 Each required gate names its gate ID, lane, and command. The `gates` array
 contains the broker receipts for gates that ran. A required gate absent from
 that array did not complete. The dispatcher stops after the first unsuccessful
-gate and checks candidate integrity before it returns the aggregate result.
+gate and checks HEAD and Git status before it returns the aggregate result.
 
 Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, and
 `error`. A failed gate does not by itself establish a source-code defect.
@@ -226,7 +255,7 @@ deployment handoff.
 Release and deployment use the shared release builder below. Each product
 seals its runtime executables and dedicated `PRODUCT-install`. The coordinator
 invokes that sealed installer's Rust adapter. The shared `cell-install` library
-owns immutable artifact selection. Product Rust code owns lifecycle and
+owns program publication and file replacement. Product Rust code owns lifecycle and
 recovery. Credential and scheduled-job shell frontends remain versioned assets.
 
 `deployment/build.py` requires Python 3.11 or newer. It prepares production
@@ -236,10 +265,11 @@ packages and binaries. The builder then seals product candidates in parallel.
 Release builds share a persistent target and file lock per logical Git
 repository, separate from CI. Cargo defaults to at most eight jobs.
 
-The cache identifies completed candidates by source content and build inputs.
-The builder checks executable hashes and versions before reuse. Git HEAD is
-excluded, so a version-update build can be reused after those exact source bytes
-are committed. The cache records builds, not CI results. See
+The cache identifies clean builds by the full Git commit ID, build inputs, and
+the selected signing policy. Uncommitted builds get a fresh identity and do not
+reuse cache entries. The builder does not hash source files. It verifies cached
+production signatures and executable hashes before reuse. The cache records
+builds, not CI results. See
 [deployment](../deployment/README.md)
 for invocation, candidate identity, and cache retention.
 
@@ -251,14 +281,8 @@ longer exists. Other hosts use a `mkdir` fallback that fails closed. On those
 hosts, confirm that no release is active before removing a stale
 `.git/cell-release-publication.lock.d`.
 
-## Prompt test state
+## Prompt tests
 
 The shared `prompts` gate checks `cell-prompts`. Changes below `prompting/`
-also select all current prompt consumers in the manager's validation plan. Each
-parallel test gate imports `prompting/seed.json` into a private temporary Bazaar
-database and retains it until execution finishes. It sets
-`CELL_BAZAAR_DATABASE` for its tests. Consumer reads can share this fixture;
-tests that change strings use separate temporary databases. Tests never use the
-live database.
-The importer runs inside the admitted heavy gate. Keep source prompt text in
-the explicit seed, not in a test-only runtime fallback.
+also select all current prompt consumers in the manager's validation plan.
+The retained tests do not open a Bazaar database or import prompt state.

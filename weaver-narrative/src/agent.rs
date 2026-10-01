@@ -485,6 +485,3 @@ async fn run_inner(
         .await?;
     }
 }
-
-#[cfg(test)]
-mod tests;

@@ -16,7 +16,7 @@ a content change.
 | --- | --- |
 | `bazaar.string.read` | Latest and exact reads, complete version history, CLI results, Rust readers, and query consistency. |
 | `bazaar.string.update` | Complete appends, immutable version identity, Rust writers, transaction guarantees, and uncertain completion. |
-| `bazaar.installation` | Program publication, private state, initialization, integrity checks, compatibility, backup, and recovery guarantees. |
+| `bazaar.installation` | Program publication, private state, initialization, integrity checks, compatibility and program recovery guarantees. |
 
 ## Operations
 
@@ -38,7 +38,7 @@ means appending an older value. Program recovery preserves the separate database
 
 Bazaar does not parse prompts, render templates, choose models, migrate callers,
 or run agents. It installs no daemon or schedule. There is no supported history
-deletion, automatic backup, state migration, or direct SQL integration.
+deletion, state migration, or direct SQL integration.
 
 Related feature references provide navigation. Required dependencies express
 documentation compatibility and assemble complete contracts; they do not create

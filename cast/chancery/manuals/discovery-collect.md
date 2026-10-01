@@ -60,12 +60,24 @@ returned posting ID. A failed request does not fall back to a board download.
 Other ATS adapters may download a board or its pages, but only the selected
 posting enters Cast. Unrelated postings and discovered careers links are not
 admitted by this operation. A board URL without a posting identity is refused.
-The schema-one result contains `schema_version` and `job`.
+The default text receipt identifies the selected job and URL. With the global
+`--json` flag, the existing schema-one result contains `schema_version` and
+`job`. Machine callers must pass that flag explicitly.
 
 An exact generic job URL must produce one owned `JobPosting` whose normalized
 URL matches the supplied URL. Unsupported, ambiguous, absent, and non-job
 pages fail without inventing a record. Failed targeted collection retains its
 source, run outcome, and conservative request accounting for diagnosis.
+
+## Command output
+
+Collection and refresh print readable run outcomes and local status by default.
+Use the global `--json` flag for their existing machine results. The flag is
+accepted before or after the command, including `cast job collect URL --json`.
+Operational errors exit 1 and use a text diagnostic on stderr by default.
+With `--json`, stderr contains a schema-one object with `ok:false` and
+`error.detail`. Invalid command syntax uses Clap's text diagnostic on stderr
+and exit 2 in both modes.
 
 ## Source ownership and support
 
@@ -151,7 +163,7 @@ those results.
 
 ## Compatibility and limits
 
-Collection contract 5 preserves the distinction between exact-job observation
+Collection contract 6 preserves the distinction between exact-job observation
 and ordinary collection. The configuration, database, and export schema
 numbers remain separate. Older programs can reject configuration containing
 `automatic_excluded_ats`; see `cast.state` before program recovery.

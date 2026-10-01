@@ -13,17 +13,17 @@ Use `clockwork.install.operate` for ordered operating procedures.
 <TRUSTED_CLOCKWORK_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY --chancery ABSOLUTE_PATH
 <TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]
 clockwork [--json] doctor
-clockwork [--json] migrate --backup ABSOLUTE_NEW_DIRECTORY
+clockwork [--json] migrate
 ./deploy.sh clockwork
 ```
 
-The Rust installer requires a tested regular executable binary, its matching
-Rust installer, complete provider bundle, and a separately supplied regular
-executable Chancery reader, all at absolute paths. Candidate `clockwork VERSION`
-output must exactly match provider and installer release. The overview, feature
-contracts, and procedures use provider schema four. The reader must support
-that schema and its validation/discovery interfaces; Chancery 0.8 supports them.
-A catalog entry or successful structural check does not prove live readiness.
+The `clockwork` CLI prints plain text by default. Pass `--json` for its
+existing compact machine response. The separate installer protocol is
+unchanged.
+
+The Rust installer accepts the binary, installer, and provider files at absolute
+paths. It places those files and publishes their selectors without comparing
+versions, validating provider contents, or probing runtime readiness.
 
 Direct installation creates no runtime database, registers no product
 schedule, changes no binding, writes no `org.clockwork.*` plist, and runs no
@@ -40,15 +40,11 @@ The installer hashes the exact binary, Rust installer, public layout, and
 complete provider tree into one immutable release under
 `$HOME/Library/Application Support/Clockwork/install/releases`. Its
 `cell-install-v2` manifest is `manifest.json`. The retained installer appears
-at `bin/clockwork-install` and `package/install`. The installer also verifies
-the supported legacy release format when admitting an existing installation
-or recovering a retained release.
+at `bin/clockwork-install` and `package/install`. The installer reads retained release metadata when selecting an existing
+installation or recovering a retained release.
 
-The explicit candidate reader validates the provider copy inside that exact
-staged release before any public selector mutation. Before commit, it must
-discover every indexed Clockwork entry through the installed provider registry
-and selected path. Whole-bundle content participates in release identity and
-integrity. No runtime state belongs in the provider or release.
+Provider files are copied with the release. Installation does not invoke a
+Chancery reader or validate discovery. No runtime state belongs in the release.
 
 One atomic current selector connects both public views:
 
@@ -61,24 +57,21 @@ One atomic current selector connects both public views:
   -> .../Clockwork/install/current/share/chancery/clockwork
 ```
 
-An update validates existing selector form and retained releases. Identical
+An update retains owned selector boundaries and release metadata. Identical
 installation is idempotent. A changed candidate preserves a valid prior
 selection as `previous` and atomically replaces `current`. Optional
 `--expected-current` enforces the caller's captured absent or `releases/HASH`
-expectation. Symbolic candidates, foreign public paths, selectors escaping the
-owned release tree, version mismatches, malformed manifests, and changed
-release bytes are refused rather than adopted.
+expectation. Foreign public paths and selectors outside the owned installation remain
+unsupported.
 
-A failed installed version/help check before commit restores prior current,
+A failed publication before commit restores prior current,
 previous, command, installer, and provider views. If coherent restoration
 cannot be completed, all owned public selectors are detached and the
 fail-closed state is reported while releases remain. Diagnostics and retained
-selectors supply recovery evidence; bypassing content checks or replacing a
-foreign path is unsupported.
+selectors supply recovery evidence; replacing a foreign path is unsupported.
 
-After commit, recovery with a trusted tested installer verifies and selects a
-canonical owned retained release. An unverified installer from that release is
-not a recovery trust basis. Program rollback changes stable program/provider
+After commit, recovery reads metadata and selects an owned retained release.
+Select the retained installer explicitly. Program rollback changes program/provider
 selection but leaves product bindings and generated plists unchanged. Each
 plist pins an exact content-addressed broker; releases cannot be pruned while
 any plist or running activation may refer to them.
@@ -136,16 +129,15 @@ after proving their broker and any child absent. It chooses no journal repair,
 executes no product, and changes no binding. Its evidence is local to invocation;
 it establishes neither product success nor future timer delivery.
 
-## Explicit migration and rollback
+## Explicit schema migration
 
 Clockwork 0.5 and later require SQLite schema two. Schema-one upgrade is an
-explicit `migrate --backup` operation after product schedules and Clockwork
+explicit `migrate` operation after product schedules and Clockwork
 commands are quiescent and old running rows/transitions have been settled.
-Migration takes the schema gate, refuses retained running rows, checkpoints
-SQLite, writes a private database-plus-sidecar backup to a new absolute
-directory, and changes the schema transactionally. It preserves definitions,
-selection, activation history, timers, and product pauses. Program deployment
-never performs migration.
+Migration takes the schema gate, refuses retained running rows and pending
+binding transitions, and changes the schema transactionally in place. It
+preserves definitions, selection, activation history, timers, and product pauses.
+Program deployment never performs migration.
 
 Schema-one definitions keep their original digest and legacy failure behavior.
 They do not acquire policy merely because storage migrated. Product rollout
@@ -155,11 +147,9 @@ inactive intent, and imports failure-owned halts before removing old gates.
 plists need the compatible exact broker before maintenance release. Installation
 cannot invoke incident resume or clear product user pauses and recovery evidence.
 
-An old binary cannot open the schema-two store. Cross-schema rollback needs
-quiescence, a matching schema-one database and sidecars, compatible Clockwork
-and product releases, prior definitions, and generated plists. Failed state
-and newer incidents remain recovery evidence. A pre-halt backup cannot erase
-a later halt or authorize work.
+An old binary cannot open the schema-two store. Recover program selection only
+with a release compatible with retained state. Migration has no reverse schema
+operation. Preserve failed state and newer incident evidence during recovery.
 
 The hidden absolute test-state override uses `STATE_ROOT/email` as the default
 Email double; explicit `failure.email_cli` still selects its authorized wrapper.
@@ -174,8 +164,7 @@ and EMT handoff; stable CLI replacement alone does not refresh them. Additive
 incident feed and routing metadata leave SQLite schema two unchanged.
 
 `failure-checks.json`, `notification-checks.json`, `notification-routing.json`,
-the incident database, and EMT correspondence must be backed up and restored
-together. The schema-one failure-check sidecar retains the immutable abend ledger
+the incident database, and EMT correspondence remain coherent retained state. The schema-one failure-check sidecar retains the immutable abend ledger
 cursor and pending per-key episodes; SQLite remains schema two. Refresh every
 enabled pinned broker before relying on the new delay. An older broker must not
 run while this sidecar exists. Existing incidents remain halted and preserve

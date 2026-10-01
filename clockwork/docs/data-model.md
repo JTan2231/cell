@@ -11,8 +11,8 @@ shape; it is not a public integration interface.
 | Activation identity, process state, timestamps, history, and status | [Activations](../chancery/manuals/activations.md) · `clockwork.activations` |
 | Immutable abends, pending failure episodes, confirmed halts, approvals, and insertion cursors | [Incidents](../chancery/manuals/incidents.md) · `clockwork.incidents` |
 | Transport status, check progress, routing, and delivery claims | [Notifications](../chancery/manuals/notifications.md) · `clockwork.notifications` |
-| Store compatibility, backup, migration, and retained-state scope | [Installation](../chancery/manuals/installation.md) · `clockwork.installation` |
+| Store compatibility, migration, and retained-state scope | [Installation](../chancery/manuals/installation.md) · `clockwork.installation` |
 
 Read installed content with `chancery show ID`. Use
 `chancery resolve clockwork.install.operate` for recovery procedures and required
-contracts. Keep runtime state and backups private. Do not edit SQLite directly.
+contracts. Keep runtime state private. Do not edit SQLite directly.

@@ -21,7 +21,7 @@ struct OwnedFile {
     sha256: String,
 }
 
-pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
+pub fn migrate(root: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
@@ -32,42 +32,6 @@ pub fn migrate(root: &Path, backup: &Path) -> Result<()> {
         store.version()? == SCHEMA_VERSION,
         "unsupported migration schema"
     );
-    // The migration first commits a self-contained library. A failure to create
-    // its backup leaves all originals and the durable cleanup manifest intact.
-    let retained_backup: Option<(PathBuf, String)> = store.setting("migration_backup")?;
-    if let Some((retained, expected)) = retained_backup {
-        regular_file(&retained)?;
-        ensure!(
-            digest(&std::fs::read(&retained)?) == expected,
-            "migration backup changed; cleanup remains held"
-        );
-        if retained == backup {
-            let connection = rusqlite::Connection::open_with_flags(
-                &retained,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )?;
-            let version: i64 =
-                connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-            ensure!(
-                version == SCHEMA_VERSION,
-                "backup uses a predecessor schema; select a new backup path"
-            );
-        }
-        if retained != backup {
-            cleanup(&store)?;
-            store.backup(backup)?;
-            store.set_setting(
-                "migration_backup",
-                &(backup, digest(&std::fs::read(backup)?)),
-            )?;
-        }
-    } else {
-        store.backup(backup)?;
-        store.set_setting(
-            "migration_backup",
-            &(backup, digest(&std::fs::read(backup)?)),
-        )?;
-    }
     cleanup(&store)
 }
 
@@ -406,6 +370,7 @@ fn retain_unmapped(
                         | "packets.sqlite3-journal"
                         | "packets.sqlite3-wal"
                         | "packets.sqlite3-shm"
+                        | "backups"
                 )
             )
         {
@@ -438,7 +403,12 @@ fn filename(path: &Path) -> Result<&str> {
 }
 
 fn cleanup(store: &Store) -> Result<()> {
-    let files: Vec<OwnedFile> = store.setting("migration_cleanup")?.unwrap_or_default();
+    let files: Vec<OwnedFile> = store
+        .setting::<Vec<OwnedFile>>("migration_cleanup")?
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|file| !file.path.starts_with(store.root().join("backups")))
+        .collect();
     // Compare every remaining file before deleting any; retained paths are a
     // migration manifest, never runtime content dependencies.
     for file in &files {
@@ -459,108 +429,5 @@ fn cleanup(store: &Store) -> Result<()> {
         "DELETE FROM settings WHERE key IN ('migration_cleanup','migration_backup')",
         [],
     )?;
-    Ok(())
-}
-
-/// Build a self-contained current-schema copy for an isolated delivery exercise.
-/// Source activity is fenced with the same file locks as its runtime. This
-/// never cleans up source files, changes source eligibility, or migrates the
-/// installed library. The destination must be new and remains private.
-pub fn snapshot(source: &Path, destination: &Path) -> Result<()> {
-    use fs2::FileExt as _;
-    use std::os::unix::fs::PermissionsExt as _;
-    ensure!(
-        source.is_absolute() && destination.is_absolute(),
-        "snapshot roots must be absolute"
-    );
-    ensure!(
-        !destination.try_exists()?,
-        "snapshot destination must be new"
-    );
-    regular_file(&source.join(crate::store::DATABASE))?;
-    let source_activity = std::fs::File::open(source)?;
-    source_activity
-        .try_lock_exclusive()
-        .context("Platter source activity has not settled")?;
-    let legacy_runner = if source.join("runner.lock").try_exists()? {
-        regular_file(&source.join("runner.lock"))?;
-        let file = std::fs::File::open(source.join("runner.lock"))?;
-        file.try_lock_exclusive()
-            .context("legacy Platter runner is still active")?;
-        Some(file)
-    } else {
-        None
-    };
-    let connection = rusqlite::Connection::open_with_flags(
-        source.join(crate::store::DATABASE),
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    )?;
-    let version: i64 = connection
-        .pragma_query_value(None, "user_version", |r| r.get(0))
-        .context("read snapshot source schema")?;
-    ensure!(
-        matches!(version, 1..=SCHEMA_VERSION),
-        "unsupported source schema"
-    );
-    crate::private_dir(destination)?;
-    let target = destination.join(crate::store::DATABASE);
-    connection
-        .execute("VACUUM INTO ?1", [target.to_string_lossy().as_ref()])
-        .context("copy source SQLite into private snapshot")?;
-    std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600))?;
-    if matches!(version, 2..=6) {
-        upgrade_editions(&Store::control(destination)?)?;
-    }
-    if version == 1 {
-        ensure!(
-            legacy_runner.is_some(),
-            "legacy source has no observable runner lock"
-        );
-        let config = destination.join("config.json");
-        std::fs::copy(source.join("config.json"), &config)?;
-        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o600))?;
-        let occurrences = source.join("ad-hoc");
-        let mut copied = vec![config];
-        if occurrences.try_exists()? {
-            for entry in std::fs::read_dir(occurrences)? {
-                let entry = entry?;
-                ensure!(
-                    entry.file_type()?.is_dir() && !entry.file_type()?.is_symlink(),
-                    "unrecognized source occurrence"
-                );
-                let folder = destination.join("ad-hoc").join(entry.file_name());
-                crate::private_dir(&folder)?;
-                let source_metadata = entry.path().join("occurrence.json");
-                regular_file(&source_metadata)?;
-                let target_metadata = folder.join("occurrence.json");
-                std::fs::copy(source_metadata, &target_metadata)?;
-                std::fs::set_permissions(&target_metadata, std::fs::Permissions::from_mode(0o600))?;
-                copied.push(target_metadata);
-            }
-        }
-        let store = Store::control(destination)?;
-        import(&store).context("import file-backed snapshot content")?;
-        // A copied library has no authority to remove predecessor source files.
-        store.connection.execute(
-            "DELETE FROM settings WHERE key IN ('migration_cleanup','migration_backup')",
-            [],
-        )?;
-        for file in copied {
-            std::fs::remove_file(file)?;
-        }
-        if destination.join("ad-hoc").try_exists()? {
-            for entry in std::fs::read_dir(destination.join("ad-hoc"))? {
-                std::fs::remove_dir(entry?.path())?;
-            }
-            std::fs::remove_dir(destination.join("ad-hoc"))?;
-        }
-    } else {
-        let store = Store::open(destination)?;
-        ensure!(
-            store.setting::<Value>("migration_cleanup")?.is_none(),
-            "source migration cleanup is still pending"
-        );
-    }
-    std::fs::File::open(&target)?.sync_all()?;
     Ok(())
 }

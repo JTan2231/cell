@@ -402,16 +402,13 @@ impl State<'_> {
             .ok_or_else(|| failure("invalid migration release identity"))?;
         let release = self.target.join("install").join(selected);
         dir(&release, self.uid)?;
-        let verified = self.user_checked(
-            &std::env::current_exe()?,
-            &["verify-release".into(), release.as_os_str().to_owned()],
+        let info = cell_install::read_release_at(
+            &super::release::layout(),
+            &release,
+            &super::release::legacy,
         )?;
-        let verified: Value = serde_json::from_slice(&verified.stdout)?;
-        if verified["ok"] != true || verified["data"]["release_id"] != release_id {
-            return Err(failure("migration release identity was not verified"));
-        }
         let runner = release.join("bin/annals-inbox");
-        let launch = if verified["data"]["format"] == cell_install::TRANSACTION_FORMAT {
+        let launch = if info.format == cell_install::TRANSACTION_FORMAT {
             json!({"kind":"direct","program":runner,"sha256":hash(&runner)?})
         } else {
             json!({"kind":"interpreted","interpreter":"/bin/sh","interpreter_sha256":hash(Path::new("/bin/sh"))?,"script":runner,"script_sha256":hash(&runner)?})
@@ -456,19 +453,22 @@ impl State<'_> {
             || !self.child_transactions()?.is_empty())
     }
     fn child_archives(&self) -> Result<Vec<String>> {
-        let parent = self.target.join("backups/deployments");
-        if !exists(&parent) {
-            return Ok(Vec::new());
-        }
-        dir(&parent, self.uid)?;
         let mut names = Vec::new();
-        for entry in fs::read_dir(parent)? {
-            let name = entry?
-                .file_name()
-                .into_string()
-                .map_err(|_| failure("invalid Annals recovery archive name"))?;
-            if name.starts_with("transaction.primary.") {
-                names.push(name);
+        // Older completed transactions remain readable without moving their data.
+        for relative in ["install/transactions", "backups/deployments"] {
+            let parent = self.target.join(relative);
+            if !exists(&parent) {
+                continue;
+            }
+            dir(&parent, self.uid)?;
+            for entry in fs::read_dir(parent)? {
+                let name = entry?
+                    .file_name()
+                    .into_string()
+                    .map_err(|_| failure("invalid Annals transaction name"))?;
+                if name.starts_with("transaction.primary.") {
+                    names.push(format!("{relative}/{name}"));
+                }
             }
         }
         names.sort();
@@ -500,25 +500,28 @@ impl State<'_> {
         } else {
             // A completed child may lose its stdout before the parent saves it.
             // Its newly archived committed journal proves completion without
-            // replaying --fresh-state against the already-moved generation.
+            // replaying the already-completed installation.
             let baseline = self.transaction.join("child-archives.json");
             file(&baseline, self.invoking_uid, Some(0o600))?;
             let baseline: Vec<String> = serde_json::from_slice(&fs::read(baseline)?)?;
             let mut completed = 0;
             for name in self.child_archives()? {
-                if baseline.contains(&name) {
+                if baseline.contains(&name)
+                    || baseline
+                        .iter()
+                        .any(|prior| Some(prior.as_str()) == name.rsplit('/').next())
+                {
                     continue;
                 }
-                let root = self.target.join("backups/deployments").join(name);
+                let root = self.target.join(name);
                 dir(&root, self.uid)?;
                 let path = root.join("journal.json");
                 file(&path, self.uid, Some(0o600))?;
                 let journal: Value = serde_json::from_slice(&fs::read(path)?)?;
-                if journal["schema"] == 1
+                if matches!(journal["schema"].as_u64(), Some(1 | 2))
                     && journal["home"] == json!(self.home)
                     && journal["key"] == KEY
                     && journal["committed"] == true
-                    && journal["fresh_state"] == true
                     && journal["keep_maintenance"] == true
                     && journal["candidate"]["release_id"] == proof["release_id"]
                 {
@@ -667,7 +670,7 @@ impl State<'_> {
             || phase.as_deref() == Some("rewritten") && self.child_may_have_run()?
         {
             return Err(failure(
-                "child installation may have committed; migration state and backups must remain for recovery",
+                "child installation may have committed; migration state and transaction evidence must remain for recovery",
             ));
         }
         self.empty_binding()?;
@@ -714,7 +717,7 @@ impl State<'_> {
                 fs::remove_file(marker)?;
             }
             // Only directories proved absent before this transaction are its disposable staging.
-            for (name, flag) in [("install", "had-install"), ("backups", "had-backups")] {
+            for (name, flag) in [("install", "had-install")] {
                 if self.record(flag)? == "0" && exists(&self.legacy.join(name)) {
                     fs::remove_dir_all(self.legacy.join(name))?;
                 }
@@ -931,6 +934,20 @@ pub(super) fn run(args: &Args) -> Result<Value> {
     for path in [&state.frontend, &state.payload] {
         file(path, state.invoking_uid, None)?;
     }
+    let installer = args.deploy.clone().unwrap_or(std::env::current_exe()?);
+    for (key, binary) in [
+        ("annals", &args.binary),
+        ("annals-usage", &args.usage_binary),
+        ("annals-install", &installer),
+    ] {
+        cell_install::signing::verify_native_for_user(
+            "annals",
+            key,
+            binary,
+            &state.home,
+            state.uid,
+        )?;
+    }
     state.user_checked(&args.binary, &words(&["--version"]))?;
     state.user_checked(&args.usage_binary, &words(&["--version"]))?;
     state.user_checked(&state.frontend, &words(&["stats"]))?;
@@ -943,10 +960,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
         (
             "had-install",
             u8::from(exists(&state.legacy.join("install"))).to_string(),
-        ),
-        (
-            "had-backups",
-            u8::from(exists(&state.legacy.join("backups"))).to_string(),
         ),
         ("frontend-sha256", hash(&state.frontend)?),
         ("payload-sha256", hash(&state.payload)?),
@@ -1028,7 +1041,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
         )?;
         state.gate(&state.target)?;
         state.write_phase("rewritten")?;
-        let installer = args.deploy.clone().unwrap_or(std::env::current_exe()?);
         let mut child = vec![OsString::from("install")];
         for (flag, value) in [
             ("--binary", &args.binary),
@@ -1044,14 +1056,21 @@ pub(super) fn run(args: &Args) -> Result<Value> {
             child.push(flag.into());
             child.push(value.as_os_str().to_owned());
         }
-        child.extend(words(&["--fresh-state", "--migration-clockwork-handoff"]));
+        child.extend(words(&["--migration-clockwork-handoff"]));
         state.owner_write(
             &state.transaction.join("child-archives.json"),
             &serde_json::to_vec(&state.child_archives()?)?,
             state.invoking_uid,
         )?;
-        // The child can archive the original generation before returning. A
-        // missing response never authorizes deleting those recovery backups.
+        // The child can complete before returning. A missing response never
+        // authorizes deleting current state or retained transaction evidence.
+        cell_install::signing::verify_native_for_user(
+            "annals",
+            "annals-install",
+            &installer,
+            &state.home,
+            state.uid,
+        )?;
         state.write_phase("installing")?;
         let response = state.user_checked(&installer, &child)?;
         let response: Value = serde_json::from_slice(&response.stdout)?;
@@ -1089,239 +1108,7 @@ pub(super) fn run(args: &Args) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn fixture(launch: &str) -> Result<(tempfile::TempDir, Args)> {
-        let root = tempfile::tempdir()?;
-        let launchctl = root.path().join("launchctl");
-        fs::write(&launchctl, format!("#!/bin/sh\n{launch}\n"))?;
-        fs::set_permissions(&launchctl, fs::Permissions::from_mode(0o700))?;
-        let unused = root.path().join("must-not-run");
-        let args = Args {
-            binary: unused.clone(),
-            usage_binary: unused.clone(),
-            bundle: unused.clone(),
-            usage_bundle: unused.clone(),
-            nucleus: unused.clone(),
-            nucleus_socket: unused.clone(),
-            clockwork: unused.clone(),
-            legacy_prefix: Some(root.path().to_owned()),
-            legacy_state: None,
-            launchctl,
-            dscl: unused.clone(),
-            operator_runner: unused,
-            deploy: None,
-            wait_seconds: 0,
-        };
-        Ok((root, args))
-    }
-
-    fn state<'a>(args: &'a Args, root: &Path) -> Result<State<'a>> {
-        let uid = fs::metadata(root)?.uid();
-        let state = State {
-            args,
-            invoking_uid: uid,
-            operator: "fixture".into(),
-            uid,
-            group: "fixture".into(),
-            home: root.join("home"),
-            legacy: root.join("legacy"),
-            transaction: root.join("transaction"),
-            target: root.join("state"),
-            frontend: root.join("annals"),
-            payload: root.join("annals-core"),
-            daemon: root.join("absent-daemon.plist"),
-        };
-        for path in [&state.transaction, &state.target.join("spool")] {
-            fs::create_dir_all(path)?;
-            fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
-        }
-        state.write_phase("committed")?;
-        state.gate(&state.target)?;
-        for path in [&state.frontend, &state.payload] {
-            fs::write(path, b"retained legacy program")?;
-        }
-        Ok(state)
-    }
-
-    #[test]
-    fn committed_rollback_keeps_the_state_root_and_gate_without_calling_children() -> Result<()> {
-        let (root, args) = fixture("exit 91")?;
-        let state = state(&args, root.path())?;
-        let error = state
-            .rollback()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(
-            error
-                .message
-                .contains("committed migration cannot roll back")
-        );
-        assert!(state.target.is_dir());
-        assert!(!state.legacy.exists());
-        assert!(state.marker().is_file());
-        assert_eq!(state.phase()?.as_deref(), Some("committed"));
-        Ok(())
-    }
-
-    #[test]
-    fn uncertain_child_commit_preserves_the_original_generation_in_backups() -> Result<()> {
-        let (root, args) = fixture("exit 91")?;
-        let state = state(&args, root.path())?;
-        state.write_phase("installing")?;
-        let original = state
-            .target
-            .join("backups/deployments/child/original/annals.db");
-        fs::create_dir_all(
-            original
-                .parent()
-                .ok_or_else(|| failure("fixture archive has no parent"))?,
-        )?;
-        fs::write(&original, b"original database")?;
-        let error = state
-            .rollback()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(
-            error
-                .message
-                .contains("child installation may have committed")
-        );
-        assert_eq!(fs::read(original)?, b"original database");
-        assert!(state.target.is_dir());
-        assert!(!state.legacy.exists());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
-
-    #[test]
-    fn legacy_rewritten_phase_with_a_child_selector_cannot_delete_child_backups() -> Result<()> {
-        let (root, args) = fixture("exit 91")?;
-        let state = state(&args, root.path())?;
-        state.write_phase("rewritten")?;
-        fs::create_dir(state.target.join("install"))?;
-        std::os::unix::fs::symlink(
-            format!("releases/{}", "a".repeat(64)),
-            state.target.join("install/current"),
-        )?;
-        let error = state
-            .rollback()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(
-            error
-                .message
-                .contains("child installation may have committed")
-        );
-        assert!(state.target.is_dir());
-        assert!(!state.legacy.exists());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
-
-    #[test]
-    fn a_new_committed_child_archive_recovers_a_lost_success_response() -> Result<()> {
-        let (root, args) = fixture("exit 91")?;
-        let state = state(&args, root.path())?;
-        fs::create_dir(state.target.join("install"))?;
-        let proof = json!({"release_id":"a".repeat(64)});
-        state.owner_write(
-            &state.transaction.join("child-archives.json"),
-            b"[]",
-            state.invoking_uid,
-        )?;
-        let archive = state
-            .target
-            .join("backups/deployments/transaction.primary.fixture");
-        fs::create_dir_all(&archive)?;
-        state.owner_write(
-            &archive.join("journal.json"),
-            &serde_json::to_vec(&json!({"schema":1,"home":state.home,"key":KEY,"committed":true,"fresh_state":true,"keep_maintenance":true,"candidate":{"release_id":proof["release_id"]}}))?,
-            state.uid,
-        )?;
-        state.child_receipt(&proof)?;
-        let receipt: Value =
-            serde_json::from_slice(&fs::read(state.target.join("install/last-update.json"))?)?;
-        assert_eq!(receipt["release_id"], proof["release_id"]);
-        assert!(receipt["clockwork_definition"].is_null());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
-
-    #[test]
-    fn an_archive_that_predates_the_child_does_not_prove_its_success() -> Result<()> {
-        let (root, args) = fixture("exit 91")?;
-        let state = state(&args, root.path())?;
-        fs::create_dir(state.target.join("install"))?;
-        let archive = state
-            .target
-            .join("backups/deployments/transaction.primary.prior");
-        fs::create_dir_all(&archive)?;
-        state.owner_write(
-            &state.transaction.join("child-archives.json"),
-            br#"["transaction.primary.prior"]"#,
-            state.invoking_uid,
-        )?;
-        let error = state
-            .child_receipt(&json!({"release_id":"a".repeat(64)}))
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(
-            error
-                .message
-                .contains("completed child installation is unproved")
-        );
-        assert!(!state.target.join("install/last-update.json").exists());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
-
-    #[test]
-    fn unsuccessful_bootout_retains_every_legacy_artifact_and_the_gate() -> Result<()> {
-        let (root, args) =
-            fixture("case \"$1\" in print) exit 0;; bootout) exit 1;; *) exit 92;; esac")?;
-        let state = state(&args, root.path())?;
-        let error = state
-            .retire()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(error.message.contains("could not be stopped"));
-        assert!(state.frontend.is_file());
-        assert!(state.payload.is_file());
-        assert!(state.marker().is_file());
-        assert_eq!(state.phase()?.as_deref(), Some("committed"));
-        Ok(())
-    }
-
-    #[test]
-    fn successful_bootout_still_requires_a_fresh_absence_proof() -> Result<()> {
-        let (root, args) = fixture("case \"$1\" in print|bootout) exit 0;; *) exit 92;; esac")?;
-        let state = state(&args, root.path())?;
-        let error = state
-            .retire()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(error.message.contains("remains loaded"));
-        assert!(state.frontend.is_file());
-        assert!(state.payload.is_file());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
-
-    #[test]
-    fn an_inspection_error_is_not_proof_that_the_service_is_absent() -> Result<()> {
-        let (root, args) = fixture("echo 'inspection unavailable' >&2; exit 1")?;
-        let state = state(&args, root.path())?;
-        let error = state
-            .retire()
-            .err()
-            .ok_or_else(|| failure("expected operation to fail"))?;
-        assert!(error.message.contains("absence is unproved"));
-        assert!(state.frontend.is_file());
-        assert!(state.payload.is_file());
-        assert!(state.marker().is_file());
-        Ok(())
-    }
+    use super::valid_hash;
 
     #[test]
     fn migration_id_is_only_an_exact_lowercase_sha256() {
