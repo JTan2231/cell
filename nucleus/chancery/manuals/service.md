@@ -4,7 +4,7 @@ Nucleus runs as a current-user macOS service. It owns its private state, socket,
 program installation, readiness, and durable maintenance holds. Use this feature
 to interpret service health, admission, drain, restart, installation, and recovery.
 Use `chancery show nucleus.execution.operate` for ordered installation,
-restore, and service-control procedures. Read `nucleus manual` for shared
+recovery, and service-control procedures. Read `nucleus manual` for shared
 requester coordination and recovery order before work that can interrupt it.
 
 ## Interfaces and access
@@ -100,8 +100,9 @@ installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard
 locally; the public health proof requires all guards drained.
 
-Installation does not call health or check harness, authentication, artifact,
-or persistent-state integrity. Use the ordinary diagnostic interfaces for those
+Installation checks the native CLI and daemon signatures under Cell's configured
+signing policy. It does not call health or check harness, authentication, or
+persistent-state integrity. Use the ordinary diagnostic interfaces for those
 observations. Maintenance ownership and drain remain required for replacement.
 
 The HTTP surfaces are GET `/v1/maintenance` and POST
@@ -128,6 +129,17 @@ Chancery bundle. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS
 command selects a `cell-install-v2` package and invokes the Nucleus service
 installer. Public CLI and daemon copies remain service-owned. `inspect` reads
 release metadata. There are no installer `verify` or `verify-release` commands.
+
+macOS service installation also requires Cell's persistent signing policy.
+The supplied native CLI and daemon must use its exact certificate and the
+permanent `nucleus/nucleus` and `nucleus/nucleusd` product/artifact keys.
+Their code identifiers are `NAMESPACE.nucleus.nucleus` and
+`NAMESPACE.nucleus.nucleusd`, where `NAMESPACE` is the configured namespace.
+The service installer verifies input before copying and installed copies before
+launchd bootstrap. Missing or invalid policy, unsigned or ad hoc input, a
+different certificate, a wrong identifier, or failed verification stops the
+installation. It does not choose another identity or re-sign input. Read
+`chancery show ci-manager.signing.operate` for policy setup and explicit changes.
 
 The service installer captures prior public programs, replaces the LaunchAgent,
 imports a supplied credential source when needed, and starts the daemon under

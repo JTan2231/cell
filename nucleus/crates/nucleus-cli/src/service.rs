@@ -25,6 +25,12 @@ pub enum ServiceError {
     InvalidCodexHome(PathBuf),
     #[error("a loaded {SERVICE_LABEL} service has no managed plist at {0}")]
     UnmanagedLoadedService(PathBuf),
+    #[error("Cell signature verification failed for {path}: {source}")]
+    Signing {
+        path: PathBuf,
+        #[source]
+        source: cell_install::Error,
+    },
     #[error("{operation} failed for {path}: {source}")]
     Io {
         operation: &'static str,
@@ -256,10 +262,11 @@ pub fn install(
     codex_home_source: Option<&Path>,
 ) -> Result<InstallResult, ServiceError> {
     require_macos()?;
-    paths.create_directories()?;
-
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
+    verify_cell_signature(&cli_source, "nucleus")?;
+    verify_cell_signature(&daemon_source, "nucleusd")?;
+    paths.create_directories()?;
     let codex = find_codex(codex_source)?;
     let source_codex_home = find_codex_home(codex_home_source)?;
     let target = service_target()?;
@@ -281,6 +288,8 @@ pub fn install(
         if cli_source != paths.cli {
             copy_executable(&cli_source, &paths.cli)?;
         }
+        verify_cell_signature(&paths.cli, "nucleus")?;
+        verify_cell_signature(&paths.daemon, "nucleusd")?;
         let plist = render_plist(&paths, &codex);
         atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
         command_success(
@@ -668,6 +677,15 @@ fn copy_executable(source: &Path, destination: &Path) -> Result<(), ServiceError
         source: source_error,
     })?;
     atomic_write(destination, &bytes, 0o755)
+}
+
+fn verify_cell_signature(path: &Path, artifact: &str) -> Result<(), ServiceError> {
+    cell_install::signing::verify_native("nucleus", artifact, path).map_err(|source| {
+        ServiceError::Signing {
+            path: path.to_owned(),
+            source,
+        }
+    })
 }
 
 fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, ServiceError> {
