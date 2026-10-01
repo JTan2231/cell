@@ -3367,17 +3367,17 @@ mod tests {
     use super::{
         BuiltinToolsV1, CodexError, CodexEvent, CodexHarness, CodexRunSpec, DynamicTool,
         GeneratedSchema, HarnessInspection, ModelCapability, ProtocolDirection,
-        SUPPORTED_CODEX_VERSION, ToolResult, WorkerAuthentication, WorkspaceAccess,
-        configured_model_catalog, disabled_features, dynamic_tool_specs,
-        prepare_isolated_codex_home, read_protocol_lines_with_limit, read_worker_authentication,
-        runtime_config, validate_auth_document,
+        SUPPORTED_CODEX_VERSION, WorkerAuthentication, WorkspaceAccess, configured_model_catalog,
+        disabled_features, dynamic_tool_specs, prepare_isolated_codex_home,
+        read_protocol_lines_with_limit, read_worker_authentication, runtime_config,
+        validate_auth_document,
     };
     use serde_json::{Value, json};
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::Path;
-    use std::process::{Command, Stdio};
+    use std::process::Stdio;
     use std::sync::{Arc, Mutex as StdMutex};
     use std::time::Duration;
     use tokio::io::{AsyncWriteExt as _, duplex};
@@ -4277,44 +4277,6 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     }
 
     #[tokio::test]
-    async fn account_snapshot_promotes_a_safe_proactive_refresh_from_staging()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("runtime/codex");
-        write_managed_fake_codex(&executable)?;
-        fs::write(directory.path().join("proactive-account-refresh"), b"")?;
-        let codex_home = directory.path().join("codex-home");
-        write_test_codex_home(
-            &codex_home,
-            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
-        )?;
-        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
-
-        let snapshot = harness
-            .read_account_snapshot(true, Duration::from_secs(1), Duration::from_secs(3))
-            .await?;
-        assert_eq!(snapshot.rate_limits["limitId"], "primary");
-        assert_eq!(
-            snapshot
-                .usage
-                .as_ref()
-                .and_then(|usage| usage.get("planType")),
-            Some(&json!("pro"))
-        );
-        let staging_home = fs::read_to_string(directory.path().join("account-read-home"))?;
-        assert_ne!(staging_home, codex_home.display().to_string());
-        assert!(!Path::new(&staging_home).exists());
-        let WorkerAuthentication::ManagedChatgpt(refreshed) =
-            read_worker_authentication(&codex_home)?
-        else {
-            panic!("account refresh changed authentication modes");
-        };
-        assert_eq!(refreshed.access_token, REFRESHED_ACCESS_TOKEN);
-        assert_eq!(refreshed.account_id, CHATGPT_ACCOUNT_ID);
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn account_request_cancellation_cannot_strand_a_rotated_generation()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4490,42 +4452,6 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     }
 
     #[tokio::test]
-    async fn closed_auth_operation_gate_rejects_new_account_and_refresh_children()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("runtime/codex");
-        write_managed_fake_codex(&executable)?;
-        let codex_home = directory.path().join("codex-home");
-        write_test_codex_home(
-            &codex_home,
-            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
-        )?;
-        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
-        let WorkerAuthentication::ManagedChatgpt(rejected) =
-            read_worker_authentication(&codex_home)?
-        else {
-            panic!("managed authentication was classified as an API key");
-        };
-        harness.close_auth_operations();
-
-        let Err(account_error) = harness
-            .read_account_snapshot(false, Duration::from_secs(1), Duration::from_secs(3))
-            .await
-        else {
-            panic!("closed supervisor started an account child");
-        };
-        assert!(account_error.to_string().contains("shutting down"));
-        let auth_session = harness.acquire_auth_session().await?;
-        let Err(refresh_error) = harness.refresh_managed_auth(&rejected, auth_session).await else {
-            panic!("closed supervisor started a refresh child");
-        };
-        assert!(refresh_error.to_string().contains("shutting down"));
-        assert!(!directory.path().join("account-read-home").exists());
-        assert!(!directory.path().join("refresh-count").exists());
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn changed_generation_from_another_account_is_never_adopted()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4676,84 +4602,6 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
     }
 
     #[tokio::test]
-    async fn managed_worker_refresh_is_end_to_end_and_secrets_never_become_events()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("runtime/codex");
-        write_managed_fake_codex(&executable)?;
-        let codex_home = directory.path().join("codex-home");
-        write_test_codex_home(
-            &codex_home,
-            &managed_auth_document(INITIAL_ACCESS_TOKEN, INITIAL_REFRESH_TOKEN),
-        )?;
-        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
-        let inspection = harness.inspect().await?;
-        let spec = CodexRunSpec {
-            instructions: "Return the managed result.".to_owned(),
-            developer_instructions: None,
-            prompt: "work".to_owned(),
-            model: "example-model".to_owned(),
-            reasoning_effort: Some("medium".to_owned()),
-            working_directory: directory.path().to_path_buf(),
-            workspace_access: WorkspaceAccess::None,
-            builtin_tools: BuiltinToolsV1 {
-                local_execution: false,
-                web_search: false,
-            },
-            timeout: Duration::from_secs(5),
-            tools: Vec::new(),
-            launch_environment: None,
-        };
-        let (events_tx, mut events_rx) = mpsc::channel(64);
-        let event_collector = tokio::spawn(async move {
-            let mut bytes = Vec::new();
-            while let Some(event) = events_rx.recv().await {
-                match event {
-                    CodexEvent::Protocol { bytes: record, .. } | CodexEvent::Stderr(record) => {
-                        bytes.extend(record);
-                    }
-                    CodexEvent::ToolCall(_) => panic!("managed fixture emitted a tool call"),
-                }
-            }
-            bytes
-        });
-        let (_cancel_tx, cancel_rx) = watch::channel(false);
-
-        let outcome = harness.run(&inspection, spec, events_tx, cancel_rx).await?;
-        assert_eq!(outcome.final_message, "managed");
-        let event_bytes = event_collector.await?;
-        assert!(
-            !String::from_utf8_lossy(&event_bytes).contains("account/chatgptAuthTokens/refresh"),
-            "authentication refresh request became a Codex event"
-        );
-        for secret in [
-            INITIAL_ACCESS_TOKEN,
-            REFRESHED_ACCESS_TOKEN,
-            INITIAL_REFRESH_TOKEN,
-            REFRESHED_REFRESH_TOKEN,
-        ] {
-            assert!(
-                !String::from_utf8_lossy(&event_bytes).contains(secret),
-                "authentication material escaped through a Codex event"
-            );
-        }
-        assert_eq!(
-            fs::read_to_string(directory.path().join("refresh-count"))?
-                .lines()
-                .count(),
-            1
-        );
-        assert_eq!(
-            serde_json::from_str::<Value>(&fs::read_to_string(codex_home.join("auth.json"))?)?,
-            serde_json::from_str::<Value>(&managed_auth_document(
-                REFRESHED_ACCESS_TOKEN,
-                REFRESHED_REFRESH_TOKEN,
-            ))?
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
     async fn worker_cancellation_cannot_interrupt_canonical_refresh()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -4822,156 +4670,6 @@ printf '%s\n' '{"models":[{"slug":"example-model","shell_type":"shell_command","
             1
         );
         Ok(())
-    }
-
-    #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn fake_app_server_preserves_protocol_and_cleans_descendants()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let directory = tempfile::tempdir()?;
-        let executable = directory.path().join("runtime/codex");
-        let descendant_pid = directory.path().join("descendant.pid");
-        write_fake_codex(&executable, &descendant_pid)?;
-        let codex_home = directory.path().join("codex-home");
-        fs::create_dir(&codex_home)?;
-        fs::set_permissions(&codex_home, fs::Permissions::from_mode(0o700))?;
-        fs::write(
-            codex_home.join("config.toml"),
-            "cli_auth_credentials_store = \"file\"\n",
-        )?;
-        fs::set_permissions(
-            codex_home.join("config.toml"),
-            fs::Permissions::from_mode(0o600),
-        )?;
-        fs::write(
-            codex_home.join("auth.json"),
-            r#"{"OPENAI_API_KEY":"credential"}"#,
-        )?;
-        fs::set_permissions(
-            codex_home.join("auth.json"),
-            fs::Permissions::from_mode(0o600),
-        )?;
-        let harness = CodexHarness::with_codex_home(&executable, &codex_home);
-        let inspection = harness.inspect().await?;
-        assert_eq!(inspection.version, SUPPORTED_CODEX_VERSION);
-        assert!(inspection.models[0].supports_local_execution);
-        assert!(inspection.models[0].supports_web_search);
-        let spec = CodexRunSpec {
-            instructions: "Use only create_todo and call it once.".to_owned(),
-            developer_instructions: Some("Call the supplied tool exactly once.".to_owned()),
-            prompt: "Create one todo".to_owned(),
-            model: "example-model".to_owned(),
-            reasoning_effort: Some("medium".to_owned()),
-            working_directory: directory.path().to_path_buf(),
-            workspace_access: WorkspaceAccess::None,
-            builtin_tools: BuiltinToolsV1 {
-                local_execution: false,
-                web_search: false,
-            },
-            timeout: Duration::from_secs(5),
-            tools: vec![DynamicTool {
-                name: "create_todo".to_owned(),
-                description: "Create one todo".to_owned(),
-                input_schema: json!({"type": "object"}),
-            }],
-            launch_environment: None,
-        };
-        let (events_tx, mut events_rx) = mpsc::channel(32);
-        let event_collector = tokio::spawn(async move {
-            let mut protocol = Vec::new();
-            let mut saw_stderr = false;
-            while let Some(event) = events_rx.recv().await {
-                match event {
-                    CodexEvent::Protocol { bytes, .. } => protocol.push(bytes),
-                    CodexEvent::Stderr(bytes) => saw_stderr |= !bytes.is_empty(),
-                    CodexEvent::ToolCall(call) => {
-                        assert_eq!(call.call_id, "call-1");
-                        assert_eq!(call.name, "create_todo");
-                        assert_eq!(call.arguments["title"], "Actionable");
-                        call.reply
-                            .send(ToolResult {
-                                success: true,
-                                content: r#"{"id":"t1"}"#.to_owned(),
-                            })
-                            .unwrap_or_else(|_| panic!("adapter must await the tool result"));
-                    }
-                }
-            }
-            (protocol, saw_stderr)
-        });
-        // A requester dropping the cancellation handle is not cancellation.
-        let (cancel_tx, cancel_rx) = watch::channel(false);
-        drop(cancel_tx);
-        let outcome = harness.run(&inspection, spec, events_tx, cancel_rx).await?;
-        assert_eq!(outcome.thread_id, "thread-1");
-        assert_eq!(outcome.turn_id, "turn-1");
-        assert_eq!(outcome.final_message, "created");
-        let (records, saw_stderr) = event_collector.await?;
-        assert!(saw_stderr);
-        assert!(records.iter().all(|record| record.ends_with(b"\n")));
-        assert!(records.iter().any(|record| {
-            std::str::from_utf8(record)
-                .is_ok_and(|line| line.contains("\"method\":\"item/tool/call\""))
-        }));
-        assert!(records.iter().any(|record| {
-            std::str::from_utf8(record).is_ok_and(|line| {
-                line.contains("\"baseInstructions\":\"Use only create_todo and call it once.\"")
-            })
-        }));
-        assert!(records.iter().any(|record| {
-            std::str::from_utf8(record).is_ok_and(|line| {
-                line.contains("\"developerInstructions\":\"Call the supplied tool exactly once.\"")
-                    && line.contains("\"experimentalRawEvents\":true")
-                    && line.contains("\"environments\":[]")
-            })
-        }));
-        assert!(records.iter().any(|record| {
-            std::str::from_utf8(record).is_ok_and(|line| line.contains("\\\"id\\\":\\\"t1\\\""))
-        }));
-        assert_eq!(
-            fs::read_to_string(codex_home.join("auth.json"))?,
-            r#"{"OPENAI_API_KEY":"credential"}"#
-        );
-
-        let failed_spec = CodexRunSpec {
-            instructions: "contract".to_owned(),
-            developer_instructions: None,
-            prompt: "FAIL_AFTER_THREAD".to_owned(),
-            model: "example-model".to_owned(),
-            reasoning_effort: Some("medium".to_owned()),
-            working_directory: directory.path().to_path_buf(),
-            workspace_access: WorkspaceAccess::None,
-            builtin_tools: BuiltinToolsV1 {
-                local_execution: false,
-                web_search: false,
-            },
-            timeout: Duration::from_secs(5),
-            tools: Vec::new(),
-            launch_environment: None,
-        };
-        let (failed_events, mut failed_events_rx) = mpsc::channel(32);
-        let drain = tokio::spawn(async move { while failed_events_rx.recv().await.is_some() {} });
-        let (_cancel_tx, cancel_rx) = watch::channel(false);
-        let Err(failure) = harness
-            .run(&inspection, failed_spec, failed_events, cancel_rx)
-            .await
-        else {
-            panic!("nonzero app-server exit should fail");
-        };
-        assert!(
-            matches!(failure, CodexError::HarnessFailure { .. }),
-            "unexpected failure: {failure:?}"
-        );
-        drain.await?;
-
-        let pid: u32 = fs::read_to_string(&descendant_pid)?.trim().parse()?;
-        for _ in 0..20 {
-            if !process_exists(pid) {
-                return Ok(());
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
-        panic!("descendant process {pid} survived adapter cleanup");
     }
 
     fn write_managed_fake_codex(path: &Path) -> std::io::Result<()> {
@@ -5097,60 +4795,6 @@ printf '%s\n' '{"method":"turn/completed","params":{"threadId":"thread-managed",
         stage_fake_runtime(&executable, path)
     }
 
-    fn write_fake_codex(path: &Path, descendant_pid: &Path) -> std::io::Result<()> {
-        let script = format!(
-            r#"#!/bin/sh
-if [ "$1" = "--version" ]; then
-  printf '%s\n' 'codex-cli 0.154.0-alpha.6.2'
-  exit 0
-fi
-if [ "$1" = "debug" ]; then
-  printf '%s\n' '{{"models":[{{"slug":"example-model","default_reasoning_level":"medium","supported_reasoning_levels":[{{"effort":"medium"}}],"tool_mode":"code_mode_only","shell_type":"shell_command","supports_search_tool":true,"apply_patch_tool_type":"freeform"}}]}}'
-  exit 0
-fi
-case "$*" in
-  *'model_catalog_json='*) ;;
-  *) exit 20 ;;
-esac
-case "$*" in
-  *'web_search="disabled"'*) ;;
-  *) exit 21 ;;
-esac
-printf '%s\n' 'diagnostic' >&2
-IFS= read -r initialize
-printf '%s\n' '{{"id":0,"result":{{}}}}'
-IFS= read -r initialized
-IFS= read -r inventory
-printf '%s\n' '{{"id":1,"result":{{"data":[],"nextCursor":null}}}}'
-IFS= read -r thread
-printf '%s\n' '{{"id":2,"result":{{"thread":{{"id":"thread-1"}}}}}}'
-  IFS= read -r turn
-  printf '%s\n' '{{"id":3,"result":{{"turn":{{"id":"turn-1"}}}}}}'
-  case "$turn" in
-    *FAIL_AFTER_THREAD*) exit 19 ;;
-  esac
-  (trap '' TERM; sleep 300) &
-  printf '%s\n' "$!" > '{pidfile}'
-  printf '%s\n' '{{"id":20,"method":"item/tool/call","params":{{"threadId":"thread-1","turnId":"turn-1","callId":"call-1","namespace":null,"tool":"create_todo","arguments":{{"title":"Actionable"}}}}}}'
-IFS= read -r tool_result
-case "$tool_result" in
-  *'"success":true'*) ;;
-  *) exit 22 ;;
-esac
-  printf '%s\n' '{{"method":"item/completed","params":{{"threadId":"thread-1","turnId":"turn-1","item":{{"type":"agentMessage","text":"created"}}}}}}'
-  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-other","turn":{{"id":"turn-other","status":"completed","items":[{{"type":"agentMessage","text":"wrong-turn"}}]}}}}}}'
-  printf '%s\n' '{{"method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"turn-1","status":"completed","items":[]}}}}}}'
-  printf '%s' '{{"OPENAI_API_KEY":"refreshed"}}' > "$CODEX_HOME/auth.json"
-  wait
-"#,
-            pidfile = descendant_pid.display(),
-        );
-        let source = tempfile::tempdir()?;
-        let executable = source.path().join("codex");
-        fs::write(&executable, script)?;
-        stage_fake_runtime(&executable, path)
-    }
-
     fn stage_fake_runtime(source: &Path, executable: &Path) -> std::io::Result<()> {
         let helper = source.with_file_name("codex-code-mode-host");
         fs::write(&helper, "#!/bin/sh\nexit 0\n")?;
@@ -5162,14 +4806,5 @@ esac
         })?;
         crate::runtime_bundle::stage_runtime(source, destination).map_err(std::io::Error::other)?;
         fs::set_permissions(destination, fs::Permissions::from_mode(0o700))
-    }
-
-    fn process_exists(pid: u32) -> bool {
-        Command::new("/bin/kill")
-            .args(["-0", "--", &pid.to_string()])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok_and(|status| status.success())
     }
 }

@@ -29,6 +29,35 @@ class NotificationTests(unittest.TestCase):
         for value in (job["id"], job["input_commit"], "Artifacts", "Models", "budget"):
             self.assertNotIn(value, subject + body)
 
+    def test_skipped_tests_are_visible_after_success(self):
+        for deployed in (False, True):
+            with self.subTest(deployed=deployed):
+                job = self.job(last_receipt={"selection": {"tests_skipped": True}})
+                if deployed:
+                    job.update(installation_verified=True, deployment_result={
+                        "state": "succeeded", "products": ["annals"]})
+                subject, body = render(job)
+                self.assertIn("Tests were skipped.", body)
+                self.assertIn("Required checks", body)
+                self.assertNotIn("tests passed", body.lower())
+                self.assertIn("deployed" if deployed else "passed", subject)
+
+    def test_skipped_tests_are_visible_after_check_failure(self):
+        job = self.job(last_receipt={
+            "selection": {"tests_skipped": True},
+            "failure": {"gate": "cell.structure", "message": "invalid descriptor"}})
+        job.update(outcome="failed", stopped_phase="checking")
+        subject, body = render(job)
+        self.assertIn("failed", subject)
+        self.assertIn("Tests were skipped.", body)
+        self.assertIn("Nothing was deployed.", body)
+
+    def test_skip_notice_uses_validation_evidence(self):
+        for selection in (None, {"tests_skipped": False}):
+            with self.subTest(selection=selection):
+                job = self.job(skip_tests=True, last_receipt={"selection": selection})
+                self.assertNotIn("Tests were skipped.", render(job)[1])
+
     def test_failed_tests_survive_exhausted_repair_summary(self):
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "validation.log"

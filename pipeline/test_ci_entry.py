@@ -247,6 +247,25 @@ else:
         self.assertEqual([command[command.index("--group") + 1] for command in tests],
                          ["product", "platform"])
 
+    def test_skip_tests_retains_provider_lint_docs_and_release_checks(self):
+        result = self.invoke(group="none")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertTrue(all(command[0] == "cargo" for command in commands))
+        self.assertEqual([command[1] for command in commands],
+                         ["fmt", "clippy", "run", "doc", "build"])
+        self.assertIn("tests skipped", result.stdout)
+
+    def test_skip_tests_post_phase_can_seal_candidate_after_build(self):
+        stage = str(self.root.parent / "sealed candidate")
+        result = self.invoke("post", group="none", stage=stage)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        commands = self.commands()
+        self.assertEqual([command[0] for command in commands],
+                         ["cargo", "cargo", "cargo", "candidate.py"])
+        self.assertEqual([command[1] for command in commands if command[0] == "cargo"],
+                         ["run", "doc", "build"])
+
     def test_pre_phase_rejects_candidate_staging_before_running_any_checks(self):
         result = self.invoke("pre", stage=str(self.root.parent / "candidate"))
         self.assertEqual(result.returncode, 1)
@@ -570,6 +589,77 @@ class WorkerDeploymentTests(unittest.TestCase):
 
 
 class WorkerValidationTests(unittest.TestCase):
+    def validation_fixture(self, **policy):
+        temporary = tempfile.TemporaryDirectory(prefix="cell-ci-worker-policy-test-")
+        self.addCleanup(temporary.cleanup)
+        directory = Path(temporary.name)
+        worktree = directory / "private worktree"
+        worker = Worker.__new__(Worker)
+        worker.repository = directory / "repository"
+        worker.store = mock.Mock()
+        worker.store.job.return_value = {"cancel_requested": False}
+        worker.worktree = mock.Mock(return_value=worktree)
+        worker.directory = mock.Mock(return_value=directory)
+        worker.process = mock.Mock()
+        job = {"id": "fixture-job", "base_commit": "a" * 40,
+               "candidate_commit": "b" * 40, "validations": [], **policy}
+        receipt = {"schema_version": 1, "base_commit": job["base_commit"],
+                   "candidate_commit": job["candidate_commit"], "state": "passed", "gates": [],
+                   "selection": {"tests_skipped": policy.get("skip_tests", False)}}
+        return worker, job, directory, worktree, receipt
+
+    def test_validation_runs_frozen_test_policy_and_retains_receipt(self):
+        for policy in ({}, {"skip_tests": False}, {"skip_tests": True}):
+            with self.subTest(policy=policy):
+                worker, job, directory, worktree, receipt = self.validation_fixture(**policy)
+                if not policy:
+                    receipt.pop("selection")  # Existing validators omitted the new field.
+                worker.process.return_value = ({"exit_code": 0}, json.dumps(receipt).encode(), b"")
+                with mock.patch("ci_manager.manager.git.ensure_worktree"), \
+                        mock.patch("ci_manager.manager.git.clean_candidate"):
+                    worker.checking(job)
+                command = [sys.executable, str(worktree / "pipeline/select_changes.py"), "run",
+                           "--base", job["base_commit"], "--candidate", job["candidate_commit"], "--json"]
+                if policy.get("skip_tests"):
+                    command.append("--skip-tests")
+                worker.process.assert_called_once_with(job, "validation-0", command, worktree)
+                worker.store.save.assert_called_once_with(job, "accepting")
+                self.assertEqual(job["last_receipt"], receipt)
+                self.assertEqual(json.loads((directory / "validation-0.json").read_text()), receipt)
+
+    def test_passed_receipt_rejects_mismatched_or_malformed_test_policy(self):
+        for requested, reported in ((True, False), (False, True), (True, "false"),
+                                    (False, 0), (True, None)):
+            with self.subTest(requested=requested, reported=reported):
+                worker, job, directory, _, receipt = self.validation_fixture(skip_tests=requested)
+                receipt["selection"]["tests_skipped"] = reported
+                worker.process.return_value = ({"exit_code": 0}, json.dumps(receipt).encode(), b"")
+                with mock.patch("ci_manager.manager.git.ensure_worktree"), \
+                        mock.patch("ci_manager.manager.git.clean_candidate") as clean, \
+                        self.assertRaisesRegex(ManagerError, "requested test policy"):
+                    worker.checking(job)
+                clean.assert_not_called()
+                worker.store.save.assert_not_called()
+                self.assertEqual(job["validations"], [])
+                self.assertFalse((directory / "validation-0.json").exists())
+
+    def test_skip_job_retains_planning_error_without_a_selection(self):
+        worker, job, directory, _, receipt = self.validation_fixture(skip_tests=True)
+        receipt.update(state="error", selection=None, failure={
+            "kind": "planning_error", "message": "invalid plan", "gate": None,
+            "execution_id": None})
+        worker.process.return_value = ({"exit_code": 78}, json.dumps(receipt).encode(), b"invalid plan")
+        worker.finish = mock.Mock()
+        with mock.patch("ci_manager.manager.git.ensure_worktree"), \
+                mock.patch("ci_manager.manager.git.clean_candidate"):
+            worker.checking(job)
+        worker.finish.assert_called_once_with(
+            job, "failed", "Validation execution requires recovery: error", unresolved=False)
+        self.assertEqual(job["last_receipt"], receipt)
+        self.assertEqual(json.loads((directory / "validation-0.json").read_text()), receipt)
+        self.assertEqual(job["validations"][0]["state"], "error")
+        self.assertEqual((directory / "validation-0.log").read_bytes(), b"invalid plan")
+
     def test_validation_calls_internal_runner_with_fixed_base_after_repair(self):
         with tempfile.TemporaryDirectory(prefix="cell-ci-worker-test-") as temporary:
             directory = Path(temporary)

@@ -43,6 +43,13 @@ accepted source, and emails the outcome. See [the CI manager](../ci_manager/READ
 for setup, effects, status, and recovery. Bare `./ci.sh`, product selection
 arguments, and direct validation flags are not supported CI entry points.
 
+New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
+to run selected tests. `--skip-tests` selects the default explicitly. The
+validator retains syntax, formatting, lint, provider, documentation, build,
+version, and candidate checks. It skips Rust tests and Python and shell regression
+suites. The receipt records `selection.tests_skipped`; product selection still
+controls automatic deployment.
+
 ### Prepare or update the test runner
 
 Install the pinned nextest executable before submitting a change that uses the
@@ -181,7 +188,7 @@ or release unit.
 The internal dispatcher in `select_changes.py` requests broker admission for
 each product phase, shared check suite, and the parallel Rust test stage. The
 broker schedules execution; it does not decide relevance. Product bodies receive
-`--tests product|all` and their phase in the brokered command identity. The Rust
+`--tests product|all|none` and their phase in the brokered command identity. The Rust
 test command records all selected products, platform products, shared Rust
 suites, and its worker limit. Its toolchain identity includes the pinned nextest
 path, version, and executable hash. An inherited flag cannot bypass admission.

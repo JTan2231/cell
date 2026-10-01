@@ -7,7 +7,7 @@ export PYTHONDONTWRITEBYTECODE=1
 
 usage() {
     cat <<'EOF'
-Usage: ./ci.sh submit COMMIT [--repo PATH] [--request-id KEY] [--deploy PRODUCT]...
+Usage: ./ci.sh submit COMMIT [--skip-tests | --run-tests] [--repo PATH] [--request-id KEY] [--deploy PRODUCT]...
        ./ci.sh status [JOB] | wait JOB [--timeout SECONDS]
        ./ci.sh pause | resume | cancel JOB | recover JOB
        ./ci.sh maintenance ACTION [--owner OWNER] | service ACTION
@@ -16,6 +16,7 @@ Usage: ./ci.sh submit COMMIT [--repo PATH] [--request-id KEY] [--deploy PRODUCT]
 
 CI runs through the installed cell-ci manager. Commit changes, then submit the
 commit for integration, validation, bounded repair, deployment, and outcome email.
+Tests are skipped by default. Use --run-tests to run the selected tests.
 EOF
 }
 

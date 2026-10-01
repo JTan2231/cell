@@ -142,7 +142,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.5.0 uses queue contract 5 and retains journal
+arguments. Manager release 0.5.3 uses queue contract 6 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
@@ -156,7 +156,20 @@ Commit the intended changes before submission. Then submit that commit:
 cell-ci submit COMMIT
 cell-ci submit COMMIT --repo /absolute/cell --request-id REQUEST_KEY
 cell-ci submit COMMIT --deploy nucleus --deploy email
+cell-ci submit COMMIT --run-tests
 ```
+
+New submissions skip tests by default. Use `--skip-tests` to select this policy
+explicitly, or `--run-tests` to run the selected product and platform tests.
+The job freezes this choice. Existing jobs without the choice still run tests.
+The request key includes this choice; do not reuse it with a different test policy.
+Skipping tests retains structure, recognition, syntax, provider, formatting,
+lint, documentation, build, version, and candidate checks. It skips Rust tests,
+Python and shell regression suites, and product test scripts. Receipts and
+outcome emails state when tests were skipped. Product selection still controls
+automatic deployment. A passing result with skipped tests supplies no test evidence.
+The candidate validator must support `--skip-tests`; use `--run-tests` when
+submitting an older candidate that does not support it.
 
 The repository option must identify the configured common Git repository.
 Submission resolves and pins the input commit, freezes its policy and selected

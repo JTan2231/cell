@@ -17,8 +17,12 @@ Submit a committed candidate and inspect its retained job:
 
 ```sh
 ./ci.sh submit COMMIT
+./ci.sh submit COMMIT --run-tests
 ./ci.sh status JOB
 ```
+
+New submissions skip tests by default. Use `--run-tests` to run the selected
+tests, or `--skip-tests` to select the default explicitly. Other checks still run.
 
 Read [queue operation](chancery/manuals/queue-operate.md) before initialization,
 installation, submission, cancellation, or recovery. It defines submission

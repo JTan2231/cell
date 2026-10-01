@@ -131,5 +131,7 @@ def render(job: dict) -> tuple[str, str]:
         else:
             lines.append("Nothing was deployed.")
         lines.append("The CI queue is paused." + (" Recovery is required." if job.get("unresolved") else ""))
+    if selection.get("tests_skipped"):
+        lines += ["", "Tests were skipped."]
     suffix = f" — {scope}" if scope else ""
     return f"Cell CI: {title}{suffix}", "\n".join(lines)

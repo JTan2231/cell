@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -22,6 +22,8 @@
     {"label": "Initialize a known accepted baseline", "invocation": "cell-ci init --repo /absolute/cell --accepted-baseline COMMIT"},
     {"label": "Install source manager and matching provider", "invocation": "./ci.sh install"},
     {"label": "Submit through the repository wrapper", "invocation": "./ci.sh submit COMMIT"},
+    {"label": "Submit with selected tests enabled", "invocation": "cell-ci submit COMMIT --run-tests"},
+    {"label": "Submit with tests explicitly skipped", "invocation": "cell-ci submit COMMIT --skip-tests"},
     {"label": "Submit an immutable input", "invocation": "cell-ci submit COMMIT --repo /absolute/cell --request-id KEY --deploy PRODUCT"},
     {"label": "Read queue or one job", "invocation": "cell-ci status [JOB]"},
     {"label": "Wait for a job", "invocation": "cell-ci wait JOB"},
@@ -36,6 +38,7 @@
   ],
   "effects": [
     "Initialization records one repository, explicit accepted baseline and policy. Submission pins an input commit and appends a durable FIFO job.",
+    "New submissions freeze skip_tests=true by default. --run-tests freezes false. Jobs without this field retain test execution. Required non-test checks still run, and receipts and outcome emails identify skipped tests.",
     "The worker merges in a private worktree, runs brokered CI, invokes read-only Nucleus remediation, applies final-response patches through Git, creates private candidate commits, and atomically advances refs/ci/accepted after successful validation.",
     "The worker requests deployment of the exact accepted commit and sends a deterministic job-outcome email to Email's fixed personal recipient.",
     "Installation selects manager and provider files and configures the current-user service. Pause, cancellation, recovery and maintenance alter only their declared queue or operation state."
@@ -125,7 +128,7 @@
       {"status": "unsupported", "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."}
     ],
     "compatibility_and_evolution": [
-      {"status": "declared", "statement": "Manager release 0.5.2 uses journal schema 1, this operation contract 5, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
+      {"status": "declared", "statement": "Manager release 0.5.3 uses journal schema 1, this operation contract 6, committed-range aggregate CI receipt schema 1, and the declared Nucleus, Email and Bazaar contract bounds. New submissions freeze refund_accepted_patches=true. Retained jobs without the flag preserve their original charge-every-invocation policy; the release does not rewrite their budgets."},
       {"status": "unspecified", "statement": "No automatic journal migration, rollback across incompatible state, cross-release support window or deprecation interval is promised."}
     ],
     "reliances": [

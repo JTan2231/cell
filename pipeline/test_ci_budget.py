@@ -1,6 +1,8 @@
 """Exercise refundable repair budgets with private Git and queue fixtures."""
 
 import argparse
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import sys
@@ -15,7 +17,7 @@ sys.path.insert(0, str(SOURCE))
 
 from ci_manager import git_ops as git
 from ci_manager.budget import repair_budget
-from ci_manager.client import status, submit
+from ci_manager.client import main as client_main, status, submit
 from ci_manager.integrations import DeferredError
 from ci_manager.manager import Worker
 from ci_manager.storage import ManagerError, Store
@@ -106,7 +108,8 @@ class RepairBudgetTests(unittest.TestCase):
     def fail_validation(self):
         candidate = self.job["candidate_commit"]
         receipt = {"schema_version": 1, "base_commit": self.base,
-                   "candidate_commit": candidate, "state": "failed", "gates": []}
+                   "candidate_commit": candidate, "state": "failed", "gates": [],
+                   "selection": {"tests_skipped": self.job.get("skip_tests", False)}}
         with mock.patch.object(self.worker, "process", return_value=(
                 {"exit_code": 1}, json.dumps(receipt).encode(), b"another gate failed")):
             self.worker.checking(self.job)
@@ -241,6 +244,53 @@ class RepairBudgetTests(unittest.TestCase):
         self.assertEqual(repeated["id"], self.job["id"])
         self.assertEqual(repeated["policy"], self.job["policy"])
         self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0], 1)
+
+    def test_submit_cli_freezes_default_and_explicit_test_policy(self):
+        for ordinal, (flag, expected) in enumerate(((None, True), ("--skip-tests", True),
+                                                  ("--run-tests", False))):
+            with self.subTest(flag=flag):
+                arguments = ["submit", self.base, "--repo", str(self.repository),
+                             "--request-id", f"test-policy-{ordinal}"]
+                if flag:
+                    arguments.append(flag)
+                output = io.StringIO()
+                with mock.patch("ci_manager.client.Store", return_value=self.store), \
+                        mock.patch("ci_manager.client.state_root", return_value=self.store.root), \
+                        mock.patch("ci_manager.client.workspace.require_capacity"), \
+                        redirect_stdout(output):
+                    self.assertEqual(client_main(arguments), 0)
+                job = json.loads(output.getvalue())
+                self.assertIs(job["skip_tests"], expected)
+                self.assertIs(self.store.job(job["id"])["skip_tests"], expected)
+        self.assertEqual(self.store.get("config")["policy"], self.policy)
+
+    def test_test_policy_is_part_of_idempotent_submission_inputs(self):
+        self.assertIs(self.job["skip_tests"], True)
+        self.args.skip_tests = False
+        with self.assertRaisesRegex(ManagerError, "different inputs"):
+            submit(self.store, self.args)
+        self.assertIs(self.store.job(self.job["id"])["skip_tests"], True)
+        self.args.request_id = "run-tests-fixture"
+        job = submit(self.store, self.args)
+        self.assertIs(job["skip_tests"], False)
+        self.assertEqual(submit(self.store, self.args)["id"], job["id"])
+        self.args.skip_tests = True
+        with self.assertRaisesRegex(ManagerError, "different inputs"):
+            submit(self.store, self.args)
+        self.assertIs(self.store.job(job["id"])["skip_tests"], False)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0], 2)
+
+    def test_legacy_job_retains_tests_and_requires_matching_resubmission(self):
+        self.job.pop("skip_tests")
+        self.store.save(self.job)
+        with self.assertRaisesRegex(ManagerError, "different inputs"):
+            submit(self.store, self.args)
+        self.args.skip_tests = False
+        repeated = submit(self.store, self.args)
+        self.assertEqual(repeated["id"], self.job["id"])
+        self.assertNotIn("skip_tests", repeated)
+        self.fail_validation()
+        self.assertIs(self.job["last_receipt"]["selection"]["tests_skipped"], False)
 
     def test_legacy_job_keeps_invocation_limit_and_idempotent_submission_policy(self):
         self.job["policy"].pop("refund_accepted_patches")
