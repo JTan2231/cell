@@ -14,6 +14,5 @@ Semantics-Project: paperboy
   jobs and leave new jobs disabled.
 - Do not add source adapters, agent prompts, a database, retained messages,
   automatic retries, or delivery reconciliation without an approved change.
-- Preserve the retired SQLite database without opening or migrating it.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. Follow the root CI instructions.
