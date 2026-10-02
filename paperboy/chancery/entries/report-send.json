@@ -1,87 +1,54 @@
 {
   "id": "paperboy.report.send",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Research and email a conversation or decision report",
-  "summary": "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox.",
+  "title": "Run a renderer and email its stdout",
+  "summary": "Execute one manifest job and send successful nonempty stdout unchanged as plain-text email to the fixed personal recipient.",
   "use_when": [
-    "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox."
+    "Execute a configured collection-and-render script and email its successful stdout, or inspect its manifest and supported output contract."
   ],
   "do_not_use_when": [
-    "The request is to mutate source tasks, contact another recipient, certify STE compliance, or infer final inbox delivery."
+    "The request needs a saved-message preview, report-history read, retry of a retained payload, another recipient, source-specific reporting, or delivery confirmation."
   ],
-  "outcome": "Have an agent read conversations or Krisis decisions accepted into Annals during the requested period, retain a report, and send it to the fixed personal inbox.",
+  "outcome": "One renderer execution either skips empty successful stdout or returns Email submission acceptance for the exact nonempty plain-text output.",
   "interfaces": [
     {
-      "label": "Send an independent report now",
-      "invocation": "paperboy run --ad-hoc"
+      "label": "Run a configured job now",
+      "invocation": "paperboy run JOB_ID"
     },
     {
-      "label": "Run the scheduled occurrence",
-      "invocation": "paperboy run --scheduled"
+      "label": "Select an absolute manifest",
+      "invocation": "paperboy --manifest /absolute/paperboy.toml run JOB_ID"
     },
     {
-      "label": "Resume a report",
-      "invocation": "paperboy run --brief BRIEF_ID"
+      "label": "List configured jobs",
+      "invocation": "paperboy list"
     },
     {
-      "label": "Retry failed generation",
-      "invocation": "paperboy run --brief BRIEF_ID --retry-agent"
-    },
-    {
-      "label": "List briefs",
-      "invocation": "paperboy list --limit 20"
-    },
-    {
-      "label": "Read a report and attempts",
-      "invocation": "paperboy show BRIEF_ID"
-    },
-    {
-      "label": "Preview retained email",
-      "invocation": "paperboy preview BRIEF_ID"
-    },
-    {
-      "label": "Reconcile an uncertain accepted email",
-      "invocation": "paperboy reconcile EMAIL_ATTEMPT_ID --receipt PROVIDER_MESSAGE_ID"
-    },
-    {
-      "label": "Reconcile confirmed nonacceptance",
-      "invocation": "paperboy reconcile EMAIL_ATTEMPT_ID --not-accepted"
-    },
-    {
-      "label": "Report accepted decisions",
-      "invocation": "paperboy run --ad-hoc --report decisions --annals-config <DECISIONS_CONFIG> [--from <RFC3339> --until <RFC3339>]"
+      "label": "Validate configuration and executable paths",
+      "invocation": "paperboy doctor"
     }
   ],
   "effects": [
-    "Report execution consumes Nucleus allowance, reads private history on demand, retains product records, and sends the frozen summary when authorized."
+    "Execution starts a trusted normal-user renderer; successful nonempty stdout is disclosed through Email. Paperboy retains no rendered body or structured send ledger. Scheduled logs can retain result metadata. Scripts own any source reads and side effects."
   ],
   "authority": [
-    "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
+    "Paperboy validates execution and stdout; renderers own data and report meaning. Email owns submission acceptance; Gmail owns final delivery. Clockwork owns scheduled runtime evidence."
   ],
   "success": [
-    "A report is generated when its summary is committed. A send succeeds when provider acceptance is retained. Installation succeeds after exact candidate readiness and release of run-owned holds. Schedule enable succeeds when Clockwork commits its binding."
+    "Renderer exit success and zero stdout bytes establish a skip. Otherwise a successful Email receipt establishes Resend submission acceptance for the unchanged stdout body, not inbox delivery or source completeness."
   ],
   "failure_and_recovery": [
-    "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
-    "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout ends the current activation. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending failure episode. An established halt requires exact continuation approval; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear established halts."
+    "Nonzero renderer exit, timeout, invalid UTF-8, or oversized stdout sends no email. Stderr stays separate and diagnostics exclude captured stdout. No saved body or structured retry state remains.",
+    "Email timeout or interruption can leave acceptance unknown. Inspect Resend before a new run when duplication matters. A new run renders again; it cannot resume or reconcile the prior payload.",
+    "Scheduled failures use Clockwork halt-until-approved with its shared service-health delay. Later activations can occur while failure is pending. Exact incident approval permits future admission and does not retry failed work."
   ],
   "privacy": [
-    "Source text can enter private tool replies and Nucleus records; final email text leaves for Resend and the personal inbox provider. Secrets never enter prompts, product records or Clockwork definitions."
+    "Scripts run with current-user access. Captured stdout stays in memory for Email handoff and is not printed or logged by Paperboy. Script stderr may contain private data in bounded diagnostics. Email loads credentials and discloses subject and body to Resend and Gmail."
   ],
   "dependencies": [
-    {
-      "id": "conversations.history.explore",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
-    },
-    {
-      "id": "nucleus.execution.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
-    },
     {
       "id": "email.message.send",
       "min_contract": 4,
@@ -91,166 +58,100 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 5,
       "max_contract_exclusive": 6
-    },
-    {
-      "id": "annals.decision-account.exchange",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "bazaar.string.read",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
-    "Catalog presence does not authorize an ad hoc send, enabling the schedule, changing providers, deleting private records, or treating uncertain acceptance as absence."
+    "Discovery does not authorize executing a script, sending email, enabling a schedule, or treating uncertain acceptance as confirmed nonacceptance."
   ],
   "promise": {
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and authorized installed local Paperboy runner."
+        "statement": "The current user and explicitly authorized installed scheduled Paperboy jobs."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Private supported state, compatible installed providers, normal-user history access, authenticated Nucleus, and explicit ad hoc or standing daily personal-email authority."
-      },
-      {
-        "status": "declared",
-        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.paperboy selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+        "statement": "A valid selected version-one TOML manifest, readable executable renderer, supported Email wrapper, and authority for script execution and its resulting personal email. Scheduled execution also requires an applied enabled Clockwork binding."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Brief identity or occurrence, absolute requested timeframe, source pointers, and versioned fixed agent instructions. The initial task contains no preloaded conversation content."
-      },
-      {
-        "status": "declared",
-        "statement": "--report decisions selects Annals acceptance-time reporting and requires an absolute --annals-config for an identity-bound decisions library. The default kind is conversations. Ad hoc --from and --until accept an inclusive/exclusive RFC3339 interval."
+        "statement": "An absolute manifest selection or the default Paperboy manifest and one stable job ID. Each job supplies nonempty render argv with an absolute executable, an optional subject defaulting to its ID, and one supported interval or local-calendar schedule. Literal -c arguments are unsupported. The selected regular UTF-8 manifest is at most 1 MiB and rejects unknown fields. Arguments contain no NUL; explicit subjects are nonblank and contain no control characters."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON envelopes expose requested brief/attempt selections and acceptance receipts. Preview exposes the exact stored subject/body. Errors describe the failed operation; process success is not inbox receipt."
+        "statement": "Results return job_id, body_bytes, and outcome skipped_empty or accepted; accepted results add provider_message_id. Default output is formatted JSON; --json selects compact ok/data or stderr ok:false/error envelopes. No captured stdout appears in the result. status-snapshot uses raw Iatreion schema one."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "A brief owns one requested interval and accepted immutable summary. An agent attempt owns one exact job request and durable tool replies. An email attempt represents one Email invocation. Source retrieval remains agent-directed."
-      },
-      {
-        "status": "declared",
-        "statement": "Decision reports select Annals documents by accepted_at, not original decision occurrence time. The agent chooses organization, grouping and context. Brief source pointers retain the report kind and Annals selection; no separate consumer cursor or report snapshot is maintained."
+        "statement": "Successful nonempty stdout is the unchanged plain-text body; stderr is separate. Zero bytes skip Email, while whitespace-only output is sent. Scripts own collection semantics and reporting windows; Paperboy retains no body or occurrence ledger."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Brief and attempt IDs are stable UUIDs. Daily identities distinguish report kind and local 09:00 cutoff; ad hoc identities are independent. Record and filter times use Unix seconds; Annals accepted_at uses RFC3339. Windows are inclusive/exclusive and default to 86400 seconds; explicit ad hoc bounds replace that duration."
+        "statement": "Job IDs are at most 63 ASCII bytes, begin with a lowercase letter, and continue with lowercase letters, digits, or hyphens. Each maps to paperboy/JOB_ID. Interval values are whole seconds; calendar values are local hour and minute; output limits count bytes. There is no durable per-run message identity."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "History is read live on demand. Provider page failures remain errors. Tool pagination reports selected_count, offset, next_offset and has_more for the filtered metadata or message collection. Brief list limits only brief metadata. No snapshot, machine-wide event completeness or independent generated-text accuracy is asserted."
+        "statement": "List reads configured jobs, not history. Manual execution selects current manifest configuration; scheduled execution selects an applied immutable command snapshot. Neither freezes renderer file bytes or data."
       },
       {
         "status": "unspecified",
-        "statement": "No maximum source age, launch delay, model start/completion time or inbox receipt time is promised."
-      },
-      {
-        "status": "declared",
-        "statement": "Decision tools preserve document bytes and feed cursors while filtering events to the brief acceptance-time interval. has_more is true for any nonempty unfiltered source page; continue until false even after an empty filtered page. Page events count accepted documents, not distinct decisions. Feed reads do not depend on later librarian processing."
+        "statement": "Source accuracy, completeness, freshness, start delay, throughput, and inbox arrival time are not promised."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "The typed Nucleus client and Conversations library perform agent execution and on-demand reads. Clockwork uses its provider-owned typed CLI client. Email uses its installed credential-loading CLI. Agent workspace, local execution and web access are disabled. The decision tool uses annals_api::Client::{start,watermark,read_page} against the selected config."
+        "statement": "Literal command execution uses the executable parent as cwd and clears ambient environment except HOME, PATH=/usr/bin:/bin:/usr/sbin:/sbin:HOME/.local/bin, and CHANCERY_USAGE_INTERNAL=1. Scripts run as the current user under operating-system permissions, without a Paperboy sandbox. Renderer stdin is closed."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One runner lock serializes product runs. Exact requests persist before submission. Tool call/reply pairs and summary commit atomically. Exact repeated calls replay their prior reply. Frozen summaries and acceptance receipts survive later runtime errors. Uncertain sends block automatic resend until explicit evidence reconciliation."
-      },
-      {
-        "status": "declared",
-        "statement": "Callers resolve cell.prompts.paperboy to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "Paperboy waits for successful renderer exit before invoking Email once. It retains no payload or structured send ledger and performs no process retry. Scheduled logs can retain execution results including receipt IDs, but supply no replay interface. Applied schedules fix argv, subject, and absolute Email wrapper path without runtime manifest reads. Separate executions render again and do not reuse a prior message identity."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One active product runner, 1200-second active agent timeout, 1800-second total agent wait, 2100-second Clockwork timeout, and 180-second Email invocation observation. History pages contain up to 100 records; final body is at most 64000 UTF-8 bytes. Decision pages have at most 200 events and 4 MiB of document bytes."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No throughput, future history-retention, automatic language certification, unlimited retry or unlimited deduplication guarantee."
+        "statement": "Manifest maximum 1 MiB; renderer timeout 1200 seconds; stdout maximum 64000 UTF-8 bytes, rejected rather than truncated; stderr diagnostic prefix 4096 bytes, excess drained and discarded; Email observation 120 seconds; Clockwork timeout 1380 seconds. Interval range 1 through 31536000; local hour 0 through 23 and minute 0 through 59; run-at-load false."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Private schema 1, daily-report and decision-report toolsets: historical version 1 and new selection version plus 1. Existing conversation requests retain their meaning. No database migration is required for decision source pointers."
+        "statement": "Report contract five replaces the legacy conversation and decision-report commands. TOML version one is the configuration format. Paperboy 0.3.0 leaves the retired SQLite database unopened and exposes no legacy preview, retry, reconciliation, or maintenance CLI."
       },
       {
         "status": "unspecified",
-        "statement": "No general future compatibility window or deprecation period."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "No general future compatibility or deprecation window is promised."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Conversations supplies normalized local history and stable source identities.",
-        "target": "conversations",
-        "kind": "data",
-        "contract": "conversations.history.explore"
-      },
-      {
-        "status": "declared",
-        "statement": "Nucleus supplies constrained execution, mailbox durability and managed authentication.",
-        "target": "nucleus",
-        "kind": "control",
-        "contract": "nucleus.execution.operate"
-      },
-      {
-        "status": "declared",
-        "statement": "Email supplies fixed personal-recipient submission and provider acceptance.",
+        "statement": "Email supplies fixed personal-recipient submission, bounded within-invocation transport retries, and provider-acceptance receipts.",
         "target": "email",
         "kind": "control",
         "contract": "email.message.send"
       },
       {
         "status": "declared",
-        "statement": "Clockwork supplies exact release activation, the shared service-health delay for halt-until-approved, retained incident notification, exact continuation approval, schedule selection and runtime history.",
+        "statement": "Clockwork supplies immutable activation definitions, binding selection, overlap control, runtime history, delayed failure halts, incidents, and exact continuation approval.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
-      },
-      {
-        "status": "declared",
-        "statement": "Annals supplies unchanged accepted Krisis documents, acceptance times and feed start/watermark/page reads through its typed CLI client. Decision reports require the start operation.",
-        "target": "annals",
-        "kind": "data",
-        "contract": "annals.decision-account.exchange"
-      },
-      {
-        "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
-        "target": "bazaar",
-        "kind": "data",
-        "contract": "bazaar.string.read"
       }
     ]
   },

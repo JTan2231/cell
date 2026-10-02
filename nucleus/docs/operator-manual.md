@@ -46,7 +46,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/conatus/chancery/overview.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/email/chancery/overview.md) |
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/emt/chancery/overview.md) |
-| Paperboy | Reports from conversations or accepted Krisis decisions | [Paperboy](/Users/joey/rust/cell/paperboy/README.md) |
+| Paperboy | Manifest renderer execution and exact stdout email handoff | [Paperboy](/Users/joey/rust/cell/paperboy/chancery/overview.md) |
 | Weaver | Narratives authored from free-form directions and Annals reading | [Weaver](/Users/joey/rust/cell/weaver-narrative/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/conversations/chancery/overview.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/decisions/README.md) |
@@ -69,10 +69,11 @@ requesting products --> Nucleus --> isolated Codex app-server
 
 Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
-Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Paperboy, Weaver
+Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Weaver
 Cast --> Platter <-- Vita career works in Annals
 Cast --> Clew application history
 Platter, Clew, Conatus, Paperboy, EMT --> Email --> Resend
+configured renderer scripts --> Paperboy --> Email
 installed product releases --> Chancery documentation
 Cell declarations + product status probes --> Iatreion operational report
 ```
@@ -86,9 +87,9 @@ them. Conversations reads normal-user history through App Server. Annals Usage
 reads Nucleus output and Annals attribution records without owning either store.
 
 Krisis sends decision documents to Annals. Annals owns accepted text, library
-identity, and the document feed. Paperboy selects documents by acceptance time;
-Conatus forwards their exact text; Semantics reconciles them for participating
-projects; Weaver reads them for authoring. Interpretation belongs to each
+identity, and the document feed. Conatus forwards their exact text; Semantics
+reconciles them for participating projects; Weaver reads them for authoring.
+Interpretation belongs to each
 consumer. See [the document exchange](/Users/joey/rust/cell/annals/chancery/annals/manuals/decision-account-exchange.md)
 and [Krisis source documents](/Users/joey/rust/cell/decisions/docs/source-documents.md).
 
@@ -103,6 +104,11 @@ for collection, authoring, and acceptance rules.
 Email owns transport and credential loading. Its receipt means provider
 acceptance, not final inbox delivery. Conatus submits its deterministic daily
 email through Email. The email path invokes no model.
+
+Paperboy executes manifest commands and sends successful nonempty stdout
+unchanged through Email. Its scripts own collection, reporting windows, and
+source integrations. Paperboy itself uses Clockwork and Email; it retains no
+report or send ledger and invokes no Nucleus agent.
 
 Source colocation and a shared Cargo workspace do not merge product databases,
 credentials, release units, or runtime authority.
@@ -140,7 +146,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `conatus/update` | Preserve source/feed identity; stop after the first failed update stage. |
 | `krisis/observer` | Preserve coverage and pending document identity; explicit observation retry. |
 | `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
-| `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
+| `paperboy/JOB_ID` | Execute the applied renderer snapshot; skip empty stdout and fail without sending invalid output. No retained payload or retry queue. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
 | `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip explicit maintenance holds. |
 | `clew/daily-email` | Preserve complete application snapshots and frozen messages; require explicit recovery of uncertain submission. |
@@ -295,9 +301,9 @@ A decoder repair may expose output from an old completed job without another
 model attempt. Missing observations remain a gap. The repair does not change
 requester terminal records or authorize a retry.
 
-Rebuild embedded consumers when their provider's behavior changes. Krisis and
-Paperboy embed Conversations, including its normalization and executable
-defaults. Weaver embeds Annals, Nucleus, Iatreion, and Chancery usage interfaces.
+Rebuild embedded consumers when their provider's behavior changes. Krisis
+embeds Conversations, including its normalization and executable defaults.
+Weaver embeds Annals, Nucleus, Iatreion, and Chancery usage interfaces.
 Select affected consumers explicitly when their supported interfaces change.
 Keep executable pins and library identities aligned through product instructions.
 See [Conversations installation](/Users/joey/rust/cell/conversations/chancery/manuals/installation-operate.md)
@@ -745,8 +751,8 @@ topology, authority, compatibility, coordination, and recovery order. Product
 references own record meaning and exact operations.
 
 Nucleus, Annals, Annals Usage, Bazaar, Cast, Chancery, Clew, Clockwork, Conatus,
-Conversations, Email, EMT, Platter, Semantics, Usher, and Weaver publish detailed
-behavior as feature contracts in their product-owned Chancery provider bundles.
+Conversations, Email, EMT, Paperboy, Platter, Semantics, Usher, and Weaver publish
+detailed behavior as feature contracts in their product-owned Chancery provider bundles.
 Read `chancery product PROVIDER_ID`
 for the overview and inventory, `chancery show ID` for one feature or procedure,
 and `chancery resolve ID` for the complete required contract reading.

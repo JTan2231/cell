@@ -19,13 +19,16 @@ selection formats, and invalid templates stop request preparation.
 
 Each product reads `cell.prompts.OWNER` once, then reads the exact component
 versions named in that string. Owners are `annals`, `conatus`, `krisis`,
-`semantics`, `paperboy`, `platter`, `weaver`, `emt`, and `ci-manager`.
+`semantics`, `platter`, `weaver`, `emt`, and `ci-manager`.
 CI Manager freezes its selected repair instructions and template before its
 first model request, then retains every rendered request for recovery. For example:
 
 ```json
 {"schema_version":1,"entries":{"weaver.narrative.instructions":1,"weaver.tools.read_decisions.description":1,"weaver.tools.submit_document.description":1}}
 ```
+
+The seed retains Paperboy components and its selection for historical jobs.
+Paperboy 0.3.0 executes manifest renderers and no longer retrieves prompts.
 
 Publish component versions before publishing the selection that names them.
 This makes each product's selected set consistent without assuming that Bazaar
@@ -63,8 +66,8 @@ IDs, reuses identical latest content, and publishes selections after every
 component exists. An interrupted import may leave unused component versions.
 Repeat the same import to finish; inspect history after an uncertain write.
 Publication is per owner, not an atomic cutover of all requesters.
-Retiring a caller removes its components from this import. Retained Bazaar IDs
-and versions remain unchanged.
+Keep compatibility components required by historical jobs when retiring a
+caller. Retained Bazaar IDs and versions remain unchanged.
 
 Selection version 1 is the immutable migration baseline for historical jobs.
 Import the original seed before publishing edits. Keep that baseline and all
@@ -81,9 +84,9 @@ owner's next selection.
 ## Execution compatibility
 
 New dynamic toolset versions encode the selection version above the product's
-historical range: Annals adds 2; Platter adds 3; Krisis, Semantics, Paperboy, and
-Weaver add 1. Annals also versions input schema IDs because its schema fields
-contain editable descriptions. Old toolset identities keep the original text
+historical range: Annals adds 2; Platter adds 3; Krisis, Semantics, and Weaver
+add 1. Legacy Paperboy toolsets also add 1. Annals versions input schema IDs
+because its schema fields contain editable descriptions. Old toolset identities keep the original text
 from selection 1. Structural schema changes still require a code change and
 the requester's compatibility procedure.
 

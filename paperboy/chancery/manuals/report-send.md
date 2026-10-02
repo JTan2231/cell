@@ -1,191 +1,203 @@
-# Research and email a report
+# Run a renderer and email its stdout
 
-Paperboy researches local Codex conversations or Krisis decision documents
-accepted into Annals during a selected interval. It retains the report and
-sends it to Email's fixed personal recipient. Use this capability for an
-authorized report. Source reads do not change conversations or Annals documents.
+Paperboy runs a configured command, captures stdout, and submits successful
+nonempty output to Email as a plain-text body. Scripts own collection, source
+access, report structure, and data windows. Paperboy adds no report text.
 
-The operation requires supported private state, compatible providers,
-normal-user history access, and authenticated Nucleus. An ad hoc send requires
-explicit authority. A daily run requires standing personal-email authority.
+Use this capability when execution and email submission are authorized. A
+scheduled job requires standing authority for its script and resulting email.
+Reading configuration or preparing schedules does not execute the script.
 
-## Run or read a report
+## Select and inspect a manifest
 
-```sh
-paperboy run --ad-hoc
-paperboy run --scheduled
-paperboy run --ad-hoc --report decisions --annals-config /absolute/decisions.toml
-paperboy run --ad-hoc --report decisions --annals-config /absolute/decisions.toml \
-  --from 2026-09-09T09:00:00-05:00 --until 2026-09-10T09:00:00-05:00
-paperboy list --limit 20
-paperboy show BRIEF_ID
-paperboy preview BRIEF_ID
-paperboy run --brief BRIEF_ID
-paperboy run --brief BRIEF_ID --retry-agent
-```
-
-The run commands can consume Nucleus allowance and send real email. `preview`
-returns the stored subject and body. List selects brief metadata and reports
-`has_more`. Show selects one brief and all its attempts. JSON envelopes report
-the selected records or the failed operation.
-
-An ad hoc occurrence ends at invocation time and does not consume the daily
-occurrence. A scheduled occurrence ends at the most recent local 09:00. Its
-start is inclusive, its end exclusive, and its length exactly 86,400 seconds.
-A late run keeps that cutoff; older missed mornings are not replayed.
-Daylight-saving changes can produce a one-hour gap or overlap between windows.
-For an ad hoc report, `--from` and `--until` replace the default window. Supply
-both as RFC3339 timestamps with offsets; start is inclusive and end is exclusive.
-
-The default report kind is `conversations`. `--report decisions` requires an
-absolute `--annals-config` for an identity-bound decisions library. Paperboy uses
-the installed `~/.local/bin/annals` command and its typed feed client. This mode
-requires Annals to support `decision-feed start`. It reads accepted documents
-before or after librarian processing. The agent selects the requested period by
-Annals `accepted_at`, not a decision date mentioned in the document. It chooses
-the report's organization, grouping, and context.
-
-`run --brief` uses the retained source and timeframe. It does not accept source
-overrides. Daily occurrence identities distinguish conversation and decision
-reports at the same cutoff. The single daily binding selects one report kind;
-see the installation contract to select it.
-
-## Records and interpretation
-
-The schema-one database is
-`~/Library/Application Support/Paperboy/paperboy.sqlite`.
-
-| Record | Meaning |
-| --- | --- |
-| Brief | One occurrence, requested interval, source pointers, accepted immutable subject/body, producing attempt, and stable email key |
-| Agent attempt | One exact Nucleus request, job correlation, outcome, and durable tool replies |
-| Email attempt | One Email invocation and its acceptance, failed, or uncertain outcome |
-
-These records have stable UUID identities. The daily identity uses the local
-09:00 cutoff instant; ad hoc identities are independent. Timestamps use Unix
-seconds. Brief bounds describe source time. Summary time records local acceptance.
-Attempt times describe their execution or submission observations.
-
-The agent receives source pointers and the requested interval. It reads its
-source on demand through bounded tools. History pagination reports `selected_count`,
-`offset`, `next_offset`, and `has_more` for the filtered metadata or message
-collection. These counts do not measure real-world events or prove complete
-source retention. Decision reads return Annals events with complete document
-text, acceptance times, watermark, and cursors. The tool selects documents by
-the brief’s acceptance-time bounds. `has_more` means the unfiltered source page
-was nonempty; continue until it is false even after an empty or short filtered
-page. The agent selects report material from those documents. No persistent feed consumer or report
-snapshot is added. A provider read failure remains an error.
-
-The agent uses `gpt-5.6-sol` with medium reasoning and submits its final text
-through `submit_summary`. Instructions require the ASD-STE100 Issue 9 house
-style and exclude process commentary. Paperboy does not certify the language
-or independently prove generated-text accuracy.
-
-## Success and recovery
-
-One process lock serializes runs and schedule changes. Paperboy persists the
-exact request before Nucleus admission. Repeated tool calls replay the same
-durable reply. Summary acceptance and its tool reply commit atomically.
-
-A committed summary establishes generation success. A retained Email acceptance
-receipt establishes submission success. Neither proves final inbox delivery.
-A later agent or transport failure does not erase either accepted result.
-
-Resume an interrupted brief with `run --brief BRIEF_ID`. An ambiguous admission
-reuses the exact request and job ID. After a terminal generation failure,
-`--retry-agent` creates a new Nucleus job. There is no automatic new attempt.
-
-The product-owned schema-two daily definition declares `halt-until-approved`.
-Startup failure, crash, timeout, or a nonzero report run ends the current
-activation. Clockwork permits later activations before the shared service-health
-threshold. By default, five consecutive failed read-only checks, at least 60
-seconds apart, halt the binding and make its alert eligible together. Healthy
-or inactive checks clear a pending episode. An already accepted daily occurrence
-is an ordinary no-op. An established halt requires explicit approval; failed
-briefs and uncertain sends retain their separate recovery rules.
-
-Inspect `clockwork incident list paperboy/daily` and
-`clockwork incident show INCIDENT_ID`. After resolving the cause, explicitly
-approve future scheduling with `clockwork binding resume paperboy/daily
-INCIDENT_ID`. This does not retry the failed brief, authorize `--retry-agent`,
-reconcile an uncertain send, or reset its message identity. Select that brief
-separately for recovery. Binding enable, disable, release changes and
-maintenance release preserve Clockwork incidents.
-
-An uncertain email blocks automatic resend. Inspect Resend, then record the
-observed outcome:
+The default manifest is
+`~/Library/Application Support/Paperboy/paperboy.toml`. Use an absolute
+`--manifest` path to select another file:
 
 ```sh
-paperboy reconcile EMAIL_ATTEMPT_ID --receipt PROVIDER_MESSAGE_ID
-paperboy reconcile EMAIL_ATTEMPT_ID --not-accepted
+paperboy init
+paperboy list
+paperboy doctor
+paperboy --manifest /absolute/paperboy.toml list
+paperboy --manifest /absolute/paperboy.toml run daily-report
 ```
 
-The second form requires confirmed nonacceptance. Resume the brief afterward
-to retry its exact message. Resend's idempotency window is 24 hours; it does not
-provide unlimited deduplication. Preserve failed and uncertain records.
+`init` writes an empty manifest only when the selected file is absent. It
+validates and preserves existing configuration. `list` reads configured jobs,
+not execution history. `doctor` validates configuration and required executable paths
+without running a renderer or sending email. It does not certify script output,
+source access, Email credentials, or future timer delivery.
+
+## Manifest format
+
+The manifest is a regular UTF-8 TOML file of at most 1 MiB. It requires version
+one and a `jobs` table. Unknown fields are rejected:
+
+```toml
+version = 1
+
+[jobs.daily-report]
+render = ["/absolute/path/render-report", "--daily"]
+subject = "Daily report"
+
+[jobs.daily-report.schedule]
+kind = "local-calendar"
+hour = 9
+minute = 0
+
+[jobs.hourly-report]
+render = ["/absolute/path/render-hourly"]
+
+[jobs.hourly-report.schedule]
+kind = "interval"
+seconds = 3600
+```
+
+Each job ID begins with a lowercase ASCII letter. The remaining characters are
+lowercase ASCII letters, digits, or hyphens. Its maximum length is 63 bytes.
+The ID identifies both the manifest entry and its `paperboy/JOB_ID` Clockwork
+binding. Renaming an ID creates a different job.
+
+`render` is a nonempty array of literal strings. Its first value is an absolute
+executable path. Arguments receive no shell expansion, interpolation, globbing,
+or automatic shell interpretation. Arguments must contain no NUL. To run an
+interpreted script, supply its interpreter and script path explicitly, or use an executable script with a
+supported shebang. The literal argument `-c` is unsupported; put command logic
+in a script file.
+
+`subject` is optional. Its default is the exact job ID. It is separate from
+stdout and becomes Email's subject. An explicit subject must be nonblank and
+contain no control characters. The manifest contains no recipient or
+body template. Email fixes the sender and recipient.
+
+Each job requires exactly one schedule. `interval` accepts `seconds` from 1
+through 31,536,000. `local-calendar` accepts `hour` from 0 through 23 and
+`minute` from 0 through 59. A local-calendar job uses the host's local timezone.
+Both forms register with `run_at_load = false`. Paperboy exposes no timezone,
+catch-up, or occurrence-window setting. Clockwork and launchd own timer delivery;
+the renderer owns which data period to report.
+
+## Execute and send
+
+```sh
+paperboy run daily-report
+```
+
+Manual execution reads the selected manifest and executes that job once. It
+uses the renderer executable's parent directory as its working directory.
+The renderer receives only `HOME`, `PATH`, and `CHANCERY_USAGE_INTERNAL=1`.
+`PATH` is `/usr/bin:/bin:/usr/sbin:/sbin:HOME/.local/bin`, with `HOME` replaced
+by the user's absolute home path. Other caller environment variables are
+cleared. Shell startup files are not sourced by Paperboy.
+Renderer stdin is closed; Paperboy supplies no input stream.
+
+A renderer is a trusted normal-user program. It has the current user's
+filesystem, process, and network access under operating-system permissions.
+Paperboy supplies no sandbox or source-specific access policy. A script must
+arrange its own configuration and any source authentication.
+
+Paperboy waits for successful process exit before submitting output. A nonzero
+exit, timeout, invalid UTF-8 stdout, or stdout above 64,000 bytes fails the run
+and sends no email. Paperboy rejects an oversized body rather than truncating
+it. Stderr is separate and never becomes the email body.
+
+Successful stdout with zero bytes skips Email. Whitespace-only output is
+nonempty and is sent unchanged. Paperboy preserves spaces, line endings, and
+trailing newlines. It does not parse stdout into headers, remove commentary,
+format Markdown, or convert it to HTML.
+
+The command returns `job_id`, `outcome`, and `body_bytes`. Empty output returns
+`outcome = "skipped_empty"`. Acceptance returns `outcome = "accepted"` and
+`provider_message_id`. The command does not print the email body.
+A receipt proves that Resend accepted submission. It proves neither final
+inbox delivery nor source accuracy or completeness.
+
+Commands print formatted JSON data by default. `--json` selects a compact
+`{"ok":true,"data":...}` envelope. With that flag, failures write
+`{"ok":false,"error":"..."}` to stderr and exit nonzero. Without it, errors
+use the `paperboy: ` prefix. `status-snapshot --json` returns the raw version-one
+Iatreion snapshot rather than this envelope.
+
+## Schedule snapshots
+
+Use `paperboy apply` and the controls in `paperboy.install.operate` to register
+and select schedules. New jobs remain disabled until explicitly enabled.
+
+An applied definition fixes the installed Paperboy executable, job ID,
+subject, renderer argv, absolute Email wrapper path, schedule, and launch context.
+The scheduled runner uses that snapshot without reading the manifest again.
+Manifest edits affect manual runs immediately; apply them to update schedules.
+Applying a definition does not freeze renderer file bytes or source data.
+Clockwork verifies its registered top-level Paperboy launch image, not the
+renderer or its dependencies.
+
+## Failure and repeat execution
+
+Paperboy retains no rendered body, report record, occurrence ledger, structured
+send ledger, or retry queue. Clockwork retains scheduled activation history.
+Product logs can retain execution results, including an accepted message ID,
+and bounded diagnostics. They contain no captured renderer stdout and provide
+no payload recovery or resend interface.
+
+Paperboy invokes Email once for one successful nonempty rendering. Email can
+retry transport within that invocation under `email.message.send`. Paperboy
+performs no process retry. A later manual or scheduled execution runs the
+script again and submits its new output. It does not resume the prior message
+or preserve a prior idempotency key. Scripts own any collection checkpoints,
+side effects, or duplicate suppression they need.
+
+A timeout or interrupted Email call can leave submission acceptance unknown.
+An error does not establish nonacceptance. Inspect Resend before an explicit
+new execution when duplicate submission matters. Paperboy provides no
+reconciliation command and cannot reconstruct the prior body.
+
+Each scheduled definition declares `halt-until-approved`. Clockwork ends a
+failed activation and applies its shared service-health delay before an
+established halt. Later activations can occur while that failure episode is
+pending. Resolve `clockwork.schedule.operate` for the complete policy, incident
+notification, and exact continuation rules. Approval permits future scheduling;
+it does not retry a failed Paperboy run.
 
 ## Limits and privacy
 
 | Operation | Limit |
 | --- | --- |
-| Active agent execution | 1,200 seconds |
-| Total agent wait, including capacity | 1,800 seconds |
-| Clockwork activation | 2,100 seconds |
-| Email invocation observation | 180 seconds |
-| History page | At most 100 records |
-| Decision page | At most 200 events and 4 MiB of document bytes |
-| Final report body | At most 64,000 UTF-8 bytes |
+| Manifest file | 1 MiB |
+| Renderer execution | 1,200 seconds |
+| Successful stdout body | 64,000 UTF-8 bytes |
+| Retained stderr diagnostic prefix | 4,096 bytes |
+| Email wrapper observation | 120 seconds |
+| Clockwork activation | 1,380 seconds |
 
-Nucleus permits eight active attempts across all requesters. No maximum source
-age, launch delay, completion time, throughput, or inbox arrival time is promised.
-The daily schedule requires a macOS GUI session and has no run-at-load trigger.
+Paperboy drains stderr beyond its diagnostic limit and discards the excess.
+Diagnostics can contain private data written by the script to stderr.
+Captured stdout remains in memory for validation and submission. Email
+receives the exact subject and body and discloses them to Resend and Gmail.
+Email's selected wrapper owns credential loading. No credential belongs in
+manifest arguments, subjects, or Clockwork definitions.
 
-The conversation agent has history-read tools. The decision agent has
-`read_decisions`. Both use `submit_summary`. Workspace, local
-execution, web, and email tools are disabled. Retrieved text is evidence and
-cannot change these permissions.
+Configuration, executable paths, arguments, schedules, and logs are private
+local data. Clockwork retains definition and activation metadata but ingests
+no renderer output. Scripts and providers own their separate retention.
+No source freshness, throughput, start delay, completion time, or inbox arrival
+objective is promised.
 
-Private tool replies and Nucleus records can contain conversation text. Email
-sends the final report to Resend and the personal inbox provider. Email's installed
-wrapper loads its credential; secrets do not enter Paperboy records, agent
-requests, or Clockwork definitions. Logs contain metadata and bounded diagnostics.
-There is no automatic local pruning. Paperboy and Nucleus retain separate state.
+## Compatibility and command usage
 
-Schema 1, `paperboy/daily-report/1`, and `paperboy/decision-report/1` preserve retained request meaning. There
-is no general future compatibility window, legacy database migration, or direct
-incompatible rollback. Installation and schedule changes are separate operations.
+Paperboy 0.3.0 uses this manifest-render contract and TOML version one. It does
+not open or migrate the retired
+`~/Library/Application Support/Paperboy/paperboy.sqlite` database. Old briefs,
+agent requests, summaries, and send attempts remain untouched. The new CLI
+provides no legacy report, preview, retry, reconciliation, or maintenance
+operations. Retained legacy programs and upstream state keep their own rules;
+see `paperboy.install.operate` before cutover or recovery.
 
-## Command usage
+Contract five replaces the conversation and decision-report interface. Scripts
+can use other installed products under those products' contracts. Paperboy
+itself depends only on Clockwork and Email for scheduling and submission.
+No general future compatibility window or deprecation period is promised.
 
 CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
 journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
-
-## Bazaar prompt selection
-
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.paperboy selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.paperboy` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.paperboy --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+or outcomes. Internal product calls are excluded. Recording errors preserve
+command results. Runtime commands do not invoke Chancery discovery.
