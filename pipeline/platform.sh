@@ -19,12 +19,13 @@ fi
 case "$suite" in
     pipeline)
         "$PIPELINE_ROOT/pipeline/check.sh"
+        python3 "$PIPELINE_ROOT/pipeline/test_generate.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_parallel_tests.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_autofix.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_autofix_dispatch.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_release_build.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
-        python3 -m unittest -q deployment.test_signing deployment.test_candidate deployment.test_build deployment.test_cli ci_manager.test_signing ci_manager.test_installation ci_manager.test_integrations ci_manager.test_autofix
+        python3 -m unittest -q deployment.test_inventory deployment.test_signing deployment.test_candidate deployment.test_build deployment.test_cli ci_manager.test_signing ci_manager.test_installation ci_manager.test_integrations ci_manager.test_autofix
         ;;
     install|maintenance|prompts)
         CARGO_PATH_PREFIX=

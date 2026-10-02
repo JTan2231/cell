@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
@@ -173,6 +174,29 @@ os._exit(0)
     def test_only_explicit_selection_is_ordered_without_installed_inspection(self):
         inventory = {name: {"aliases": [], "manifest": {"order": index}}
             for index, name in enumerate(("beta", "alpha", "unselected"))}
+        self.assertEqual(cli.requested_products(inventory, ["alpha", "beta"]), ["beta", "alpha"])
+
+    def test_catalog_reads_flat_and_nested_declarations_from_the_selected_commit(self):
+        source = self.directory / "source"
+        source.mkdir()
+        subprocess.run(["git", "init", "--quiet", str(source)], check=True, capture_output=True)
+        descriptors = source / "pipeline/products"
+        descriptors.mkdir(parents=True)
+        for product, directory, order in (("alpha", "alpha", 9), ("beta", "infrastructure/beta", 4)):
+            (descriptors / f"{product}.sh").write_text(f"PRODUCT_ID={product}\nPRODUCT_DIR={directory}\n")
+            declaration = source / directory / "deployment/manifest.json"
+            declaration.parent.mkdir(parents=True)
+            declaration.write_text(json.dumps({"schema": 1, "product": product, "order": order,
+                "steps": [{"id": "install", "kind": "run", "argv": [f"{{candidate_dir}}/bin/{product}-install"]}]}))
+        cli.git(source, "add", ".")
+        cli.git(source, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test",
+                "commit", "--quiet", "--no-gpg-sign", "-m", "fixture")
+        revision = cli.git(source, "rev-parse", "HEAD")
+        (descriptors / "beta.sh").write_text("PRODUCT_ID=beta\nPRODUCT_DIR=missing\n")
+        (source / "infrastructure/beta/deployment/manifest.json").write_text("invalid checkout declaration")
+        inventory = cli.catalog(source, revision)
+        self.assertEqual(inventory["alpha"]["directory"], "alpha")
+        self.assertEqual(inventory["beta"]["directory"], "infrastructure/beta")
         self.assertEqual(cli.requested_products(inventory, ["alpha", "beta"]), ["beta", "alpha"])
 
     def test_replayed_request_cannot_change_settings_or_prepared_input(self):

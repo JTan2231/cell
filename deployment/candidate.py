@@ -22,7 +22,7 @@ if __package__ in (None, ""):
 
 from ci_broker.client import git, repository_is_clean, source_commit
 from deployment import signing
-from deployment.inventory import descriptor
+from deployment.inventory import descriptor, product_root
 
 
 class CandidateError(RuntimeError):
@@ -117,9 +117,12 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
     descriptor_path = source / "pipeline/products" / f"{descriptor_id}.sh"
     regular(descriptor_path)
     values = descriptor(descriptor_path.read_text())
-    product_dir = values.get("PRODUCT_DIR", "")
-    if values.get("PRODUCT_ID") != descriptor_id or not re.fullmatch(r"[a-z][a-z0-9-]*", product_dir):
+    if values.get("PRODUCT_ID") != descriptor_id:
         raise CandidateError("invalid product directory declaration")
+    try:
+        product_root(source, values.get("PRODUCT_DIR", ""))
+    except ValueError as error:
+        raise CandidateError(str(error)) from error
     canonical = "krisis" if product == "decisions" else product
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=".candidate-", dir=output.parent))

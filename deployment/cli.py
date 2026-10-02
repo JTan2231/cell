@@ -29,7 +29,7 @@ from ci_broker import client as ci_client
 from ci_broker.broker import MINIMAL_ENVIRONMENT, process_token
 from ci_manager import workspace
 from deployment import candidate, manifest
-from deployment.inventory import descriptor
+from deployment.inventory import descriptor, product_directory
 
 SCHEMA = 2
 MANIFEST_EXECUTOR = 1
@@ -171,8 +171,8 @@ def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
         values = descriptor(git(root, "show", f"{revision}:{path}"))
         identity = values["PRODUCT_ID"]
         product = "krisis" if identity == "decisions" else identity
-        directory = values["PRODUCT_DIR"]
-        if not NAME.fullmatch(product) or not NAME.fullmatch(directory):
+        directory = product_directory(values["PRODUCT_DIR"])
+        if not NAME.fullmatch(product):
             raise DeploymentError("invalid product identity in build inventory")
         declaration = json.loads(git(root, "show", f"{revision}:{directory}/deployment/manifest.json"))
         manifest.declaration(declaration, product)

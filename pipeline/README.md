@@ -8,8 +8,10 @@ manager requires Python 3.11 or newer.
 
 `generate.sh --write` updates checked-in product entry points.
 `generate.sh --check` rejects drift. In either mode, repeat `--product PRODUCT`
-to select products. The routine `check.sh` body checks descriptor shape,
-provider counts, shell syntax, and generated wrapper drift in the light lane.
+to select products. Generated wrappers locate the Cell root from the depth of
+the descriptor's repository-relative `PRODUCT_DIR`. The routine `check.sh` body
+checks descriptor shape, provider counts, shell syntax, and generated wrapper
+drift in the light lane.
 It does not run regression suites or invoke Cargo. The `test.sh` wrapper uses
 the same manager command path as root and product `ci.sh` wrappers. Focused
 unit tests remain development checks, not CI submission.
@@ -107,9 +109,10 @@ There are two target groups:
   `cell-install` and `cell-maintenance` packages. Its target convention also
   recognizes integration targets named `install` or `maintenance`.
 
-The test suite uses in-memory inputs and has no filesystem, process, socket,
-thread, or lock fixtures. The test runners and build tools still use
-operating-system resources.
+The Rust test suites use in-memory inputs and have no filesystem, process,
+socket, thread, or lock fixtures. The generator regression suite uses temporary
+source roots and stub commands to check wrapper paths and argument forwarding.
+The test runners and build tools still use operating-system resources.
 
 `parallel_tests.py` selects Cargo targets from metadata inside one admitted
 heavy gate. The plan identifies each allowed package, target kind, and target

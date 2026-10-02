@@ -18,7 +18,7 @@ emit_ci_wrapper() {
 # Edit the descriptor or shared runtime, then regenerate.
 set -eu
 PRODUCT_DIR=\$(CDPATH='' cd "\$(dirname "\$0")" && pwd)
-CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/.." && pwd)
+CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/$cell_root_relative" && pwd)
 exec "\$CELL_ROOT/ci.sh" "\$@"
 EOF
 }
@@ -30,7 +30,7 @@ emit_release_wrapper() {
 # This publishes a release; it is not a build command.
 set -eu
 PRODUCT_DIR=\$(CDPATH='' cd "\$(dirname "\$0")" && pwd)
-CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/.." && pwd)
+CELL_ROOT=\$(CDPATH='' cd "\$PRODUCT_DIR/$cell_root_relative" && pwd)
 exec "\$CELL_ROOT/pipeline/release.sh" "$PRODUCT_ID" "\$@"
 EOF
 }
@@ -98,6 +98,12 @@ generation_failed=0
 while IFS= read -r product_id; do
     [ -n "$product_id" ] || continue
     pipeline_load_descriptor "$product_id"
+    cell_root_relative=..
+    product_path=$PRODUCT_DIR
+    while [ "${product_path#*/}" != "$product_path" ]; do
+        cell_root_relative="../$cell_root_relative"
+        product_path=${product_path#*/}
+    done
     generate_file "$PIPELINE_ROOT/$PRODUCT_DIR/ci.sh" ci
     generate_file "$PIPELINE_ROOT/$PRODUCT_DIR/release.sh" release
 done <<EOF

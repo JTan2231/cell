@@ -25,9 +25,18 @@ uncertain submission. Its source, selected products, settings, and prepared buil
 input must match. Replay returns the retained operation and executes no command.
 
 Selection includes exactly the requested canonical products. The committed
-`PRODUCT/deployment/manifest.json` supplies a literal numeric order. Ties use the
-product name. The executor does not add dependencies, installed companions, or
-maintenance products. The caller owns a complete selection and its execution order.
+`pipeline/products/PRODUCT.sh` descriptor supplies `PRODUCT_DIR`, a canonical
+path relative to the Cell source root. Flat and nested paths are supported.
+`PRODUCT_DIR/deployment/manifest.json` supplies a literal numeric order. Ties use
+the product name. A source-directory move does not change the canonical product
+name or execution order. The executor does not add dependencies, installed
+companions, or maintenance products. The caller owns a complete selection and
+its execution order.
+
+Build preparation requires the declared product directory to exist within the
+selected source checkout without symbolic path components. Plan reads the
+descriptor and declaration from the selected commit. It does not read them from
+the current checkout.
 
 Use `--settings /absolute/private/settings.json` to pass product-owned settings.
 The executor passes each object's contents without interpreting them. Refer to
