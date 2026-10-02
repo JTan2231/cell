@@ -1,15 +1,16 @@
-# Cast state and current model definitions
+# Cast state and current records
 
-Cast owns the selected discovery database, retained collection configuration,
-source metadata, local budget counters, and the supported employer-ownership
+Cast owns the selected private database, retained configuration, source
+metadata, compatibility projection, and supported legacy employer-ownership
 repair. These are local current-user interfaces. Use `cast.install.operate`
 for the setup, configuration, diagnosis, and recovery procedure.
 
-Cast performs no collection. Configuration, source controls, budget reads,
-and ownership reconciliation remain available for existing state. These
-interfaces do not populate the unused current model or refresh retained jobs.
+Cast performs no collection. New state uses accepted current records. Existing
+schema-one discovery state remains supported without migration. Configuration,
+source controls, and reads work with both formats; these commands do not
+retrieve or refresh jobs.
 
-## Unused current model
+## Accepted current model
 
 `cast::current` defines `Company`, `Job`, `Source`, `Location`, `JobLocation`,
 and `JobSource`. `cast::current::SCHEMA` contains the corresponding SQLite
@@ -26,31 +27,48 @@ job_source   job_id -> job, source_id -> source, url
 
 Both join tables use their two foreign keys as the composite primary key.
 `employer_id` identifies who hires. `operator_id` identifies who operates a
-source. Locations identify workplaces; `work_mode` is a separate job field.
-A job can appear in several sources. Each job/source pair has one URL.
+source. Locations identify workplaces; `work_mode` is a separate job field. A
+job can appear in several sources. Each job/source pair has one URL.
 
-The model represents one accepted current record per job. It contains no
-collection runs, observations, timestamps, evidence, affiliation history, or
-assessments. Duplicate matching and conflicting values require a decision
-before that record changes; the model does not preserve that decision history.
+The core represents one accepted current record per job. Duplicate matching
+and conflicting values require a decision before that record changes. A write
+replaces the job and its workplace and source links in one transaction. The
+core contains no collection runs, observations, timestamps, evidence,
+affiliation history, or assessments, and preserves no decision history.
 
-These are unused library definitions. Cast does not execute this SQL, select
-this model, or migrate data into it. The CLI, installer setup, `Store`, and
-downstream reads retain the existing discovery state and output. Data
-migration and activation are separate work.
+Cast executes this schema when it initializes a missing database. The runtime
+also retains configuration, snapshot revision, company identity aliases, and
+current compatibility metadata in the company, job, and source rows. A `meta`
+table holds configuration, snapshot revision, and alias lookup values. The
+compatibility metadata carries the existing exported
+fields, including current entity revisions, supplied dates and evidence,
+compensation, and source controls. It is not a second employer or job identity
+model and contains no revision history, request ledger, or run history.
+
+Existing schema-one databases keep their discovery tables and records. Opening
+or initializing them does not migrate them. Both formats provide the existing
+schema-one export and supported read types; `cast.discovery.explore` defines
+the projection and its limits. Accepted-record writes require schema-two
+state. Company and job compatibility dates must be valid RFC 3339 values, with
+`first_seen_at` no later than `last_seen_at`. Cast normalizes these two fields
+to UTC with nine fractional-second digits so consumers can compare their
+strings chronologically. Updates preserve the first-seen instant and do not
+move the last-seen instant backwards. An existing location ID preserves
+its name. There is no CLI job ingestion or collection command.
 
 ## State selection and access
 
 State defaults to `~/.local/share/cast`. Use the global `--state-dir PATH`
-option or `CAST_STATE_DIR` to select another directory. The CLI flag can select
-state independently of the environment. The installed wrapper preserves an
-explicit `CAST_STATE_DIR`.
+option or `CAST_STATE_DIR` to select another directory. The CLI flag can
+select state independently of the environment. The installed wrapper preserves
+an explicit `CAST_STATE_DIR`.
 
 The selected directory contains `cast.sqlite3`. The directory uses mode 0700;
 the database uses mode 0600. Configuration is stored in database metadata.
-Initialize missing state explicitly with `cast init`. Initialization preserves
-existing discovery records and consumed budgets and starts no collection.
-Other commands require supported initialized state.
+Initialize missing state explicitly with `cast init`. Missing state uses
+database schema 2. Initialization preserves existing schema-one discovery
+records and consumed budgets, and starts no collection. Other commands require
+supported initialized state.
 
 Only one writer can use a state directory at a time. Mutation uses a
 kernel-backed file lock. Stop callers before state maintenance or recovery.
@@ -75,17 +93,17 @@ Configuration and source writes print short receipts. Ownership repair labels
 its result counts. Use the global `--json` flag for existing machine success
 results. It is accepted before or after any state command.
 
-Operational errors exit 1 and use a text diagnostic on stderr by default.
-With `--json`, stderr contains a schema-one object with `ok:false` and
+Operational errors exit 1 and use a text diagnostic on stderr by default. With
+`--json`, stderr contains a schema-one object with `ok:false` and
 `error.detail`. Invalid command syntax uses Clap's text diagnostic on stderr
 and exit 2 in both modes.
 
-`config show --json` returns the complete selected machine configuration. `config set --file`
-validates and replaces that complete configuration. Inspect the current values
-before editing them so that the replacement preserves retained queries,
-intervals, adapter parameters, and caps. Changes update stored configuration;
-they do not start collection, reset consumed allowance, purchase credits, or
-change provider billing.
+`config show --json` returns the complete selected machine configuration.
+`config set --file` validates and replaces that complete configuration.
+Inspect the current values before editing them so that the replacement
+preserves retained queries, intervals, adapter parameters, and caps. Changes
+update stored configuration; they do not start collection, reset consumed
+allowance, purchase credits, or change provider billing.
 
 The default configuration includes TheirStack, Brave, and Hacker News queries.
 Configuration schema 1 contains query families, budget settings, careers
@@ -96,18 +114,20 @@ supported input; credentials do not belong in it.
 `automatic_excluded_ats` is an array of distinct supported ATS names: `ashby`,
 `greenhouse`, or `lever`. It defaults to `["ashby"]`, including when existing
 configuration omits the field. An explicit empty array removes these ATS
-exclusions in the retained configuration. Each source still has its own enabled
-setting. No collection command applies these settings in this release.
+exclusions in the retained configuration. Each source still has its own
+enabled setting. No collection command applies these settings in this release.
 
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
-with an existing company. Without the company option, an ordinary website URL
-creates or reuses a company candidate from its hostname. For a supported ATS
-URL, omit `--company-id`: Cast assigns its canonical provider/tenant company
-identity and rejects an explicit company override.
+with an existing company in the compatibility metadata. This association does
+not establish `source.operator_id` or the employer of a job. Without the
+company option, an ordinary website URL creates or reuses a company candidate
+from its hostname. For a supported ATS URL, omit `--company-id`: Cast assigns
+its canonical provider/tenant company identity and rejects an explicit company
+override.
 
-`source disable SOURCE_ID` clears the retained enabled setting while preserving
-the source, jobs, and collected data. Source add and disable make no remote
-request.
+`source disable SOURCE_ID` clears the retained enabled setting while
+preserving the source, jobs, and collected data. Source add and disable make
+no remote request.
 
 ## Local budget defaults and units
 
@@ -124,15 +144,17 @@ request.
 | `max_verifications_per_run` | 50 | Adapter pages for targeted collection. |
 
 These are retained configuration defaults and historical local accounting
-units. No collector consumes allowance in this release. They do not measure a
-provider's available balance or establish its billing statement. The TheirStack
-total cap is not a monthly provider allowance. Raising a cap does not obtain
-additional provider credits.
+units. Schema-one state reports its retained request usage and last run.
+Schema-two state has no request ledger or runs: usage is zero, the last run is
+null, and query coverage is empty. No collector consumes allowance in this
+release. They do not measure a provider's available balance or establish its
+billing statement. The TheirStack total cap is not a monthly provider
+allowance. Raising a cap does not obtain additional provider credits.
 
-Configuration and diagnostic reads describe selected local state. `doctor`
-can check configuration and credential presence. It does not check provider
-authentication or balance. Local readiness or an installed Chancery entry
-does not establish those conditions or current job availability.
+Configuration and diagnostic reads describe selected local state. `doctor` can
+check configuration and credential presence. It does not check provider
+authentication or balance. Local readiness or an installed Chancery entry does
+not establish those conditions or current job availability.
 
 ## Employer-ownership reconciliation
 
@@ -140,46 +162,54 @@ does not establish those conditions or current job availability.
 cast state reconcile-ownership
 ```
 
-This explicit local repair applies the current ownership rules to older stored
-records. It holds the mutation lock and commits one transaction. It assigns
-ATS sources and their jobs to the provider/tenant company, sets older JSON-LD
-jobs to `unknown`, resets their retained source collection status, and restores
-affected search-candidate names to their domains. It applies current adapter
-rules to shared recruiting hosts and clears their company domains, website
-URLs, and identity aliases.
+In schema-one state, this explicit local repair applies the current ownership
+rules to older stored records. It holds the mutation lock and commits one
+transaction. It assigns ATS sources and their jobs to the provider/tenant
+company, sets older JSON-LD jobs to `unknown`, resets their retained source
+collection status, and restores affected search-candidate names to their
+domains. It applies current adapter rules to shared recruiting hosts and
+clears their company domains, website URLs, and identity aliases.
 
 The result reports `moved_sources`, `moved_jobs`, `quarantined_jobs`,
 `renamed_candidates`, and `cleared_shared_identities`. These counts describe
 the selected repair, not external coverage. Source and job IDs, paid request
-accounting, run history, query coverage, and cursors remain intact. Changed jobs
-and companies gain revisions. These associations change in retained reads;
-reconciliation does not retrieve source facts.
+accounting, run history, query coverage, and cursors remain intact. Changed
+jobs and companies gain revisions. These associations change in retained
+reads; reconciliation does not retrieve source facts.
+
+In schema-two state, reconciliation reports zero changes. It preserves the
+accepted job employer and optional source operator rather than inferring one
+from the other.
 
 The repair uses stored records and makes no provider requests. Repeating it
-leaves material records unchanged, while each invocation advances the snapshot
-revision. Read `cast.discovery.explore` for the meaning of retained identities,
-attribution, availability, and revisions.
+leaves material records unchanged, while each schema-one invocation advances
+the snapshot revision. Schema-two reconciliation also preserves the snapshot
+revision. Read `cast.discovery.explore` for the meaning of retained
+identities, attribution, availability, and revisions.
 
 ## Recovery and privacy
 
 Installation state and discovery state are different recovery units. Restoring
 an older program alone cannot restore newer domain state or configuration.
+Programs that support only database schema 1 cannot open schema-two state.
 
 This release provides no automatic database migration, pruning, destructive
 reset, or state uninstaller. Use the supported state and configuration
 commands. Do not erase state to clear a budget or repair individual rows by
-hand. Preserve retained observations and conservative request usage.
+hand. Preserve retained schema-one observations and conservative request
+usage.
 
 State, exports, and diagnostic captures can contain private search interests,
-source locators, posting excerpts, and collection history. Keep credentials in
-the caller environment and user-owned shell configuration. The Rust payload
-reads `THEIRSTACK_API_KEY` and `BRAVE_SEARCH_API_KEY` from its environment;
-`cast.installation` owns the installed wrapper's loading and privacy contract.
+source locators, posting excerpts, and legacy collection history. Keep
+credentials in the caller environment and user-owned shell configuration. The
+Rust payload reads `THEIRSTACK_API_KEY` and `BRAVE_SEARCH_API_KEY` from its
+environment; `cast.installation` owns the installed wrapper's loading and
+privacy contract.
 
 ## Compatibility and limits
 
-Database schema, configuration schema, export schema, feature contract version,
-and product release are distinct. Configuration schema remains 1 with
+Database schema, configuration schema, export schema, feature contract
+version, and product release are distinct. Configuration schema remains 1 with
 `automatic_excluded_ats`; older programs that reject unknown fields cannot
 read configuration written with that field. Program recovery does not remove
 it or restore previous state.

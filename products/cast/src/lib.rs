@@ -1,5 +1,6 @@
 pub mod adapters;
 pub mod current;
+mod current_store;
 pub mod http;
 pub mod models;
 pub mod store;

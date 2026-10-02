@@ -1,13 +1,11 @@
-//! Accepted current job records, separate from the existing read model.
-//!
-//! The schema is not installed or opened by Cast. No existing data is migrated.
+//! Accepted current records, projected through the existing public read model.
 
 use serde::{Deserialize, Serialize};
 
 /// The six-table schema for accepted current records.
 ///
-/// Callers must select a database and execute this SQL explicitly. Identifiers
-/// are opaque strings supplied by the caller. This schema creates no records.
+/// Cast installs this core when it initializes new state. Identifiers are opaque
+/// strings supplied by the accepting caller. This schema creates no records.
 pub const SCHEMA: &str = include_str!("current.sql");
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -53,4 +51,19 @@ pub struct JobSource {
     pub job_id: String,
     pub source_id: String,
     pub url: String,
+}
+
+/// One caller-resolved current job and its complete workplace and source links.
+///
+/// Compatibility values retain facts required by the existing snapshot contract.
+/// Their employer, title, description, status, work mode and workplaces must agree
+/// with the current record. The first accepted source and URL remain the primary
+/// appearance exposed to existing consumers.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptedJob {
+    pub job: Job,
+    pub locations: Vec<Location>,
+    pub appearances: Vec<JobSource>,
+    pub compatibility: crate::models::Job,
 }

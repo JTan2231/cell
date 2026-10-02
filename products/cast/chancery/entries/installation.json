@@ -128,7 +128,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cast performs no collection. Deployment setup retains the existing discovery schema and does not activate or migrate data into the unused current model definitions."
+        "statement": "Cast performs no collection. Deployment setup initializes missing schema-two accepted current state and preserves existing schema-one discovery state without migration. Both formats retain the existing read and export protocols."
       }
     ],
     "compatibility_and_evolution": [

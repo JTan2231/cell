@@ -79,8 +79,9 @@ authentication or current provider allowance.
    cast status --json
    ```
 
-Initialization preserves existing records and consumed budgets and collects
-nothing. Configuration replacement updates retained settings and does not reset
+Initialization creates schema-two current state when the database is missing.
+It preserves existing schema-one records and consumed budgets without
+migration, and collects nothing. Configuration replacement updates retained settings and does not reset
 usage, purchase credits, or change provider billing. The retained ATS exclusion
 defaults to Ashby when omitted; an explicit empty array clears these exclusions.
 No collector applies them in this release. Older programs can reject
@@ -93,7 +94,9 @@ local configuration and credential presence. It does not establish provider
 authentication, balances, or current posting availability.
 
 Inspect the retained last run, source health, coverage, and budget diagnostics
-when interpreting historical work. Preserve observations and local charges.
+when interpreting historical schema-one work. Schema-two state has no request
+ledger or runs; zero usage, null last run, and empty query coverage do not
+establish collection success. Preserve observations and local charges.
 Do not erase state to clear allowance or treat an absent error as complete
 coverage. `run`, `job refresh`, and `job collect` are removed.
 
@@ -102,8 +105,8 @@ program selection. Its optional `state_dir` and `config_file` settings are
 absolute paths. A supplied file replaces complete configuration; omitted
 settings preserve current values. Setup does not invoke the selected CLI or
 source shell configuration, so it does not depend on the CLI output protocol.
-This setup creates no collection schedule and does not activate or migrate data
-into the unused current model definitions.
+This setup creates no collection schedule. It initializes missing state with
+the current model and does not migrate existing data.
 
 Ordinary Cast commands print readable text by default. Add the global `--json`
 flag when a caller parses their output. The JSON success schemas and snapshot
@@ -152,12 +155,17 @@ and enabled setting; adding a source does not prove successful retrieval.
 4. Confirm that source/job IDs, paid request usage, run history, query coverage,
    and cursors remain retained. Resume only the callers stopped for this work.
 
-The repair holds one mutation lock and commits one transaction. It corrects
+In schema-one state, the repair holds one mutation lock and commits one
+transaction. It corrects
 ATS ownership, sets older or affected shared-host JSON-LD jobs to `unknown`,
 resets retained source collection status, and corrects affected candidate identities.
 Changed jobs and companies gain revisions. Repetition leaves material records
 unchanged but advances the snapshot revision. The repair sends no provider
 request and does not establish current posting availability.
+
+In schema-two state, reconciliation returns zero changes and preserves
+accepted employer/operator associations and the snapshot revision. It does not
+infer an employer from the source operator.
 
 ## Recover programs or prepare state recovery
 
@@ -180,7 +188,8 @@ deployer is running before removing a stale installation lock and rerunning
 the tested candidate. Never remove another active writer's lock. Runtime
 mutation uses a separate kernel-backed lock.
 
-Program recovery leaves discovery state unchanged. This release provides no automatic
+Program recovery leaves Cast state unchanged. Programs that support only
+database schema 1 cannot read schema-two state. This release provides no automatic
 database migration, pruning, destructive reset, or state uninstaller. Stop
 when a proposed recovery requires unsupported row edits or an incompatible
 program/state pair.

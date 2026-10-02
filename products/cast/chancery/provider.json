@@ -3,18 +3,18 @@
   "provider": {
     "id": "cast",
     "name": "Cast",
-    "release": "0.5.0"
+    "release": "0.5.1"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns retained company and job identities, extracted fields, source metadata, historical collection outcomes and timestamps, retained configuration and local accounting, consistent JSON exports, unused current-model definitions and program packaging."
+      "Cast owns accepted company and job identities, workplace and source appearances, current compatibility fields, source controls, supported legacy discovery state and accounting, retained configuration, consistent JSON exports, and program packaging."
     ],
     "not_authoritative_for": [
       "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
     ],
     "inventory": {
       "covers": [
-        "All supported public Cast CLI outcomes for retained-record inspection and export, state and source controls, configuration and diagnosis, and program installation in this release. cast.state also describes the unused current-model library definitions."
+        "All supported public Cast CLI outcomes for record inspection and export, state and source controls, configuration and diagnosis, and program installation in this release. cast.state describes accepted current storage and supported legacy state."
       ],
       "completeness": "complete",
       "excludes": [
@@ -25,13 +25,13 @@
       "Cast is a local current-user CLI with private selected state. Retained diagnostics check provider-key presence. The installed frontend executes user-owned ~/.zshrc and preserves only documented state, usage and provider-key environment values; cast.installation defines that trust boundary."
     ],
     "shared_privacy_and_retention": [
-      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and historical collection records. API keys do not belong in config, database, command arguments or logs.",
+      "Private state and exports include search interests, company/job evidence and dates, extracted posting text, source locators, and legacy collection records. API keys do not belong in config, database, command arguments or logs.",
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
       "Cast release, feature contract versions, installation format and database/config/export schemas are distinct. Ordinary CLI output is readable text by default; explicit --json retains the existing success schemas. JSON snapshot artifacts and the status-snapshot --json protocol retain their formats. Installed documentation changes only with the matching product release.",
       "Configuration schema 1 includes automatic_excluded_ats. Older programs that reject unknown fields can reject configuration written with it. Program recovery does not restore discovery state or configuration.",
-      "Collection commands run, job refresh and job collect and the cast.discovery.collect contract are removed. Existing read interfaces, legacy state initialization and output schemas remain. The six-table current model is defined but unused; no data migration or activation occurs."
+      "Collection commands run, job refresh and job collect and the cast.discovery.collect contract are removed. Missing state initializes the six-table accepted current model with current compatibility metadata; existing schema-one discovery state remains readable without migration. Existing read interfaces and output schemas remain. Programs that support only database schema 1 cannot open schema-two state."
     ],
     "operational_limits": [
       "Cast performs no collection or runtime HTTP requests. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
