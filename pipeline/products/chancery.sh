@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=chancery
 PRODUCT_NAME=Chancery
-PRODUCT_DIR=chancery
+PRODUCT_DIR=infrastructure/chancery
 STATUS_SCHEMA=1
 STATUS_COMMAND=chancery
 STATUS_UNITS='chancery/catalog|on_demand||chancery.directory.discover'
@@ -15,10 +15,10 @@ chancery-usage'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|chancery/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/chancery/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=after-tests
-RELEASE_UNITS='chancery|Chancery|package|chancery/crates/chancery/Cargo.toml|chancery-|1'
+RELEASE_UNITS='chancery|Chancery|package|infrastructure/chancery/crates/chancery/Cargo.toml|chancery-|1'
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='chancery|target/release/chancery|chancery
 chancery|target/release/chancery-install|chancery-install'
-PROVIDERS='chancery|chancery|chancery/provider|7'
+PROVIDERS='chancery|chancery|infrastructure/chancery/provider|7'

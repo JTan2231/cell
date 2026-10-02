@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=email
 PRODUCT_NAME=Email
-PRODUCT_DIR=email
+PRODUCT_DIR=infrastructure/email
 STATUS_SCHEMA=1
 STATUS_COMMAND=email
 STATUS_UNITS='email/transport|on_demand||email.message.send'
@@ -14,10 +14,10 @@ CARGO_PACKAGES=email
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|email/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/email/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='email|Email|package|email/crates/email/Cargo.toml|email-|1'
+RELEASE_UNITS='email|Email|package|infrastructure/email/crates/email/Cargo.toml|email-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='email|target/release/email|email
 email|target/release/email-install|email-install'
-PROVIDERS='email|email|email/chancery|6'
+PROVIDERS='email|email|infrastructure/email/chancery|6'

@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=usher
 PRODUCT_NAME=Usher
-PRODUCT_DIR=usher
+PRODUCT_DIR=infrastructure/usher
 STATUS_SCHEMA=1
 STATUS_COMMAND=usher
 STATUS_UNITS='usher/report|on_demand||usher.recognition.inspect'
@@ -13,9 +13,9 @@ chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=usher
 CARGO_OFFLINE=1
-CI_SHELL_CHECKS='sh|usher/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/usher/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='usher|Usher|package|usher/crates/usher/Cargo.toml|usher-|1'
+RELEASE_UNITS='usher|Usher|package|infrastructure/usher/crates/usher/Cargo.toml|usher-|1'
 RELEASE_BINARY_CHECKS='usher|target/release/usher|usher
 usher|target/release/usher-install|usher-install'
-PROVIDERS='usher|usher|usher/chancery|4'
+PROVIDERS='usher|usher|infrastructure/usher/chancery|4'

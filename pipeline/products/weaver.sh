@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=weaver
 PRODUCT_NAME=Weaver
-PRODUCT_DIR=weaver-narrative
+PRODUCT_DIR=products/weaver-narrative
 STATUS_SCHEMA=1
 STATUS_COMMAND=weaver
 STATUS_UNITS='weaver/author|on_demand||weaver.install.operate'
@@ -15,10 +15,10 @@ CARGO_PACKAGES=weaver
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|weaver-narrative/release.sh'
+CI_SHELL_CHECKS='sh|products/weaver-narrative/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='weaver|Weaver|package|weaver-narrative/Cargo.toml|weaver-|1'
+RELEASE_UNITS='weaver|Weaver|package|products/weaver-narrative/Cargo.toml|weaver-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='weaver|target/release/weaver|weaver
 weaver|target/release/weaver-install|weaver-install'
-PROVIDERS='weaver|weaver|weaver-narrative/chancery|4'
+PROVIDERS='weaver|weaver|products/weaver-narrative/chancery|4'

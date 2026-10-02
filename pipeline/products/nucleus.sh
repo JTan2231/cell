@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=nucleus
 PRODUCT_NAME=Nucleus
-PRODUCT_DIR=nucleus
+PRODUCT_DIR=infrastructure/nucleus
 STATUS_SCHEMA=1
 STATUS_COMMAND=nucleus
 STATUS_UNITS='nucleus/service|active||nucleus.execution.operate'
@@ -19,11 +19,11 @@ nucleus-store'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|nucleus/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/nucleus/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='nucleus|Nucleus|workspace-package|Cargo.toml|nucleus-|1'
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus
 nucleus|target/release/nucleusd|nucleusd
 nucleus|target/release/nucleus-install|nucleus-install'
-PROVIDERS='nucleus|nucleus|nucleus/chancery|10'
+PROVIDERS='nucleus|nucleus|infrastructure/nucleus/chancery|10'

@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=emt
 PRODUCT_NAME=EMT
-PRODUCT_DIR=emt
+PRODUCT_DIR=infrastructure/emt
 STATUS_SCHEMA=1
 STATUS_COMMAND=emt
 STATUS_UNITS='emt/worker|active|emt/worker|emt.installation.operate'
@@ -15,10 +15,10 @@ CARGO_PACKAGES=emt
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|emt/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/emt/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='emt|EMT|package|emt/Cargo.toml|emt-|1'
+RELEASE_UNITS='emt|EMT|package|infrastructure/emt/Cargo.toml|emt-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='emt|target/release/emt|emt
 emt|target/release/emt-install|emt-install'
-PROVIDERS='emt|emt|emt/chancery|5'
+PROVIDERS='emt|emt|infrastructure/emt/chancery|5'

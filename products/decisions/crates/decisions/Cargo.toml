@@ -1,0 +1,38 @@
+[package]
+name = "decisions"
+version = "0.9.7"
+edition.workspace = true
+default-run = "krisis"
+
+[[bin]]
+name = "krisis"
+path = "src/main.rs"
+
+[[bin]]
+name = "krisis-install"
+path = "src/bin/krisis-install.rs"
+
+[dependencies]
+cell-prompts.workspace = true
+chancery-usage.workspace = true
+cell-maintenance.workspace = true
+cell-install.workspace = true
+clockwork = { path = "../../../../infrastructure/clockwork/crates/clockwork" }
+annals-api.workspace = true
+krisis-api.workspace = true
+clap.workspace = true
+conversations = { path = "../../../conversations/crates/conversations" }
+fs2.workspace = true
+iatreion-api.workspace = true
+libc.workspace = true
+nucleus-client.workspace = true
+nucleus-core.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["local-offset"] }
+toml.workspace = true
+tokio.workspace = true
+uuid.workspace = true
