@@ -13,8 +13,8 @@ cast export --json
 ```
 
 New state uses accepted companies, jobs, workplaces, and source appearances.
-The existing snapshot format remains available. Existing discovery state
-remains readable without migration.
+The existing snapshot format remains available. Read the state contract for
+supported storage and recovery.
 
 ## CI
 
@@ -33,7 +33,7 @@ repairs, deploys, and emails the outcome.
 - [Records and read handoff](chancery/manuals/discovery-explore.md)
 - [State and current records](chancery/manuals/state.md)
 - [Installation contract](chancery/manuals/installation.md)
-- [Installation, configuration, and recovery procedure](chancery/manuals/install-operate.md)
+- [Installation, initialization, and recovery procedure](chancery/manuals/install-operate.md)
 
 Use `chancery product cast` for the installed overview, `chancery show ID` for
 one contract, and `chancery resolve cast.install.operate` for the procedure and

@@ -1,6 +1,6 @@
 {
   "id": "cast.installation",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -42,11 +42,12 @@
     "Owned command and provider selectors follow the supplied release. Installation runs no signature audit, executable probe, or operational-readiness gate."
   ],
   "failure_and_recovery": [
-    "Refuse foreign public selectors or stale expected-current selections. An instruction failure retains completed file and selector changes for explicit recovery. Recovery selects retained program files and leaves product data unchanged."
+    "Refuse foreign public selectors or stale expected-current selections. An instruction failure retains completed file and selector changes for explicit recovery. Recovery selects retained program files and leaves product data unchanged.",
+    "Older releases requiring stored collector configuration can fail status or diagnosis on newly initialized Cast 0.6.0 state even if they read schema-two exports. Recovery does not recreate configuration."
   ],
   "privacy": [
-    "Provider keys do not enter arguments, saved config, provider contracts or output. The user owns executable .zshrc behavior.",
-    "CLI usage records command identity, time and thread ID without arguments, output or outcomes; recording errors preserve product results."
+    "CLI usage records command identity, time and thread ID without arguments, output or outcomes; recording errors preserve product results.",
+    "The frontend reads no provider keys or user shell configuration. Product state and exports remain private caller-owned data."
   ],
   "does_not_authorize": [
     "A collection run, schedule, provider purchase, credential replacement, state deletion or downstream application workflow."
@@ -54,15 +55,15 @@
   "dependencies": [
     {
       "id": "cast.state",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user may install or recover Cast programs through a trusted tested candidate, inspect selectors and understand retained wrapper credential loading."
+        "statement": "The current user may install or recover Cast programs through a trusted tested candidate, inspect selectors and understand the restricted frontend environment."
       }
     ],
     "preconditions": [
@@ -104,11 +105,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "The installed frontend suppresses trace and output while sourcing ~/.zshrc. It passes HOME, fixed system PATH, optional CAST_STATE_DIR, provider keys, CODEX_THREAD_ID, CHANCERY_USAGE_DB, CHANCERY_USAGE_DISABLED and CHANCERY_USAGE_INTERNAL. It preserves arguments and stdin. Help, version and --register-usage bypass shell configuration."
-      },
-      {
-        "status": "declared",
-        "statement": "User-owned shell commands and side effects remain the user's responsibility; Chancery does not execute or validate that configuration."
+        "statement": "The installed frontend passes HOME, fixed system PATH, optional CAST_STATE_DIR, CODEX_THREAD_ID, CHANCERY_USAGE_DB, CHANCERY_USAGE_DISABLED and CHANCERY_USAGE_INTERNAL. It preserves arguments and stdin. It does not source ~/.zshrc or extract provider keys."
       }
     ],
     "lifecycle_and_consistency": [
@@ -128,28 +125,26 @@
       },
       {
         "status": "declared",
-        "statement": "Cast performs no collection. Deployment setup initializes missing schema-two accepted current state and preserves existing schema-one discovery state without migration. Both formats retain the existing read and export protocols."
+        "statement": "Cast performs no collection. Deployment setup initializes missing schema-two state and rejects unsupported schemas. Optional state_dir is an absolute path; selection uses it, then nonempty inherited CAST_STATE_DIR, then ~/.local/share/cast in the selected home. config_file and collector configuration are removed."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
+        "statement": "Installation contract 4 removes shell credential loading and deployment config_file. Retained release layout and supported installation-metadata readers remain. Program recovery does not restore product data or check program/state compatibility. Select a program that accepts the retained schema."
+      },
+      {
+        "status": "declared",
+        "statement": "New state has no collector configuration. Existing metadata can retain old configuration values inertly; Cast does not read or replace them. Older releases requiring those values can fail status or diagnosis on new state even if they support schema-two exports. Program recovery recreates no configuration."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Program recovery selects retained files without a state compatibility check and does not restore discovery state or configuration.",
+        "statement": "Program recovery selects retained files without a state compatibility check and does not restore Cast data. Setup initializes only supported schema-two state.",
         "target": "cast",
         "kind": "data",
         "contract": "cast.state"
-      },
-      {
-        "status": "declared",
-        "statement": "Installed credential loading relies on user-owned ~/.zshrc executed by zsh; no dedicated installed contract covers that executable configuration.",
-        "target": "user-shell-configuration",
-        "kind": "readiness"
       }
     ]
   },

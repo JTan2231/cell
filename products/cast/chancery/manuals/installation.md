@@ -1,17 +1,17 @@
 # Cast program installation
 
-The installer copies the supplied programs and provider bundle into a retained
+The installer copies supplied programs and the provider bundle into a retained
 release and selects their owned public paths together. It creates required
 installation directories and uses product and catalog locks with atomic selector
 updates. `--expected-current absent|releases/ID` guards the selected release.
 Foreign public selectors are refused. An instruction failure retains completed
 file and selector changes for explicit recovery.
 
-Opaque UUID release IDs name the staged files. Installation and recovery do not compare
-artifact hashes, component versions, or retained file inventories. They do not
-run executable probes, native-signature audits, database integrity checks,
-dependency probes, or readiness checks. Inspection reads recorded installation
-metadata and selectors; it is not an integrity result.
+Opaque UUID release IDs name the staged files. Installation and recovery do not
+compare artifact hashes, component versions, or retained file inventories. They
+do not run executable probes, native-signature audits, database integrity
+checks, dependency probes, or readiness checks. Inspection reads recorded
+installation metadata and selectors; it is not an integrity result.
 
 The default installation root is
 `~/Library/Application Support/Cast/install`. Releases are retained beneath
@@ -26,52 +26,42 @@ cast-install inspect
 cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery reads
-retained metadata and selects a release in that home's installation directory.
-It does not rebuild the release or restore product data. There is no installer
-`verify` or `verify-release` command. Ordinary runtime checks keep their existing
-behavior.
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery
+reads retained metadata and selects a release in that home's installation
+directory. It does not rebuild the release or restore product data. There is no
+installer `verify` or `verify-release` command. Run ordinary diagnostics
+separately when requested.
 
-Installation creates no database, schedule, or provider request. Cast performs
-no collection in this release.
+Direct installation creates no database, schedule, or provider request. Cast
+performs no collection.
 
-## Frontend credentials and trust
+## Frontend environment
 
-The retained diagnostic path reads `THEIRSTACK_API_KEY` and
-`BRAVE_SEARCH_API_KEY` presence from its environment without using the keys
-for collection. The installed zsh frontend suppresses trace and output while it
-sources `~/.zshrc`. It extracts those keys and starts the payload with only
-`HOME`, fixed system `PATH`, optional `CAST_STATE_DIR`, the two provider keys,
-and the command-usage values `CODEX_THREAD_ID`, `CHANCERY_USAGE_DB`,
-`CHANCERY_USAGE_DISABLED`, and `CHANCERY_USAGE_INTERNAL`. State selection and
-usage values are captured before sourcing shell configuration. The frontend
-preserves arguments and standard input. Help, version, and `--register-usage`
-reads bypass shell configuration.
+The installed zsh frontend starts the payload with `HOME`, fixed system
+`PATH`, optional `CAST_STATE_DIR`, and the command-usage values
+`CODEX_THREAD_ID`, `CHANCERY_USAGE_DB`, `CHANCERY_USAGE_DISABLED`, and
+`CHANCERY_USAGE_INTERNAL`. It preserves arguments and standard input.
 
-No key appears in an argument, saved config, provider contract, or command
-output. `.zshrc` is user-owned executable shell configuration. Its commands
-and side effects remain the user's responsibility. Chancery does not execute
-or validate it, and no dedicated installed contract establishes its readiness.
-Do not place credentials in query configuration, database rows, or logs.
+The frontend does not source `~/.zshrc` or extract provider keys. Cast reads no
+TheirStack or Brave credentials. Shell configuration is not a Cast runtime
+readiness dependency.
 
 ## Cell deployment setup
 
-The Cast deployment recipe configures state after selecting its release. Setup uses
-Cast's native state APIs and product lock. It initializes missing state and
-preserves existing records and consumed budgets without collecting. Optional
-settings are `state_dir` and `config_file`, both absolute paths. A supplied
-`config_file` replaces the complete configuration. Omitted settings retain
-current values. State selection uses `state_dir`, then a nonempty inherited
-`CAST_STATE_DIR`, then `~/.local/share/cast` in the selected home.
+The Cast deployment recipe initializes state after selecting its release.
+Setup uses Cast's native state APIs and product lock. It initializes missing
+state with database schema 2 and preserves existing schema-two records without
+collection. Unsupported database schemas cause an explicit failure.
+
+The optional `state_dir` setting is an absolute path. State selection uses
+`state_dir`, then a nonempty inherited `CAST_STATE_DIR`, then
+`~/.local/share/cast` in the selected home. Collector configuration and the
+`config_file` setting are removed.
 
 Setup does not invoke the selected CLI or source shell configuration. Explicit
-retained-release recovery selects programs and leaves state configuration unchanged.
-Deployment creates no collection schedule. Setup initializes missing state with database schema 2 and preserves existing
-schema-one discovery state without migration. Both formats retain the existing
-read and export protocols.
-
-Read `cast.state` for private state selection, configuration, and state
-recovery. Program installation and discovery state have separate lifecycles.
+retained-release recovery selects programs and leaves state unchanged.
+Deployment creates no collection schedule. Read `cast.state` for private
+state selection, supported schemas, readiness, and recovery.
 
 ## Command usage
 
@@ -87,9 +77,17 @@ change command results.
 ## Compatibility and limits
 
 Provider release, feature contract version, installation format, database
-schema, configuration schema, and export schema evolve separately. The exact
-bundle is published and recovered with its matching product release. Catalog
-presence establishes neither live readiness nor permission to invoke Cast.
+schema, and export schema evolve separately. The exact bundle is published and
+recovered with its matching product release. Catalog presence establishes
+neither live readiness nor permission to invoke Cast.
+
+Installation contract 4 removes shell credential loading and deployment
+configuration. The retained release layout and supported installation-metadata
+readers remain. Program recovery leaves data unchanged and does not check
+program/state compatibility. Select a program that accepts the retained schema.
+Older releases that require stored collector configuration can fail status or
+diagnosis on newly initialized Cast 0.6.0 state. Recovery does not recreate that
+configuration; read `cast.state` before selection.
 
 No installation-latency objective, future migration promise, automatic state
 rollback, or deprecation window is defined. Cast installs no recurring
@@ -98,8 +96,8 @@ activation and has no Nucleus, CRM, Email, or computer-use runtime dependency.
 ## Deployment recipe
 
 `cast-install deploy` reads one schema-two Cell recipe request from stdin.
-The product command selects supplied programs, initializes missing state, and applies supplied configuration through the product lock.
-The manifest executor runs this instruction and records its exit status. It does
-not inspect application output or create a maintenance hold, drain work, or
-recover prior effects. A failed instruction leaves completed changes in place.
-Use the product's explicit recovery operation when recovery is required.
+The product command selects supplied programs and initializes missing state
+through the product lock. The manifest executor runs this instruction and
+records its exit status. It does not inspect application output or create a
+maintenance hold, drain work, or recover prior effects. A failed instruction
+leaves completed changes in place. Use explicit product recovery when required.

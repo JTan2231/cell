@@ -1,72 +1,63 @@
 {
   "id": "cast.state",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Manage Cast state and accepted current records",
-  "summary": "Select or initialize private state, inspect or replace retained configuration, control sources, interpret current and legacy accounting, reconcile legacy employer ownership, and understand accepted current records.",
+  "summary": "Select or initialize private schema-two state, diagnose local readiness, inspect record counts, add source metadata, and understand accepted current records and recovery limits.",
   "use_when": [
-    "Selected Cast state, retained configuration, source metadata, accounting or accepted current records must be understood or changed within the supported interface.",
-    "Older retained employer ownership needs the supported local reconciliation or state recovery limits must be understood."
+    "Selected Cast state, source enrollment, local status, readiness or accepted current records must be understood or changed through supported interfaces.",
+    "The caller needs storage compatibility and state recovery limits."
   ],
   "do_not_use_when": [
     "Collection, exact public job-URL retrieval or data migration is required.",
     "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream job selection."
   ],
-  "outcome": "Selected initialized private state, a locally verified complete configuration or source enrollment, or one transactionally reconciled retained ownership state.",
+  "outcome": "Selected initialized schema-two private state, a local readiness or record-count result, or an accepted source enrollment.",
   "interfaces": [
     {
       "label": "Initialize state",
       "invocation": "/Users/joey/.local/bin/cast init"
     },
     {
-      "label": "Inspect readiness",
+      "label": "Inspect local readiness",
       "invocation": "/Users/joey/.local/bin/cast doctor"
     },
     {
-      "label": "Show configuration",
-      "invocation": "/Users/joey/.local/bin/cast config show"
+      "label": "Inspect local record counts",
+      "invocation": "/Users/joey/.local/bin/cast status --json"
     },
     {
-      "label": "Replace configuration",
-      "invocation": "/Users/joey/.local/bin/cast config set --file PATH"
+      "label": "Read operational status",
+      "invocation": "/Users/joey/.local/bin/cast status-snapshot --json"
     },
     {
       "label": "Add a careers source",
       "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
-    },
-    {
-      "label": "Clear a retained source enabled setting",
-      "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
-    },
-    {
-      "label": "Reconcile retained employer ownership",
-      "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
     }
   ],
   "effects": [
-    "Initialization creates missing schema-two accepted current state and preserves existing schema-one discovery records and consumed budgets without migration or collection.",
-    "Configuration replacement updates retained settings without starting collection, resetting usage or purchasing provider credits.",
-    "Source controls retain source metadata and evidence; disabling clears its retained enabled setting without fetching remote sources.",
-    "Ownership reconciliation repairs older schema-one associations under one mutation lock and transaction, preserving IDs, usage, runs, coverage and cursors. In schema-two state it returns zero changes and preserves accepted employers, source operators and snapshot revision."
+    "Initialization creates missing schema-two accepted current state. Existing schema-two records remain. Schema-one and unknown database schemas are rejected without conversion.",
+    "Source enrollment retains metadata without fetching external records or establishing employer or source-operator ownership.",
+    "Doctor and status inspect selected local state. Cast reads no collector configuration or provider keys."
   ],
   "authority": [
-    "Cast owns state schema, complete configuration validation, source enrollment, local counters and supported ownership reconciliation.",
-    "The caller chooses policy and accounts; providers own external balances and billing."
+    "Cast owns state schema, accepted records, source enrollment, and local readiness.",
+    "Callers resolve duplicate and conflicting record facts before accepting them; consumers own personal selection and downstream actions."
   ],
   "success": [
-    "The selected state operation completes and supported reads confirm its intended local result.",
-    "Reconciliation returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts. Material changes in legacy state preserve identity and gain revisions; current state returns zero changes."
+    "The selected state operation completes and supported reads confirm its intended local result."
   ],
   "failure_and_recovery": [
-    "Stop callers before ownership reconciliation. Program recovery preserves discovery state.",
-    "Preserve successful observations and conservative usage after collection failure. Do not erase state to clear budgets or hand-edit individual rows.",
-    "Program recovery leaves discovery state and configuration unchanged; an older program can reject newer configuration fields."
+    "Stop callers before state maintenance or recovery. Program recovery preserves the database.",
+    "Schema-one state fails explicitly. This release has no migration command, destructive reset or direct SQLite repair surface.",
+    "Select a program that accepts the retained database schema; program recovery does not check or restore data.",
+    "Older releases requiring stored collector configuration can fail status or diagnosis on newly initialized Cast 0.6.0 state even if they read schema-two exports. Recovery does not recreate configuration."
   ],
   "privacy": [
-    "Private state, exports and diagnostics can contain search interests, locators, posting text and collection history.",
-    "Credentials remain outside saved configuration, database rows, arguments and logs."
+    "Private state, exports and diagnostics can contain locators, posting text, supplied evidence and dates.",
+    "Cast reads no provider credentials and sends no records to remote sources."
   ],
   "does_not_authorize": [
     "A provider purchase, credential replacement, state deletion, scheduled activation, model job or downstream application workflow."
@@ -82,81 +73,77 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user may select and initialize Cast state, inspect or replace collection configuration, control sources and invoke the supported ownership repair."
+        "statement": "The current user may select and initialize private Cast state, diagnose local readiness, inspect record counts, add source metadata and understand accepted-record storage."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select the intended private state directory. Except explicit initialization, operations require supported initialized state and valid inputs. Stop callers before ownership reconciliation."
+        "statement": "Select the intended private state directory. Except explicit initialization, ordinary operations require initialized database schema 2 and valid inputs. Stop callers before state maintenance or recovery. The operational status-snapshot protocol does not open Cast state."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "State defaults to ~/.local/share/cast and can be selected with --state-dir PATH or CAST_STATE_DIR. The CLI flag selects independently of environment. config set --file supplies a complete schema-one configuration; config show --json returns the current complete machine input."
+        "statement": "State defaults to ~/.local/share/cast. --state-dir PATH or CAST_STATE_DIR selects another directory; the CLI flag selects independently of environment."
       },
       {
         "status": "declared",
-        "statement": "automatic_excluded_ats accepts distinct ashby, greenhouse or lever names. It defaults to [\"ashby\"] when omitted; an explicit empty array removes ATS exclusions while retaining source enabled policy."
-      },
-      {
-        "status": "declared",
-        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS sources reject that override and use canonical provider/tenant compatibility associations. This exported association does not establish the optional current source operator or any job employer. source disable selects one source ID."
+        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS URLs reject that override and use canonical provider/tenant compatibility associations. That association establishes neither the optional source operator nor a job employer."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "CLI state commands use readable diagnosis/configuration and short write receipts by default. Global --json selects the existing success JSON results. State commands return local readiness, complete configuration, source enrollment or ownership-repair counts. Repair counts describe the selected local transaction rather than external collection coverage. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. The status-snapshot --json protocol and native Rust APIs remain unchanged."
+        "statement": "Init prints selected state and returns its existing JSON receipt with --json. Doctor JSON schema 2 returns database:ready, database_schema:2 and state_dir. Ordinary status JSON schema 3 returns snapshot_revision and companies, jobs and sources counts. Global --json selects machine output before or after the command. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2."
+      },
+      {
+        "status": "declared",
+        "statement": "status-snapshot --json retains operational schema 1 and the cast/discovery unit. It reports installed command availability without opening state or checking database integrity. It is separate from ordinary status output."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Configuration retains query families, terms, intervals, adapter settings and request caps. No collector applies them in this release. Changes do not reset consumed allowance, buy credits or configure provider billing."
+        "statement": "cast::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both joins use composite primary keys with one URL per job/source pair. The core holds one accepted current record per job, with duplicates and conflicts resolved before writing. It has no history or collection mechanics."
       },
       {
         "status": "declared",
-        "statement": "Schema-one budgets describe historical conservative request accounting. TheirStack total covers the retained lifetime rather than a provider monthly balance. Schema-two state has no request ledger or run history: usage is zero, last run is null and query coverage is empty. Cast does not collect or consume request allowance."
+        "statement": "meta retains snapshot revision and company aliases. Compatibility columns in company/job/source retain supplied export fields, including timestamps, evidence, compensation, entity revisions and source metadata. There are no revision-history, observation, request-ledger or run tables. Accepted writes replace a job and its complete workplace/source links atomically. Company/job first_seen_at and last_seen_at must be valid ordered RFC 3339 values; they normalize to UTC with nine fractional-second digits. Updates preserve first_seen_at and do not move last_seen_at backwards. Existing location IDs preserve their names. There is no CLI job ingestion interface."
       },
       {
         "status": "declared",
-        "statement": "Schema-one reconciliation moves ATS associations to canonical provider/tenant companies, sets older or affected shared-host JSON-LD jobs to unknown, resets source collection status, restores affected candidate names and clears shared-host domains, website URLs and identity aliases. Schema-two reconciliation preserves accepted employer/operator associations without deriving either from the other."
+        "statement": "Exported source enabled, status, timestamps, cursor and note remain compatibility metadata. No collector acts on them. Source enrollment makes no remote request."
       },
       {
         "status": "declared",
-        "statement": "cast::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both joins have composite primary keys, with one URL per job/source pair. The core holds one accepted current record per job; duplicates and conflicting source values require resolution before writing. The core has no history or collection mechanics."
-      },
-      {
-        "status": "declared",
-        "statement": "Schema-two meta retains configuration, snapshot revision and company aliases; compatibility columns in company/job/source retain current export fields, including supplied timestamps, evidence, compensation, current entity revisions and source controls. There are no revision-history, observation, request-ledger or run tables. Cast accepted-record writes replace a job and its workplace/source links atomically and require schema-two state. Company/job first_seen_at and last_seen_at must be valid RFC 3339 values in order and normalize to UTC with nine fractional-second digits for chronological string comparison. Updates retain the first-seen instant and do not move the last-seen instant backwards. Existing location IDs retain their names. There is no CLI job ingestion interface."
+        "statement": "Collector query/budget/interval/adapter configuration, defaults, validation and provider-key diagnostics are removed. Cast does not use retained collector configuration. The commands config show, config set, state reconcile-ownership, source disable and unresolved list are retired. Cast does not infer or repair accepted employers or source operators."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "The selected state directory identifies an independent Cast database named cast.sqlite3. Legacy paid accounting uses TheirStack credits, Brave requests, HTTP requests and elapsed seconds; daily and monthly windows use UTC."
+        "statement": "The selected directory identifies an independent database named cast.sqlite3. Current counts use retained company, job and source records. Stable IDs and current revisions remain under the read contract."
       },
       {
-        "status": "declared",
-        "statement": "Legacy repair preserves source/job IDs, paid usage, run history, coverage and cursors. Changed jobs and companies gain revisions, and each legacy repair invocation advances snapshot_revision. Schema-two reconciliation preserves all accepted records and the snapshot revision."
+        "status": "not_applicable",
+        "statement": "Local state operations define no provider budget, billing, or request-usage unit."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Configuration and doctor reads describe selected local state at invocation. Doctor checks configuration and credential presence; it does not establish provider authentication, balance or current posting availability."
+        "statement": "Doctor and status describe selected local state at invocation. Doctor checks usable local database schema 2. Status counts retained records, not all external postings. Neither reads provider keys or collector configuration."
       },
       {
         "status": "unsupported",
-        "statement": "Installed documentation, initialization and local diagnosis do not establish current provider allowance or successful collection."
+        "statement": "Local readiness and installation do not establish current source availability or successful collection."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "The current-user CLI is the state administration boundary. The state directory uses mode 0700 and cast.sqlite3 uses mode 0600. Configuration is stored in database metadata."
+        "statement": "The current-user CLI is the local administration boundary. State directory mode is 0700 and cast.sqlite3 mode is 0600."
       },
       {
         "status": "unsupported",
@@ -166,25 +153,21 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Initialization creates database schema 2 when state is missing and preserves existing schema-one records and usage without migration. Store open supports both formats. Only one writer uses a selected directory, with a kernel-backed mutation lock. Legacy ownership reconciliation commits one transaction and makes no provider request."
+        "statement": "Initialization creates database schema 2 when missing and preserves supported existing state. Opening, initialization and deployment reject schema-one state without migrating or changing its records. Only one writer uses a selected directory through a kernel-backed mutation lock."
       },
       {
         "status": "declared",
-        "statement": "Repeating legacy reconciliation leaves material records unchanged but advances snapshot_revision. Corrected legacy associations remain visible through reads. Current-state reconciliation reports no changes and preserves snapshot_revision."
+        "statement": "Ordinary website source add without a company ID creates or reuses a hostname candidate. ATS enrollment uses canonical provider/tenant identity. Enrollment does not retrieve remote records."
       },
       {
         "status": "declared",
-        "statement": "Source disable retains records and clears the enabled setting. Ordinary website source add without a company ID creates or reuses a hostname candidate. Neither command retrieves remote records."
-      },
-      {
-        "status": "declared",
-        "statement": "Missing state, including deployment setup, uses the accepted current model. Existing schema-one state remains supported without migration. Both storage formats retain the existing public read types and export schema 1; older programs that support only database schema 1 cannot open schema-two state."
+        "statement": "Schema-one-only programs cannot open schema-two state, and this release cannot open schema-one state. Program selection and data recovery are separate operations."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Retained configuration defaults are 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run, 50 careers-source collections per run and 50 targeted adapter pages via max_verifications_per_run. No collector applies these limits in this release."
+        "statement": "Cast performs no collection and uses no provider credentials, configuration, budgets or request ledger."
       },
       {
         "status": "unsupported",
@@ -198,7 +181,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Database, configuration, export, contract and release versions are distinct. Configuration schema remains 1 with automatic_excluded_ats. Older programs that reject unknown fields cannot read configuration written with that field. Program recovery restores no previous state or configuration."
+        "statement": "State contract 3 retires schema-one runtime support and local collector controls. Ordinary status moves to response schema 3 and doctor to schema 2. Operational status-snapshot schema 1 and export/native Snapshot contract 3 remain. Database, export, contract and release versions are distinct. Program recovery restores no data."
+      },
+      {
+        "status": "declared",
+        "statement": "New state has no collector configuration. Existing metadata can retain old configuration values inertly; Cast does not read or replace them. Older releases requiring those values can fail status or diagnosis on new state even if they support schema-two exports. Program recovery recreates no configuration."
       },
       {
         "status": "unspecified",
@@ -208,7 +195,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Supported record reads establish retained identities, revisions, attribution and post-repair evidence.",
+        "statement": "Supported reads establish current identities, revisions, primary posting identity, and supplied evidence.",
         "target": "cast",
         "kind": "data",
         "contract": "cast.discovery.explore"

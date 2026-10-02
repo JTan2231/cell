@@ -2,10 +2,8 @@
 #![allow(clippy::missing_errors_doc)]
 use crate::{
     Result,
-    models::{
-        Company, CompanyDraft, Config, Coverage, DiscoveryQuery, Evidence, Job, Snapshot, Source,
-    },
-    normalize_url, now, stable_id, timestamp,
+    models::{Company, Evidence, Snapshot, Source},
+    normalize_url, now, stable_id,
 };
 use fs2::FileExt;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -27,7 +25,6 @@ pub struct Store {
     connection: Arc<Mutex<Connection>>,
     pub directory: PathBuf,
     locked: Arc<AtomicBool>,
-    current: bool,
 }
 
 pub struct ProductLock {
@@ -53,7 +50,7 @@ impl Store {
             return Err("Cast state is not initialized; run cast init".into());
         }
         let connection =
-            Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+            Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
         let schema: Option<String> = connection
             .query_row(
@@ -62,15 +59,25 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?;
-        if !matches!(schema.as_deref(), Some("1" | "2")) {
-            return Err("unsupported Cast state schema".into());
+        match schema.as_deref() {
+            Some("2") => {}
+            Some("1") => {
+                return Err(
+                    "legacy Cast state schema 1 is no longer supported; select schema-two state"
+                        .into(),
+                );
+            }
+            _ => return Err("unsupported Cast state schema".into()),
         }
+        drop(connection);
+        let connection =
+            Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE)?;
+        connection.busy_timeout(std::time::Duration::from_secs(5))?;
         connection.execute_batch("PRAGMA foreign_keys=ON")?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             directory: directory.to_owned(),
             locked: Arc::new(AtomicBool::new(false)),
-            current: schema.as_deref() == Some("2"),
         })
     }
 
@@ -110,10 +117,6 @@ impl Store {
           INSERT INTO meta VALUES('snapshot_revision','0');",
         )?;
         crate::current_store::initialize(&tx)?;
-        tx.execute(
-            "INSERT INTO meta(key,value) VALUES('config',?1)",
-            [serde_json::to_string(&Config::default())?],
-        )?;
         tx.commit()?;
         drop(connection);
         drop(initialization_lock);
@@ -167,54 +170,6 @@ impl Store {
         Ok(result)
     }
 
-    pub fn config(&self) -> Result<Config> {
-        self.read(read_config)
-    }
-
-    pub fn set_config(&self, config: &Config) -> Result<()> {
-        if config.schema_version != 1
-            || config.budgets.runtime_seconds == 0
-            || config.budgets.runtime_seconds > 3600
-        {
-            return Err("invalid configuration version or runtime bound".into());
-        }
-        let mut providers = std::collections::HashSet::new();
-        for provider in &config.automatic_excluded_ats {
-            if !matches!(provider.as_str(), "ashby" | "greenhouse" | "lever")
-                || !providers.insert(provider)
-            {
-                return Err("invalid or duplicate automatic ATS exclusion".into());
-            }
-        }
-        let mut ids = std::collections::HashSet::new();
-        for query in &config.queries {
-            if query.id.is_empty()
-                || !ids.insert(&query.id)
-                || !matches!(query.provider.as_str(), "hn" | "brave" | "theirstack")
-                || query.interval_seconds == 0
-            {
-                return Err("invalid or duplicate discovery query".into());
-            }
-            reject_secrets(&query.params)?;
-        }
-        self.write(|tx| {
-            for coverage in all::<Coverage>(tx, "coverage")? {
-                let unchanged = config.queries.iter().any(|query| {
-                    query.id == coverage.query_id
-                        && query_fingerprint(query) == coverage.query_fingerprint
-                });
-                if !unchanged {
-                    tx.execute("DELETE FROM coverage WHERE id=?1", [&coverage.query_id])?;
-                }
-            }
-            tx.execute(
-                "UPDATE meta SET value=?1 WHERE key='config'",
-                [serde_json::to_string(config)?],
-            )?;
-            Ok(())
-        })
-    }
-
     pub fn snapshot(&self) -> Result<Snapshot> {
         self.read(|c| {
             c.execute_batch("BEGIN DEFERRED")?;
@@ -230,7 +185,7 @@ impl Store {
                     companies: all(c, "companies")?,
                     jobs: all(c, "jobs")?,
                     source_health: all(c, "sources")?,
-                    coverage: all(c, "coverage")?,
+                    coverage: Vec::new(),
                 })
             })();
             c.execute_batch("ROLLBACK")?;
@@ -244,28 +199,18 @@ impl Store {
 
     /// Stores an accepted company in current-model state.
     pub fn accept_company(&self, company: &Company) -> Result<()> {
-        self.require_current()?;
         self.write(|tx| crate::current_store::put_company(tx, company))
     }
 
     /// Stores a source with an explicit operator and retained export metadata.
     pub fn accept_source(&self, source: &crate::current::Source, metadata: &Source) -> Result<()> {
-        self.require_current()?;
         self.write(|tx| crate::current_store::put_current_source(tx, source, metadata))
     }
 
     /// Replaces one accepted job and its workplace/source associations atomically.
     /// The caller resolves duplicates and conflicting source values before this call.
     pub fn accept_job(&self, record: &crate::current::AcceptedJob) -> Result<()> {
-        self.require_current()?;
         self.write(|tx| crate::current_store::replace_job(tx, record))
-    }
-
-    fn require_current(&self) -> Result<()> {
-        if !self.current {
-            return Err("accepted-record writes require new Cast state; legacy migration is not implemented".into());
-        }
-        Ok(())
     }
 
     pub fn source(&self, id: &str) -> Result<Source> {
@@ -281,15 +226,6 @@ impl Store {
     }
 
     pub fn add_manual_source(&self, input: &str, company_id: Option<&str>) -> Result<Source> {
-        self.manual_source(input, company_id, true)
-    }
-
-    fn manual_source(
-        &self,
-        input: &str,
-        company_id: Option<&str>,
-        enabled: bool,
-    ) -> Result<Source> {
         let url = crate::adapters::canonical_board_url(input).unwrap_or(normalize_url(input)?);
         self.write(|tx| {
             if crate::adapters::board_identity(&url).is_some() {
@@ -298,128 +234,27 @@ impl Store {
                         "ATS ownership is determined by its tenant; omit --company-id".into(),
                     );
                 }
-                return source_inner_with_enabled(tx, "", &url, enabled);
+                return source_inner(tx, "", &url);
             }
             let company_id = if let Some(id) = company_id {
                 get::<Company>(tx, "companies", id)?.ok_or("company not found")?;
                 id.to_owned()
             } else {
-                let board = crate::adapters::board_identity(&url);
-                let host = url::Url::parse(&url)?
-                    .host_str()
-                    .unwrap_or_default()
-                    .to_owned();
-                let draft = CompanyDraft {
-                    name: board.clone().unwrap_or_else(|| host.clone()),
-                    domain: board.is_none().then_some(host),
-                    provider_id: board,
-                    website_url: Some(url.clone()),
-                    ..Default::default()
-                };
-                company_inner(tx, &draft)?.id
+                website_company_inner(tx, &url)?.id
             };
-            source_inner_with_enabled(tx, &company_id, &url, enabled)
-        })
-    }
-
-    pub fn disable_source(&self, id: &str) -> Result<Source> {
-        self.write(|tx| {
-            let mut source: Source = get(tx, "sources", id)?.ok_or("source not found")?;
-            source.enabled = false;
-            put(tx, "sources", id, &source)?;
-            Ok(source)
-        })
-    }
-
-    /// Applies current ATS tenant and HTML adapter rules to stored associations.
-    pub fn reconcile_ownership(&self) -> Result<Value> {
-        if self.current {
-            return Ok(
-                json!({"moved_sources":0,"moved_jobs":0,"quarantined_jobs":0,"renamed_candidates":0,"cleared_shared_identities":0,"retained":"accepted employer and operator associations"}),
-            );
-        }
-        self.write(|tx| {
-            let mut moved_sources=0_u64;
-            let mut moved_jobs=0_u64;
-            let mut quarantined_jobs=0_u64;
-            let mut renamed_candidates=0_u64;
-            let mut cleared_shared_identities=0_u64;
-            for mut source in all::<Source>(tx,"sources")? {
-                if crate::adapters::board_identity(&source.url).is_some() {
-                    let owner=ats_company_inner(tx,&source.url,None)?;
-                    if source.company_id!=owner.id {
-                        source.company_id=owner.id;
-                        source.note=Some("ATS tenant ownership reconciled independently from linking pages".into());
-                        put(tx,"sources",&source.id,&source)?;
-                        moved_sources+=1;
-                    }
-                }
-            }
-            for mut job in all::<Job>(tx,"jobs")? {
-                let source=get::<Source>(tx,"sources",&job.source_id)?;
-                let board_source=source.as_ref().filter(|source|crate::adapters::board_identity(&source.url).is_some());
-                let mut changed=false;
-                if let Some(source)=board_source {
-                    if job.company_id!=source.company_id {
-                        job.company_id.clone_from(&source.company_id);
-                        merge_evidence(&mut job.evidence,&[Evidence {source_url:source.url.clone(),kind:"identity_reconciliation".into(),note:"Employer association updated to the ATS provider/tenant identity".into(),..Default::default()}]);
-                        moved_jobs+=1;
-                        changed=true;
-                    }
-                } else if (job.evidence.iter().any(|e|e.kind=="employer_jsonld") && !job.evidence.iter().any(|e|e.kind=="employer_jsonld_owned")) || (job.evidence.iter().any(|e| matches!(e.kind.as_str(),"employer_jsonld"|"employer_jsonld_owned")) && (crate::adapters::is_discovery_directory(&job.url) || source.as_ref().is_some_and(|source|crate::adapters::is_discovery_directory(&source.url)))) {
-                    if job.availability!="unknown" || !job.evidence.iter().any(|e|e.kind=="identity_unresolved") {
-                        job.availability="unknown".into();
-                        job.missing_complete_snapshots=0;
-                        job.first_missing_at=None;
-                        merge_evidence(&mut job.evidence,&[Evidence {source_url:job.url.clone(),kind:"identity_unresolved".into(),note:"JSON-LD observation does not match current adapter rules; recorded status set to unknown".into(),..Default::default()}]);
-                        quarantined_jobs+=1;
-                        changed=true;
-                    }
-                    if let Some(mut source)=source {
-                        source.status="needs_identity_review".into();
-                        source.note=Some("JSON-LD does not match the current employer URL rule".into());
-                        source.next_due_at=0;
-                        put(tx,"sources",&source.id,&source)?;
-                    }
-                }
-                if changed {
-                    job.revision+=1;
-                    put_revision(tx,"job",&job.id,job.revision,&job)?;
-                    put(tx,"jobs",&job.id,&job)?;
-                }
-            }
-            for mut company in all::<Company>(tx,"companies")? {
-                let mut changed=false;
-                if let Some(domain)=company.domain.clone() && company.name!=domain && !company.evidence.is_empty() && company.evidence.iter().all(|e| matches!(e.kind.as_str(),"search_result_unverified"|"identity_unresolved")) {
-                    company.name=domain;
-                    merge_evidence(&mut company.evidence,&[Evidence {source_url:company.website_url.clone().unwrap_or_default(),kind:"identity_unresolved".into(),note:"Search candidate name reset to its domain by the current adapter rules".into(),..Default::default()}]);
-                    renamed_candidates+=1;
-                    changed=true;
-                }
-                if clear_shared_identity(tx,&mut company)? {cleared_shared_identities+=1;changed=true;}
-                if repair_hn_display_name(tx,&mut company)? {renamed_candidates+=1;changed=true;}
-                if changed {
-                    company.revision+=1;
-                    put_revision(tx,"company",&company.id,company.revision,&company)?;
-                    put(tx,"companies",&company.id,&company)?;
-                }
-            }
-            Ok(json!({"moved_sources":moved_sources,"moved_jobs":moved_jobs,"quarantined_jobs":quarantined_jobs,"renamed_candidates":renamed_candidates,"cleared_shared_identities":cleared_shared_identities,"retained":"source/job IDs, request ledger, run history, query coverage and cursors"}))
+            source_inner(tx, &company_id, &url)
         })
     }
 
     pub fn status(&self) -> Result<Value> {
         let snapshot = self.snapshot()?;
-        let budgets = self.config()?.budgets;
-        self.read(|c| { let today=timestamp().div_euclid(86400)*86400;
-            let mut usage=serde_json::Map::new();
-            for provider in ["theirstack","brave","http","hn"] {let (total,daily)=if self.current {(0,0)} else {(c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1",[provider],row_u64)?,c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1 AND epoch>=?2",params![provider,today],row_u64)?)};usage.insert(provider.into(),json!({"total_units":total,"daily_units":daily}));}
-            let requests:u64=if self.current {0} else {c.query_row("SELECT COUNT(*) FROM requests WHERE epoch>=?1",[today],row_u64)?};
-            let last:Option<Value>=if self.current {None} else {c.query_row("SELECT id,started_at,finished_at,status,note FROM runs ORDER BY started_epoch DESC,rowid DESC LIMIT 1",[],|r|Ok(json!({"id":r.get::<_,String>(0)?,"started_at":r.get::<_,String>(1)?,"finished_at":r.get::<_,Option<String>>(2)?,"status":r.get::<_,String>(3)?,"note":r.get::<_,Option<String>>(4)?}))).optional()?};
-            Ok(json!({"schema_version":2,"snapshot_revision":snapshot.snapshot_revision,"companies":snapshot.companies.len(),"jobs":snapshot.jobs.len(),"sources":snapshot.source_health.len(),"http_requests_today":requests,"usage":usage,"last_run":last,"budgets":budgets,
-                "source_health":snapshot.source_health.into_iter().filter(|source| !matches!(source.status.as_str(), "complete" | "resolved" | "observed")).map(|source| json!({"id":source.id,"status":source.status,"enabled":source.enabled,"last_attempt_at":source.last_attempt_at,"last_success_at":source.last_success_at,"note":source.note})).collect::<Vec<_>>(),
-                "coverage":snapshot.coverage.into_iter().filter(|coverage| coverage.status != "complete").map(|coverage| json!({"query_id":coverage.query_id,"provider":coverage.provider,"status":coverage.status,"last_attempt_at":coverage.last_attempt_at,"last_complete_at":coverage.last_complete_at,"note":coverage.note})).collect::<Vec<_>>()}))
-        })
+        Ok(json!({
+            "schema_version": 3,
+            "snapshot_revision": snapshot.snapshot_revision,
+            "companies": snapshot.companies.len(),
+            "jobs": snapshot.jobs.len(),
+            "sources": snapshot.source_health.len(),
+        }))
     }
 
     pub fn atomic_export(&self, path: &Path) -> Result<()> {
@@ -468,247 +303,40 @@ impl Store {
     }
 }
 
-fn repair_hn_display_name(tx: &Transaction<'_>, company: &mut Company) -> Result<bool> {
-    if crate::adapters::plausible_company_name(&company.name)
-        || !company
-            .evidence
-            .iter()
-            .any(|e| e.kind == "hn_hiring_comment")
-        || company.evidence.iter().any(|e| {
-            !matches!(
-                e.kind.as_str(),
-                "hn_hiring_comment"
-                    | "ats_tenant_identity"
-                    | "identity_reconciliation"
-                    | "identity_unresolved"
-            )
-        })
-    {
-        return Ok(false);
-    }
-    let board = all::<Source>(tx, "sources")?
-        .iter()
-        .filter(|source| source.company_id == company.id)
-        .find_map(|source| crate::adapters::board_identity(&source.url));
-    let replacement = board
-        .map(|board| format!("ats:{board}"))
-        .or_else(|| company.domain.clone())
-        .unwrap_or_else(|| "Unknown employer".into());
-    if replacement == company.name {
-        return Ok(false);
-    }
-    let prior = std::mem::replace(&mut company.name, replacement);
-    let source_url = company
-        .evidence
-        .first()
-        .map_or_else(String::new, |e| e.source_url.clone());
-    merge_evidence(
-        &mut company.evidence,
-        &[Evidence {
-            source_url,
-            kind: "identity_reconciliation".into(),
-            note: format!(
-                "HN display name updated to its source identity; previous display: {prior}"
-            ),
-            ..Default::default()
-        }],
-    );
-    Ok(true)
-}
-
-fn clear_shared_identity(tx: &Transaction<'_>, company: &mut Company) -> Result<bool> {
-    let mut removed = Vec::new();
-    if company.domain.as_ref().is_some_and(|domain| {
-        crate::adapters::is_discovery_directory(&format!("https://{domain}/"))
-    }) && let Some(domain) = company.domain.take()
-    {
-        removed.push(format!("https://{domain}/"));
-    }
-    if company
-        .website_url
-        .as_deref()
-        .is_some_and(crate::adapters::is_discovery_directory)
-        && let Some(website) = company.website_url.take()
-    {
-        removed.push(website);
-    }
-    if removed.is_empty() {
-        return Ok(false);
-    }
-    let aliases = {
-        let mut statement = tx.prepare("SELECT alias FROM company_aliases WHERE company_id=?1")?;
-        statement
-            .query_map([&company.id], |row| row.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
-    };
-    for alias in aliases {
-        let url = alias
-            .strip_prefix("domain:")
-            .map(|domain| format!("https://{domain}/"))
-            .or_else(|| alias.strip_prefix("website:").map(str::to_owned));
-        if url
-            .as_deref()
-            .is_some_and(crate::adapters::is_discovery_directory)
-        {
-            tx.execute("DELETE FROM company_aliases WHERE alias=?1", [alias])?;
-        }
-    }
-    for url in removed {
-        merge_evidence(&mut company.evidence,&[Evidence {source_url:url,kind:"identity_unresolved".into(),note:"Shared-host company domain and website fields cleared by adapter rules; source data retained".into(),..Default::default()}]);
-    }
-    Ok(true)
-}
-
-fn is_current(c: &Connection) -> Result<bool> {
-    Ok(c.query_row(
-        "SELECT value='2' FROM meta WHERE key='schema_version'",
-        [],
-        |r| r.get(0),
-    )?)
-}
-
 fn all<T: DeserializeOwned>(c: &Connection, table: &str) -> Result<Vec<T>> {
-    if is_current(c)? {
-        return if table == "coverage" {
-            Ok(Vec::new())
-        } else {
-            crate::current_store::all(c, table)
-        };
-    }
-    let mut statement = c.prepare(&format!("SELECT body FROM {table} ORDER BY id"))?;
-    let rows = statement.query_map([], |r| r.get::<_, String>(0))?;
-    rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
+    crate::current_store::all(c, table)
 }
-fn query_fingerprint(query: &DiscoveryQuery) -> String {
-    stable_id(
-        "query",
-        &json!([query.provider, query.terms, query.params]).to_string(),
-    )
-}
+
 fn row_u64(row: &rusqlite::Row<'_>) -> rusqlite::Result<u64> {
     let value: i64 = row.get(0)?;
     u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, value))
 }
+
 fn get<T: DeserializeOwned>(c: &Connection, table: &str, id: &str) -> Result<Option<T>> {
-    if is_current(c)? {
-        return crate::current_store::get(c, table, id);
-    }
-    let body: Option<String> = c
-        .query_row(
-            &format!("SELECT body FROM {table} WHERE id=?1"),
-            [id],
-            |r| r.get(0),
-        )
-        .optional()?;
-    body.map(|v| serde_json::from_str(&v).map_err(Into::into))
-        .transpose()
+    crate::current_store::get(c, table, id)
 }
-fn put(c: &Connection, table: &str, id: &str, body: &impl serde::Serialize) -> Result<()> {
-    if is_current(c)? {
-        let body = serde_json::to_value(body)?;
-        return match table {
-            "companies" => crate::current_store::put_company(c, &serde_json::from_value(body)?),
-            "sources" => crate::current_store::put_source(c, &serde_json::from_value(body)?),
-            _ => Err("unsupported current-model write".into()),
-        };
-    }
-    c.execute(&format!("INSERT INTO {table}(id,body) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET body=excluded.body"),params![id,serde_json::to_string(body)?])?;
-    Ok(())
-}
-fn put_revision(
-    c: &Connection,
-    kind: &str,
-    id: &str,
-    revision: u64,
-    body: &impl serde::Serialize,
-) -> Result<()> {
-    if is_current(c)? {
-        return Ok(());
-    }
-    c.execute(
-        "INSERT INTO revisions VALUES(?1,?2,?3,?4)",
-        params![
-            kind,
-            id,
-            i64::try_from(revision)?,
-            serde_json::to_string(body)?
-        ],
-    )?;
-    Ok(())
-}
-fn alias(c: &Connection, table: &str, column: &str, key: &str) -> Result<Option<String>> {
-    if is_current(c)? {
-        return Ok(c
-            .query_row(
-                "SELECT value FROM meta WHERE key=?1",
-                [format!("company_alias:{key}")],
-                |r| r.get(0),
-            )
-            .optional()?);
-    }
+
+fn alias(c: &Connection, key: &str) -> Result<Option<String>> {
     Ok(c.query_row(
-        &format!("SELECT {column} FROM {table} WHERE alias=?1"),
-        [key],
+        "SELECT value FROM meta WHERE key=?1",
+        [format!("company_alias:{key}")],
         |r| r.get(0),
     )
     .optional()?)
 }
-fn add_alias(c: &Connection, table: &str, column: &str, key: &str, id: &str) -> Result<()> {
-    if is_current(c)? {
-        c.execute(
-            "INSERT OR IGNORE INTO meta(key,value) VALUES(?1,?2)",
-            params![format!("company_alias:{key}"), id],
-        )?;
-        return Ok(());
-    }
-    c.execute(
-        &format!("INSERT OR IGNORE INTO {table}(alias,{column}) VALUES(?1,?2)"),
-        params![key, id],
-    )?;
-    Ok(())
-}
 
-fn company_inner(tx: &Transaction<'_>, draft: &CompanyDraft) -> Result<Company> {
-    let website = draft
-        .website_url
-        .as_deref()
-        .and_then(|u| normalize_url(u).ok());
-    let domain = draft
-        .domain
-        .as_deref()
-        .map(|d| d.trim().trim_start_matches("www.").to_lowercase())
-        .filter(|d| !d.is_empty());
-    let mut aliases = Vec::new();
-    if let Some(provider) = &draft.provider_id {
-        aliases.push(format!("provider:{provider}"));
-    }
-    if let Some(domain) = &domain {
-        aliases.push(format!("domain:{domain}"));
-    }
-    if aliases.is_empty() {
-        if let Some(url) = &website {
-            aliases.push(format!("website:{url}"));
-        } else {
-            aliases.push(format!(
-                "unresolved:{}:{}",
-                draft.name,
-                draft.evidence.first().map_or("", |e| e.source_url.as_str())
-            ));
-        }
-    }
-    let mut existing = None;
-    for key in &aliases {
-        if let Some(id) = alias(tx, "company_aliases", "company_id", key)? {
-            existing = Some(id);
-            break;
-        }
-    }
-    let id = existing.unwrap_or_else(|| stable_id("company", &aliases[0]));
-    let previous = get::<Company>(tx, "companies", &id)?;
-    let mut company = previous.clone().unwrap_or_else(|| Company {
+fn website_company_inner(tx: &Transaction<'_>, url: &str) -> Result<Company> {
+    let host = url::Url::parse(url)?
+        .host_str()
+        .ok_or("source URL has no hostname")?
+        .to_owned();
+    let domain = host.trim_start_matches("www.").to_lowercase();
+    let key = format!("domain:{domain}");
+    let id = alias(tx, &key)?.unwrap_or_else(|| stable_id("company", &key));
+    let mut company = get::<Company>(tx, "companies", &id)?.unwrap_or_else(|| Company {
         id: id.clone(),
         revision: 0,
-        name: draft.name.clone(),
+        name: host.clone(),
         domain: None,
         website_url: None,
         first_seen_at: now(),
@@ -717,49 +345,17 @@ fn company_inner(tx: &Transaction<'_>, draft: &CompanyDraft) -> Result<Company> 
         evidence: vec![],
     });
     if company.name.is_empty() || company.name == company.domain.clone().unwrap_or_default() {
-        company.name.clone_from(&draft.name);
+        company.name = host;
     }
-    if company.domain.is_none() {
-        company.domain = domain;
-    }
-    if company.website_url.is_none() {
-        company.website_url = website;
-    }
-    merge_evidence(&mut company.evidence, &draft.evidence);
-    for reason in &draft.relevance_reasons {
-        if !company.relevance_reasons.contains(reason) {
-            company.relevance_reasons.push(reason.clone());
-        }
-    }
+    company.domain.get_or_insert(domain);
+    company.website_url.get_or_insert_with(|| url.into());
     company.last_seen_at = now();
-    let material = |c: &Company| {
-        json!([
-            c.name,
-            c.domain,
-            c.website_url,
-            c.relevance_reasons,
-            c.evidence
-        ])
-    };
-    if previous
-        .as_ref()
-        .is_none_or(|p| material(p) != material(&company))
-    {
-        company.revision += 1;
-        put_revision(tx, "company", &id, company.revision, &company)?;
-    }
-    put(tx, "companies", &id, &company)?;
-    for key in aliases {
-        add_alias(tx, "company_aliases", "company_id", &key, &id)?;
-    }
-    Ok(company)
-}
-
-fn read_config(c: &Connection) -> Result<Config> {
-    let body: String = c.query_row("SELECT value FROM meta WHERE key='config'", [], |r| {
-        r.get(0)
-    })?;
-    Ok(serde_json::from_str(&body)?)
+    crate::current_store::put_company(tx, &company)?;
+    tx.execute(
+        "INSERT OR IGNORE INTO meta(key,value) VALUES(?1,?2)",
+        params![format!("company_alias:{key}"), id],
+    )?;
+    get(tx, "companies", &company.id)?.ok_or_else(|| "stored company disappeared".into())
 }
 
 fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> Result<Company> {
@@ -790,27 +386,16 @@ fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> R
     merge_evidence(&mut company.evidence, &[evidence]);
     if previous.is_none() || company.evidence.len() != before {
         company.revision += 1;
-        put_revision(tx, "company", &id, company.revision, &company)?;
-        put(tx, "companies", &id, &company)?;
+        crate::current_store::put_company(tx, &company)?;
     }
-    if is_current(tx)? {
-        tx.execute("INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![format!("company_alias:{key}"), id])?;
-    } else {
-        tx.execute("INSERT INTO company_aliases(alias,company_id) VALUES(?1,?2) ON CONFLICT(alias) DO UPDATE SET company_id=excluded.company_id",params![key,id])?;
-    }
+    tx.execute(
+        "INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        params![format!("company_alias:{key}"), id],
+    )?;
     Ok(company)
 }
 
 fn source_inner(tx: &Transaction<'_>, company_id: &str, url: &str) -> Result<Source> {
-    source_inner_with_enabled(tx, company_id, url, true)
-}
-
-fn source_inner_with_enabled(
-    tx: &Transaction<'_>,
-    company_id: &str,
-    url: &str,
-    enabled: bool,
-) -> Result<Source> {
     let canonical = crate::adapters::canonical_board_url(url);
     let url = canonical.as_deref().unwrap_or(url);
     let owner = canonical
@@ -824,7 +409,7 @@ fn source_inner_with_enabled(
     if let Some(mut existing) = get::<Source>(tx, "sources", &id)? {
         if canonical.is_some() && existing.company_id != company_id {
             existing.company_id = company_id.into();
-            put(tx, "sources", &id, &existing)?;
+            crate::current_store::put_source(tx, &existing)?;
         }
         return Ok(existing);
     }
@@ -833,7 +418,7 @@ fn source_inner_with_enabled(
         id: id.clone(),
         company_id: company_id.into(),
         url: url.into(),
-        enabled,
+        enabled: true,
         status: "never_checked".into(),
         last_attempt_at: None,
         last_success_at: None,
@@ -841,7 +426,7 @@ fn source_inner_with_enabled(
         cursor: None,
         note: None,
     };
-    put(tx, "sources", &id, &source)?;
+    crate::current_store::put_source(tx, &source)?;
     Ok(source)
 }
 
@@ -860,28 +445,72 @@ fn merge_evidence(existing: &mut Vec<Evidence>, incoming: &[Evidence]) {
     }
 }
 
-fn reject_secrets(value: &Value) -> Result<()> {
-    match value {
-        Value::Object(object) => {
-            for (key, value) in object {
-                let key = key.to_lowercase();
-                if ["key", "token", "secret", "authorization", "password"]
-                    .iter()
-                    .any(|s| key.contains(s))
-                {
-                    return Err(
-                        "credentials belong in environment variables, not configuration".into(),
-                    );
-                }
-                reject_secrets(value)?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn current_state_retains_source_identity_and_rejects_legacy_without_conversion() -> Result<()> {
+        let directory = std::env::temp_dir().join(format!("cast-store-{}", uuid::Uuid::now_v7()));
+        let result = (|| {
+            let store = Store::init(&directory)?;
+            store.accept_company(&Company {
+                id: "retained-company".into(),
+                revision: 0,
+                name: "Retained employer".into(),
+                domain: Some("example.com".into()),
+                website_url: None,
+                first_seen_at: "2026-10-01T00:00:00Z".into(),
+                last_seen_at: "2026-10-01T00:00:00Z".into(),
+                relevance_reasons: vec![],
+                evidence: vec![],
+            })?;
+            store.write(|tx| {
+                tx.execute(
+                    "INSERT INTO meta(key,value) VALUES('company_alias:domain:example.com','retained-company')",
+                    [],
+                )?;
+                Ok(())
+            })?;
+            let source = store.add_manual_source("https://www.example.com/careers", None)?;
+            let retained = store.add_manual_source("https://www.example.com/careers", None)?;
+            assert_eq!(source.id, retained.id);
+            assert_eq!(source.company_id, retained.company_id);
+            assert_eq!(source.company_id, "retained-company");
+            let snapshot = store.snapshot()?;
+            assert_eq!(snapshot.schema_version, 1);
+            assert_eq!(snapshot.companies.len(), 1);
+            assert_eq!(snapshot.source_health.len(), 1);
+            assert!(snapshot.coverage.is_empty());
+            let config_count: i64 = store.read(|connection| {
+                Ok(connection.query_row(
+                    "SELECT COUNT(*) FROM meta WHERE key='config'",
+                    [],
+                    |row| row.get(0),
+                )?)
+            })?;
+            assert_eq!(config_count, 0);
+            drop(store);
+
+            let legacy = directory.join("legacy");
+            fs::create_dir(&legacy)?;
+            let database = legacy.join("cast.sqlite3");
+            let connection = Connection::open(&database)?;
+            connection.execute_batch("CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO meta VALUES('schema_version','1');")?;
+            drop(connection);
+            let original = fs::read(&database)?;
+            for result in [Store::open(&legacy), Store::init(&legacy)] {
+                let error = result.err().ok_or("legacy state was accepted")?;
+                assert!(
+                    error
+                        .to_string()
+                        .contains("schema 1 is no longer supported")
+                );
             }
-        }
-        Value::Array(values) => {
-            for value in values {
-                reject_secrets(value)?;
-            }
-        }
-        _ => {}
+            assert_eq!(fs::read(&database)?, original);
+            Ok(())
+        })();
+        fs::remove_dir_all(&directory)?;
+        result
     }
-    Ok(())
 }
