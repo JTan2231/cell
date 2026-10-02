@@ -67,8 +67,11 @@ sandbox so product installers can update their owned host programs and state.
 
 The release cache override and explicit build output must stay inside the
 configured workspace. Source remains on the host; private CI and deployment
-worktrees are external. The source Git repository retains commit objects,
-refs, and linked-worktree metadata as part of source control.
+worktrees are external. The source Git repository retains commit objects and
+refs. The manager removes each settled job's worktree directory and Git
+registration. Unresolved jobs keep their worktrees for recovery. Read the
+[queue operation contract](chancery/manuals/queue-operate.md#protect-retained-state)
+for cleanup status and retry behavior.
 
 A missing, replaced, full, or unwritable drive blocks work. Reconnect the same
 drive before inspecting or recovering its queue. Loss during execution is not

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 
 from ci_manager.storage import ManagerError
@@ -57,6 +58,72 @@ def ensure_worktree(root: Path, path: Path, revision: str) -> None:
         raise ManagerError("private candidate belongs to another repository")
     git(path, "reset", "--hard", revision)
     git(path, "clean", "-ffd")
+
+
+def _worktree_registration(root: Path, path: Path, directory: Path) -> Path:
+    parent = common(root) / "worktrees"
+    if (not directory.is_absolute() or directory.parent != parent
+            or directory.resolve().parent != parent.resolve()
+            or parent.is_symlink() or directory.is_symlink()):
+        raise ManagerError("candidate registration is outside the repository's linked-worktree directory")
+    marker = directory / "gitdir"
+    if marker.is_symlink():
+        raise ManagerError("symbolic candidate registration")
+    if marker.is_file() and Path(marker.read_text().strip()).resolve() != path.resolve() / ".git":
+        raise ManagerError("candidate registration belongs to another worktree")
+    return directory
+
+
+def worktree_registration(root: Path, path: Path) -> Path | None:
+    """Find this tree's exact admin directory before deleting its files."""
+    if path.is_symlink():
+        raise ManagerError(f"symbolic candidate worktree: {path}")
+    marker = path / ".git"
+    if marker.is_symlink():
+        raise ManagerError("symbolic candidate Git file")
+    if marker.is_file():
+        value = marker.read_text().strip()
+        if not value.startswith("gitdir: "):
+            raise ManagerError("invalid candidate Git file")
+        directory = Path(value[len("gitdir: "):])
+        if not directory.is_absolute():
+            directory = (path / directory).absolute()
+        return _worktree_registration(root, path, directory)
+    parent = common(root) / "worktrees"
+    if parent.is_symlink():
+        raise ManagerError("symbolic linked-worktree directory")
+    if parent.is_dir():
+        for directory in parent.iterdir():
+            marker = directory / "gitdir"
+            if (not directory.is_symlink() and marker.is_file() and not marker.is_symlink()
+                    and Path(marker.read_text().strip()).resolve() == path.resolve() / ".git"):
+                return _worktree_registration(root, path, directory)
+    return None
+
+
+def remove_worktree(root: Path, path: Path, registration: Path | None = None) -> None:
+    """Remove one finished job's files and linked-worktree registration."""
+    if path.is_symlink():
+        raise ManagerError(f"symbolic candidate worktree: {path}")
+    target = path.resolve()
+    records = git(root, "worktree", "list", "--porcelain", "-z").stdout.split(b"\0")
+    paths = [Path(os.fsdecode(record[len(b"worktree "):])).resolve()
+             for record in records if record.startswith(b"worktree ")]
+    if paths and target == paths[0]:
+        raise ManagerError("cannot remove the repository's main worktree")
+    registration = (_worktree_registration(root, path, registration)
+                    if registration is not None else worktree_registration(root, path))
+    if path.exists():
+        # Remove all private files, including dirty, ignored and nested Git
+        # content. File-first removal also recovers a partially deleted .git.
+        shutil.rmtree(path)
+    if target in paths:
+        # Git removes the absent tree's exact registration. Force twice also
+        # clears a lock on this settled, manager-owned worktree.
+        git(root, "worktree", "remove", "--force", "--force", str(path))
+    if registration is not None and registration.exists():
+        # Replay also clears partial admin deletion that Git no longer lists.
+        shutil.rmtree(registration)
 
 
 def clean_candidate(path: Path, revision: str) -> None:

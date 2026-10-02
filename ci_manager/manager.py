@@ -80,6 +80,42 @@ class Worker:
                                    "key": f"cell-ci/{job['id']}/outcome/{job.get('outcome_generation', 1)}", "attempts": [],
                                    "created": time.time(), "state": "pending"}
         self.save(job, "notifying")
+        self.cleanup_worktree(job)
+
+    def cleanup_worktree(self, job: dict) -> None:
+        settled = (job["phase"] in TERMINAL
+                   or (job["phase"] in {"notifying", "blocked"} and job.get("outcome") in TERMINAL))
+        if (not settled or job.get("unresolved") or job.get("model_unresolved")
+                or job.get("worktree_cleanup", {}).get("state") == "removed"):
+            return
+        cleanup = dict(job.get("worktree_cleanup", {}))
+        try:
+            path = self.worktree(job)
+            if "registration" not in cleanup:
+                registration = git.worktree_registration(self.repository, path)
+                cleanup.update(state="pending", updated=time.time(),
+                               registration=str(registration) if registration is not None else None)
+                job["worktree_cleanup"] = cleanup
+                # Retain exact correlation before any files or Git metadata go.
+                self.save(job)
+            registration = Path(cleanup["registration"]) if cleanup["registration"] is not None else None
+            git.remove_worktree(self.repository, path, registration)
+        except (ManagerError, OSError, subprocess.SubprocessError) as exception:
+            cleanup.update(state="failed", updated=time.time(), error=str(exception))
+        else:
+            cleanup.pop("error", None)
+            cleanup.update(state="removed", updated=time.time())
+        job["worktree_cleanup"] = cleanup
+        # Cleanup failure does not change the retained CI outcome or Email key.
+        self.save(job)
+
+    def cleanup_finished_worktrees(self) -> None:
+        rows = self.store.db.execute("""SELECT * FROM jobs
+            WHERE phase IN ('succeeded','failed','cancelled','already_included','notifying','blocked')
+            AND COALESCE(json_extract(data, '$.worktree_cleanup.state'), '') != 'removed'
+            ORDER BY sequence""").fetchall()
+        for row in rows:
+            self.cleanup_worktree(self.store.decode(row))
 
     def step(self, job: dict) -> None:
         workspace.root()
@@ -724,6 +760,8 @@ class Worker:
 
     def run(self) -> None:
         while True:
+            workspace.root()
+            self.cleanup_finished_worktrees()
             job = self.claim()
             if job is not None:
                 try:
