@@ -17,29 +17,33 @@ and change explicitly supplied schedule intent. It adds no ledger notes or appli
 and performs no preparation or immediate send. Initialize and inspect commands
 grant no note, mail, or status authority.
 
-## Deploy through the coordinator
+## Deploy through the instruction executor
 
 1. Select a validated committed candidate on local main. Use
    `cell-ci submit COMMIT` for ordinary delivery. The manager integrates,
    validates, attempts bounded repairs, deploys, and emails the outcome.
 2. Preview a separately authorized manual deployment with `./deploy.sh plan clew`.
-   Confirm the selected product and dependency changes.
+   Confirm the explicit product selection and instruction order. Add any required
+   dependency updates to the selection; the executor does not add products.
 3. Set `daily_email_enabled` only when the intended schedule change is authorized.
    Omit it to preserve existing intent. Explicit true grants standing authority
    for the complete daily digest to Email's fixed personal recipient. Explicit
    false selects disabled intent.
-4. Run `./deploy.sh clew`. The coordinator installs compatible dependencies when
-   necessary, captures schedule intent, holds email admission, suspends the
-   binding, and drains sends before configuration. A schema-one or schema-two
-   ledger uses the guarded migration below.
+4. Run `./deploy.sh clew`. The product command selects program and provider files,
+   enters ordinary admission, initializes or migrates the ledger, and updates its
+   daily definition. It preserves the saved schedule policy and enabled intent,
+   unless `daily_email_enabled` overrides that intent. An absent binding remains
+   absent when the setting is omitted. Deployment creates no maintenance hold,
+   drains no send, and temporarily disables no binding.
 5. Confirm the retained deployment outcome and captured or explicit schedule intent.
    Deployment does not check artifact integrity, ledger integrity, or the Cast
    snapshot. Ordinary doctor and application checks remain separate.
 
-Stop for missing dependencies, unresolved or foreign holds, an incomplete drain,
-unsafe migration mappings, failed setup, or foreign selectors. Preserve operation evidence for coordinator recovery. Do not release
-holds, approve incidents, or force an older incompatible program to obtain a
-successful result.
+Stop for unavailable required interfaces, an existing admission hold, unsafe
+migration mappings, failed setup, or foreign selectors. Completed effects remain
+after failure. Inspect them through the owning product interfaces before an
+explicit new attempt. The executor performs no automatic retry or recovery.
+Preserve holds and failure incidents.
 
 ## Install program files directly
 
@@ -52,7 +56,7 @@ successful result.
    ```
 
    Use `--home ABSOLUTE_PATH` for an explicit user home and
-   `--expected-current absent|releases/HASH` when selection must match an exact
+   `--expected-current absent|releases/ID` when selection must match an exact
    prior condition. Stop if selectors belong to another owner .
 3. Run `clew init` to create empty schema-three state or check compatible state.
    Stop for schema one or two, nonempty foreign state, or unsupported state.
@@ -67,10 +71,9 @@ private state outside source and release trees.
 
 ## Migrate an older ledger
 
-1. Use coordinated deployment to convert supported schema-one or schema-two state
-   to schema three. Let admitted sends finish. Configure requires the sole
-   run-owned email maintenance hold. Ordinary commands and `init` refuse older
-   schemas; direct program installation does not migrate state.
+1. Use the product deployment command to convert supported schema-one or schema-two
+   state to schema three under ordinary admission. Ordinary commands and `init`
+   refuse older schemas; direct program installation does not migrate state.
 2. Exclude concurrent ledger writers through the guarded migration transaction.
 3. Resolve every retained legacy reference through Platter's public opportunity
    reader for schema-one state. Stop on missing mappings or two legacy references
@@ -81,8 +84,8 @@ private state outside source and release trees.
    associations, legacy aliases, and exact write requests in one transaction.
    No original-schema copy is created. Failure before commit preserves prior data.
 5. Read the retained deployment outcome. Preserve reported transaction evidence.
-   Keep a schema-three-compatible program selected after migration. Restore only
-   captured or explicit schedule intent after coherent activation.
+   Keep a schema-three-compatible program selected after migration. Preserve
+   saved or explicitly requested schedule intent.
 
 Existing job identity becomes a `cast.job` external reference with an explicit
 application-report association. Migration preserves entry IDs, sequence,
@@ -129,9 +132,10 @@ permits future activation and does not retry an uncertain message.
    Program recovery does not check state compatibility.
 3. Select it with `clew-install recover --release /absolute/owned/release`.
    File recovery preserves private state. It does not downgrade the schema or
-   retry mail. Follow retained coordinator recovery for an interrupted coordinated
-   deployment so admission remains held until program and schedule selections
-   are coherent.
+   retry mail. Inspect the retained executor receipt after an interrupted
+   deployment. Reconcile and acknowledge executor admission separately from any
+   authorized product recovery; acknowledgement does not establish ledger or
+   schedule correctness.
 4. Run `clew-install inspect` to read release metadata. Ledger and Cast diagnostics
    remain separate. Restore only captured enabled intent. Keep unresolved holds and incidents intact.
 

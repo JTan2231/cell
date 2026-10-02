@@ -6,9 +6,10 @@ separate effects. Catalog presence does not authorize any of them.
 
 ## Prepare and deploy
 
-Cell deployment uses committed local `main`, compatible candidates, and the
-Nucleus requester maintenance closure. Complete the required development checks
-before publication or deployment. From the Cell root:
+Cell deployment executes the explicitly selected products' instructions from
+committed local `main`. Complete the required development checks before
+publication or deployment. Select required dependency updates explicitly.
+From the Cell root:
 
 ```sh
 ./deploy.sh plan paperboy
@@ -23,17 +24,18 @@ Annals and Paperboy together when adding this support:
 ./deploy.sh annals paperboy
 ```
 
-The shared builder seals production artifacts. The coordinator holds affected
-requester admission, drains existing work, and selects the exact program and
-provider release. Paperboy owns its private database and recovery. Nucleus owns
+The shared builder prepares artifacts. The executor runs Paperboy's product
+command to select program and provider files and perform setup. It creates no
+maintenance hold, drains no requester, and temporarily disables no binding.
+Paperboy owns its private database and recovery. Nucleus owns
 execution and credentials; Conversations owns history reads; Email owns submission;
 Clockwork owns activation, durable scheduling halts and incident notification.
 
 Deployment initializes an absent schema-one database or opens existing supported
 state without copying it. Unsupported versions stop it.
 Installation performs setup without artifact-integrity, state-integrity, or
-operational-readiness checks. It succeeds after setup and release of run-owned
-holds. Ordinary doctor and report checks remain separate.
+operational-readiness checks. It succeeds when its setup commands complete.
+Ordinary doctor and report checks remain separate.
 Direct installer publication and rollback are unavailable; use the coordinator.
 
 ## State and inspection
@@ -127,9 +129,11 @@ Retain releases pinned by schedules, including disabled selections.
 
 ## Failure and recovery
 
-A process lock serializes runs and schedule mutations. Preserve maintenance when
-recovery cannot prove a coherent installation. Use a release compatible with
-retained state. Unknown apply or email outcomes remain uncertain.
+A process lock serializes runs and schedule mutations. A failed deployment
+retains completed file, state, and schedule changes. The executor stops and
+performs no automatic retry, rollback, or application recovery. Inspect current
+product state before an explicit new attempt. Preserve any separately acquired
+maintenance holds. Unknown command or email outcomes remain uncertain.
 
 Accepted summaries and submission receipts survive later runtime failures.
 Resume an interrupted brief with `paperboy run --brief BRIEF_ID`. A terminal
@@ -169,17 +173,17 @@ private; Nucleus and mail-provider retention are separate.
 
 ## Deployment configuration and activation
 
-Deployment captures and suspends `paperboy/daily`, initializes absent state or
-opens supported state during configuration, then selects a disabled
-definition for the final installed program. It preserves existing schedule,
-arguments, environment and output paths. The optional `enabled` deployment
-setting overrides saved enabled intent. With no setting, an absent binding
-remains absent and a disabled binding stays disabled. Activation follows all
-maintenance releases. Existing Clockwork incidents survive every phase.
+The product deployment command captures `paperboy/daily`, selects program files,
+then initializes absent state or opens supported state under ordinary admission
+and the runner lock. It retargets and selects the definition directly, preserving
+schedule, arguments, environment, output paths, and failure incidents. The
+optional `enabled` setting overrides saved enabled intent. With no setting, an
+absent binding remains absent and a disabled binding stays disabled.
 
-Recovery repeats configuration under its retained owner. The retained completion
-receipt avoids repeating initialization. Existing schema-one receipts remain
-accepted without reading their former data-copy fields.
+An existing maintenance hold can refuse ordinary setup. Deployment does not
+release that hold. Reconcile an interrupted executor receipt and acknowledge its
+admission separately from authorized product recovery. The same request ID
+returns the retained result and executes no instruction again.
 
 ## Command usage
 

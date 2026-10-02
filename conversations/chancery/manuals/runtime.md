@@ -86,21 +86,21 @@ installed contract for this data surface; complete resolution preserves that gap
 The installer copies the supplied programs and provider bundle into a retained
 release and selects their owned public paths together. It creates required
 installation directories and uses product and catalog locks with atomic selector
-updates. `--expected-current absent|releases/HASH` guards the selected release.
-Foreign public selectors are refused. File-operation or basic execution failures
-restore the prior selectors when possible.
+updates. `--expected-current absent|releases/ID` guards the selected release.
+Foreign public selectors are refused. An instruction failure retains completed
+file and selector changes for explicit recovery.
 
-Release hashes name the staged files. Installation and recovery do not compare
+Opaque UUID release IDs name the staged files. Installation and recovery do not compare
 artifact hashes, component versions, or retained file inventories. They do not
-run database integrity checks, dependency probes, or readiness checks. Basic
-`--help` and `--version` execution checks remain. Inspection reads recorded
-installation metadata and selectors; it is not an integrity result.
+run executable probes, native-signature audits, database integrity checks,
+dependency probes, or readiness checks. Inspection reads recorded installation
+metadata and selectors; it is not an integrity result.
 
 The installation root is
 `~/Library/Application Support/Conversations/install`. Public `conversations`,
 `conversations-install`, and the Conversations provider follow `current`.
 `previous` retains the prior selection. `manifest.json` describes the
-`cell-install-v2` layout, and `package/install` retains the installer.
+`cell-install-v3` layout, and `package/install` retains the installer.
 Recovery also reads the previous shell format.
 
 Deployment does not run `doctor`, read history, or change Codex authentication.

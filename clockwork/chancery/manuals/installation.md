@@ -9,7 +9,7 @@ Use `clockwork.install.operate` for ordered operating procedures.
 ## Interfaces and installation inputs
 
 ```text
-<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/HASH]
+<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]
 <TRUSTED_CLOCKWORK_INSTALL> recover --release ABSOLUTE_OWNED_RELEASE_DIRECTORY --chancery ABSOLUTE_PATH
 <TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]
 clockwork [--json] doctor
@@ -18,8 +18,9 @@ clockwork [--json] migrate
 ```
 
 The `clockwork` CLI prints plain text by default. Pass `--json` for its
-existing compact machine response. The separate installer protocol is
-unchanged.
+existing compact machine response. Direct installer commands retain their
+interfaces. Manifest deployment invokes `clockwork-install deploy` with JSON
+artifact paths and settings on stdin and uses its exit status as completion.
 
 The Rust installer accepts the binary, installer, and provider files at absolute
 paths. It places those files and publishes their selectors without comparing
@@ -36,10 +37,10 @@ explicit absolute home option; runtime isolation is not a new production owner.
 
 ## Release identity and selector consistency
 
-The installer hashes the exact binary, Rust installer, public layout, and
-complete provider tree into one immutable release under
+The installer copies the exact binary, Rust installer, public layout, and
+complete provider tree into one immutable UUID release under
 `$HOME/Library/Application Support/Clockwork/install/releases`. Its
-`cell-install-v2` manifest is `manifest.json`. The retained installer appears
+`cell-install-v3` manifest is `manifest.json`. The retained installer appears
 at `bin/clockwork-install` and `package/install`. The installer reads retained release metadata when selecting an existing
 installation or recovering a retained release.
 
@@ -57,38 +58,37 @@ One atomic current selector connects both public views:
   -> .../Clockwork/install/current/share/chancery/clockwork
 ```
 
-An update retains owned selector boundaries and release metadata. Identical
-installation is idempotent. A changed candidate preserves a valid prior
+An update retains owned selector boundaries and release metadata. Each new
+preparation has a UUID. Publication preserves a valid prior
 selection as `previous` and atomically replaces `current`. Optional
-`--expected-current` enforces the caller's captured absent or `releases/HASH`
+`--expected-current` enforces the caller's captured absent or `releases/ID`
 expectation. Foreign public paths and selectors outside the owned installation remain
 unsupported.
 
-A failed publication before commit restores prior current,
-previous, command, installer, and provider views. If coherent restoration
-cannot be completed, all owned public selectors are detached and the
-fail-closed state is reported while releases remain. Diagnostics and retained
-selectors supply recovery evidence; replacing a foreign path is unsupported.
+A failed publication retains completed selector changes and release files.
+There is no automatic selector restoration or detachment. Inspect current
+selectors and use an explicitly selected recovery operation when authorized.
+Replacing a foreign path is unsupported.
 
 After commit, recovery reads metadata and selects an owned retained release.
 Select the retained installer explicitly. Program rollback changes program/provider
 selection but leaves product bindings and generated plists unchanged. Each
-plist pins an exact content-addressed broker; releases cannot be pruned while
+plist pins an exact immutable broker; releases cannot be pruned while
 any plist or running activation may refer to them.
 
 ## Coordinated broker refresh
 
-Coordinated `./deploy.sh clockwork` captures the complete binding inventory
-before maintenance. It disables those bindings while retaining selected
-definitions and failure halts. Product adapters prepare new definitions under
-their own holds. After holds are released, it restores captured enabled intent
-through the final selected broker, rewriting those plists with its exact path.
-Previously disabled bindings stay disabled. This phase precedes EMT activation.
+Manifest `./deploy.sh clockwork` selects program files, then refreshes existing
+enabled bindings through the selected broker when a runtime database exists.
+Each binding keeps its selected definition digest. The generated plist pins the
+selected broker path. Disabled bindings stay disabled. There is no temporary
+disable-all step, maintenance hold, product expansion, or activation phase order.
 
-An interrupted deployment retains its original inventory and re-establishes
-suspension before configuration repair. Temporary disablement does not replace
-original intent. Unknown binding or projection changes stop recovery. No
-installation phase approves incidents or retries failed work.
+Binding refresh preserves failure incidents and retries no product work. A
+run-at-load definition can start work when its enabled binding is refreshed.
+An interrupted instruction has unknown effects. Completed changes remain, and
+the executor performs no automatic retry, rollback, or Clockwork recovery.
+Inspect the product state before an explicit recovery or new attempt.
 
 ## Detach and retained-state scope
 

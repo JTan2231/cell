@@ -6,7 +6,7 @@ use cell_install::transaction::{
     self, InstallLayout, InstallSnapshot, LockKind, LockSpec, PreparedRelease, ProviderSpec,
     PublicEntry, PublicKind, ReleaseInfo, ReleasePlan, SourceFile,
 };
-use cell_install::{Error, FileEntry, Result, file_digest};
+use cell_install::{Error, FileEntry, Result};
 use std::collections::BTreeMap;
 use std::fs;
 use std::os::unix::fs::MetadataExt as _;
@@ -70,7 +70,14 @@ pub fn legacy_info(root: &Path, uid: u32) -> Result<ReleaseInfo> {
         .into_iter()
         .map(|(name, sha256)| {
             let mode = fs::symlink_metadata(root.join(&name))?.mode() & 0o7777;
-            Ok((name, FileEntry { sha256, mode }))
+            Ok((
+                name,
+                FileEntry {
+                    sha256,
+                    mode,
+                    code_identifier: None,
+                },
+            ))
         })
         .collect::<Result<_>>()?;
     Ok(ReleaseInfo {
@@ -107,7 +114,7 @@ fn add_bundle(files: &mut BTreeMap<String, SourceFile>, source: &Path, prefix: &
         if fs::symlink_metadata(&path)?.is_dir() {
             add_bundle(files, &path, &key)?;
         } else {
-            file_digest(&path)?;
+            legacy::regular(&path)?;
             files.insert(
                 key,
                 SourceFile {
@@ -189,7 +196,7 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
         ("krisis-observer.clockwork.toml.in", 0o644),
         ("hooks.json", 0o600),
     ] {
-        file_digest(&package.join(name))?;
+        legacy::regular(&package.join(name))?;
         let source = fs::canonicalize(package.join(name))?;
         files.insert(
             format!("package/{name}"),
@@ -226,29 +233,5 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
 }
 
 pub fn prepare(paths: &Paths, options: &Install) -> Result<PreparedRelease> {
-    cell_install::signing::verify_native("krisis", "krisis", &options.binary)?;
-    super::support::checked(
-        paths,
-        &options.binary,
-        &super::support::args(&["--version"]),
-        &BTreeMap::new(),
-        30,
-    )?;
     transaction::prepare_release(&layout(), &paths.home, &plan(options)?)
-}
-
-pub fn stage(paths: &Paths, binary: &Path, source_root: &Path) -> Result<PreparedRelease> {
-    cell_install::signing::verify_native("krisis", "krisis", binary)?;
-    super::support::checked(
-        paths,
-        binary,
-        &super::support::args(&["--version"]),
-        &BTreeMap::new(),
-        30,
-    )?;
-    transaction::prepare_release(
-        &layout(),
-        &paths.home,
-        &source_plan(binary, Some(source_root))?,
-    )
 }

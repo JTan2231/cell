@@ -22,7 +22,7 @@ class SigningTests(unittest.TestCase):
     def test_fingerprint_normalization_preserves_the_permanent_identifier(self):
         uppercase = {"schema": 1, "macos": {**self.policy["macos"], "certificate_sha1": "A" * 40}}
         self.assertEqual(signing.validate_policy(uppercase), self.policy)
-        self.assertEqual(signing.policy_digest(uppercase), signing.policy_digest(self.policy))
+        self.assertEqual(signing.validate_policy(uppercase), signing.validate_policy(self.policy))
         self.assertEqual(signing.identifier(self.policy, "annals", "annals-usage"), "local.cell.annals.annals-usage")
         self.assertEqual(signing.identifier(self.policy, "krisis", "krisis-install"), "local.cell.krisis.krisis-install")
 
@@ -59,25 +59,22 @@ class SigningTests(unittest.TestCase):
                 signing.preflight(self.policy)
             self.assertEqual(run.call_count, 1)
 
-    def test_signing_and_verification_pin_the_same_leaf_and_identifier(self):
+    def test_signing_pins_leaf_and_identifier_without_an_audit(self):
         with mock.patch.object(signing, "assert_current"), \
                 mock.patch.object(signing, "is_native", return_value=True), \
                 mock.patch.object(signing, "_run") as run:
             signing.sign(Path("/fixture/native"), self.policy, "nucleus", "nucleusd")
-            sign_command, verify_command = (call.args[0] for call in run.call_args_list)
+            run.assert_called_once()
+            sign_command = run.call_args.args[0]
             self.assertIn(self.policy["macos"]["certificate_sha1"], sign_command)
             self.assertIn("--timestamp=none", sign_command)
             self.assertIn("=designated => " + signing.requirement(self.policy, "nucleus", "nucleusd"), sign_command)
-            self.assertIn("--all-architectures", verify_command)
-            self.assertIn("=" + signing.requirement(self.policy, "nucleus", "nucleusd"), verify_command)
 
-    def test_native_production_signing_cannot_accept_a_script(self):
-        with mock.patch.object(signing, "assert_current"), \
-                mock.patch.object(signing, "is_native", return_value=False), \
+    def test_signing_instruction_does_not_inspect_payload_contents(self):
+        with mock.patch.object(signing, "is_native", side_effect=AssertionError("content inspection")), \
                 mock.patch.object(signing, "_run") as run:
-            with self.assertRaisesRegex(signing.SigningError, "not native"):
-                signing.sign(Path("/fixture/script"), self.policy, "nucleus", "nucleusd")
-            run.assert_not_called()
+            signing.sign(Path("/fixture/payload"), self.policy, "nucleus", "nucleusd")
+            run.assert_called_once()
 
     def test_structured_status_requires_explicit_json_selection(self):
         with mock.patch.object(signing.sys, "platform", "darwin"), \
@@ -90,7 +87,7 @@ class SigningTests(unittest.TestCase):
             status = json.loads(output.call_args.args[0])
             self.assertTrue(status["ready"])
             self.assertEqual(status["policy"], self.policy)
-            self.assertEqual(status["policy_digest"], signing.policy_digest(self.policy))
+            self.assertNotIn("policy_digest", status)
 
 
 if __name__ == "__main__":

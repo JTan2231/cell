@@ -114,7 +114,7 @@ Installation normally requires paused admission and no active job. Service stop
 always requires both conditions. Installation has only the exception for
 cancelled validation described below.
 Installation keeps the queue paused and loads the service. It pins a
-content-addressed release under `~/.local/share/cell-ci/releases/` and selects
+immutable release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
 selectors or LaunchAgent files and attempts to restore the prior selection if
 installation fails. A failed restoration leaves an explicit recovery error.
@@ -165,8 +165,11 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.6.2 uses queue contract 9 and retains journal
-schema 1. New submissions freeze `policy.refund_accepted_patches = true`.
+arguments. Manager release 0.8.0 uses queue contract 10 and retains journal
+schema 1. New submissions freeze `policy.refund_accepted_patches = true` and
+`policy.manifest_executor = 1`. The latter selects deployment receipt schema 2.
+Retained schema-1 deployment outcomes remain readable. The new manager does
+not start or reconcile an unfinished legacy deployment protocol.
 Existing jobs without this flag retain their original policy, which charges
 every invocation. Installation preserves the pause until an explicit resume.
 
@@ -177,7 +180,7 @@ do not change frozen model, test or signing policies. Install the matching
 manager and provider through the paused, drained procedure above before using
 this mode. An edit to the checkout does not replace the installed worker.
 
-New jobs retain `signing_policy` and `signing_policy_digest` at submission.
+New jobs retain `signing_policy` at submission.
 Retained jobs without those fields keep their earlier acceptance path. Manager
 replacement does not attach a current signing policy to old jobs. Settle that
 work before initial signing adoption or identity rotation.
@@ -235,8 +238,8 @@ credential changes, arbitrary emails, or deletion of retained work.
 
 Repeat `--deploy PRODUCT` to select deployment products explicitly. Without that
 selection, the manager uses products covered by the passing validation's product
-and platform scope. The deployment coordinator may include its declared
-companions. If no products are selected, the result states that deployment was
+and platform scope. Deployment uses that exact selected set. It does not add
+dependencies or companions. If no products are selected, the result states that deployment was
 not required; it does not claim a fresh installation.
 
 ## Follow the serial source history
@@ -269,8 +272,7 @@ test ran or that an automated patch is semantically correct in all cases.
 For new jobs, passing validation enters a host-controlled `preparing` phase.
 The installed manager prepares production candidates for the union of checked
 products and explicitly requested deployment products. Its pinned build and
-signing modules compile under the external-workspace confinement, then sign
-and verify staged native executables outside the compiler body. Candidate
+signing modules compile under the external-workspace confinement, then run the declared native signing instructions outside the compiler body. Candidate
 source does not supply the host signing implementation.
 
 For deferred release checks, one Cargo invocation builds every selected product's
@@ -283,22 +285,23 @@ product's separate selection.
 A source compilation failure in a deferred release check enters the job's
 ordinary bounded repair path. The manager retains the compiler diagnostics and
 validates any repaired candidate against the fixed base before another production
-preparation. Signing, signature verification, and other preparation failures
+preparation. Signing and other preparation failures
 remain terminal and pause the queue. Retained jobs without deferred release
 checks do not acquire this repair path.
 
 The manager retains a `production_receipt` with the exact source commit,
-signing-policy digest, product scope, and signed candidate identities. Before
-acceptance, it checks that receipt, rechecks the candidates' final hashes and
-signatures, and checks that the host policy still matches the frozen selection.
-For deferred release checks, the trusted helper also retains
-`preparation_digest`, the SHA-256 of the preparation's exact `result.json` bytes.
-The manager rechecks that digest before acceptance and carries the retained
-value into deployment.
+signing-policy object, product scope, and signed candidate identities. Before
+acceptance, it checks execution correlation in that receipt and checks that the
+host policy still matches the frozen selection. It does not audit candidate
+contents, executable scope, signatures, or application behavior.
+For deferred release checks, the trusted helper retains the preparation result
+object. The manager compares the saved result with that object before acceptance
+and carries its admitted snapshot into deployment. No custom receipt hash is
+computed.
 This phase is required when tests are skipped. It does not add unselected
 products to ordinary selective CI.
 
-Signing configuration or signature failure stops before acceptance and pauses
+Signing configuration or signing-command failure stops before acceptance and pauses
 the queue. It does not select a model repair, another certificate, or an unsigned
 fallback. Repair receives no signing configuration writer or private-key material
 from the manager. Restore the selected identity through its signing procedure;
@@ -446,7 +449,7 @@ is not retried by recovery. Cancel and recover that job, then resume a queued
 descendant or submit the intended commit again for fresh validation.
 
 Unknown model execution, a lost Nucleus attempt, missing child completion
-evidence, and unresolved deployment maintenance remain blocking conditions.
+evidence, and unresolved deployment process ownership remain blocking conditions.
 Process disappearance and elapsed time do not establish successful completion.
 
 Resume refuses a blocked or unresolved active job. Service restart does not
@@ -491,36 +494,39 @@ hold.
 
 The manager freezes a deployment request ID, exact accepted source commit and
 selected products. It reads that operation before starting or reconciling it.
-New jobs pass the retained signing policy to deployment. The coordinator checks
-the selected policy before admission and publication; it does not reload a
-different signer for a partially completed operation.
+New jobs pass the retained signing policy to deployment as build input. Native
+signing is a packaging instruction. Deployment correlates the recorded build
+request and does not audit signature bytes before placement.
 
 For a passing deferred production preparation, the manager supplies its
-`result.json` through `--prepared-build` and its retained `preparation_digest`
-through `--prepared-build-digest`. The coordinator rejects a digest mismatch
-before admission and retains the same path and SHA-256 for its operation and
-builder. It verifies the exact source, product scope, candidate identities,
-artifact hashes, and frozen signing policy before copying the signed candidates
-into its operation. It compiles only products added by its deployment dependency
-scope. Reuse does not turn a build receipt into test evidence, and missing or
-changed supplied artifacts stop the operation.
-The coordinator owns installation, maintenance release, and recovery. Matching
-source and operation identity, completed installation outcome and released
-maintenance establish the manager's deployment success. Cleanup failure can
-remain visible even when installation and maintenance release succeeded.
+`result.json` through `--prepared-build` and its retained preparation object
+through `--prepared-build-snapshot-file`. The coordinator checks execution
+correlation and copies the declared candidates. It does not audit candidate
+contents or expand deployment from application compatibility observations.
+
+Deployment receipt schema 2 retains `manifest_executor: 1`, exact source and
+request identities, the selected products, and ordered instruction results.
+The manager reports deployment success when the result is `succeeded`, its
+exit code is zero, and every instruction is `succeeded`. Application health,
+maintenance release, rollback safety, and domain state are outside this result.
+A failed or interrupted instruction stops the run and pauses CI. The executor
+does not run application recovery. An interrupted result records uncertain
+effects; it supplies no permission to repeat the instruction.
 
 If a start invocation returns a completed failure before admission, the manager
 reads the same request again. A `not_found` observation for that exact request
 stops the CI job as a deployment admission failure and pauses the queue. The
 manager retains the stopped diagnostic without creating an admitted deployment
 receipt. An admitted, uncertain, or uncorrelated result retains the normal
-reconciliation and recovery requirements.
+process reconciliation and explicit operator acknowledgement. Product
+inspection or recovery is a separate authorized operation.
 
 The manager creates a deterministic outcome email after deployment or terminal
 failure. It sends to Email's fixed personal recipient.
 
 New messages lead with the outcome and affected product or check names. They
-separate validation, deployment, recovery, and cleanup failures. A failed check
+separate validation and instruction failures. Legacy results retain their
+recorded recovery and cleanup distinctions. A failed check
 includes available failed test names or a short diagnostic. Missing causes remain
 explicitly unknown. The email omits job and commit IDs, model names, repair budget,
 and artifact paths. Detailed evidence remains in local job status and artifacts.
@@ -569,7 +575,7 @@ Signing configuration is a separate private host file at
 `~/Library/Application Support/Cell/signing.json`. It stays outside Git,
 worktrees, release caches, and the external work volume. The Keychain owns the
 private key. Job records retain public certificate selection and policy,
-not private-key bytes. Read `ci-manager.signing.operate` for the recovery export.
+not private-key bytes. Read `ci-manager.signing.operate` for identity recovery.
 
 Admission verifies the mounted volume's identity, ownership and write access.
 New work requires at least 2 GiB free. CI bodies and release compiler processes
@@ -587,3 +593,8 @@ names, and short outcome diagnostics to Resend and the fixed recipient's mail
 provider. The manager does not copy Nucleus credentials or load Email's
 credential. Read-only inspection and
 catalog discovery do not authorize these disclosures or start a job.
+
+Production candidates use opaque UUID IDs. Installed manager and product releases
+also use opaque UUID directory names. Retained hash-named releases remain
+readable without recomputing their hashes. Native signing remains a packaging instruction. CI and deployment do not
+reverify retained artifacts or apply custom content-hash checks.

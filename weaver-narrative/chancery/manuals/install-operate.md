@@ -36,7 +36,8 @@ publish a narrative, send email, or authorize an authoring retry.
    {"weaver":{"annals_config":"/absolute/Annals/decisions/config.toml"}}
    ```
 
-4. Preview the selected products and dependencies from the Cell root. Stop if
+4. Preview the explicit selected products and instructions from the Cell root. Add
+   required dependency updates explicitly. Stop if
    the plan requires a choice or effect outside the authorized endpoint.
 
    ```sh
@@ -51,10 +52,11 @@ publish a narrative, send email, or authorize an authoring retry.
    ./deploy.sh weaver --settings /absolute/weaver-settings.json
    ```
 
-   The coordinator holds and drains Weaver, selects the program and provider,
-   and calls the product initializer for configuration. It releases only its own
-   hold. It performs no artifact-integrity, state-integrity, Annals-readiness, or
-   Nucleus-readiness checks. Product initialization retains its ordinary rules.
+   The executor runs Weaver's product command to select program and provider
+   files and save reading configuration and state. Setup uses ordinary admission
+   and the runner lock. It creates no hold and drains no authoring job. It performs
+   no artifact-integrity, state-integrity, Annals-readiness, or Nucleus-readiness
+   checks. An existing maintenance hold can refuse ordinary setup.
    Do not invoke direct installer `install` or `recover`; those routes are refused.
 
 6. Read selected release metadata with `weaver-install inspect`. Use `weaver doctor`
@@ -62,7 +64,7 @@ publish a narrative, send email, or authorize an authoring retry.
    an installation gate. Read the installed Chancery pages for their contracts.
 
 7. Register the installed command inventory with `weaver --register-usage`.
-   Confirm that the coordinator released its own holds. Preserve other owners'
+   Read the retained execution result. Preserve separately acquired maintenance
    holds. Treat a readiness or documentation gap as its reported outcome;
    catalog presence alone does not establish runtime success.
 
@@ -118,14 +120,14 @@ publish a narrative, send email, or authorize an authoring retry.
    After an intended cancellation, resume the same ID to collect its outcome.
    Resume reuses the saved request and job; it does not create another attempt.
    Inspect `weaver show DOCUMENT_ID` if runtime failure follows saved Markdown.
-3. Recover an interrupted deployment through the coordinator's retained
-   transaction. Follow its original ownership and exact candidate. The next
-   ordinary deployment command uses an unresolved transaction for recovery;
-   there is no separate public deployment resume route. Before publication the
-   prior installation stays selected; after publication Weaver can finish
-   forward with recorded reading configuration and supported state. Keep the
-   named hold if recovery cannot be proved. Do not delete holds or change
-   database rows to bypass the failure.
+3. Read the interrupted execution's retained receipt and inspect current program
+   selection and reading configuration. Completed changes remain. The executor
+   performs no automatic retry, rollback, or product recovery. Reconcile and
+   acknowledge its admission marker only after the original execution has stopped
+   and the product state is understood. Acknowledgement does not prove recovery.
+   An authorized new attempt requires a new request ID. Keep any separately
+   acquired hold until its maintenance operation is complete. Do not delete holds
+   or change database rows to bypass a failure.
 4. Confirm complete drain before releasing the hold acquired for attended
    maintenance. Source and readiness diagnostics remain separate operations.
 

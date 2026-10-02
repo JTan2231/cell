@@ -325,7 +325,7 @@ Unknown fields and incomplete scope or promise objects are invalid.
 ## Validation and security
 
 Registry provider selectors can be symbolic links to a product's current
-content-addressed release. Chancery canonicalizes each once per invocation.
+immutable release. Chancery canonicalizes each once per invocation.
 CLI validation reads `provider.json`, its optional indexed overview, and its
 indexed entries and manuals.
 Indexed paths must stay beneath the resolved root and contain no symbolic links.
@@ -393,11 +393,12 @@ provider-owned Rust client. The client method is `Client::validate(&Path)`.
 ## Release publication guarantees
 
 The owning product stages its unchanged bundle under
-`share/chancery/PROVIDER_ID` inside its content-addressed release. Bundle bytes
-participate in release naming and the recorded file manifest. Its single selector
+`share/chancery/PROVIDER_ID` inside its immutable release. Opaque release IDs name the retained files; recorded manifests keep file paths
+and modes. Its single selector
 under `~/Library/Application Support/Chancery/providers/PROVIDER_ID` follows
-that product's `current` release. A failed upgrade or rollback restores the
-program and documentation together. The owning installer must reject a
+that product's `current` release. A failed instruction leaves completed changes
+in place. Explicit retained-release recovery selects programs and documentation
+together. The owning installer must reject a
 pre-existing selector owned by someone else.
 
 A selector can precede installation of the Chancery CLI. Publication is a
@@ -416,5 +417,5 @@ instructions rely on them. Update consumers before removing incompatible
 contracts. No universal deprecation window or legacy-schema retirement date is
 promised. Read `chancery show chancery.provider.publish` for the publication
 procedure and `chancery show chancery.installation.operate` for reader
-installation and recovery. Do not edit an installed content-addressed bundle
+installation and recovery. Do not edit an installed immutable bundle
 or point an installed selector at a source checkout.

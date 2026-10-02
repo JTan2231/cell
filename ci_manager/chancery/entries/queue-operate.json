@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -97,7 +97,7 @@
     "Deterministic fixes reuse the existing strict Clippy invocation's complete, nonconflicting MachineApplicable suggestion groups for tracked files and run the formatter once for selected Cargo packages. The validator prepares one retained patch in a temporary tracked snapshot, without changing the committed candidate, and stops before tests and later product stages when that patch is available. The manager records a private child candidate and validates it against the same base before acceptance. This path invokes no model and consumes no model repair point.",
     "The worker requests deployment of the exact accepted commit and sends a deterministic job-outcome email to Email's fixed personal recipient.",
     "Installation selects manager and provider files and configures the current-user service. Pause, cancellation, recovery and maintenance alter only their declared queue or operation state.",
-    "New jobs preflight and freeze the host signing policy and retain release_builds_deferred=true. For a supported candidate, confined validation defers release compilation to one trusted production release check before source acceptance, even when tests are skipped. Deployment receives the frozen signing selection and verified prepared-build candidates. Retained jobs keep their earlier release-build behavior."
+    "New jobs freeze policy.manifest_executor=1, preflight and freeze the host signing policy and retain release_builds_deferred=true. For a supported candidate, confined validation defers release compilation to one trusted production release check before source acceptance, even when tests are skipped. Deployment receives the frozen signing selection and prepared-build candidate references. Retained jobs keep their earlier release-build behavior."
   ],
   "authority": [
     "The manager owns serial delivery policy and retained job results; it does not decide provider execution, CI gate success, installed product health, or final inbox delivery.",
@@ -106,18 +106,18 @@
   ],
   "success": [
     "Successful admission returns a retained job identity for a pinned input; it is not successful validation or deployment.",
-    "Successful validation identifies the fixed base, exact candidate and completed required gate scope. A deferred validation pass is incomplete release-build evidence until the installed manager records a matching successful production release check. New jobs require the production receipt and verified final artifact hashes and signatures under the frozen host signing policy before accepted state advances.",
-    "Deployment success requires matching coordinator evidence for the exact source and released maintenance. A no-product result is reported as no deployment required. Already-included input creates no fresh deployment.",
+    "Successful validation identifies the fixed base, exact candidate and completed required gate scope. A deferred validation pass is incomplete release-build evidence until the installed manager records a matching successful production release check. New jobs require the successful production command receipt, exact source, requested scope, candidate references, and frozen signing policy before accepted state advances. Candidate bytes and application behavior are not acceptance gates.",
+    "Deployment success requires matching schema-2 coordinator evidence for the exact source and request, the selected products, zero exit code and successful completion of every declared instruction. It does not establish application health, maintenance release, safe rollback or artifact suitability. A no-product result is reported as no deployment required. Already-included input creates no fresh deployment.",
     "Email success means provider acceptance of the frozen notification, separately from source acceptance and installation success."
   ],
   "failure_and_recovery": [
     "Merge conflicts stop automatic processing. Failed jobs and active cancellation pause new jobs; queued cancellation prevents admission without outcome email. Resume does not clear a blocked or unresolved active operation.",
     "Failed or Git-rejected attempts remain charged to the frozen job budget. Under refund_accepted_patches=true, Git acceptance and a recorded private candidate refund one point before later validation. Quota or maintenance deferral preserves the prepared request identity without another charge; unknown or lost execution still requires recovery.",
-    "Unknown or lost model execution, missing child completion evidence, or unresolved deployment maintenance remains blocked. Recovery consults owning providers and never invents a success or silently starts a replacement model attempt.",
-    "A completed stopped deployment start fails the job before admission only after the coordinator reports not_found for that exact request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated results retain reconciliation and recovery requirements.",
+    "Unknown or lost model execution, missing child completion evidence, or unresolved deployment process ownership remains blocked. Recovery consults owning providers and never invents a success or silently starts a replacement model attempt.",
+    "A completed stopped deployment start fails the job before admission only after the coordinator reports not_found for that exact request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated results require process reconciliation and explicit operator acknowledgement; product inspection or recovery is a separate authorized operation.",
     "After an installation that qualifies for the cancelled validation exception, recover JOB reconciles the retained supervisor result and recognizes cancellation before reading the aggregate validation receipt. A completed validation already recorded in job history can also prove cancellation when no newer validation artifacts exist and its candidate and receipt path match. Missing or mismatched terminal evidence remains blocked. Recovery does not rerun a completed stale validation; installation itself does not complete or validate the job.",
     "Outcome email uses one frozen key and payload for at most two Email invocations, at least five minutes apart and within 23 hours. Unproved acceptance after that boundary blocks continuation without a replacement message.",
-    "Missing or unusable signing identity rejects new submission. A changed policy, failed signature or non-compilation production-preparation failure stops before acceptance without requesting model repair or selecting another signer. Only a source compilation failure during a deferred production release check enters ordinary bounded repair. Retained jobs without release_builds_deferred keep terminal production-preparation failures; jobs without a signing snapshot keep their earlier acceptance path."
+    "Missing or unusable signing identity rejects new submission. A changed policy, failed signing command or non-compilation production-preparation failure stops before acceptance without requesting model repair or selecting another signer. Only a source compilation failure during a deferred production release check enters ordinary bounded repair. Retained jobs without release_builds_deferred keep terminal production-preparation failures; jobs without a signing snapshot keep their earlier acceptance path."
   ],
   "privacy": [
     "Job state retains private source identities, deterministic fix patches and candidate commits, model requests and final responses, diagnostics, deployment records, and notification payloads. There is no automatic pruning.",
@@ -142,8 +142,8 @@
     },
     {
       "id": "ci-manager.signing.operate",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     }
   ],
   "does_not_authorize": [
@@ -196,7 +196,7 @@
       },
       {
         "status": "declared",
-        "statement": "New submissions freeze skip_tests=true by default, or false with --run-tests, plus the normalized host signing_policy and SHA-256 signing_policy_digest. They also retain the top-level release_builds_deferred=true field. Missing test fields retain test execution; missing signing fields retain the legacy acceptance path; missing release_builds_deferred retains the ordinary release gate and terminal production-preparation failures. Idempotent request-key retry returns the original signing snapshot and release-build policy rather than adopting later choices."
+        "statement": "New submissions freeze skip_tests=true by default, or false with --run-tests, plus the normalized host signing_policy. They also retain the top-level release_builds_deferred=true field. Missing test fields retain test execution; missing signing fields retain the legacy acceptance path; missing release_builds_deferred retains the ordinary release gate and terminal production-preparation failures. Idempotent request-key retry returns the original signing snapshot and release-build policy rather than adopting later choices."
       }
     ],
     "outputs": [
@@ -210,7 +210,7 @@
       },
       {
         "status": "declared",
-        "statement": "New jobs retain production_receipt with exact source commit, signing-policy digest, product scope, preparation source/build identities, and signed candidate identities and final artifact hashes. Deferred jobs also retain preparation_digest, the SHA-256 of the exact preparation result.json bytes, and require release-check evidence; the aggregate validation selection records release_builds_deferred. configuration_error identifies signing selection or key-usability failures; validation and deployment receipts remain distinct."
+        "statement": "New jobs retain production_receipt with exact source commit, signing-policy object, product scope, preparation source/build identities, and candidate references. Deferred jobs retain the exact preparation result object and require release-check evidence; the aggregate validation selection records release_builds_deferred. configuration_error identifies signing selection or key-usability failures; validation and deployment receipts remain distinct."
       },
       {
         "status": "declared",
@@ -242,7 +242,7 @@
       },
       {
         "status": "declared",
-        "statement": "The certificate SHA-1 fingerprint selects one signing certificate, not an executable hash algorithm. The policy digest is SHA-256 of normalized canonical policy JSON. Stable code identifiers combine the configured namespace, canonical product key, and declared executable key; source version and build path do not enter them."
+        "statement": "The certificate SHA-1 fingerprint selects one signing certificate, not an executable hash algorithm. Cell compares normalized policy objects directly. Stable code identifiers combine the configured namespace, canonical product key, and declared executable key; source version and build path do not enter them."
       }
     ],
     "completeness_and_freshness": [
@@ -288,11 +288,11 @@
       },
       {
         "status": "declared",
-        "statement": "A completed stopped deployment start fails before admission only after a coordinator status read reports not_found for the same request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated evidence retains the existing reconciliation and recovery requirements."
+        "statement": "A completed stopped deployment start fails before admission only after a coordinator status read reports not_found for the same request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated evidence requires process reconciliation and explicit operator acknowledgement; product inspection or recovery is a separate authorized operation."
       },
       {
         "status": "declared",
-        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation selects content-addressed program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."
+        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation selects immutable program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."
       },
       {
         "status": "declared",
@@ -300,11 +300,11 @@
       },
       {
         "status": "declared",
-        "statement": "For new jobs, confined passing validation enters a supervised preparing phase using signing and build modules pinned in the installed manager release. Deferred release checks compile every selected descriptor package's default library and binary targets in one Cargo invocation with locked dependencies, denied warnings and offline mode when required by a selected product. It prepares checked plus explicitly requested deployment products, verifies cached and final candidates under the frozen policy, retains the production receipt, and rechecks signatures and policy before accepted-ref compare-and-swap. For deferred checks, the trusted helper retains preparation_digest for the preparation result.json and the manager rechecks that digest before acceptance. Source compilation failures in a deferred release check use ordinary bounded repair and revalidation against the fixed base. Signing, verification and other preparation failures remain terminal. Tests may be skipped, but this phase may not. The Keychain retains the key; the manager supplies repair agents no private-key material or signing configuration writer."
+        "statement": "For new jobs, confined passing validation enters a supervised preparing phase using signing and build modules pinned in the installed manager release. Deferred release checks compile every selected descriptor package's default library and binary targets in one Cargo invocation with locked dependencies, denied warnings and offline mode when required by a selected product. It prepares checked plus explicitly requested deployment products, runs the declared packaging and native signing instructions under the frozen policy, retains the production receipt, and checks source, product and candidate reference correlation plus policy before accepted-ref compare-and-swap. For deferred checks, the trusted helper retains the preparation result object and the manager compares saved result.json with that snapshot before acceptance. Source compilation failures in a deferred release check use ordinary bounded repair and revalidation against the fixed base. Signing and other preparation failures remain terminal. Tests may be skipped, but this phase may not. The Keychain retains the key; the manager supplies repair agents no private-key material or signing configuration writer."
       },
       {
         "status": "declared",
-        "statement": "For a successful deferred production preparation, deployment receives its result.json through --prepared-build and the retained preparation_digest through --prepared-build-digest. The coordinator rejects a digest mismatch before admission and retains the same path and SHA-256 for its operation and builder. It verifies matching source, signing policy, product identities, candidate hashes and executable scope, copies the signed candidates into its retained operation, and compiles only missing products in its dependency scope. Missing or changed supplied artifacts stop deployment; reuse is not test evidence."
+        "statement": "For a successful deferred production preparation, deployment receives its result.json through --prepared-build and its retained preparation object through --prepared-build-snapshot-file. The coordinator rejects a changed result object before admission and retains the same path and parsed snapshot for its operation and builder. It checks matching source, signing policy, requested product identities and candidate references, then copies declared candidates into its retained operation. It does not scan executable inventory, reverify signatures, execute application probes or expand the selected set. Missing or changed supplied artifacts stop deployment; reuse is not test evidence."
       }
     ],
     "operational_limits": [
@@ -332,7 +332,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.6.2 uses journal schema 1, queue contract 9, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
+        "statement": "Manager release 0.8.0 uses journal schema 1, queue contract 10, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
       },
       {
         "status": "declared",
@@ -387,7 +387,7 @@
       },
       {
         "status": "declared",
-        "statement": "Exact-source installation and maintenance recovery rely on the Cell deployment coordinator and selected product installers; no dedicated coordinator Chancery contract is installed.",
+        "statement": "Exact-source instruction execution relies on the Cell deployment coordinator and selected product commands; no dedicated coordinator Chancery contract is installed.",
         "target": "cell-deployment",
         "kind": "control"
       },

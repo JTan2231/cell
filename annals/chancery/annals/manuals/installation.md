@@ -3,12 +3,12 @@
 Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it.
 
 The user-owned macOS deployment installs Annals and Annals Usage together,
-plus configuration, content-addressed releases, and the scheduled inbox
+plus configuration, immutable releases, and the scheduled inbox
 Clockwork binding `annals/inbox`. Nucleus remains a separately installed
 execution and credential service; Clockwork remains a separately installed
 activation and process-history service.
 
-The primary deployer also discovers registered named libraries in Annals'
+The explicit manual installer also discovers registered named libraries in Annals'
 `catalog.db`. It records identity and paths, fences new command admission,
 drains admitted work, and performs transactional schema migrations in place.
 Program recovery preserves current data and requires compatible prior programs.
@@ -22,7 +22,7 @@ its separate admission and binding authority.
 
 ## Release selection and recovery
 
-The deployer stages a content-addressed release without artifact or dependency
+The explicit manual installer stages a immutable release without artifact or dependency
 readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
 and exact Clockwork definition digest, and publishes the installed commands.
@@ -137,17 +137,18 @@ maintenance gate remains engaged.
 
 ## Deployment admission and coordination
 
-The coordinator's `apply` phase stages release files.
-`configure` runs product configuration, migration and selector publication with
-scheduling disabled. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
+The Cell manifest runs one `annals-install deploy` command. The schema-2
+stdin request supplies candidate and source paths, the run identity and product
+settings. Annals performs its own primary setup and dedicated decisions
+provisioning. It creates or migrates libraries, writes configuration, places the release, and directly selects the two schedules. It
+does not hold or drain application work, suspend schedules, check readiness,
+or recover automatically. Shared deployment does not run a mandatory application lifecycle
+or parse Annals state as its success condition.
 
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
+Annals preserves each binding's enabled state unless the optional boolean
+`enabled` setting supplies an override. A new binding defaults enabled.
+Clockwork incident halts and product pauses remain in force. Annals retains
+its own migration and explicit transaction-recovery procedures.
 
 ```text
 annals --library DATABASE --json maintenance status
@@ -159,8 +160,7 @@ These commands use the private sibling `<database>.cell-maintenance` without
 opening, initializing, or migrating the database. Status leaves an absent
 gate absent. Its standard `ok/data` envelope contains `protocol_version: 1`,
 `contract_version: 1`, all `holds`, and `drained`. Drain describes live command
-admission; the product adapter must also prove durable work and dependency
-jobs are settled before relying on domain quiescence.
+admission. Annals owns any additional waiting needed for its setup commands.
 
 Holds atomically fence new mutations and survive process exit. Existing
 commands may finish. Hold and release are idempotent, and release removes
@@ -175,16 +175,13 @@ ordinary admission. Annals Usage doctor can prove intentionally held Nucleus
 readiness for this same owner through the typed deployment-health interface;
 that proof does not enable normal Nucleus job submission.
 
-`annals-install adapter` is the Cell coordinator interface.
-The adapter explicitly composes the primary deployer and this exact
-release's decisions provisioner, preserves operator pauses and prior schedule
-enabled booleans, and does not choose a legacy activation watermark. It first
-requires maintenance support from the installed CLI. Unsupported old binaries
-stop coordinated inspection before effects and need one compatibility update
-through the existing deployers and quiescence procedure; the new candidate
-cannot fence an old binary. Recovery invokes each retained product transaction with the matching outer
-run owner before it releases the recovered installation. Unknown ownership,
-changed evidence, or incomplete recovery retains the outer hold.
+`annals-install deploy` performs primary and decisions setup as one product-owned
+command. Existing application maintenance is preserved; native database and
+publication locks protect actual writes. An interrupted command can leave
+completed effects in place. Inspect its log before a further operation. It does not perform native
+signature audits or run binaries with `--version` or `--help` as installation
+gates. Release labels come from the supplied provider descriptors. Explicit
+operator diagnostics remain available separately.
 
 ## Data preservation
 
@@ -222,7 +219,7 @@ uncommitted transaction for rollback and discarded after successful commit. Its
 current configuration and live diagnostic semantics belong to
 `annals-usage.execution.operate`.
 
-The current strict `cell-install-v2` file inventory seals both programs,
+The `cell-install-v3` release records the declared paths for both programs,
 the exact installer, native frontend and runner roles, and both provider bundles.
 Provider Markdown, entry JSON, and the schema-4 product overview are release
 bytes. A documentation change follows the same selection and rollback as the

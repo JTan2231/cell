@@ -17,6 +17,11 @@ use crate::{
 pub fn initialize(root: &Path, config: &Config) -> Result<Value> {
     config.validate()?;
     config.reader().start()?;
+    install_config(root, config)
+}
+
+pub(crate) fn install_config(root: &Path, config: &Config) -> Result<Value> {
+    config.validate()?;
     let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID").ok();
     let admission = gate(root);
     let _guard = if let Some(owner) = owner {

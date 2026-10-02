@@ -145,9 +145,9 @@ credentials. Never put credential bytes in deployment settings.
 
 Use coordinated maintenance when replacing a daemon could lose work. The
 installer starts the service without waiting for health, migration, or compaction.
-A failed cutover can restore captured programs only when the database schema
-is unchanged. A schema change prevents binary-only rollback. Authentication
-is excluded from program and database rollback.
+A failed installation retains completed filesystem and service effects. It does
+not capture prior programs or restore a prior service. Preserve current database
+state and authentication when selecting the next installation.
 
 After installation, register command inventory and inspect the selected service:
 
@@ -164,26 +164,18 @@ Ordinary daemon startup and admission keep their runtime checks. A held service
 still requires the run's sole drained hold. Installation does not reopen quota
 admission or submit a synthetic model job.
 
-## Recover interrupted cutover
+## Handle an interrupted installation
 
-Inspect the retained run ownership and private `service-cutover.json`. Use its
-recorded candidate daemon, harness, and deployment run ID:
+Inspect the retained manifest executor step, child identity and logs. Wait until
+that process has stopped. Its effects are unknown until the affected paths and
+service operations are inspected. The executor performs no automatic recovery.
 
-```sh
-CELL_DEPLOYMENT_RUN_ID=<RECORDED_RUN_ID> \
-  nucleus service recover --daemon <RECORDED_DAEMON> --codex <RECORDED_CODEX>
-```
-
-Require the sole drained hold. For a stopped service, every retained job and
-attempt must be terminal. Unknown ownership or unfinished work keeps admission
-held. Recovery selects and starts the recorded candidate; matching files alone
-do not prove which executable is resident. It does not cancel or retry work,
-roll back a database, or restore an older credential. Authentication import is
-allowed only when the owned file is absent and the source was recorded.
-
-Keep the journal and candidate on failure. Recovery completes after the recorded
-service setup operation succeeds. Follow the shared manual
-for group release; release no unrelated pause or failure halt.
+Select the intended program and harness paths explicitly, then run the supported
+installation command. Preserve current database state and owned credentials.
+Use explicit maintenance when admitted work must finish. A named legacy hold
+still requires its exact owner and drain before an explicit service recovery;
+release only the hold created for that operation. Acknowledge the executor to
+release its admission separately from any product maintenance operation.
 
 ## Recover authentication
 

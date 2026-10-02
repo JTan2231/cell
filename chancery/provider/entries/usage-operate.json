@@ -119,7 +119,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "System and command identities are opaque 1\u2013128 ASCII metadata. Observation IDs order one database history; times and range bounds are whole Unix seconds."
+        "statement": "System and command identities are opaque 1–128 ASCII metadata. Observation IDs order one database history; times and range bounds are whole Unix seconds."
       }
     ],
     "completeness_and_freshness": [

@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,7 +21,7 @@ sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker.client import bootstrap_cargo_path, common_git_directory, git
+from ci_broker.client import bootstrap_cargo_path, git
 from ci_broker.broker import MINIMAL_ENVIRONMENT
 from deployment import candidate, signing
 from deployment.inventory import descriptor
@@ -52,6 +51,27 @@ def read_descriptor(source: Path, product: str) -> dict[str, str]:
     if values.get("PRODUCT_ID") != product:
         raise BuildError(f"product descriptor identity mismatch: {product}")
     return values
+
+
+def executable_scope(source: Path, product: str, unit: str | None = None) -> set[str]:
+    values = read_descriptor(source, product)
+    units = {row.split("|")[0] for row in values.get("RELEASE_UNITS", "").splitlines()}
+    if unit is not None and unit not in units:
+        raise BuildError(f"unknown release unit for {product}: {unit}")
+    names: set[str] = set()
+    for row in values.get("RELEASE_BINARY_CHECKS", "").splitlines():
+        fields = row.split("|")
+        if len(fields) != 3:
+            raise BuildError(f"invalid binary declaration: {product}")
+        release_unit, relative, name = fields
+        if unit is not None and release_unit != unit:
+            continue
+        if not NAME.fullmatch(name) or relative != f"target/release/{name}" or name in names:
+            raise BuildError(f"invalid or repeated release executable: {name}")
+        names.add(name)
+    if not names:
+        raise BuildError(f"product declares no selected release executables: {product}")
+    return names
 
 
 def selection(source: Path, products: list[str], unit: str | None,
@@ -133,35 +153,13 @@ def build_configuration(source: Path, cache: Path, *, release_check: bool = Fals
                  if line.startswith("host: ")), None)
     if host is None:
         raise BuildError("rustc did not report its host target")
-    # Cargo reads configuration from cwd ancestors and CARGO_HOME. Retain their
-    # contents in identity, without making temporary worktree paths significant.
-    cargo_home = Path(environment.get("CARGO_HOME", str(Path.home() / ".cargo")))
-    configurations: list[dict[str, str]] = []
-    for directory in [cargo_home, *(parent / ".cargo" for parent in reversed((source, *source.parents)))]:
-        for name in ("config", "config.toml"):
-            path = directory / name
-            if path.exists():
-                candidate.regular(path)
-                configurations.append({"name": name, "sha256": candidate.digest(path)})
-    relevant = dict(environment)
-    # These paths are controlled by this coordinator and are not build inputs.
-    for name in ("CARGO_TARGET_DIR", "CARGO_BUILD_TARGET_DIR", "CARGO_BUILD_BUILD_DIR"):
-        relevant.pop(name, None)
-    configuration = {"cargo": cargo_version, "rustc": rustc_version, "target": host,
-                     "profile": "release", "jobs": jobs,
-                     "environment": {name: hashlib.sha256(value.encode()).hexdigest()
-                                     for name, value in relevant.items()},
-                     "cargo_configuration": configurations}
-    return environment, configuration
-
-
-
-
+    return environment, {"target": host, "jobs": jobs}
 
 
 def prepare(source: Path, products: list[str], output: Path, unit: str | None = None, *,
             signing_policy: dict[str, Any] | None = None, prepared_build: Path | None = None,
-            prepared_build_digest: str | None = None, release_check: bool = False) -> dict[str, Any]:
+            prepared_build_snapshot: dict[str, Any] | None = None,
+            release_check: bool = False) -> dict[str, Any]:
     source = source.resolve()
     if not output.is_absolute() or output.is_symlink() or output == source or source in output.parents:
         raise BuildError("build output must be an absolute non-symbolic path outside the source worktree")
@@ -173,23 +171,19 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
     if policy is not None:
         signing.assert_current(policy)
         signing.preflight(policy)
-    policy_digest = signing.policy_digest(policy) if policy is not None else None
     workspace.require_capacity()
     workspace.require_path(output)
     source_key = candidate.source_identity(source)
     if prepared_build is not None:
-        return prepare_supplied(source, products, output, unit, policy, source_key,
-                                prepared_build, prepared_build_digest=prepared_build_digest,
-                                release_check=release_check)
-    if prepared_build_digest is not None:
-        raise BuildError("prepared build digest requires a prepared build")
-    repository_key = hashlib.sha256(os.fsencode(str(common_git_directory(source)))).hexdigest()
-    cache = Path(os.environ.get("CELL_RELEASE_CACHE_DIR", str(workspace.directory("releases/" + repository_key)))).expanduser()
+        return prepare_supplied(source, products, output, unit, policy, source_key, prepared_build,
+                                prepared_build_snapshot=prepared_build_snapshot, release_check=release_check)
+    if prepared_build_snapshot is not None:
+        raise BuildError("prepared build snapshot requires a prepared build")
+    cache = Path(os.environ.get("CELL_RELEASE_CACHE_DIR", str(workspace.directory("releases")))).expanduser()
     workspace.require_path(cache)
     if not cache.is_absolute() or cache.is_symlink():
         raise BuildError("release cache must be an absolute non-symbolic directory")
     cache.mkdir(mode=0o700, parents=True, exist_ok=True)
-    (cache / "entries").mkdir(mode=0o700, exist_ok=True)
     offline = release_check and any(read_descriptor(source, product).get("CARGO_OFFLINE") == "1"
                                    for product in products)
     environment, configuration = build_configuration(source, cache, release_check=release_check,
@@ -197,31 +191,25 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
     metadata = json.loads(tool_output(source, environment, "cargo", "metadata", "--format-version", "1",
                                       "--no-deps", "--locked", "--manifest-path", str(source / "Cargo.toml")))
     selected = selection(source, products, unit, metadata)
-    identity = {"schema": 1, "source_key": source_key, "configuration": configuration, "selection": selected,
-                "signing_policy": policy, "signing_policy_digest": policy_digest}
-    release_packages = []
-    if release_check:
-        release_packages = sorted({package for product in products
-                                   for package in read_descriptor(source, product).get("CARGO_PACKAGES", "").split()})
-        identity["release_packages"] = release_packages
-    build_key = hashlib.sha256(candidate.json_bytes(identity)).hexdigest()
-    entry = cache / "entries" / build_key
     started = time.monotonic()
-    build_seconds = 0.0
-    cache_hit = False
     lock_path = cache / "build.lock"
     if lock_path.is_symlink():
         raise BuildError("release cache lock must not be symbolic")
-    with lock_path.open("a+b") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        queue_seconds = time.monotonic() - started
-        if entry.exists():
-            cache_hit = True
-        else:
-            owners = {name: product for product, item in selected.items() for name in item["binaries"]}
-            names = sorted(owners)
-            packages = release_packages if release_check else sorted({record["package"]
-                for item in selected.values() for record in item["binaries"].values()})
+    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
+    try:
+        # Cargo owns cache freshness. Keep its outputs locked until all selected
+        # binaries have been copied into independently signed product packages.
+        with lock_path.open("a+b") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            queue_seconds = time.monotonic() - started
+            names = sorted(name for item in selected.values() for name in item["binaries"])
+            if release_check:
+                packages = sorted({package for product in products
+                                   for package in read_descriptor(source, product).get("CARGO_PACKAGES", "").split()})
+            else:
+                packages = sorted({record["package"] for item in selected.values()
+                                   for record in item["binaries"].values()})
             command = ["cargo", "build", "--release", "--locked", "--manifest-path", str(source / "Cargo.toml"),
                        "--target", configuration["target"], "--target-dir", str(cache / "target"),
                        "--jobs", str(configuration["jobs"])]
@@ -239,67 +227,27 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
             except subprocess.CalledProcessError as error:
                 raise CompilationError(f"release compilation failed (exit {error.returncode})") from error
             build_seconds = time.monotonic() - build_started
-            temporary = Path(tempfile.mkdtemp(prefix=".entry-", dir=cache / "entries"))
-            try:
-                binaries = temporary / "binaries" / "release"
-                binaries.mkdir(parents=True)
-                for name in names:
-                    binary = cache / "target" / configuration["target"] / "release" / name
-                    candidate.regular(binary)
-                    staged = binaries / name
-                    shutil.copyfile(binary, staged)
-                    staged.chmod(0o755)
-                    if policy is not None:
-                        signing.sign(staged, policy, owners[name], name)
-                manifest = {"schema": 1, "identity": identity,
-                            "build_seconds": build_seconds,
-                            "binaries": {name: candidate.digest(binaries / name) for name in names}}
-                (temporary / "manifest.json").write_bytes(candidate.json_bytes(manifest))
-                candidate.seal_tree(temporary)
-                temporary.rename(entry)
-            finally:
-                if temporary.exists():
-                    candidate.remove_tree(temporary)
-        if entry.is_symlink() or not entry.is_dir():
-            raise BuildError("release cache entry must be a non-symbolic directory")
-        candidate.regular(entry / "manifest.json")
-        retained = json.loads((entry / "manifest.json").read_text())
-        if not isinstance(retained, dict) or retained.get("schema") != 1 or retained.get("identity") != identity:
-            raise BuildError("release cache metadata does not match the build")
-        recorded = retained.get("binaries")
-        names = {name for item in selected.values() for name in item["binaries"]}
-        if not isinstance(recorded, dict) or set(recorded) != names:
-            raise BuildError("release cache executable inventory changed")
-        for product, item in selected.items():
-            for name in item["binaries"]:
-                binary = entry / "binaries" / "release" / name
-                candidate.regular(binary)
-                if candidate.digest(binary) != recorded[name]:
-                    raise BuildError(f"release cache executable changed: {name}")
-                if policy is not None:
-                    signing.verify(binary, policy, product, name)
-    output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
-    try:
-        def assemble(product: str) -> tuple[str, dict[str, Any]]:
-            item = selected[product]
-            manifest = candidate.stage_build(source, product, staging / "candidates" / product,
-                                             item["binary_spec"], target=entry / "binaries", source_key=source_key,
-                                             signing_policy=policy)
-            return product, {"candidate_id": manifest["candidate_id"], "source_key": manifest["source_key"],
-                             "candidate_dir": str(output / "candidates" / product)}
 
-        with ThreadPoolExecutor(max_workers=min(len(selected), 8)) as executor:
-            candidates = dict(executor.map(assemble, selected))
-        result = {"schema": 1, "state": "built", "source_key": source_key, "build_key": build_key,
-                  "candidates": candidates, "cache_hit": cache_hit, "cache_entry": str(entry),
-                  "build_seconds": build_seconds, "queue_seconds": queue_seconds,
-                  "elapsed_seconds": time.monotonic() - started,
-                  "release_check": release_check,
-                  "signing_policy": policy, "signing_policy_digest": policy_digest}
-        (staging / "result.json").write_bytes(candidate.json_bytes(result))
-        staging.rename(output)
-        return result
+            def assemble(product: str) -> tuple[str, dict[str, Any]]:
+                item = selected[product]
+                manifest = candidate.stage_build(source, product, staging / "candidates" / product,
+                                                 item["binary_spec"],
+                                                 target=cache / "target" / configuration["target"],
+                                                 source_key=source_key, signing_policy=policy,
+                                                 versions={name: record["version"]
+                                                           for name, record in item["binaries"].items()})
+                return product, {"candidate_id": manifest["candidate_id"], "source_key": manifest["source_key"],
+                                 "candidate_dir": str(output / "candidates" / product)}
+
+            with ThreadPoolExecutor(max_workers=min(len(selected), 8)) as executor:
+                candidates = dict(executor.map(assemble, selected))
+            result = {"schema": 1, "state": "built", "source_key": source_key,
+                      "candidates": candidates, "build_seconds": build_seconds, "queue_seconds": queue_seconds,
+                      "elapsed_seconds": time.monotonic() - started, "release_check": release_check,
+                      "signing_policy": policy}
+            (staging / "result.json").write_bytes(candidate.json_bytes(result))
+            staging.rename(output)
+            return result
     finally:
         if staging.exists():
             candidate.remove_tree(staging)
@@ -307,25 +255,23 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
 
 def prepare_supplied(source: Path, products: list[str], output: Path, unit: str | None,
                      policy: dict[str, Any] | None, source_key: str, prepared_build: Path, *,
-                     prepared_build_digest: str | None, release_check: bool) -> dict[str, Any]:
-    """Copy verified supplied bundles and compile only the missing product scope."""
+                     prepared_build_snapshot: dict[str, Any] | None, release_check: bool) -> dict[str, Any]:
+    """Copy referenced supplied bundles and compile only missing products."""
     started = time.monotonic()
     if not prepared_build.is_absolute() or prepared_build.is_symlink():
         raise BuildError("prepared build must be an absolute non-symbolic result file")
     workspace.require_path(prepared_build)
     candidate.regular(prepared_build)
-    supplied_bytes = prepared_build.read_bytes()
-    receipt_digest = hashlib.sha256(supplied_bytes).hexdigest()
-    if prepared_build_digest is not None and receipt_digest != prepared_build_digest:
+    supplied = json.loads(prepared_build.read_text())
+    if prepared_build_snapshot is not None and supplied != prepared_build_snapshot:
         raise BuildError("prepared build changed after deployment admission")
-    supplied = json.loads(supplied_bytes)
-    policy_digest = signing.policy_digest(policy) if policy is not None else None
     if (not isinstance(supplied, dict) or supplied.get("schema") != 1
             or supplied.get("state") != "built" or supplied.get("source_key") != source_key):
         raise BuildError("prepared build does not match the selected source")
-    if (supplied.get("signing_policy") != policy
-            or supplied.get("signing_policy_digest") != policy_digest):
+    if supplied.get("signing_policy") != policy:
         raise BuildError("prepared build does not match the selected signing policy")
+    if release_check and supplied.get("release_check") is not True:
+        raise BuildError("prepared build has no release check evidence")
     available = supplied.get("candidates")
     if not isinstance(available, dict):
         raise BuildError("prepared build candidate inventory is invalid")
@@ -344,19 +290,12 @@ def prepare_supplied(source: Path, products: list[str], output: Path, unit: str 
         if not directory.is_absolute():
             raise BuildError(f"prepared candidate path must be absolute: {product}")
         workspace.require_path(directory)
-        manifest = candidate.verify(directory, signing_policy=policy)
+        manifest = candidate.read_manifest(directory)
         if (manifest.get("product") != product or manifest.get("source_commit") != commit
                 or manifest.get("source_key") != source_key
                 or manifest.get("candidate_id") != record.get("candidate_id")
                 or record.get("source_key") != source_key):
             raise BuildError(f"prepared candidate does not match the selected source and identity: {product}")
-        values = read_descriptor(source, product)
-        rows = [row.split("|") for row in values.get("RELEASE_BINARY_CHECKS", "").splitlines()]
-        if any(len(row) != 3 for row in rows):
-            raise BuildError(f"invalid binary declaration: {product}")
-        expected = {row[2] for row in rows if unit is None or row[0] == unit}
-        if not expected or set(manifest["binaries"]) != expected:
-            raise BuildError(f"prepared candidate executable scope does not match: {product}")
         reused[product] = directory, manifest
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
@@ -367,38 +306,31 @@ def prepare_supplied(source: Path, products: list[str], output: Path, unit: str 
         candidates = {}
         for product in selected:
             if product in reused:
-                directory, expected_manifest = reused[product]
+                directory, manifest = reused[product]
             else:
                 directory = Path(built["candidates"][product]["candidate_dir"])
-                expected_manifest = candidate.verify(directory, signing_policy=policy)
+                manifest = candidate.read_manifest(directory)
             destination = staging / "candidates" / product
-            shutil.copytree(directory, destination)
-            manifest = candidate.verify(destination, signing_policy=policy)
-            if manifest != expected_manifest:
-                raise BuildError(f"prepared candidate changed while copying: {product}")
-            candidate.seal_tree(destination)
+            shutil.copytree(directory, destination, symlinks=True)
             candidates[product] = {"candidate_id": manifest["candidate_id"], "source_key": source_key,
                                    "candidate_dir": str(output / "candidates" / product)}
         if missing:
             candidate.remove_tree(staging / "missing")
         result = {"schema": 1, "state": "built", "source_key": source_key,
                   "candidates": candidates, "prepared_build": str(prepared_build),
-                  "prepared_build_digest": receipt_digest,
                   "reused_products": sorted(reused), "built_products": missing,
                   "build_seconds": built.get("build_seconds", 0.0),
                   "queue_seconds": built.get("queue_seconds", 0.0),
                   "elapsed_seconds": time.monotonic() - started,
                   "release_check": release_check,
-                  "signing_policy": policy, "signing_policy_digest": policy_digest}
-        for key in ("build_key", "cache_hit", "cache_entry"):
-            if key in built:
-                result[key] = built[key]
+                  "signing_policy": policy}
         (staging / "result.json").write_bytes(candidate.json_bytes(result))
         staging.rename(output)
         return result
     finally:
         if staging.exists():
             candidate.remove_tree(staging)
+
 
 
 def main() -> int:
@@ -408,8 +340,8 @@ def main() -> int:
     parser.add_argument("--unit")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--prepared-build", type=Path, help="reuse verified candidates from this build result")
-    parser.add_argument("--prepared-build-digest", help=argparse.SUPPRESS)
+    parser.add_argument("--prepared-build", type=Path, help="reuse candidate references from this build result")
+    parser.add_argument("--prepared-build-snapshot-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--release-check", action="store_true", help=argparse.SUPPRESS)
     arguments = parser.parse_args()
     try:
@@ -423,10 +355,15 @@ def main() -> int:
                 policy = signing.validate_policy(value)
             signing.assert_current(policy)
             options["signing_policy"] = policy
+        snapshot = None
+        if arguments.prepared_build_snapshot_file is not None:
+            candidate.regular(arguments.prepared_build_snapshot_file)
+            snapshot = json.loads(arguments.prepared_build_snapshot_file.read_text())
+            if not isinstance(snapshot, dict):
+                raise BuildError("prepared build snapshot must be an object")
         result = prepare(arguments.source_root, arguments.product, arguments.output,
                          arguments.unit, prepared_build=arguments.prepared_build,
-                         prepared_build_digest=arguments.prepared_build_digest,
-                         release_check=arguments.release_check, **options)
+                         prepared_build_snapshot=snapshot, release_check=arguments.release_check, **options)
         print(json.dumps(result, sort_keys=True))
         return 0
     except (BuildError, candidate.CandidateError, OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

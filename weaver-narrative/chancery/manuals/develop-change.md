@@ -45,7 +45,7 @@ readiness, maintenance, and release guarantees.
    each observation deadline from its original Nucleus attempt start, including
    on resume. Queue time consumes neither authoring deadline.
 3. Update the owning feature pages, normalized claims, provider index, overview,
-   procedures, descriptor, and adapter when the affected boundary changes.
+   procedures, descriptor, and deployment instructions when the affected boundary changes.
    Keep related documentation as entry points. Publish the complete provider
    bundle with matching program bytes. Update the Nucleus operator manual only
    for shared boundaries. Keep the root Cell README unchanged unless explicitly

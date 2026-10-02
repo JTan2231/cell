@@ -22,7 +22,7 @@ or grant account, email, intervention or installation authority.
 | --- | --- |
 | `emt.incident.respond` | Incident discovery, initial-alert ownership, recognized replies, agent authority, correspondence, deadlines and exact exchange recovery. |
 | `emt.quota-notices` | Quota deferral, one shared deterministic notice per condition, exact mail identity and uncertain delivery recovery. |
-| `emt.service` | Configuration, worker admission, scheduling, readiness, maintenance, retained state, matched installation and coordinated recovery. |
+| `emt.service` | Configuration, worker admission, scheduling, readiness, maintenance, retained state, matched installation instructions. |
 
 ## Operations
 

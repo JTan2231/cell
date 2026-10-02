@@ -156,7 +156,7 @@ create an open-ended retry or infer failure from runtime status alone.
 
 1. Read `conatus-install inspect` and preserve the current release and both
    binding selections. Establish maintenance and drain when admitted work cannot
-   tolerate replacement. Use shared coordinated deployment for coupled products.
+   tolerate replacement. Select each required product explicitly in the deployment manifest request.
 2. Select a previously validated candidate program and its matching complete
    provider bundle.
 3. Install with the expected current selection:
@@ -165,7 +165,7 @@ create an open-ended retry or infer failure from runtime status alone.
    conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
    ```
 
-   Use the observed `releases/HASH` instead of `absent` for upgrade. Packaging
+   Use the observed `releases/ID` instead of `absent` for upgrade. Packaging
    commands accept `--home ABS_HOME`. Installation selects programs and published
    documentation only; it initializes no runtime state or schedule.
 4. Run `conatus-install inspect` to read selection metadata. Installation performs
@@ -176,7 +176,7 @@ create an open-ended retry or infer failure from runtime status alone.
 Recover only to an exact retained release:
 
 ```sh
-conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
+conatus-install recover --release ABS_RELEASE --expected-current releases/ID
 ```
 
 Inspect the selected release metadata and preserved bindings. Recovery does not revert the database, Annals library or Clockwork
@@ -244,8 +244,8 @@ uncertain-submission recovery remain separate from future scheduling.
 
 ## Operate owned maintenance
 
-Use this route for an attended product operation. The coordinated deployment
-route below acquires its own holds; do not pre-acquire a foreign hold for it.
+Use this route for an attended product operation. Manifest execution creates
+no product maintenance holds.
 
 1. Read `conatus --json config`, `conatus maintenance status` and both Clockwork
    binding selections. Preserve product pause, each present binding digest,
@@ -266,16 +266,11 @@ route below acquires its own holds; do not pre-acquire a foreign hold for it.
    the captured operator controls. Preserve disabled or absent schedules and
    existing failure incidents.
 
-## Coordinated deployment setup
+## Execute installation instructions
 
-Use the coordinator for coupled program changes. It captures product controls
-and acquires its own maintenance holds. Do not place a manual hold before asking
-it to execute; another operation's hold blocks admission.
-
-1. Read `nucleus manual` for the shared Cell deployment procedure. Inspect
-   `conatus --json config`, `conatus maintenance status` and both binding
-   selections. Preserve configuration, product pause and present binding intent.
-   Resolve any interrupted owning operation before starting another deployment.
+1. Read `nucleus manual` and review `./deploy.sh plan conatus`. Select each
+   required product explicitly. The executor infers no dependency or health
+   requirement from Conatus configuration.
 2. Supply absolute `state_dir`, `decisions_config`, `annals_state_dir` and the
    intended `library` when defaults are unsuitable. Fresh defaults use Conatus
    state, installed Annals state and `decisions/config.toml`, and library
@@ -283,28 +278,19 @@ it to execute; another operation's hold blocks admission.
 3. Supply update `enabled` and `daily_email_enabled` separately only when a
    change is intended. Omission preserves prior intent. An absent binding remains
    absent unless its enabled setting is supplied.
-4. Plan and execute from the Cell root, using the shared procedure for supplied
-   settings and retained operation identity:
-
-   ```sh
-   ./deploy.sh plan conatus
-   ./deploy.sh conatus
-   ```
-
-   Review the plan before execution. The coordinator holds admission, suspends
-   selected bindings, drains admitted commands, selects programs, and initializes
-   absent state or rebinds the final Annals executable. Existing library IDs,
-   cursor, records and instructions are preserved.
-5. Inspect the retained operation evidence. Verify coherent selected release and
-   configuration. Verify each present or explicitly requested binding selected
-   the exact new definition. An omitted absent binding needs no new definition.
-   Activation restores captured pause and independent enabled intent only after
-   all holds release. Existing incidents remain halted.
-6. Follow coordinator recovery after interruption. Complete coherent configuration
-   before its own hold release. Stop on foreign holds, incoherent configuration,
-   unresolved admission or uncertain domain results; do not release another
-   operation's hold to bypass refusal.
+4. Run `./deploy.sh conatus`. The declared installer instruction publishes
+   programs, initializes absent state or updates the final Annals executable,
+   and publishes each selected schedule with its intended enabled state.
+   Existing library IDs, cursor, records, instructions, pause and incidents
+   remain unchanged. It uses ordinary admission and runner locks without
+   creating maintenance holds, suspending schedules or draining work.
+5. Inspect the retained instruction exit status and log. Use Conatus diagnostics
+   separately when the authorized endpoint requires application readiness or
+   domain evidence. Exit zero proves completion of the declared instruction.
+6. Inspect effects after failure or interruption before an explicit next
+   operation. Completed effects remain in place. The executor does not repeat,
+   roll back or recover instructions automatically.
 
 No installation, registration, catalog publication or successful activation
 alone proves retention, interpretation or inbox delivery. There is no promised
-activation delay, queue-drain deadline, storage capacity or completion time.
+activation delay, storage capacity or completion time.

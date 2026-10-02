@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.signing.operate",
-  "contract_version": 1,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -44,30 +44,30 @@
     "Initial creation generates one RSA 3072-bit self-signed code-signing certificate with SHA-256 signature and 3650-day validity, imports its certificate and key into the login Keychain, authorizes /usr/bin/codesign for that key, and adds current-user code-signing trust. macOS can require native user authorization.",
     "Initial creation uses private temporary staging for generation files and removes them when setup exits. It retains the certificate and private key in Keychain, with no retained certificate or private-key export in the host filesystem.",
     "Explicit configuration preflights the exact selected certificate and private key before atomically writing the normalized fixed host signing policy. Configuration writers serialize with queue and deployment admission and refuse unsettled work.",
-    "Production preparation signs and verifies staged native executables before hashing and sealing. CI, cache reuse, upgrades, and installation read the policy without changing it."
+    "Production preparation runs native signing instructions for staged executables. Completion is command evidence, without an application or retained-artifact audit. CI, cache reuse, upgrades, and installation read the policy without changing it."
   ],
   "authority": [
-    "The user owns explicit certificate and namespace selection. Cell owns policy validation, snapshot retention, identifier derivation, and publication checks. macOS Keychain owns private-key storage and use authorization.",
+    "The user owns explicit certificate and namespace selection. Cell owns policy validation, snapshot retention, identifier derivation, and signing-command execution. macOS Keychain owns private-key storage and use authorization.",
     "New CI jobs and deployment operations use their retained signing snapshot. A policy mismatch stops publication instead of choosing a current or alternative identity.",
     "The filesystem and current-user operating boundary protects configuration from routine source, cache and repair writes. It is not a security boundary against arbitrary hostile code with full current-user authority."
   ],
   "success": [
-    "Status reports the selected fingerprint, namespace, Keychain and readiness only after the exact certificate and private-key preflight succeeds. With --json it returns policy, policy_digest and ready=true.",
-    "Initial creation reports the selected fingerprint, namespace and Keychain after certificate import, trust setup, key-use preflight and private configuration publication. With --json it returns policy and policy_digest.",
-    "Explicit configure reports the selected fingerprint, namespace and Keychain after preflight and atomic configuration publication. With --json it returns policy and policy_digest. Configuration selection alone does not prove that every product was redeployed.",
-    "Production success requires signatures and final artifact hashes matching the retained policy and preparation. Full adoption or rotation additionally requires the full intended product rollout and its retained outcome."
+    "Status reports the selected fingerprint, namespace, Keychain and readiness only after the exact certificate and private-key preflight succeeds. With --json it returns policy and ready=true.",
+    "Initial creation reports the selected fingerprint, namespace and Keychain after certificate import, trust setup, key-use preflight and private configuration publication. With --json it returns policy.",
+    "Explicit configure reports the selected fingerprint, namespace and Keychain after preflight and atomic configuration publication. With --json it returns policy. Configuration selection alone does not prove that every product was redeployed.",
+    "Production success requires completion of the declared build and signing commands with matching retained source, scope and policy correlation. CI and deployment do not reverify executable inventory or native signatures. Full adoption or rotation additionally requires the full intended product rollout and its retained outcome."
   ],
   "failure_and_recovery": [
-    "Missing configuration, inaccessible or expired identity, locked Keychain, wrong signer, or failed verification stops admission or publication with no unsigned, ad hoc, certificate-name, generated-identity or renewal fallback. Signing configuration failures do not invoke model repair.",
+    "Missing configuration, inaccessible or expired identity, locked Keychain, failed signing command stops admission or publication with no unsigned, ad hoc, certificate-name, generated-identity or renewal fallback. Signing configuration failures do not invoke model repair.",
     "Creation refuses existing configuration or a Cell Local Signing certificate in the selected login Keychain. Partial setup can leave a Keychain import without configuration; use configure to select that existing identity after its key is usable. Creation never silently replaces it.",
     "Configuration failure preserves the previous file. An unavailable selected certificate or key blocks signing until that identity is usable or the user explicitly configures another identity. Verify status before admission resumes.",
     "Reissuing a certificate with the same key changes its fingerprint and requires explicit selection. Existing immutable releases are not re-signed in place.",
     "Rotation is an explicit configuration change followed by selected product deployment. Sequential installation can leave more than one signer after a failed rollout; inspect retained outcomes before claiming fleet completion."
   ],
   "privacy": [
-    "The private signing.json retains certificate fingerprint, Keychain path, profile and namespace; job and preparation receipts retain those public signing inputs and their digests, not private-key material.",
+    "The private signing.json retains certificate fingerprint, Keychain path, profile and namespace; job and preparation receipts retain those public signing inputs, not private-key material.",
     "The certificate and private key remain in macOS Keychain after setup. Generation files stay in private temporary staging and are removed when setup exits; no filesystem export is retained.",
-    "Signing commands return public selection, policy, digest and readiness only. Private-key bytes and passwords do not enter CI repair requests, command diagnostics, or signing status output."
+    "Signing commands return public selection, policy and readiness only. Private-key bytes and passwords do not enter CI repair requests, command diagnostics, or signing status output."
   ],
   "does_not_authorize": [
     "Creating or changing an identity from status inspection, catalog discovery, ordinary CI submission, installation, cache cleanup, or model repair alone.",
@@ -109,7 +109,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Commands default to text showing the selected fingerprint, namespace and Keychain; status also reports readiness after preflight. With --json, status returns policy, policy_digest and ready=true, while configure and create-local return policy and policy_digest. Operational failure returns exit 78 with a diagnostic; syntax errors return exit 2."
+        "statement": "Commands default to text showing the selected fingerprint, namespace and Keychain; status also reports readiness after preflight. With --json, status returns policy and ready=true, while configure and create-local return policy. Operational failure returns exit 78 with a diagnostic; syntax errors return exit 2."
       },
       {
         "status": "declared",
@@ -129,7 +129,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Certificate identity is a normalized lowercase SHA-1 fingerprint. Policy identity is SHA-256 of normalized canonical JSON. Code identifiers are NAMESPACE.PRODUCT.EXECUTABLE using canonical krisis identity for the decisions descriptor and permanent declared binary names; build paths and source versions do not enter them."
+        "statement": "Certificate identity is a normalized lowercase SHA-1 fingerprint. Cell compares normalized policy objects directly. Code identifiers are NAMESPACE.PRODUCT.EXECUTABLE using canonical krisis identity for the decisions descriptor and permanent declared binary names; build paths and source versions do not enter them."
       },
       {
         "status": "declared",
@@ -143,7 +143,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Standalone scripts, Python CI-manager process identity, tests, compiler scratch outputs and third-party runtimes are outside Cell-native identity coverage. Package manifests and hashes retain their existing asset coverage."
+        "statement": "Standalone scripts, Python CI-manager process identity, tests, compiler scratch outputs and third-party runtimes are outside Cell-native identity coverage. Package manifests and owned file paths retain their existing asset coverage."
       },
       {
         "status": "unspecified",
@@ -163,11 +163,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Explicit configuration preflights the selected identity before atomic replacement. Creation refuses existing configuration or a named Cell Local Signing certificate in the selected login Keychain. Ordinary build, CI, repair, install, manager upgrade and cache reuse never mutate signing selection. New jobs retain policy and digest at admission; legacy jobs without a snapshot retain their earlier path."
+        "statement": "Explicit configuration preflights the selected identity before atomic replacement. Creation refuses existing configuration or a named Cell Local Signing certificate in the selected login Keychain. Ordinary build, CI, repair, install, manager upgrade and cache reuse never mutate signing selection. New jobs retain policy at admission; legacy jobs without a snapshot retain their earlier path."
       },
       {
         "status": "declared",
-        "statement": "Staged native artifacts are signed, externally verified against the expected signer and identifier, then hashed and sealed. Cached candidates and pre-acceptance production receipts are reverified. A changed policy after admission stops publication. Immutable historical releases retain their original bytes."
+        "statement": "Staged native artifacts are signed with the selected certificate and identifier. Retained command receipts are checked for execution correlation; candidate contents and signatures are not reverified by CI or deployment. A changed policy after admission stops publication. Immutable historical releases retain their original bytes."
       },
       {
         "status": "declared",
@@ -191,7 +191,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.6.0 publishes signing contract 1 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
+        "statement": "Manager release 0.8.0 publishes signing contract 3 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
       },
       {
         "status": "unspecified",
@@ -213,7 +213,7 @@
       },
       {
         "status": "declared",
-        "statement": "Publication, cache retention and sequential product rollout rely on Cell's release builder, coordinator and product installers. Their retained operation evidence remains authoritative and has no dedicated coordinator Chancery contract.",
+        "statement": "Signing-command execution and sequential instruction execution rely on Cell's release builder and coordinator. Products own application setup and recovery commands. Their retained operation evidence remains authoritative and has no dedicated coordinator Chancery contract.",
         "target": "cell-deployment",
         "kind": "control"
       }

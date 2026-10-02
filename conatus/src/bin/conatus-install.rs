@@ -26,14 +26,14 @@ fn main() -> ExitCode {
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "conatus-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/HASH]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/HASH]\nschedule-definition --state-dir ABS --output ABS [--daily-email] [--home ABS]\n\nProgram installation does not initialize runtime state or activate schedules.",
+            "conatus-install {}\n\ndeploy < REQUEST.json\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nschedule-definition --state-dir ABS --output ABS [--daily-email] [--home ABS]\n\nDirect install selects program files only. Deploy also updates owned configuration and schedules.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::SUCCESS;
     }
-    cell_install::simple::main_with_lifecycle(
+    cell_install::simple::main_with_deployment(
         &specification(),
         env!("CARGO_PKG_VERSION"),
-        conatus::installation::lifecycle,
+        conatus::installation::deploy,
     )
 }

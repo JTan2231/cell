@@ -13,7 +13,7 @@ use clockwork::api::Manifest;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use super::legacy::{hexadecimal, pairs};
+use super::legacy::{hexadecimal, pairs, regular};
 
 pub const ACTIVE: &str = "krisis/observer";
 pub const LEGACY_OBSERVER: &str = "decisions/observer";
@@ -44,7 +44,7 @@ pub fn executable(path: &Path) -> Result<()> {
         "installation executable must be absolute",
     )?;
     text(path)?;
-    file_digest(path)?;
+    regular(path)?;
     require(
         fs::symlink_metadata(path)?.mode() & 0o111 != 0,
         "installation executable is not executable",
@@ -491,41 +491,12 @@ pub fn binding_receipt(paths: &Paths) -> Result<BTreeMap<String, String>> {
     )?;
     let result: BTreeMap<_, _> = values.into_iter().collect();
     require(
-        hexadecimal(&result["release_id"], 64)
+        cell_install::valid_release_id(&result["release_id"])
             && hexadecimal(&result["definition_digest"], 64)
             && hexadecimal(&result["annals_library_id"], 32),
         "invalid observer ownership identity",
     )?;
     Ok(result)
-}
-
-pub fn maintenance(
-    paths: &Paths,
-    binary: &Path,
-    operation: &str,
-    owner: Option<&str>,
-) -> Result<Value> {
-    let mut arguments = args(&[
-        "--database",
-        text(&paths.database)?,
-        "--json",
-        "maintenance",
-        operation,
-    ]);
-    if let Some(owner) = owner {
-        arguments.push(owner.into());
-    }
-    let bytes = checked(paths, binary, &arguments, &BTreeMap::new(), 60)?;
-    let value: Value = serde_json::from_slice(&bytes)?;
-    let data = cell_install::command::maintenance(&value)?;
-    require(
-        data["protocol_version"] == 1
-            && data["contract_version"] == 1
-            && data["holds"].is_array()
-            && data["drained"].is_boolean(),
-        "installed Krisis admission is incompatible",
-    )?;
-    Ok(data.clone())
 }
 
 pub fn inspect_result(current: Option<&cell_install::transaction::ReleaseInfo>) -> Value {

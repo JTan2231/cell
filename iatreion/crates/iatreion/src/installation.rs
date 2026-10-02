@@ -21,6 +21,5 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: false,
-        maintained: false,
     }
 }

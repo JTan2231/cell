@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,8 +21,6 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ci_broker.client import git, repository_is_clean, source_commit
-from ci_broker.broker import MINIMAL_ENVIRONMENT
-from ci_manager import workspace
 from deployment import signing
 from deployment.inventory import descriptor
 
@@ -36,14 +33,6 @@ def json_bytes(value: Any) -> bytes:
     return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
-def digest(path: Path) -> str:
-    value = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            value.update(chunk)
-    return value.hexdigest()
-
-
 def regular(path: Path) -> None:
     try:
         mode = path.lstat().st_mode
@@ -51,23 +40,6 @@ def regular(path: Path) -> None:
         raise CandidateError(f"missing artifact: {path}") from error
     if not stat.S_ISREG(mode):
         raise CandidateError(f"artifact must be a regular non-symbolic file: {path}")
-
-
-def tree_files(root: Path) -> dict[str, dict[str, Any]]:
-    """Hash a tree without following symbolic paths or accepting special files."""
-    if root.is_symlink() or not root.is_dir():
-        raise CandidateError(f"not a regular artifact directory: {root}")
-    entries: dict[str, dict[str, Any]] = {}
-    for path in sorted(root.rglob("*")):
-        mode = path.lstat().st_mode
-        if stat.S_ISDIR(mode):
-            continue
-        regular(path)
-        entries[path.relative_to(root).as_posix()] = {
-            "sha256": digest(path),
-            "executable": bool(mode & stat.S_IXUSR),
-        }
-    return entries
 
 
 def seal_tree(root: Path) -> None:
@@ -114,70 +86,25 @@ def stage(source: Path, product: str, output: Path, binary_spec: str, *,
 
 def stage_build(source: Path, product: str, output: Path, binary_spec: str, *,
                 target: Path, source_key: str,
+                versions: dict[str, str] | None = None,
                 signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
     """Seal a successful release build without claiming a CI pass."""
     return _stage(source, product, output, binary_spec, target=target,
                   build_source_key=source_key, signing_policy=signing_policy,
-                  signed_build=True)
-
-
-def verify(root: Path, *, signing_policy: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Verify candidate bytes against an externally selected signing policy."""
-    policy = signing.load_policy() if signing_policy is None else signing_policy
-    if policy is not None:
-        signing.assert_current(policy)
-    files = tree_files(root)
-    regular(root / "candidate.json")
-    manifest = read_manifest(root)
-    if manifest.get("schema") != 1:
-        raise CandidateError("unsupported candidate metadata")
-    retained_digest = signing.policy_digest(policy) if policy is not None else None
-    if (manifest.get("signing_policy") != policy
-            or manifest.get("signing_policy_digest") != retained_digest):
-        raise CandidateError("candidate signing policy does not match the selected policy")
-    unsigned_manifest = {key: value for key, value in manifest.items() if key != "candidate_id"}
-    expected_id = "sha256:" + hashlib.sha256(json_bytes(unsigned_manifest)).hexdigest()
-    if manifest.get("candidate_id") != expected_id:
-        raise CandidateError("candidate metadata identity mismatch")
-    product = manifest.get("product")
-    if not isinstance(product, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", product):
-        raise CandidateError("invalid candidate product identity")
-    binaries = manifest.get("binaries")
-    if not isinstance(binaries, dict) or not binaries:
-        raise CandidateError("candidate declares no executables")
-    if set(files) != {"candidate.json", *(f"bin/{name}" for name in binaries)}:
-        raise CandidateError("candidate file inventory changed")
-    for name, record in binaries.items():
-        if (not isinstance(name, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", name)
-                or not isinstance(record, dict) or record.get("path") != f"bin/{name}"):
-            raise CandidateError("invalid candidate executable declaration")
-        path = root / "bin" / name
-        regular(path)
-        if digest(path) != record.get("sha256"):
-            raise CandidateError(f"candidate executable changed: {name}")
-        expected_identifier = signing.identifier(policy, product, name) if policy is not None else None
-        if record.get("code_identifier") != expected_identifier:
-            raise CandidateError(f"candidate executable identifier mismatch: {name}")
-        if policy is not None:
-            signing.verify(path, policy, product, name)
-    return manifest
-
-
-def verify_signatures(root: Path, policy: dict[str, Any] | None = None) -> dict[str, Any]:
-    return verify(root, signing_policy=policy)
+                  versions=versions, preflight_done=True)
 
 
 def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
            target: Path | None = None, build_source_key: str | None = None,
+           versions: dict[str, str] | None = None,
            signing_policy: dict[str, Any] | None = None,
-           signed_build: bool = False) -> dict[str, Any]:
+           preflight_done: bool = False) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z][a-z0-9-]*", product):
         raise CandidateError("invalid product identity")
     policy = signing.load_policy() if signing_policy is None else signing_policy
-    if policy is not None:
+    if policy is not None and not preflight_done:
         signing.assert_current(policy)
-        if not signed_build:
-            signing.preflight(policy)
+        signing.preflight(policy)
     source = source.resolve()
     if not output.is_absolute() or output.is_symlink():
         raise CandidateError("candidate output must be an absolute non-symbolic path")
@@ -213,8 +140,6 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
             binary_target = target or Path(os.environ.get("CARGO_TARGET_DIR", str(source / "target")))
             binary = binary_target / relative.removeprefix("target/")
             regular(binary)
-            if policy is not None and signed_build:
-                signing.verify(binary, policy, canonical, name)
             sealed = temporary / "bin" / name
             with binary.open("rb") as incoming, sealed.open("xb") as destination:
                 shutil.copyfileobj(incoming, destination)
@@ -222,35 +147,28 @@ def _stage(source: Path, product: str, output: Path, binary_spec: str, *,
                 os.fsync(destination.fileno())
             sealed.chmod(0o755)
             if policy is not None:
-                if signed_build:
-                    signing.verify(sealed, policy, canonical, name)
-                else:
-                    signing.sign(sealed, policy, canonical, name)
-            environment = {key: value for key, value in os.environ.items() if key in MINIMAL_ENVIRONMENT}
-            environment.update(workspace.environment())
-            version = subprocess.run(workspace.confined_command([str(sealed), "--version"]),
-                                     env=environment, check=True, capture_output=True,
-                                     text=True, timeout=30).stdout.strip()
-            if policy is not None:
-                signing.verify(sealed, policy, canonical, name)
+                signing.sign(sealed, policy, canonical, name)
             sealed.chmod(0o555)
-            binaries[name] = {"path": f"bin/{name}", "sha256": digest(sealed), "version": version,
+            binaries[name] = {"path": f"bin/{name}",
                               "code_identifier": signing.identifier(policy, canonical, name)
                               if policy is not None else None}
+            if versions is not None and name in versions:
+                binaries[name]["version"] = versions[name]
         if not binaries:
             raise CandidateError("product declares no deployment executables")
         manifest: dict[str, Any] = {
             "schema": 1, "product": canonical, "source_commit": commit,
             "source_key": source_key, "binaries": binaries,
             "signing_policy": policy,
-            "signing_policy_digest": signing.policy_digest(policy) if policy is not None else None,
+            "candidate_id": "uuid:" + uuid.uuid4().hex,
         }
-        manifest["candidate_id"] = "sha256:" + hashlib.sha256(json_bytes(manifest)).hexdigest()
         with (temporary / "candidate.json").open("xb") as stream:
             stream.write(json_bytes(manifest))
             stream.flush()
             os.fsync(stream.fileno())
-        seal_tree(temporary)
+        (temporary / "candidate.json").chmod(0o444)
+        (temporary / "bin").chmod(0o555)
+        temporary.chmod(0o555)
         if output.exists():
             remove_tree(output)
         os.rename(temporary, output)

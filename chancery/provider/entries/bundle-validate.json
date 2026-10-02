@@ -1,6 +1,6 @@
 {
   "id": "chancery.bundle.validate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "develop",
   "support": "supported",
@@ -29,7 +29,7 @@
   ],
   "failure_and_recovery": [
     "An invalid report preserves detected issues with exit 1; repair the owning source bundle and validate again.",
-    "Do not edit an installed content-addressed release or substitute a source-checkout selector for release publication."
+    "Do not edit an installed immutable release or substitute a source-checkout selector for release publication."
   ],
   "privacy": [
     "Bundle documents are local release artifacts and must contain no secrets, credentials, private source material, or transient output."

@@ -31,8 +31,12 @@ pub struct ReleaseInput {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FileEntry {
+    /// Retained predecessor metadata. New releases do not calculate this field.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub sha256: String,
     pub mode: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_identifier: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -44,29 +48,6 @@ pub struct Manifest {
     pub versions: BTreeMap<String, String>,
     pub files: BTreeMap<String, FileEntry>,
     pub release_id: String,
-}
-
-#[derive(Serialize)]
-struct Identity<'a> {
-    format: &'a str,
-    product: &'a str,
-    provider: &'a str,
-    versions: &'a BTreeMap<String, String>,
-    files: &'a BTreeMap<String, FileEntry>,
-}
-
-pub(crate) fn identity(manifest: &Manifest) -> Result<String> {
-    Ok(hash_bytes(&serde_json::to_vec(&Identity {
-        format: &manifest.format,
-        product: &manifest.product,
-        provider: &manifest.provider,
-        versions: &manifest.versions,
-        files: &manifest.files,
-    })?))
-}
-
-pub(crate) fn hash_bytes(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 pub(crate) fn regular(path: &Path) -> Result<fs::Metadata> {
@@ -105,6 +86,28 @@ pub(crate) fn valid_hash(value: &str) -> bool {
         && value
             .bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// Check the literal selector format for current and retained releases.
+#[must_use]
+pub fn valid_release_id(value: &str) -> bool {
+    valid_hash(value) || uuid::Uuid::parse_str(value).is_ok_and(|id| id.to_string() == value)
+}
+
+pub(crate) fn inventory_matches(
+    actual: &BTreeMap<String, FileEntry>,
+    recorded: &BTreeMap<String, FileEntry>,
+) -> bool {
+    actual.len() == recorded.len()
+        && actual.iter().all(|(path, file)| {
+            recorded
+                .get(path)
+                .is_some_and(|entry| entry.mode == file.mode)
+        })
+}
+
+pub(crate) fn simple_format(value: &str) -> bool {
+    matches!(value, FORMAT | "cell-install-v1")
 }
 
 pub(crate) fn valid_name(value: &str) -> bool {
@@ -168,11 +171,13 @@ fn visit(
             dirs.insert(relative);
             visit(root, &path, files, dirs)?;
         } else {
+            regular(&path)?;
             files.insert(
                 relative,
                 FileEntry {
-                    sha256: digest(&path)?,
+                    sha256: String::new(),
                     mode: meta.mode() & 0o7777,
+                    code_identifier: None,
                 },
             );
         }
@@ -187,7 +192,7 @@ pub(crate) fn provider_files(
     Ok(inventory(root)?.0)
 }
 
-/// List and hash provider files for release naming and copying.
+/// List provider file paths and modes for copying.
 ///
 /// # Errors
 /// Returns an error when an input cannot be read.
@@ -207,15 +212,14 @@ pub(crate) fn write_manifest(
     versions: BTreeMap<String, String>,
 ) -> Result<Manifest> {
     let (files, _) = inventory(root)?;
-    let mut manifest = Manifest {
+    let manifest = Manifest {
         format: FORMAT.to_owned(),
         product: spec.product.to_owned(),
         provider: spec.provider.to_owned(),
         versions,
         files,
-        release_id: String::new(),
+        release_id: uuid::Uuid::now_v7().to_string(),
     };
-    manifest.release_id = identity(&manifest)?;
     fs::write(root.join("manifest.json"), serde_json::to_vec(&manifest)?)?;
     fs::set_permissions(
         root.join("manifest.json"),
@@ -240,7 +244,12 @@ pub fn read_release(spec: &InstallSpec, release: &Path) -> Result<Installation> 
     let (version, format) = if release.join("manifest.json").try_exists()? {
         let path = release.join("manifest.json");
         let manifest: Manifest = serde_json::from_slice(&fs::read(&path)?)?;
-        if manifest.format != FORMAT {
+        if !simple_format(&manifest.format)
+            || manifest.product != spec.product
+            || manifest.provider != spec.provider
+            || manifest.release_id != id
+            || !valid_release_id(id)
+        {
             return Err(Error::new("unsupported release format"));
         }
         let version = manifest

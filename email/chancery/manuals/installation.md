@@ -3,19 +3,19 @@
 The installer copies the supplied programs and provider bundle into a retained
 release and selects their owned public paths together. It creates required
 installation directories and uses product and catalog locks with atomic selector
-updates. `--expected-current absent|releases/HASH` guards the selected release.
-Foreign public selectors are refused. File-operation or basic execution failures
-restore the prior selectors when possible.
+updates. `--expected-current absent|releases/ID` guards the selected release.
+Foreign public selectors are refused. An instruction failure retains completed
+file and selector changes for explicit recovery.
 
-Release hashes name the staged files. Installation and recovery do not compare
+Opaque UUID release IDs name the staged files. Installation and recovery do not compare
 artifact hashes, component versions, or retained file inventories. They do not
-run database integrity checks, dependency probes, or readiness checks. Basic
-`--help` and `--version` execution checks remain. Inspection reads recorded
-installation metadata and selectors; it is not an integrity result.
+run executable probes, native-signature audits, database integrity checks,
+dependency probes, or readiness checks. Inspection reads recorded installation
+metadata and selectors; it is not an integrity result.
 
 The default installation root is
 `~/Library/Application Support/Email/install`. Releases are retained beneath
-`releases/HASH`; `current` selects the program and provider together and `previous`
+`releases/ID`; `current` selects the program and provider together and `previous`
 retains the superseded selection. Public commands are `~/.local/bin/email` and
 `~/.local/bin/email-install`. The provider selector is
 `~/Library/Application Support/Chancery/providers/email`.
@@ -44,10 +44,9 @@ the key, `HOME`, a fixed system `PATH`, and ordinary shell bookkeeping variables
 Unrelated caller credentials are not forwarded. The wrapper preserves stdin;
 credentials are not command arguments or part of the program release.
 
-Help and version probes bypass `.zshrc` and execute the release payload
-directly. Installation and recovery use only those probes. They do not load
-transport credentials, read account mail, send messages, or prove Resend/Gmail
-readiness. The credential fallback remains supported alongside explicit setup.
+Explicit help and version commands bypass `.zshrc` and execute the payload
+directly. Installation and recovery run no program probes. They do not read
+account mail, send messages, or prove Resend/Gmail readiness. The credential fallback remains supported alongside explicit setup.
 
 ## Usage and recovery
 
@@ -57,3 +56,12 @@ for account setup and `email.message.send` for sending behavior.
 
 No installation-time account readiness, final-delivery guarantee, retention
 horizon, or general cross-release support interval is promised.
+
+## Deployment recipe
+
+`email-install deploy` reads one schema-two Cell recipe request from stdin.
+The product command selects supplied programs and applies explicitly supplied private account settings.
+The manifest executor runs this instruction and records its exit status. It does
+not inspect application output or create a maintenance hold, drain work, or
+recover prior effects. A failed instruction leaves completed changes in place.
+Use the product's explicit recovery operation when recovery is required.

@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 10,
+  "contract_version": 12,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -17,24 +17,24 @@
   ],
   "outcome": "A current-user Krisis installation with one periodic observer, exact hook, explicit Codex history reader, preserved legacy Decisions state, explicit Annals decisions-library configuration, and retired digest/review schedules.",
   "effects": [
-    "The package builds and seals krisis and krisis-install; the latter is also retained as package/install and implements the schema-one coordinator adapter. Static runtime frontend and observer scripts remain exact release data.",
-    "The Cell product adapter composes preparation and explicit final cutover under run-owned CLI admission, preserves the write-once baseline and prior schedule enabled booleans, and retains existing product-owned installer and recovery boundaries.",
-    "Default preparation stages a content-addressed release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
-    "Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
+    "The package builds krisis and krisis-install. The installer is retained as package/install and accepts a schema-2 deploy request on stdin. Static runtime frontend and observer scripts remain release data.",
+    "The Cell manifest command places release files, performs observer activation and migration, writes the hook and Annals pin receipt, and selects krisis/observer directly. It preserves the write-once baseline and existing enabled intent unless an explicit setting overrides it.",
+    "Explicit manual install: Default preparation stages a immutable release and registers and verifies its Clockwork definition, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
+    "Explicit manual install: Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
     "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion.",
-    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
   ],
   "authority": [
     "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
     "Codex owns hook discovery and trust, Clockwork owns definition and runtime history, Annals owns its dedicated library, and Krisis owns observation and delivery state."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
+    "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
   ],
   "failure_and_recovery": [
     "Saved conversation read failures (document_source_unavailable) return zero and permit later scheduled work; other processing failures end the current run. Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
-    "Coordinated inspection stops before effects if an installed CLI lacks maintenance support; bootstrap its compatibility release through the existing deployer and writer-quiescence procedure. Adapter recovery stops on retained product-installer maintenance or unfinished transactions without clearing their evidence or another owner's hold.",
-    "A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
+    "The manifest command does not inspect installed maintenance support or perform automatic recovery. An interrupted command leaves completed effects in place; inspect the retained command log and use explicit product procedures when needed.",
+    "Explicit manual install: A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
     "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
   ],
@@ -142,6 +142,10 @@
     {
       "label": "Worker health",
       "invocation": "/Users/joey/.local/bin/krisis health [--max-idle-seconds N] [--json]"
+    },
+    {
+      "label": "Cell manifest command",
+      "invocation": "krisis-install deploy"
     }
   ],
   "does_not_authorize": [
@@ -162,15 +166,15 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Coordinated updates first prove the currently installed affected executables support maintenance, establish all affected run-owned holds, and prove product and dependency drain before applying selected candidates. Candidate support alone cannot fence an older public executable."
+        "statement": "The Cell manifest command takes the declared candidate, source paths and literal settings. It does not infer maintenance dependencies, compatibility, readiness or quiescence from installed applications."
       },
       {
         "status": "declared",
-        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+        "statement": "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
       },
       {
         "status": "declared",
-        "statement": "Before migration, exact product writers are maintenance-gated and quiesced. Migration retains the live database and committed records."
+        "statement": "The manifest command migrates through the native database transaction and admission mechanisms without proactively holding or draining application work. Explicit manual cutover retains its documented quiescence procedure."
       },
       {
         "status": "declared",
@@ -202,11 +206,11 @@
       },
       {
         "status": "declared",
-        "statement": "Successful preparation installs and verifies one content-addressed release and definition containing the explicit Codex reader while retaining maintenance and leaving active selectors unchanged."
+        "statement": "Successful preparation installs and verifies one immutable release and definition containing the explicit Codex reader while retaining maintenance and leaving active selectors unchanged."
       },
       {
         "status": "declared",
-        "statement": "Successful explicit final cutover selects one content-addressed release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
+        "statement": "Successful explicit final cutover selects one immutable release for krisis and both providers, migrates schema 6, installs the exact Stop hook, and enables only krisis/observer."
       },
       {
         "status": "declared",
@@ -272,7 +276,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+        "statement": "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
       },
       {
         "status": "declared",

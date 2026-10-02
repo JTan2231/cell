@@ -23,8 +23,8 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
     signing.preflight(policy)
-    # A surviving successful preparation is reusable only after independently
-    # checking its signatures and source identity. No candidate code is imported.
+    # Reuse the retained command result after checking execution correlation.
+    # Candidate bytes are opaque to the CI manager.
     if output.exists():
         result = json.loads((output / "result.json").read_text())
     else:
@@ -34,6 +34,8 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
         raise candidate.CandidateError("production preparation has an incompatible receipt")
     if result.get("source_key") != commit:
         raise candidate.CandidateError("production preparation has another source identity")
+    if result.get("signing_policy") != policy:
+        raise candidate.CandidateError("production preparation has another signing policy")
     if result.get("release_check", False) != release_check:
         raise candidate.CandidateError("production preparation has another release check policy")
     canonical_products = sorted({"krisis" if product == "decisions" else product for product in products})
@@ -47,20 +49,11 @@ def prepare(source: Path, products: list[str], output: Path, policy: dict | None
         path = Path(record["candidate_dir"])
         if path != output / "candidates" / product:
             raise candidate.CandidateError("production candidate is outside its preparation")
-        manifest = candidate.verify(path, signing_policy=policy)
-        if (manifest.get("source_commit") != commit
-                or manifest.get("source_key") != result["source_key"]
-                or manifest.get("candidate_id") != record.get("candidate_id")
-                or manifest.get("product") != product):
-            raise candidate.CandidateError("production candidate does not match its preparation")
     git_ops.clean_candidate(source, commit)
     signing.assert_current(policy)
-    receipt = {"schema_version": 1, "state": "passed", "source_commit": commit,
-               "signing_policy_digest": signing.policy_digest(policy), "products": canonical_products,
-               "preparation": result}
-    if release_check:
-        receipt["preparation_digest"] = candidate.digest(output / "result.json")
-    return receipt
+    return {"schema_version": 1, "state": "passed", "source_commit": commit,
+            "signing_policy": policy, "products": canonical_products,
+            "preparation": result}
 
 
 def source_commit(source: Path) -> str:

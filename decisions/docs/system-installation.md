@@ -55,7 +55,7 @@ config to Annals; it never chooses a library by fallback or `--library`.
 
 ## Prepare and final cutover
 
-Preparation is the default. It installs the content-addressed release,
+Preparation is the default. It installs the immutable release,
 registers its Clockwork definition, prepares private logs,
 and deliberately leaves the maintenance marker in place. It does not change
 the current release, command, provider, hook, database, baseline, or any
@@ -98,55 +98,46 @@ Codex path. It suppresses detailed child errors and emits only a fixed failure
 message, so it writes body-free output to the existing Decisions log path.
 Interactive `krisis` diagnostics remain detailed.
 
-## Coordinated deployment maintenance
+## Cell manifest command and explicit maintenance
 
-The coordinator's `apply` phase stages release files.
-`configure` runs product configuration, migration and selector publication with
-scheduling disabled. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
+The Cell manifest runs `krisis-install deploy` once with a schema-2 request on
+stdin. It places release files, performs observer activation and migration,
+writes the hook and Annals pin receipt, registers the observer definition, and
+selects `krisis/observer` directly. Activation preserves an existing write-once
+baseline. The command pins the installed Annals decisions library; it does not
+choose a legacy Semantics activation watermark.
 
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
+The command does not acquire application maintenance, drain live or durable
+work, suspend scheduling, retire legacy schedules, check readiness, or recover
+automatically. Native state and publication locks protect actual writes.
+An interrupted command can leave completed effects in place. Inspect its
+retained log, hook, receipt and current selection before a further operation.
+Explicit manual final cutover and recovery keep their documented procedures.
 
-`krisis-install adapter OP` is the sealed Rust product boundary used by Cell's
-deployment coordinator. It composes the product-owned prepare and final-cutover
-lifecycle, retains product-owned maintenance through group configuration, and
-releases only the coordinator's named hold after configuration. The separate
-installer marker is authenticated by its own receipt and inode. It
-preserves captured schedule enabled booleans and the write-once observer
-baseline. An ordinary update never invents a legacy activation watermark or
-performs an implicit Semantics cutover.
+Settings accept an optional `codex_bin` path and boolean `enabled`. Omission
+preserves the existing Codex pin and enabled intent; a new schedule uses the
+product's default Codex path and defaults enabled. Existing application
+maintenance, product pauses and Clockwork incident halts remain in force.
 
-The adapter first proves that the installed public executable supports
-`maintenance status`. An older installed executable cannot be fenced by a
-candidate gate: coordinated inspection stops before effects. Bootstrap that
-compatibility release through the existing documented deployer and its writer
-quiescence procedure. Supported new installation still uses the product's
-existing prepare and final-cutover path.
+Use explicit product admission commands when an authorized operation needs them:
 
-The CLI gate is the private sibling `<database>.cell-maintenance`, separate
-from `.clockwork-maintenance` and its installer receipt. Every ordinary public
-command is fenced before database access. The coordinator holds every affected
-product before applying selected candidates. Controlled installation uses the
-same sole `CELL_DEPLOYMENT_RUN_ID` and exclusive drained activity; no hold
-means ordinary admission. Doctor can prove Nucleus readiness under this exact
-run's Nucleus hold while ordinary model submissions remain stopped.
+```text
+krisis --database DATABASE --json maintenance status
+krisis --database DATABASE --json maintenance hold RUN_ID
+krisis --database DATABASE --json maintenance release RUN_ID
+```
 
-An ordinary Annals dependency update may change the exact Annals executable
-or config pin while preserving the persistent decisions-library ID. Before
-changing it, Krisis proves the selected prior definition against the prior
-release and private ownership receipt's old binary, config, and library ID.
-It then records the newly requested target. Matching
-only the new paths does not prove ownership of the old definition. A changed
-library ID, foreign receipt, or unproved prior definition stops the update;
-this transition does not rebind durable account identity to another library.
+The durable sibling `<database>.cell-maintenance` gate is separate from the
+manual installer's marker. Hold fences public commands before database access.
+Release removes only the named owner. IDs contain 1–128 ASCII letters, digits,
+hyphens, underscores or periods and cannot begin with a period. The manifest
+executor neither invokes these commands nor interprets their output.
 
-Group release removes only the coordinator's named hold after product configuration. Recovery invokes this owner's retained product transaction before releasing its hold. It keeps scheduling disabled and preserves live data. Resolved legacy transaction
-directories remain under `install/recovered-*` without consuming their data copies. Unknown ownership or incomplete recovery keeps admission held.
+The package includes `krisis` and `krisis-install`; the latter is retained as
+`package/install`. Explicit manual installation takes exact payload and
+Annals/Codex pins. `--final-cutover`, `--keep-maintenance` and
+`--release-maintenance` remain separate manual operations. Uninstall retains
+state, releases, receipts and history.
 
 ## Verification
 
@@ -184,7 +175,7 @@ Deleting those requires a separate destructive decision.
 
 Forward recovery opens retained local state with the candidate's `observe status`
 command before publishing its selectors. A valid observer baseline is required.
-The deployment adapter does not invoke doctor. Runtime diagnosis is separate.
+The manifest command does not invoke doctor. Runtime diagnosis is separate.
 
 ## Retained installation artifacts
 
@@ -212,7 +203,7 @@ infers safe database rollback from program versions or manifest identity.
 After exact preparation, `--final-cutover --keep-maintenance` retains the
 installer gate through external verification. Repeat the same candidate and
 pins with `--release-maintenance` to prove the installed surfaces and remove
-only that authenticated gate. `--expected-current absent|releases/HASH` is an
+only that authenticated gate. `--expected-current absent|releases/ID` is an
 optional stale-selector guard. Controlled rollback keeps public commands
 suspended while schema compatibility is proved. Program rollback preserves live
 data and requires an unchanged schema. A schema change recovers forward with

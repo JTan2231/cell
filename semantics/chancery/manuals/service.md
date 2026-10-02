@@ -1,6 +1,6 @@
 # Semantics service and installation guarantees
 
-Semantics installs one content-addressed release for the current macOS user.
+Semantics installs one immutable release for the current macOS user.
 It owns the public command selectors, its Chancery provider selector, private
 SQLite state, and the exact runner definition bound as `semantics/worker`.
 Clockwork owns activation, process history, and scheduling incidents. A successful
@@ -158,9 +158,9 @@ files with mode `0600`, no symlink, and one hard link. A receipt requires its ga
 
 The installer records release metadata without candidate/provider version or
 artifact-integrity checks.
-The staged `cell-install-v2` inventory covers payload, installer, static frontend
+The staged `cell-install-v3` inventory covers payload, installer, static frontend
 and worker, unrendered schedule template, and the complete provider bundle.
-Bundle bytes belong to the content-addressed release.
+Bundle bytes belong to the immutable release.
 The provider selector follows `current` and rolls back with the product.
 Retained format-one and format-two release metadata remains readable.
 
@@ -255,26 +255,26 @@ activation preserve live state. After a schema change, recover forward under
 maintenance with the retained candidate. Never run an incompatible old binary
 or discard committed state.
 
-## Coordinated deployment and uninstall
+## Cell manifest command and uninstall
 
-The compiled Cell adapter uses this product transaction. `apply` stages release files; `configure` performs configuration, migration,
-and selector publication with scheduling disabled;
-`release` removes only the run's admission hold; `activate` restores captured
-intent after every affected hold is released. Existing disabled bindings remain
-disabled. Project pause and incident halts remain effective.
+The Cell manifest runs `semantics-install deploy` with a schema-2 request on
+stdin. The request supplies candidate and source paths, a run identity and
+literal product settings. The command prepares and places release files,
+initializes or migrates the database, registers the worker definition, and
+selects it directly. Native write and publication locks protect those changes.
 
-The adapter requires maintenance support from the installed public command before
-effects. Unsupported old binaries require the documented compatibility release
-and quiescence procedure; a candidate gate cannot fence an old command.
-Ordinary updates preserve activation/cursors and never choose a legacy watermark.
-Recovery uses the exact retained transaction, restores compatible prior programs
-or finishes the retained candidate with scheduling disabled, and keeps outer holds on uncertainty.
+The command does not acquire application maintenance, drain live or durable
+work, suspend the worker, check dependency readiness, or recover automatically.
+An interrupted command can leave completed effects in place. Inspect its
+retained command log and current selections before a further operation.
+Explicit manual install, recovery and legacy feed cutover keep their documented
+procedures. An ordinary manifest command never chooses a legacy watermark.
 
-Deployment settings accept only boolean `enabled`. An omitted value preserves
-captured intent; a new schedule defaults to enabled. For example,
-`{"semantics":{"enabled":false}}` keeps the candidate disabled after group
-activation. Prior-configuration recovery ignores the override and restores
-captured intent. Drain waiting neither cancels nor retries durable jobs.
+Settings accept only boolean `enabled`. Omission preserves the current binding's
+enabled intent; a new binding defaults enabled. For example,
+`{"semantics":{"enabled":false}}` selects the new definition disabled.
+Project pauses, existing application maintenance, and Clockwork incident halts
+remain in force.
 
 Uninstall disables only the owned binding, removes any owned legacy LaunchAgent
 and public CLI/provider selectors, and retains database, releases, immutable

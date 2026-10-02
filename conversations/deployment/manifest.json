@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "conversations",
+  "order": 3,
+  "steps": [
+    {
+      "id": "install",
+      "kind": "run",
+      "argv": [
+        "{candidate_dir}/bin/conversations-install",
+        "deploy"
+      ],
+      "stdin": "deployment_request"
+    }
+  ]
+}

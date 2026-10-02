@@ -341,9 +341,11 @@ pub async fn status(home: &Path, root: &Path) -> Result<Status> {
 }
 
 pub fn install_admission(home: &Path, root: &Path) -> Result<(Admission, Option<File>)> {
-    let owner = std::env::var("CELL_DEPLOYMENT_RUN_ID")
-        .context("installation requires CELL_DEPLOYMENT_RUN_ID")?;
-    let admission = gate(home).enter_for(&owner)?;
+    let admission = if let Ok(owner) = std::env::var("CELL_DEPLOYMENT_RUN_ID") {
+        gate(home).enter_for(&owner)?
+    } else {
+        gate(home).enter()?
+    };
     let runner = runner(root)?;
     Ok((admission, runner))
 }

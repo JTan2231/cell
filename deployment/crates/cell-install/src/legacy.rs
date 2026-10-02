@@ -1,8 +1,8 @@
 //! Predecessor release metadata shared by product-owned readers.
 
-use crate::artifact::{current_uid, hash_bytes, inventory, valid_hash};
+use crate::artifact::{current_uid, inventory, valid_release_id};
 use crate::transaction::{PublicEntry, ReleaseInfo};
-use crate::{Error, Result};
+use crate::{Error, FileEntry, Result};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -28,6 +28,22 @@ pub struct LegacyProvider {
     pub provider: &'static str,
     pub path: &'static str,
     pub version_key: &'static str,
+}
+
+fn retain_alias_metadata(
+    files: &mut BTreeMap<String, FileEntry>,
+    values: &BTreeMap<String, String>,
+    spec: &LegacySpec,
+) {
+    for proof in spec.proofs {
+        if let Some(value) = values.get(proof.key) {
+            for path in proof.paths {
+                if let Some(file) = files.get_mut(*path) {
+                    file.sha256.clone_from(value);
+                }
+            }
+        }
+    }
 }
 
 /// Decode a regular predecessor manifest without inferring any missing fields.
@@ -80,7 +96,8 @@ pub fn manifest(path: &Path) -> Result<BTreeMap<String, String>> {
 /// Returns an error for inaccessible files or malformed metadata.
 pub fn read(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Result<ReleaseInfo> {
     let values = manifest(&root.join(spec.manifest))?;
-    let (files, _) = inventory(root)?;
+    let (mut files, _) = inventory(root)?;
+    retain_alias_metadata(&mut files, &values, spec);
     let mut versions = BTreeMap::new();
     for provider in spec.providers {
         let version = if provider.version_key.is_empty() {
@@ -111,10 +128,10 @@ pub fn read(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Result<
     })
 }
 
-/// Prove the predecessor's exact file inventory, modes, hashes and identity.
+/// Check the predecessor's file inventory, modes and recorded identity.
 ///
 /// # Errors
-/// Refuses unknown keys/files, symbolic/hard-linked artifacts, changed bytes,
+/// Refuses unknown keys/files, symbolic/hard-linked artifacts,
 /// unsafe owner/modes, and provider/version or release-identity disagreement.
 #[allow(clippy::too_many_lines)] // Keep the exact predecessor proof in one auditable sequence.
 pub fn verify(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Result<ReleaseInfo> {
@@ -130,7 +147,8 @@ pub fn verify(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Resul
     {
         return Err(Error::new("unsupported legacy manifest fields or format"));
     }
-    let (files, directories) = inventory(root)?;
+    let (mut files, directories) = inventory(root)?;
+    retain_alias_metadata(&mut files, &values, spec);
     let uid = current_uid()?;
     for path in std::iter::once(root.to_path_buf())
         .chain(directories.iter().map(|p| root.join(p)))
@@ -142,43 +160,22 @@ pub fn verify(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Resul
         }
     }
     let mut expected_files = BTreeSet::from([spec.manifest.to_owned()]);
-    let mut identity = String::new();
     for proof in spec.proofs {
-        let digest = values
-            .get(proof.key)
-            .ok_or_else(|| Error::new("legacy proof missing"))?;
-        if !valid_hash(digest) || proof.paths.is_empty() {
+        if proof.paths.is_empty() {
             return Err(Error::new("invalid legacy proof"));
         }
         for path in proof.paths {
-            if files.get(*path).map(|entry| &entry.sha256) != Some(digest) {
-                return Err(Error::new("legacy artifact differs from manifest"));
+            if !files.contains_key(*path) {
+                return Err(Error::new("legacy artifact missing from inventory"));
             }
             expected_files.insert((*path).to_owned());
         }
-        identity.push_str(digest);
-        identity.push('\n');
     }
     let mut versions = BTreeMap::new();
     for provider in spec.providers {
         let prefix = format!("{}/", provider.path);
-        let mut tree = String::new();
-        for (path, entry) in files.iter().filter(|(path, _)| path.starts_with(&prefix)) {
-            let relative = format!("./{}", &path[prefix.len()..]);
-            if spec.hash_path_lines {
-                tree.push_str("path=");
-                tree.push_str(&relative);
-                tree.push('\n');
-            }
-            tree.push_str(&entry.sha256);
-            tree.push_str("  ");
-            tree.push_str(&relative);
-            tree.push('\n');
+        for path in files.keys().filter(|path| path.starts_with(&prefix)) {
             expected_files.insert(path.clone());
-        }
-        let digest = hash_bytes(tree.as_bytes());
-        if values.get(provider.key) != Some(&digest) {
-            return Err(Error::new("legacy provider differs from manifest"));
         }
         let data: Value =
             serde_json::from_slice(&fs::read(root.join(provider.path).join("provider.json"))?)?;
@@ -194,12 +191,13 @@ pub fn verify(root: &Path, spec: &LegacySpec, public: Vec<PublicEntry>) -> Resul
             return Err(Error::new("legacy provider identity or version differs"));
         }
         versions.insert(provider.provider.to_owned(), version.to_owned());
-        identity.push_str(&digest);
-        identity.push('\n');
     }
-    let release_id = hash_bytes(identity.as_bytes());
-    if values.get("release_id") != Some(&release_id)
-        || root.file_name().and_then(|p| p.to_str()) != Some(release_id.as_str())
+    let release_id = values
+        .get("release_id")
+        .filter(|id| valid_release_id(id))
+        .ok_or_else(|| Error::new("invalid legacy release identity"))?
+        .clone();
+    if root.file_name().and_then(|p| p.to_str()) != Some(release_id.as_str())
         || files.keys().cloned().collect::<BTreeSet<_>>() != expected_files
     {
         return Err(Error::new(

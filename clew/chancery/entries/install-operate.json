@@ -1,11 +1,11 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 6,
+  "contract_version": 8,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install Clew",
-  "summary": "Install Clew under email admission maintenance, convert supported older ledgers transactionally, and preserve application history and daily scheduling.",
+  "summary": "Install Clew, convert supported older ledgers transactionally, and preserve application history and daily scheduling through the product command.",
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
@@ -43,7 +43,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A validated committed candidate and compatible Cast, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Coordinated mutations require drained run-owned email maintenance; migration requires the sole owned hold."
+        "statement": "An authorized explicit product selection and required Cast, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Product setup uses ordinary admission; an existing hold can refuse it. The executor adds no dependencies or maintenance holds."
       }
     ],
     "inputs": [
@@ -55,7 +55,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The selected immutable release contains clew, clew-install, and the matching Chancery provider. Coordinated configure initializes empty schema-three state or converts schema one or two transactionally with retained exact retry requests and legacy aliases."
+        "statement": "The selected release contains clew, clew-install and its Chancery provider. The product command initializes empty schema-three state or converts schema one or two transactionally with retained exact retry requests and legacy aliases."
       }
     ],
     "data_semantics": [
@@ -67,7 +67,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable releases; package version, provider contract and database schema are separate identities."
+        "statement": "Opaque UUIDs identify immutable releases; package version, provider contract and database schema are separate identities."
       }
     ],
     "completeness_and_freshness": [
@@ -85,7 +85,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The shared file transaction selects commands and provider atomically. Lifecycle captures, suspends, and drains email work, prepares the exact disabled definition, then restores intent after releasing its hold. Migration excludes ledger writers, commits schema three, reference associations, aliases, and exact write requests in one transaction. Old writers are rejected. Failure halts and frozen email bytes, keys, and receipts remain intact."
+        "statement": "Each file-selector replacement is atomic. Failed deployment retains completed file, ledger and schedule changes without automatic retry, rollback or recovery. The product command uses ordinary admission, migrates or initializes state, and retargets the owned daily definition directly while preserving saved or explicit enabled intent and failure incidents. Migration excludes ledger writers and commits schema three, reference associations, aliases and exact write requests in one transaction. Old writers are rejected; frozen email bytes, keys and receipts remain intact."
       }
     ],
     "operational_limits": [
@@ -97,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 releases, ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
       }
     ],
     "reliances": [
@@ -139,8 +139,8 @@
     },
     {
       "id": "clew.state",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "clew.application.track",
@@ -179,21 +179,21 @@
   "do_not_use_when": [
     "Recording an application update or changing Platter preparation."
   ],
-  "outcome": "Installed Clew commands and provider, with coordinated state setup or migration.",
+  "outcome": "Installed Clew commands and provider, with product-owned state setup or migration.",
   "effects": [
-    "Program deployment selects immutable files and initializes a missing ledger or converts schema one or two to schema three under maintenance transactionally in place. Existing entry identity, content, and exact retry requests remain intact; no thread is invented.",
-    "The coordinator holds email admission and suspends scheduling while preparing the selected release. Activation restores captured or explicitly supplied intent without approving a halt."
+    "Program deployment selects files and initializes a missing ledger or converts schema one or two to schema three transactionally in place. Existing entry identity, content and exact retry requests remain intact; no thread is invented.",
+    "The product command updates its daily definition directly and preserves captured or explicitly supplied enabled intent and failure incidents. Deployment creates no hold, drains no send and temporarily disables no binding."
   ],
   "authority": [
     "Clew owns its installation and ledger; the shared coordinator owns deployment ordering.",
     "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
-    "Program selection, requested state setup, and maintenance release complete. Installation does not check artifact integrity, ledger integrity, or the Cast snapshot."
+    "Program selection and requested product setup commands complete. Installation does not check artifact integrity, ledger integrity or the Cast snapshot."
   ],
   "failure_and_recovery": [
     "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve current data and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
-    "Retain email occurrences and uncertain acceptance across recovery. Resolve product and schedule selection before releasing run-owned admission; never erase or approve existing failure incidents."
+    "Retain email occurrences, uncertain acceptance and completed deployment effects. The executor stops at failure and performs no automatic retry or product recovery. Inspect current product and schedule state before an authorized new attempt; preserve separately acquired holds and failure incidents."
   ],
   "privacy": [
     "Private ledger state is outside source and installation releases."

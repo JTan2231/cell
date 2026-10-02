@@ -13,7 +13,7 @@ from ci_manager import client, production
 from ci_manager.manager import Worker
 from ci_manager.process import validation_exited
 from ci_manager.storage import ManagerError
-from deployment import signing
+from deployment import candidate, signing
 
 
 POLICY = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
@@ -52,8 +52,9 @@ class SubmissionSigningTests(unittest.TestCase):
         self.assertEqual(len(inserts), 1)
         snapshot = json.loads(inserts[0].args[1][-1])
         self.assertEqual(snapshot["signing_policy"], POLICY)
-        self.assertEqual(snapshot["signing_policy_digest"], signing.policy_digest(POLICY))
-        self.assertIs(snapshot["release_builds_deferred"], True)
+        self.assertNotIn("signing_policy_digest", snapshot)
+        self.assertTrue(snapshot["release_builds_deferred"])
+        self.assertEqual(snapshot["policy"]["manifest_executor"], 1)
         retained = {**snapshot, "id": job["id"]}
         self.store.db.execute.return_value.fetchone.return_value = retained
         self.store.decode.return_value = retained
@@ -93,7 +94,7 @@ class WorkerSigningTests(unittest.TestCase):
         self.worker.finish = mock.Mock()
         self.job = {"id": "fixture", "base_commit": "a" * 40, "candidate_commit": "b" * 40,
                     "validations": [{"state": "passed"}], "deploy_products": ["beta"],
-                    "signing_policy": POLICY, "signing_policy_digest": signing.policy_digest(POLICY),
+                    "signing_policy": POLICY, "policy": {"manifest_executor": 1},
                     "last_receipt": {"state": "passed", "candidate_commit": "b" * 40,
                                      "selection": {"product_tests": ["alpha"], "platform_products": []}}}
         stack = ExitStack()
@@ -103,29 +104,31 @@ class WorkerSigningTests(unittest.TestCase):
         self.writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_json"))
         self.bytes_writes = stack.enter_context(mock.patch("ci_manager.manager.atomic_bytes"))
         stack.enter_context(mock.patch.object(Path, "exists", return_value=False))
+        self.descriptors = stack.enter_context(mock.patch.object(production.build, "read_descriptor",
+            side_effect=lambda source, product: {"RELEASE_BINARY_CHECKS": f"main|target/release/{product}|{product}"}))
 
     def receipt(self):
         records = {product: {"candidate_dir": str(self.directory / "production-0/candidates" / product),
-                             "candidate_id": f"sha256:{product}"} for product in ("alpha", "beta")}
+                             "candidate_id": f"candidate:{product}"} for product in ("alpha", "beta")}
         return {"schema_version": 1, "state": "passed", "source_commit": self.job["candidate_commit"],
-                "signing_policy_digest": self.job["signing_policy_digest"], "products": ["alpha", "beta"],
+                "signing_policy": POLICY, "products": ["alpha", "beta"],
                 "preparation": {"source_key": self.job["candidate_commit"], "candidates": records}}
 
     def manifest(self, path, *, signing_policy):
         self.assertEqual(signing_policy, POLICY)
         return {"source_commit": self.job["candidate_commit"], "source_key": self.job["candidate_commit"],
-                "product": path.name, "candidate_id": f"sha256:{path.name}"}
+                "product": path.name, "candidate_id": f"candidate:{path.name}", "binaries": {path.name: {}}}
 
     def test_prepare_covers_checked_and_explicit_products_with_installed_host_code(self):
         self.worker.process.return_value = ({"exit_code": 0}, json.dumps(self.receipt()).encode(), b"")
-        with mock.patch("ci_manager.manager.production_candidate.verify", side_effect=self.manifest) as verify:
+        with mock.patch("deployment.signing.verify", side_effect=self.manifest) as verify:
             self.worker.preparing(self.job)
         command = self.worker.process.call_args.args[2]
         self.assertEqual(command[:4], [sys.executable, "-I", "-B", str(Path(production.__file__))])
         self.assertEqual([command[index + 1] for index, item in enumerate(command) if item == "--product"],
                          ["alpha", "beta"])
         self.writes.assert_any_call(self.directory / "signing-policy.json", POLICY)
-        self.assertEqual(verify.call_count, 2)
+        verify.assert_not_called()
         self.worker.store.save.assert_called_once_with(self.job, "accepting")
 
     def test_signing_failure_stops_before_acceptance_without_repair(self):
@@ -224,33 +227,21 @@ class WorkerSigningTests(unittest.TestCase):
         self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
         receipt = self.receipt()
         receipt["preparation"]["release_check"] = True
-        self.job["production_receipt"] = receipt | {"preparation_digest": "d" * 64}
-        with mock.patch("ci_manager.manager.production_candidate.digest", return_value="e" * 64), mock.patch(
+        self.job["production_receipt"] = receipt
+        with mock.patch("ci_manager.manager.production_candidate.regular"), mock.patch.object(
+                Path, "read_text", return_value=json.dumps(receipt["preparation"] | {"elapsed_seconds": 42})), mock.patch(
                 "ci_manager.manager.git.advance") as advance, self.assertRaisesRegex(
                 ManagerError, "receipt changed"):
             self.worker.accepting(self.job)
         advance.assert_not_called()
 
-    def test_all_signature_proofs_precede_accepted_ref_advancement(self):
-        self.job["production_receipt"] = self.receipt()
-        order = []
-        def verify(path, **kwargs):
-            order.append(f"verify:{path.name}")
-            return self.manifest(path, **kwargs)
-        with mock.patch("ci_manager.manager.production_candidate.verify", side_effect=verify), mock.patch(
-                "ci_manager.manager.git.clean_candidate"), mock.patch(
-                "ci_manager.manager.git.advance", side_effect=lambda *args: order.append("advance")):
-            self.worker.accepting(self.job)
-        self.assertEqual(order, ["verify:alpha", "verify:beta", "advance"])
-        self.assertTrue(self.job["accepted"])
-
     def test_missing_malformed_or_mismatched_receipts_cannot_advance_accepted(self):
         valid = self.receipt()
         variants = (None, [], valid | {"source_commit": "c" * 40},
-                    valid | {"signing_policy_digest": "other-policy"}, valid | {"products": ["alpha"]},
+                    valid | {"signing_policy": {}}, valid | {"products": ["alpha"]},
                     valid | {"preparation": []}, valid | {"preparation": {"candidates": []}})
         with mock.patch("ci_manager.manager.git.advance") as advance, mock.patch(
-                "ci_manager.manager.production_candidate.verify") as verify:
+                "deployment.signing.verify") as verify:
             for receipt in variants:
                 with self.subTest(receipt=receipt):
                     self.job["production_receipt"] = receipt
@@ -259,16 +250,66 @@ class WorkerSigningTests(unittest.TestCase):
             advance.assert_not_called()
             verify.assert_not_called()
 
-    def test_wrong_signature_stops_acceptance_without_another_signing_attempt(self):
+    def test_manifest_job_accepts_preparation_without_candidate_audits(self):
+        self.job["policy"] = {"manifest_executor": 1}
         self.job["production_receipt"] = self.receipt()
-        with mock.patch("ci_manager.manager.git.advance") as advance, mock.patch(
-                "ci_manager.manager.production_candidate.verify",
-                side_effect=signing.SigningError("wrong certificate")), mock.patch.object(
-                signing, "sign") as sign:
-            with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
-                self.worker.accepting(self.job)
-        advance.assert_not_called()
-        sign.assert_not_called()
+        with mock.patch("deployment.signing.verify") as verify, mock.patch(
+                "ci_manager.manager.git.clean_candidate"), mock.patch(
+                "ci_manager.manager.git.advance") as advance:
+            self.worker.accepting(self.job)
+        verify.assert_not_called()
+        self.descriptors.assert_not_called()
+        advance.assert_called_once()
+        self.assertEqual(self.job["deployment_request"]["manifest_executor"], 1)
+
+    def deployment_receipt(self, **changes):
+        return {"schema": 2, "manifest_executor": 1, "state": "succeeded", "exit_code": 0,
+                "operation_state": "terminal", "source_commit": "b" * 40,
+                "request_id": "deployment", "products": ["alpha"],
+                "steps": [{"id": "build", "state": "succeeded"},
+                          {"id": "alpha.deploy", "state": "succeeded"}], **changes}
+
+    def manifest_deployment_job(self):
+        return {**self.job, "policy": {"manifest_executor": 1}, "cancel_requested": False,
+                "deployment_request": {"source_commit": "b" * 40, "request_id": "deployment",
+                                       "products": ["alpha"], "manifest_executor": 1}}
+
+    def test_manifest_success_requires_only_instruction_completion(self):
+        job = self.manifest_deployment_job()
+        self.worker.deployment_read = mock.Mock(return_value=self.deployment_receipt())
+        self.worker.deploying(job)
+        self.assertTrue(job["installation_completed"])
+        self.worker.finish.assert_called_once_with(
+            job, "succeeded", "Deployment instructions completed for the accepted candidate.")
+
+    def test_manifest_incomplete_or_legacy_success_cannot_finish_job(self):
+        variants = ({"schema": 1}, {"manifest_executor": 0}, {"exit_code": 1}, {"steps": []},
+                    {"steps": [{"state": "failed"}]}, {"products": ["beta"]},
+                    {"source_commit": "c" * 40}, {"request_id": "other"})
+        for changed in variants:
+            with self.subTest(changed=changed):
+                self.worker.deployment_read = mock.Mock(return_value=self.deployment_receipt(**changed))
+                with self.assertRaises(ManagerError):
+                    self.worker.deploying(self.manifest_deployment_job())
+        self.worker.finish.assert_not_called()
+
+    def test_manifest_interruption_reports_failure_without_application_recovery(self):
+        job = self.manifest_deployment_job()
+        self.worker.deployment_read = mock.Mock(return_value=self.deployment_receipt(
+            state="interrupted", exit_code=1, operation_state="interrupted",
+            steps=[{"id": "alpha.deploy", "state": "interrupted"}]))
+        self.worker.deploying(job)
+        self.assertFalse(job["installation_completed"])
+        self.worker.finish.assert_called_once_with(job, "failed", "Deployment instructions interrupted.")
+
+    def test_manifest_interruption_before_first_instruction_is_terminal_failure(self):
+        job = self.manifest_deployment_job()
+        self.worker.deployment_read = mock.Mock(return_value=self.deployment_receipt(
+            state="interrupted", exit_code=1, operation_state="interrupted", steps=[]))
+        self.worker.deploying(job)
+        self.assertFalse(job["installation_completed"])
+        self.worker.process.assert_not_called()
+        self.worker.finish.assert_called_once_with(job, "failed", "Deployment instructions interrupted.")
 
     def test_policy_drift_blocks_model_repair_and_legacy_jobs_keep_their_policy(self):
         self.current.side_effect = signing.SigningError("signing selection changed")
@@ -280,11 +321,10 @@ class WorkerSigningTests(unittest.TestCase):
         self.worker.assert_signing_policy(legacy)
         self.current.assert_not_called()
 
-    def test_retained_snapshot_digest_must_match_before_policy_use(self):
-        self.job["signing_policy_digest"] = "another-digest"
-        with self.assertRaisesRegex(signing.SigningError, "snapshot"):
-            self.worker.assert_signing_policy(self.job)
-        self.current.assert_not_called()
+    def test_legacy_policy_digest_is_ignored_when_policy_matches(self):
+        self.job["signing_policy_digest"] = "obsolete-digest"
+        self.worker.assert_signing_policy(self.job)
+        self.current.assert_called_once_with(POLICY)
 
     def test_deployment_carries_only_the_frozen_signing_policy(self):
         self.job["deployment_request"] = {"request_id": "deployment", "source_commit": "b" * 40,
@@ -296,13 +336,16 @@ class WorkerSigningTests(unittest.TestCase):
 
     def test_deployment_reuses_the_exact_deferred_production_preparation(self):
         self.job["last_receipt"]["selection"]["release_builds_deferred"] = True
-        self.job["production_receipt"] = self.receipt() | {"preparation_digest": "d" * 64}
+        self.job["production_receipt"] = self.receipt()
         self.job["deployment_request"] = {"request_id": "deployment", "source_commit": "b" * 40,
                                            "products": ["alpha"]}
         command = self.worker.deployment_command(self.job, "start")
         self.assertEqual(command[command.index("--prepared-build") + 1],
                          str(self.directory / "production-0/result.json"))
-        self.assertEqual(command[command.index("--prepared-build-digest") + 1], "d" * 64)
+        self.assertEqual(command[command.index("--prepared-build-snapshot-file") + 1],
+                         str(self.directory / "production-0.snapshot.json"))
+        self.writes.assert_any_call(self.directory / "production-0.snapshot.json",
+                                   self.job["production_receipt"]["preparation"])
         self.assertNotIn("--prepared-build", self.worker.deployment_command(self.job, "status"))
 
 
@@ -311,11 +354,11 @@ class ProductionHelperTests(unittest.TestCase):
         self.source = Path("/evidence/source")
         self.output = Path("/evidence/output")
         self.commit = "b" * 40
-        self.result = {"schema": 1, "state": "built", "source_key": self.commit,
+        self.result = {"schema": 1, "state": "built", "source_key": self.commit, "signing_policy": POLICY,
                        "candidates": {"alpha": {"candidate_dir": str(self.output / "candidates/alpha"),
-                                                 "candidate_id": "sha256:alpha"}}}
+                                                 "candidate_id": "candidate:alpha"}}}
         self.manifest = {"source_commit": self.commit, "source_key": self.commit, "product": "alpha",
-                         "candidate_id": "sha256:alpha"}
+                         "candidate_id": "candidate:alpha", "binaries": {"alpha": {}}}
         stack = ExitStack()
         self.addCleanup(stack.close)
         stack.enter_context(mock.patch.object(signing, "assert_current"))
@@ -325,25 +368,31 @@ class ProductionHelperTests(unittest.TestCase):
         self.exists = stack.enter_context(mock.patch.object(Path, "exists", return_value=False))
         stack.enter_context(mock.patch.object(Path, "read_text", return_value=json.dumps(self.result)))
         self.build = stack.enter_context(mock.patch.object(production.build, "prepare", return_value=self.result))
-        self.verify = stack.enter_context(mock.patch.object(production.candidate, "verify", return_value=self.manifest))
-        self.digest = stack.enter_context(mock.patch.object(production.candidate, "digest", return_value="d" * 64))
+        self.verify = stack.enter_context(mock.patch.object(signing, "verify", return_value=self.manifest))
+        self.descriptors = stack.enter_context(mock.patch.object(production.build, "read_descriptor",
+            return_value={"RELEASE_BINARY_CHECKS": "main|target/release/alpha|alpha"}))
 
-    def test_fresh_preparation_uses_frozen_policy_and_verifies_final_bundle(self):
+    def test_fresh_preparation_uses_frozen_policy_without_auditing_outputs(self):
         receipt = production.prepare(self.source, ["alpha"], self.output, POLICY)
         self.build.assert_called_once_with(self.source, ["alpha"], self.output, signing_policy=POLICY)
-        self.verify.assert_called_once_with(self.output / "candidates/alpha", signing_policy=POLICY)
+        self.verify.assert_not_called()
         self.assertEqual(self.clean.call_args_list, [mock.call(self.source, self.commit)] * 2)
-        self.assertEqual(receipt["signing_policy_digest"], signing.policy_digest(POLICY))
+        self.assertEqual(receipt["signing_policy"], POLICY)
         self.assertEqual(receipt["source_commit"], self.commit)
 
-    def test_retained_preparation_rechecks_signature_without_rebuild(self):
+    def test_retained_preparation_reuses_command_result_without_artifact_audit(self):
         self.exists.return_value = True
         production.prepare(self.source, ["alpha"], self.output, POLICY)
         self.build.assert_not_called()
-        self.verify.assert_called_once()
-        self.verify.side_effect = signing.SigningError("retained executable has wrong certificate")
-        with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
-            production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.verify.assert_not_called()
+
+    def test_retained_preparation_does_not_interpret_executable_inventory(self):
+        self.exists.return_value = True
+        self.descriptors.return_value = {"RELEASE_BINARY_CHECKS":
+            "main|target/release/alpha|alpha\nmain|target/release/alpha-helper|alpha-helper"}
+        production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.build.assert_not_called()
+        self.descriptors.assert_not_called()
 
     def test_deferred_release_uses_strict_combined_check_and_rejects_other_policy(self):
         self.build.return_value = self.result | {"release_check": True}
@@ -365,20 +414,19 @@ class ProductionHelperTests(unittest.TestCase):
         self.clean.side_effect = [None, ManagerError("candidate worktree changed")]
         with self.assertRaisesRegex(ManagerError, "worktree changed"):
             production.prepare(self.source, ["alpha"], self.output, POLICY)
-        self.verify.assert_called_once()
+        self.verify.assert_not_called()
         self.assertEqual(self.clean.call_args_list, [mock.call(self.source, self.commit)] * 2)
 
-    def test_verified_candidate_must_have_the_frozen_commit_and_source_key(self):
-        for changed in ({"source_commit": "c" * 40}, {"source_key": "dirty:fresh-build"}):
-            with self.subTest(changed=changed):
-                self.verify.return_value = self.manifest | changed
-                with self.assertRaisesRegex(production.candidate.CandidateError, "does not match"):
-                    production.prepare(self.source, ["alpha"], self.output, POLICY)
+    def test_preparation_receipt_must_have_the_frozen_source_key(self):
+        self.build.return_value = self.result | {"source_key": "dirty:fresh-build"}
+        with self.assertRaisesRegex(production.candidate.CandidateError, "source identity"):
+            production.prepare(self.source, ["alpha"], self.output, POLICY)
+        self.verify.assert_not_called()
 
     def test_other_source_location_or_malformed_scope_is_rejected(self):
         variants = ({"source_key": "c" * 40}, {"candidates": []},
                     {"candidates": {"alpha": {"candidate_dir": "/other/candidate",
-                                              "candidate_id": "sha256:alpha"}}})
+                                              "candidate_id": "candidate:alpha"}}})
         for changed in variants:
             with self.subTest(changed=changed):
                 self.build.return_value = self.result | changed

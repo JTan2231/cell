@@ -1,4 +1,4 @@
-//! Weaver's small lifecycle around the shared Cell file transaction.
+//! Product-owned program and configuration installation.
 use cell_install::{legacy::LegacySpec, simple::Spec, transaction::LockKind};
 
 #[must_use]
@@ -20,24 +20,31 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: false,
-        maintained: true,
     }
 }
 
 #[must_use]
 pub fn main() -> std::process::ExitCode {
+    if std::env::args()
+        .nth(1)
+        .is_none_or(|value| matches!(value.as_str(), "--help" | "-h"))
+    {
+        println!(
+            "weaver-install {}\n\ndeploy < REQUEST.json\ninspect [--home ABS]\n\nDeploy selects files and applies owned setup. Failed instructions retain completed effects. Direct install and selector-only recovery are unsupported.",
+            env!("CARGO_PKG_VERSION")
+        );
+        return std::process::ExitCode::SUCCESS;
+    }
     if matches!(
         std::env::args().nth(1).as_deref(),
         Some("install" | "recover")
     ) {
-        eprintln!("Weaver installation and recovery require the Cell deployment coordinator");
+        eprintln!(
+            "use weaver-install deploy for installation; inspect retained effects and use product interfaces for recovery"
+        );
         return std::process::ExitCode::FAILURE;
     }
-    cell_install::simple::main_with_lifecycle(
-        &specification(),
-        env!("CARGO_PKG_VERSION"),
-        lifecycle,
-    )
+    cell_install::simple::main_with_deployment(&specification(), env!("CARGO_PKG_VERSION"), deploy)
 }
 
 #[derive(Default, serde::Deserialize)]
@@ -46,71 +53,35 @@ struct Settings {
     annals_config: Option<std::path::PathBuf>,
 }
 
-pub fn lifecycle(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> cell_install::Result<serde_json::Value> {
-    lifecycle_inner(context, operation).map_err(|e| cell_install::Error::new(e.to_string()))
+/// Install files and write the product-owned Annals selection and state.
+/// # Errors
+/// Returns installation or configuration-write failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    deploy_inner(context).map_err(|error| cell_install::Error::new(format!("{error:#}")))
 }
 
-fn lifecycle_inner(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> anyhow::Result<serde_json::Value> {
+fn deploy_inner(context: &cell_install::adapter::Context) -> anyhow::Result<()> {
     use anyhow::Context as _;
-    use cell_install::adapter::Operation;
-    use serde_json::json;
     let settings: Settings = serde_json::from_value(
         context
             .request
             .settings
             .clone()
-            .unwrap_or_else(|| json!({})),
+            .unwrap_or_else(|| serde_json::json!({})),
     )?;
     let root = context.home.join("Library/Application Support/Weaver");
-    if operation == Operation::Inspect {
-        let annals_config = if let Some(path) = settings.annals_config {
-            path
-        } else {
-            crate::Config::read(&root)
-                .context("first Weaver installation requires settings.weaver.annals_config")?
-                .annals_config
-        };
-        let config = crate::Config {
-            annals_binary: context.home.join(".local/bin/annals"),
-            annals_config,
-        };
-        return Ok(json!({"config":config}));
-    }
-    let forward = context
-        .request
-        .recovery
-        .as_ref()
-        .and_then(|r| r.get("any_apply_started"))
-        == Some(&json!(true))
-        && context.home.join(".local/bin/weaver").exists();
-    if context.selected()
-        && (operation == Operation::Configure || operation == Operation::Recover && forward)
-    {
-        let config: crate::Config =
-            serde_json::from_value(context.prior()?["lifecycle"]["config"].clone())?;
-        // The public initializer owns SQLite and configuration writes under the exact hold.
-        cell_install::command::json(
-            &context.home.join(".local/bin/weaver"),
-            &[
-                "--json".into(),
-                "init".into(),
-                "--annals-config".into(),
-                config.annals_config.into_os_string(),
-                "--annals-binary".into(),
-                config.annals_binary.into_os_string(),
-            ],
-            &std::collections::BTreeMap::from([(
-                "CELL_DEPLOYMENT_RUN_ID".into(),
-                context.request.run_id.clone().into(),
-            )]),
-            std::time::Duration::from_secs(180),
-        )?;
-    }
-    Ok(json!({}))
+    let annals_config = if let Some(path) = settings.annals_config {
+        path
+    } else {
+        crate::Config::read(&root)
+            .context("first Weaver installation requires settings.weaver.annals_config")?
+            .annals_config
+    };
+    let config = crate::Config {
+        annals_binary: context.home.join(".local/bin/annals"),
+        annals_config,
+    };
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    crate::operations::install_config(&root, &config)?;
+    Ok(())
 }

@@ -1,4 +1,4 @@
-use cell_install::adapter::{self, Operation};
+use cell_install::adapter;
 use cell_install::{Error, Result};
 use clap::{Args, Parser, Subcommand};
 use serde_json::{Value, json};
@@ -46,9 +46,7 @@ enum Command {
         home: HomeArgs,
     },
     #[command(hide = true)]
-    Adapter {
-        operation: Operation,
-    },
+    Deploy,
 }
 
 #[derive(Args)]
@@ -79,6 +77,8 @@ struct InstallArgs {
     expected_current: Option<String>,
     #[arg(long)]
     no_start: bool,
+    #[arg(long, hide = true)]
+    enabled: Option<bool>,
     #[arg(long, hide = true)]
     migration_clockwork_handoff: bool,
     #[arg(long, default_value = "/bin/launchctl")]
@@ -119,7 +119,7 @@ pub fn main() -> ExitCode {
             transaction,
             home: args,
         } => home(args.home).and_then(|home| lifecycle::recover(&home, &transaction)),
-        Command::Adapter { operation } => protocol::run(operation),
+        Command::Deploy => return adapter::finish_deployment(protocol::deploy()),
     };
     adapter::finish(result)
 }

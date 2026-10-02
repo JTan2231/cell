@@ -10,13 +10,13 @@ schedule registration and activation are separate effects.
 ```sh
 conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
 conatus-install inspect
-conatus-install recover --release ABS_RELEASE --expected-current releases/HASH
+conatus-install recover --release ABS_RELEASE --expected-current releases/ID
 ```
 
 Packaging commands accept `--home ABS_HOME`. The default installation root is
 `~/Library/Application Support/Conatus/install`. Install stages a
-content-addressed executable release and its matching Chancery bundle, then
-selects that candidate. Upgrade uses the observed `releases/HASH` in place of
+immutable executable release and its matching Chancery bundle, then
+selects that candidate. Upgrade uses the observed `releases/ID` in place of
 `absent`. The complete provider bundle includes the overview, indexed entries
 and complete manuals; its bytes participate in release identity.
 The provider selector follows the product's selected release.
@@ -84,7 +84,7 @@ domain success. Product operator pause, Annals pause, bounded retry-event halts,
 source identities and receipts remain product-owned. Resolve uncertainty and
 the failure cause before requesting continuation.
 
-## Maintenance and coordinated deployment
+## Maintenance and installation instructions
 
 ```sh
 conatus --json config
@@ -104,12 +104,12 @@ Send holds the product admission guard. Deliberate scheduled admission during
 maintenance returns a successful maintenance skip. A hold does not authorize
 release of another owner's hold or approval of a Clockwork incident.
 
-Cell deployment captures configuration, product pause and both exact schedule
-selections. It holds admission, temporarily pauses updates and disables selected
-bindings. Drain waits for admitted commands and the prior runner lock.
-Installation selects programs first. Configuration then initializes absent state
-or rebinds the final Annals executable through `init`, preserving existing
-library identities, cursor, records and instructions.
+`./deploy.sh conatus` executes the declared `conatus-install deploy` instruction.
+The installer publishes programs, initializes absent state or updates the final
+Annals executable path. Existing library identities, cursor, records,
+instructions and product pause remain unchanged. It uses ordinary product
+admission and runner locks. It creates no maintenance hold, suspends no schedule,
+drains no work and performs no health or signature audit.
 
 Settings accept absolute `state_dir`, `decisions_config` and `annals_state_dir`,
 plus `library`, update `enabled` and independent `daily_email_enabled`.
@@ -119,15 +119,16 @@ and library `conatus`. Other selections must be supplied explicitly.
 
 An absent binding remains absent unless its enabled setting is supplied.
 Omitted email intent preserves the prior daily-email selection and intent.
-Existing definitions retain timer, arguments, environment and output paths
-while selecting the new exact program disabled. Activation restores each saved
-enabled intent and the captured product pause only after all holds release.
-Deployment preserves existing failure halts.
+Existing definitions retain timer, arguments, environment and output paths.
+The installer updates the selected executable and Clockwork execution pin,
+then publishes each definition with its intended enabled state. Existing failure
+halts remain in force. Setup starts no model processing or email submission.
 
-Interrupted deployment recovery completes configuration for a coherent selected
-release before releasing its own hold. Program rollback does not roll back domain
-state or restore an old authentication session. The shared operator manual owns
-cross-product coordination and recovery order.
+Failure leaves completed installation effects in place. Interruption requires
+inspection before an explicit next operation; the executor does not repeat,
+roll back or recover instructions. Explicit retained-release selection changes
+programs only and does not revert domain state or authentication. Read the
+shared operator manual for executor failure and interruption handling.
 
 ## Authority, privacy and compatibility
 

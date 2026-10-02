@@ -1,4 +1,4 @@
-//! The fixed coordinator protocol and candidate paths.
+//! Product recipe request data and declared executable paths.
 
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
@@ -7,38 +7,8 @@ use std::collections::BTreeMap;
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::process::ExitCode;
-use std::str::FromStr;
 
 const MAX_REQUEST: u64 = 1024 * 1024;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum Operation {
-    Inspect,
-    Hold,
-    Drain,
-    Apply,
-    Configure,
-    Recover,
-    Release,
-    Activate,
-}
-
-impl FromStr for Operation {
-    type Err = Error;
-    fn from_str(value: &str) -> Result<Self> {
-        match value {
-            "inspect" => Ok(Self::Inspect),
-            "hold" => Ok(Self::Hold),
-            "drain" => Ok(Self::Drain),
-            "apply" => Ok(Self::Apply),
-            "configure" => Ok(Self::Configure),
-            "recover" => Ok(Self::Recover),
-            "release" => Ok(Self::Release),
-            "activate" => Ok(Self::Activate),
-            _ => Err(Error::new("unsupported adapter operation")),
-        }
-    }
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -50,19 +20,13 @@ pub struct Request {
     pub source_root: PathBuf,
     pub candidate_dir: Option<PathBuf>,
     pub candidate: Option<Value>,
-    pub prior: Option<Value>,
     pub selected_products: Vec<String>,
-    #[serde(default)]
-    pub affected_products: Vec<String>,
-    #[serde(default)]
-    pub activation_bindings: Vec<String>,
     #[serde(default)]
     pub settings: Option<Value>,
     #[serde(default)]
     pub dependency_settings: BTreeMap<String, Value>,
     #[serde(default)]
     pub dependency_candidates: BTreeMap<String, DependencyCandidate>,
-    pub recovery: Option<Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -74,8 +38,6 @@ pub struct DependencyCandidate {
 
 #[derive(Deserialize)]
 struct Candidate {
-    #[serde(default)]
-    product: Option<String>,
     binaries: BTreeMap<String, Binary>,
 }
 
@@ -103,7 +65,7 @@ fn relative(value: &str) -> Result<&Path> {
 }
 
 impl Context {
-    /// Validate the product's supported deployment settings before maintenance.
+    /// Validate the product's supported deployment settings for its recipe.
     ///
     /// # Errors
     /// Rejects unknown keys and values with the wrong type.
@@ -124,31 +86,6 @@ impl Context {
             }
         }
         Ok(())
-    }
-
-    /// Apply requested activation only to the selected, configured generation.
-    ///
-    /// # Errors
-    /// Rejects an activation setting that is not a boolean.
-    pub fn activation_enabled(&self, captured: bool) -> Result<bool> {
-        if !self.selected()
-            || self
-                .request
-                .recovery
-                .as_ref()
-                .is_some_and(|value| value["installed"] != "candidate")
-        {
-            return Ok(captured);
-        }
-        self.request
-            .settings
-            .as_ref()
-            .and_then(|value| value.get("enabled"))
-            .map_or(Ok(captured), |value| {
-                value
-                    .as_bool()
-                    .ok_or_else(|| Error::new("enabled must be a boolean"))
-            })
     }
 
     /// Select the installed dependency command or, only when it is absent, a
@@ -197,11 +134,6 @@ impl Context {
             .get(product)
             .ok_or_else(|| Error::new("dependency candidate command is missing"))?;
         let path = supplied.candidate_dir.join(relative(&binary.path)?);
-        crate::signing::verify_native(
-            manifest.product.as_deref().unwrap_or(product),
-            product,
-            &path,
-        )?;
         Ok(path)
     }
 
@@ -218,11 +150,11 @@ impl Context {
         let mut bytes = Vec::new();
         io::stdin().take(MAX_REQUEST + 1).read_to_end(&mut bytes)?;
         if bytes.len() as u64 > MAX_REQUEST {
-            return Err(Error::new("adapter request exceeds one MiB"));
+            return Err(Error::new("deployment recipe request exceeds one MiB"));
         }
         let request: Request = serde_json::from_slice(&bytes)?;
         let owner = request.run_id.as_bytes();
-        if request.schema != 1
+        if request.schema != 2
             || request.product != product
             || owner.is_empty()
             || owner.len() > 128
@@ -233,18 +165,18 @@ impl Context {
             || !request.source_root.is_absolute()
             || !request.run_dir.is_absolute()
         {
-            return Err(Error::new("unsupported adapter request"));
+            return Err(Error::new("unsupported deployment recipe request"));
         }
         relative(source_directory)?;
         let directory = request
             .candidate_dir
             .as_ref()
             .filter(|path| path.is_absolute())
-            .ok_or_else(|| Error::new("adapter requires a candidate"))?;
+            .ok_or_else(|| Error::new("deployment recipe requires a candidate"))?;
         let value = request
             .candidate
             .as_ref()
-            .ok_or_else(|| Error::new("adapter requires candidate evidence"))?;
+            .ok_or_else(|| Error::new("deployment recipe requires candidate evidence"))?;
         let candidate: Candidate = serde_json::from_value(value.clone())?;
         let binaries = candidate
             .binaries
@@ -275,26 +207,7 @@ impl Context {
             .get(name)
             .cloned()
             .ok_or_else(|| Error::new("required candidate executable is absent"))?;
-        crate::signing::verify_native(&self.request.product, name, &path)?;
         Ok(path)
-    }
-
-    /// Read the captured inspection result.
-    ///
-    /// # Errors
-    /// Returns an error if this operation has no prior inspection evidence.
-    pub fn prior(&self) -> Result<&Value> {
-        self.request
-            .prior
-            .as_ref()
-            .ok_or_else(|| Error::new("operation requires captured prior inspection"))
-    }
-
-    #[must_use]
-    pub fn selected(&self) -> bool {
-        self.request
-            .selected_products
-            .contains(&self.request.product)
     }
 }
 
@@ -326,6 +239,18 @@ pub fn finish(result: Result<Value>) -> ExitCode {
                     json!({"error":{"disposition":error.disposition}})
                 )
             );
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Report completion of an opaque deployment recipe.
+#[must_use]
+pub fn finish_deployment<T>(result: Result<T>) -> ExitCode {
+    match result {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("{}", error.message);
             ExitCode::FAILURE
         }
     }

@@ -33,9 +33,7 @@ enum Command {
     Uninstall(Control),
     Inspect(Home),
     #[command(hide = true)]
-    Adapter {
-        operation: cell_install::adapter::Operation,
-    },
+    Deploy,
 }
 
 #[derive(Clone, Args)]
@@ -100,10 +98,15 @@ fn dispatch(command: Command) -> Result<Value> {
             let snapshot = package::inspect(&paths)?;
             Ok(json!({"ok":true,"data":support::inspect_result(snapshot.current.as_ref())}))
         }
-        Command::Adapter { operation } => adapter::execute(operation),
+        Command::Deploy => adapter::deploy(),
     }
 }
 
 fn main() -> std::process::ExitCode {
-    cell_install::adapter::finish(dispatch(Cli::parse().command))
+    let command = Cli::parse().command;
+    if matches!(command, Command::Deploy) {
+        cell_install::adapter::finish_deployment(adapter::deploy())
+    } else {
+        cell_install::adapter::finish(dispatch(command))
+    }
 }

@@ -142,14 +142,11 @@ impl ScheduleState {
         Ok(manifest)
     }
 
-    /// Register and select a prepared definition without enabling it.
-    /// # Errors
-    /// Refuses conflicting scratch bytes or an unavailable Clockwork transition.
-    pub fn prepare(
+    fn register(
         client: &Client,
         manifest: &Manifest,
         path: &Path,
-    ) -> Result<BindingRecord, Error> {
+    ) -> Result<DefinitionRecord, Error> {
         let bytes = manifest.to_toml()?;
         match std::fs::OpenOptions::new()
             .write(true)
@@ -176,11 +173,41 @@ impl ScheduleState {
             }
             Err(error) => return Err(Error(error.to_string())),
         }
-        let result = client
-            .register(path)
-            .and_then(|definition| client.disable(&manifest.key, Some(&definition.digest)));
+        let result = client.register(path);
         std::fs::remove_file(path).map_err(|error| Error(error.to_string()))?;
         result
+    }
+
+    /// Publish this product's definition with its requested or saved enable intent.
+    /// # Errors
+    /// Returns definition-file or Clockwork registration and selection failures.
+    pub fn publish(
+        &self,
+        client: &Client,
+        manifest: &Manifest,
+        path: &Path,
+        enabled: Option<bool>,
+    ) -> Result<BindingRecord, Error> {
+        let definition = Self::register(client, manifest, path)?;
+        let enabled =
+            enabled.unwrap_or_else(|| self.binding.as_ref().is_some_and(|binding| binding.enabled));
+        if enabled {
+            client.switch(&manifest.key, &definition.digest)
+        } else {
+            client.disable(&manifest.key, Some(&definition.digest))
+        }
+    }
+
+    /// Register and select a definition without enabling it.
+    /// # Errors
+    /// Returns definition-file or Clockwork registration and selection failures.
+    pub fn prepare(
+        client: &Client,
+        manifest: &Manifest,
+        path: &Path,
+    ) -> Result<BindingRecord, Error> {
+        let definition = Self::register(client, manifest, path)?;
+        client.disable(&manifest.key, Some(&definition.digest))
     }
 
     /// Restore intent using the prepared selection. An incident is never cleared.

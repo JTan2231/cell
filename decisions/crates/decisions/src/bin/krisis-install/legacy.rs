@@ -2,9 +2,10 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
 
-use cell_install::{Error, Result, file_digest};
+use cell_install::{Error, Result};
 
 #[derive(Clone, Debug)]
 pub struct Release {
@@ -29,8 +30,17 @@ pub fn hexadecimal(value: &str, size: usize) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+pub fn regular(path: &Path) -> Result<fs::Metadata> {
+    let metadata = fs::symlink_metadata(path)?;
+    require(
+        metadata.is_file() && metadata.nlink() == 1,
+        "artifact is not a regular single-link file",
+    )?;
+    Ok(metadata)
+}
+
 pub fn pairs(path: &Path) -> Result<Vec<(String, String)>> {
-    file_digest(path)?;
+    regular(path)?;
     let text = fs::read_to_string(path)?;
     require(text.ends_with('\n'), "release receipt is not canonical")?;
     let mut seen = BTreeSet::new();
@@ -51,7 +61,7 @@ pub fn pairs(path: &Path) -> Result<Vec<(String, String)>> {
 fn inventory(root: &Path, directory: &Path, output: &mut BTreeMap<String, String>) -> Result<()> {
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
-        if path.is_dir() {
+        if fs::symlink_metadata(&path)?.is_dir() {
             inventory(root, &path, output)?;
         } else {
             let name = path
@@ -60,7 +70,8 @@ fn inventory(root: &Path, directory: &Path, output: &mut BTreeMap<String, String
                 .to_str()
                 .ok_or_else(|| Error::new("release path is not UTF-8"))?
                 .to_owned();
-            output.insert(name, file_digest(&path)?);
+            regular(&path)?;
+            output.insert(name, String::new());
         }
     }
     Ok(())

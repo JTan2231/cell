@@ -7,7 +7,6 @@ pub mod command;
 mod installation;
 pub mod legacy;
 pub mod migration;
-pub mod signing;
 pub mod simple;
 pub mod transaction;
 
@@ -15,13 +14,14 @@ pub use transaction::*;
 
 pub use artifact::{
     FileEntry, Manifest, ReleaseInput, file_digest, provider_inventory, read_release,
+    valid_release_id,
 };
 pub use installation::{inspect, install, recover_installation, restore};
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-pub const FORMAT: &str = "cell-install-v1";
+pub const FORMAT: &str = "cell-install-simple-v2";
 
 /// The first command supplies the version of this installation's provider.
 #[derive(Clone, Copy, Debug)]

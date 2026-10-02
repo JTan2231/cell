@@ -66,7 +66,7 @@ relies on launchd; a foreground instance does not prove launchd readiness.
 
 ## Deployment admission
 
-The deployment coordinator owns one durable hold through:
+An explicitly authorized operator owns a durable hold through:
 
 ```sh
 nucleus maintenance hold RUN_ID
@@ -100,20 +100,19 @@ installation readiness, never ordinary requester admission. Only the service
 installer holding its own exclusive activity guard may account for that guard
 locally; the public health proof requires all guards drained.
 
-Installation checks the native CLI and daemon signatures under Cell's configured
-signing policy. It does not call health or check harness, authentication, or
-persistent-state integrity. Use the ordinary diagnostic interfaces for those
-observations. Maintenance ownership and drain remain required for replacement.
+Service installation copies the supplied programs and starts the selected
+LaunchAgent. It does not audit native signatures or wait for health. Explicit
+maintenance operations retain their separate ownership and drain requirements.
 
 The HTTP surfaces are GET `/v1/maintenance` and POST
 `/v1/maintenance/{hold,release}`. Each POST accepts exactly
 `{"run_id":"OWNER"}` and returns maintenance status. The typed client owns
 these request/response types.
 
-The macOS deployer accepts `--expected-current absent|releases/HASH` and checks
+The macOS deployer accepts `--expected-current absent|releases/ID` and checks
 it under the product update lock before selector mutation. With
 `CELL_DEPLOYMENT_RUN_ID`, service install/restart requires the sole drained
-hold and retains an exclusive activity guard through replacement. The existing guarded database/credential rollback rules remain.
+hold and retains an exclusive activity guard through replacement. Completed installation effects remain after failure. Authentication moves only forward.
 
 Daemon startup retires terminal records from the removed built-in deployment
 probe. Retirement is limited to requester `nucleus-deployment`, label
@@ -126,31 +125,20 @@ and shared schemas remain unchanged. This is not a general pruning API.
 
 The Rust `nucleus-install` executable packages the CLI, daemon, installer, and
 Chancery bundle. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
-command selects a `cell-install-v2` package and invokes the Nucleus service
+command selects a `cell-install-v3` package and invokes the Nucleus service
 installer. Public CLI and daemon copies remain service-owned. `inspect` reads
 release metadata. There are no installer `verify` or `verify-release` commands.
 
-macOS service installation also requires Cell's persistent signing policy.
-The supplied native CLI and daemon must use its exact certificate and the
-permanent `nucleus/nucleus` and `nucleus/nucleusd` product/artifact keys.
-Their code identifiers are `NAMESPACE.nucleus.nucleus` and
-`NAMESPACE.nucleus.nucleusd`, where `NAMESPACE` is the configured namespace.
-The service installer verifies input before copying and installed copies before
-launchd bootstrap. Missing or invalid policy, unsigned or ad hoc input, a
-different certificate, a wrong identifier, or failed verification stops the
-installation. It does not choose another identity or re-sign input. Read
-`chancery show ci-manager.signing.operate` for policy setup and explicit changes.
+Packaging signs the native programs under Cell's configured host identity.
+The service installer copies the CLI and daemon, replaces the LaunchAgent,
+imports a supplied credential source when requested, and starts the daemon under
+launchd. It does not audit signatures or wait for health, migration, or compaction.
+Normal startup and admission keep their existing harness and authentication rules.
 
-The service installer captures prior public programs, replaces the LaunchAgent,
-imports a supplied credential source when needed, and starts the daemon under
-launchd. It does not wait for health, migration, or compaction. Normal daemon
-startup and job admission keep their existing compatibility and readiness checks.
-Installation success establishes completed setup, not operational readiness.
-
-A failed file or service operation can restore captured programs and service
-configuration only when the database schema is unchanged. Authentication is
-excluded from rollback. An uncertain service cutover retains the candidate
-package and journal for recovery without comparing program bytes.
+A file or service failure retains completed effects. Installation does not capture
+prior program bytes, read the database schema for rollback, or restore a previous
+service. Inspect the failed operation and explicitly choose the next installation.
+Preserve current credentials and database state.
 
 After installation, `nucleus --register-usage` registers the command inventory
 without product work. Health and account diagnostics remain separate operations.
@@ -176,33 +164,21 @@ the staged files. An existing destination is reused from its recorded manifest.
 Staging does not select a service runtime, import credentials, or run model work.
 
 A selected upgrade uses the supported version's staged runtime unless deployment
-settings supply `codex_bin`. An affected-only deployment preserves the path from
-the installed LaunchAgent. Installation does not compare runtime file identities.
+settings supply `codex_bin`. If no staged runtime exists, installation uses the path from the installed
+LaunchAgent. Installation does not compare runtime file identities.
 Health and admission keep their ordinary manifest and harness checks.
 
-The installer persists the run's local admission hold before a fresh daemon
-exists. It starts the service under that hold so dependent products can finish
-configuration. Admission opens only at group release after configuration.
-The installer retries the owned release request for up to 120 seconds while
-the service socket is unavailable. An API rejection fails immediately. This
-release operation does not call health or submit work.
+The product manifest invokes `nucleus-install deploy` with a schema-two
+installation request. It selects the supplied CLI, daemon, installer, and provider
+bundle, then invokes service installation. It does not perform the previous
+inspect/hold/drain/apply/configure/release/activate protocol, keep a service-cutover
+journal, or automatically recover an unfinished deployment.
 
-Before selector or service replacement, the installer writes private
-`service-cutover.json` with its owner, prior package, candidate and harness.
-Recovery uses this journal to select and reinstall the exact candidate through
-`nucleus service recover --daemon ABS --codex ABS` with the recorded
-`CELL_DEPLOYMENT_RUN_ID`. Recovery reinstalls the recorded candidate and starts its service.
-The service must have its sole drained hold. If it is stopped, recovery reads
-the database without migration and requires every retained job and attempt to
-be terminal. It does not cancel or retry requester work.
-
-Recovery can import the recorded authentication source only if Nucleus's owned
-authentication file is absent. It never rolls back a credential or database.
-A schema or service failure keeps the candidate and journal for recovery.
-Unknown ownership or unfinished jobs keep admission held. Successful recovery removes the cutover journal after service setup completes.
-
-Deployment settings accept only `codex_bin` and `codex_home`, both strings.
-Unknown keys or values of another type fail inspection before admission holds.
+Deployment settings accept only `codex_bin` and `codex_home`, both absolute
+string paths. Unknown fields or types fail the product command. The executor
+reports that exit and retains completed effects without interpreting the output.
+Use explicit maintenance commands before installation when admitted work must
+finish. Installation can interrupt attempts; requesters own any retry decision.
 
 ## Schema compatibility and retention
 

@@ -1,18 +1,18 @@
 {
   "id": "emt.service",
-  "contract_version": 4,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Operate EMT worker and retained installation state",
-  "summary": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, matched installation recovery.",
+  "summary": "Understand EMT configuration, readiness, worker admission, schedule intent, explicit maintenance and matched installation instructions.",
   "use_when": [
-    "EMT configuration, worker admission, readiness, installation guarantees, or coordinated recovery must be understood."
+    "EMT configuration, worker admission, readiness, installation instructions or explicit maintenance behavior must be understood."
   ],
   "do_not_use_when": [
     "The goal is a product-domain intervention result or Nucleus execution authority itself."
   ],
-  "outcome": "Understand EMT configuration, readiness, worker admission, schedule intent, maintenance, matched installation recovery.",
+  "outcome": "Understand EMT configuration, readiness, worker admission, schedule intent, explicit maintenance and matched installation instructions.",
   "interfaces": [
     {
       "label": "Initialize paused state",
@@ -53,6 +53,10 @@
     {
       "label": "Install uninitialized program",
       "invocation": "emt-install install --binary ABS --bundle ABS"
+    },
+    {
+      "label": "Execute installation instruction",
+      "invocation": "emt-install deploy"
     }
   ],
   "effects": [
@@ -65,7 +69,7 @@
     "Verify matched program/provider, valid configuration, known drain counts and the selected schedule, pause, hold and exact halt intent. Doctor observations do not prove receiving access or delivery."
   ],
   "failure_and_recovery": [
-    "Retain the original migration receipt, and captured operator intent. Release only the exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
+    "Installation failure leaves completed effects in place. Interruption requires inspection before an explicit next operation; no automatic replay, rollback or recovery occurs. Explicit maintenance releases only its exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
   ],
   "privacy": [
     "Correspondence, Nucleus references and quota records remain private and retained without automatic deletion. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
@@ -99,7 +103,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user, authorized EMT worker and coordinated deployment or maintenance operator."
+        "statement": "The current user, authorized EMT worker and operator of installation instructions or explicit maintenance."
       }
     ],
     "preconditions": [
@@ -159,11 +163,11 @@
       },
       {
         "status": "declared",
-        "statement": "The worker skips overlap and does not wait for model completion. Coordinated updates capture intent, hold and drain, retain migration evidence, install bytes and restore intent after configuration. Installation does not perform artifact-integrity, state-integrity or readiness checks. Existing pauses and failure halts survive."
+        "statement": "The worker skips overlap and does not wait for model completion. The declared deploy instruction publishes bytes, initializes or migrates local state, saves configuration, configures the Clockwork route and publishes intended worker selection under ordinary admission and runner locks. It creates no maintenance hold, drains no exchanges and performs no health, content or signature audit. Existing pause and failure-halt intent are preserved unless explicitly selected settings change operator intent."
       },
       {
         "status": "declared",
-        "statement": "Migration copies drained schema-one state and companion configuration without overwriting unmatched destinations. Recovery reuses the original receipt and captured intent; direct initialized selector recovery is unsupported."
+        "statement": "Explicit emt migrate checks drained schema-one state or initializes absent paused state. It copies no database or configuration. Deployment retains no migration-completion receipt and performs no automatic recovery; initialized direct selector recovery remains unsupported."
       }
     ],
     "operational_limits": [
@@ -175,7 +179,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only EMT schema one is accepted. The matched cell-install-v2 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
+        "statement": "Only EMT schema one is accepted. The matched cell-install-v3 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
       },
       {
         "status": "unspecified",

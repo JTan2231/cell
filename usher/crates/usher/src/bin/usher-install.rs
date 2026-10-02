@@ -1,8 +1,5 @@
 //! Usher's installation boundary, separate from its read-only recognition CLI.
 
-#[path = "usher-install/adapter.rs"]
-mod adapter;
-
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -46,9 +43,8 @@ enum Command {
         #[arg(long)]
         expected_current: Option<String>,
     },
-    /// Fixed coordinator protocol; accepts one version-one JSON request on stdin.
-    #[command(hide = true)]
-    Adapter { operation: adapter::Operation },
+    /// Install the supplied candidate files; accept one recipe request on stdin.
+    Deploy,
 }
 
 #[derive(Args)]
@@ -68,7 +64,7 @@ struct CandidateArgs {
     bundle: PathBuf,
     #[command(flatten)]
     home: HomeArgs,
-    /// Require absent or `releases/<sha256>`; omission snapshots before locking.
+    /// Require absent or `releases/<ID>`; omission snapshots before locking.
     #[arg(long)]
     expected_current: Option<String>,
 }
@@ -184,25 +180,32 @@ fn run(command: Command) -> Result<Value> {
                 expected_current.as_deref()
             )?)
         }
-        Command::Adapter { operation } => return adapter::run(operation),
+        Command::Deploy => {
+            let context = cell_install::adapter::Context::read(
+                "usher",
+                "usher",
+                "usher-install",
+                env!("CARGO_PKG_VERSION"),
+            )?;
+            let input = release_input(
+                context.binary("usher")?,
+                context.request.source_root.join("usher/chancery"),
+            )?;
+            json!(cell_install::install(&SPEC, &context.home, &input, None)?)
+        }
     };
     Ok(json!({"ok": true, "data": data}))
 }
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let adapter_mode = matches!(cli.command, Command::Adapter { .. });
     match run(cli.command) {
         Ok(reply) => {
             println!("{reply}");
             ExitCode::SUCCESS
         }
         Err(error) => {
-            let reply = if adapter_mode {
-                json!({"schema": 1, "status": "stopped", "detail": error.detail, "data": {"error": error}})
-            } else {
-                json!({"ok": false, "error": error})
-            };
+            let reply = json!({"ok": false, "error": error});
             println!("{reply}");
             ExitCode::from(1)
         }

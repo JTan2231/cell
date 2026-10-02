@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from contextlib import contextmanager, ExitStack
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -95,12 +94,9 @@ def load_policy() -> dict[str, Any] | None:
         raise SigningError("cannot read Cell signing configuration") from error
 
 
-def policy_digest(policy: dict[str, Any] | None) -> str:
-    return hashlib.sha256(json_bytes(validate_policy(policy) if policy is not None else None)).hexdigest()
-
-
 def assert_current(policy: dict[str, Any] | None) -> None:
-    if policy_digest(load_policy()) != policy_digest(policy):
+    normalized = validate_policy(policy) if policy is not None else None
+    if load_policy() != normalized:
         raise SigningError("Cell signing policy changed after admission; publication stopped")
 
 
@@ -172,15 +168,11 @@ def sign(path: Path, policy: dict[str, Any] | None, product: str, artifact_key: 
         if sys.platform == "darwin":
             raise SigningError("cannot sign macOS production code without its signing policy")
         return
-    assert_current(policy)
-    if not is_native(path):
-        raise SigningError("production executable is not native macOS code")
     settings = policy["macos"]
     _run(["/usr/bin/codesign", "--force", "--sign", settings["certificate_sha1"],
           "--keychain", settings["keychain"], "--identifier", identifier(policy, product, artifact_key),
           "--requirements", "=designated => " + requirement(policy, product, artifact_key),
           "--timestamp=none", str(path)])
-    verify(path, policy, product, artifact_key)
 
 
 def _directory(path: Path) -> None:
@@ -293,7 +285,7 @@ def create_local() -> dict[str, Any]:
                                      "keychain": str(keychain), "identifier_namespace": "local.cell"}})
             preflight(policy)
             _write_policy(policy)
-        return {"policy": policy, "policy_digest": policy_digest(policy)}
+        return {"policy": policy}
 
 
 def run_cli(argv: Sequence[str] | None = None) -> int:
@@ -315,12 +307,12 @@ def run_cli(argv: Sequence[str] | None = None) -> int:
         if args.command == "status":
             policy = load_policy()
             preflight(policy)
-            result = {"policy": policy, "policy_digest": policy_digest(policy), "ready": True}
+            result = {"policy": policy, "ready": True}
         elif args.command == "create-local":
             result = create_local()
         else:
             policy = configure(args.certificate_sha1, args.keychain, args.identifier_namespace)
-            result = {"policy": policy, "policy_digest": policy_digest(policy)}
+            result = {"policy": policy}
         if args.json:
             print(json.dumps(result, sort_keys=True))
         else:

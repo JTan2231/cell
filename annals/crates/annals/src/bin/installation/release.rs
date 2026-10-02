@@ -1,6 +1,4 @@
-use super::{
-    BTreeMap, Duration, Error, InstallArgs, Path, PathBuf, Result, environment, install_root,
-};
+use super::{BTreeMap, Error, InstallArgs, Path, PathBuf, Result, install_root};
 use cell_install::legacy::{LegacyProof, LegacyProvider, LegacySpec};
 use cell_install::{
     InstallLayout, LockKind, LockSpec, PreparedRelease, ProviderSpec, PublicEntry, PublicKind,
@@ -180,26 +178,14 @@ pub(super) fn legacy(root: &Path) -> Result<ReleaseInfo> {
     }
 }
 
-fn version(binary: &Path, name: &str, home: &Path) -> Result<String> {
-    cell_install::signing::verify_native("annals", name, binary)?;
-    let output = cell_install::command::checked(
-        binary,
-        &["--version".into()],
-        &environment(home, None),
-        Duration::from_secs(30),
-    )?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    let version = text
-        .trim()
-        .strip_prefix(&format!("{name} "))
-        .ok_or_else(|| Error::new("invalid Annals program version"))?;
-    cell_install::command::checked(
-        binary,
-        &["--help".into()],
-        &environment(home, None),
-        Duration::from_secs(30),
-    )?;
-    Ok(version.to_owned())
+fn version(bundle: &Path) -> Result<String> {
+    let descriptor: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(bundle.join("provider.json"))?)?;
+    descriptor
+        .pointer("/provider/release")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| Error::new("Annals provider has no release label"))
 }
 
 pub(super) fn prepare(args: &InstallArgs, home: &Path) -> Result<PreparedRelease> {
@@ -217,11 +203,8 @@ pub(super) fn prepare(args: &InstallArgs, home: &Path) -> Result<PreparedRelease
         }
     }
     let versions = BTreeMap::from([
-        ("annals".into(), version(&args.binary, "annals", home)?),
-        (
-            "annals-usage".into(),
-            version(&args.usage_binary, "annals-usage", home)?,
-        ),
+        ("annals".into(), version(&args.bundle)?),
+        ("annals-usage".into(), version(&args.usage_bundle)?),
     ]);
     let installer = std::env::current_exe()?;
     let mut files = BTreeMap::from([

@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "emt",
+  "order": 11,
+  "steps": [
+    {
+      "id": "install",
+      "kind": "run",
+      "argv": [
+        "{candidate_dir}/bin/emt-install",
+        "deploy"
+      ],
+      "stdin": "deployment_request"
+    }
+  ]
+}

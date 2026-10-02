@@ -1,6 +1,6 @@
 {
   "id": "bazaar.installation",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -31,6 +31,10 @@
     {
       "label": "Recover retained programs",
       "invocation": "bazaar-install recover --release ABSOLUTE_RELEASE"
+    },
+    {
+      "label": "Run product deployment recipe",
+      "invocation": "bazaar-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
     }
   ],
   "promise": {
@@ -55,7 +59,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Release digests select immutable program files. Database schema, release version and string versions are independent."
+        "statement": "Opaque UUID release IDs select immutable program files. Database schema, release version and string versions are independent."
       }
     ],
     "access": [
@@ -68,12 +72,16 @@
       {
         "status": "declared",
         "statement": "SQLite waits up to five seconds for contention. A connection is not shared concurrently between threads; callers open separate handles. There is no daemon, schedule, state migration, deletion, pruning, or data restoration command, and no capacity, throughput, or hard latency guarantee."
+      },
+      {
+        "status": "declared",
+        "statement": "Deploy accepts one bounded schema-two recipe request on stdin. The product command owns its setup; the shared executor uses process exit status only. Deployment runs no application execution probe, native-signature audit, maintenance hold, drain, or automatic rollback."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only Bazaar database schema one and cell-install-v2 releases are supported. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
+        "statement": "Bazaar accepts database schema one. New releases use cell-install-v3; retained earlier formats remain readable. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
       }
     ],
     "reliances": [
@@ -83,7 +91,7 @@
       },
       {
         "status": "declared",
-        "statement": "Coordinated installation relies on the Cell deployment coordinator for ordering and its separate authorized deployment procedure. No dedicated installed contract covers that shared coordinator.",
+        "statement": "The Cell manifest executor runs declared instructions in product order and checks their exit status. Bazaar owns file selection and default-state initialization. The executor imposes no application readiness, maintenance, or recovery policy.",
         "target": "cell-deployment",
         "kind": "control"
       }
@@ -91,13 +99,13 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Initialization and integrity checks select an absolute private database path. Direct installation takes matching absolute --binary and --bundle paths and optional --home and --expected-current. Recovery takes an exact owned release. Coordinated deployment selects committed local main and accepts no Bazaar settings."
+        "statement": "Initialization and integrity checks select an absolute private database path. Direct installation takes matching absolute --binary and --bundle paths and optional --home and --expected-current. Recovery takes an exact owned release. The schema-two deploy request supplies candidate and source paths and accepts no Bazaar settings."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor print short readable results by default. Global --json selects their existing schema-one JSON on stdout with no string content. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stdout with --json. Syntax errors remain text on stderr with exit 2. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. Configure initializes compatible schema-one state; installation adds no separate program-integrity or SQLite-integrity gate."
+        "statement": "The immutable release contains bazaar, bazaar-install, its recovery installer, and the matching provider. Init and doctor print short readable results by default. Global --json selects their existing schema-one JSON on stdout with no string content. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stdout with --json. Syntax errors remain text on stderr with exit 2. Rust Writer::initialize returns a Writer; Reader::check returns () or a typed error. The deployment recipe initializes compatible schema-one state; installation adds no separate program-integrity or SQLite-integrity gate."
       }
     ],
     "completeness_and_freshness": [
@@ -109,7 +117,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Shared cell-install-v2 file transactions select matching programs and provider. Direct installation does not initialize data. Coordinated configure initializes only default state. Init preserves existing versions and can finish interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. Reader::open and Writer::open create no state; Reader::check reads integrity without content in its result."
+        "statement": "Shared cell-install-v3 file transactions select matching programs and provider. Direct installation does not initialize data. The Bazaar deployment recipe initializes only default state. Init preserves existing versions and can finish interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. Reader::open and Writer::open create no state; Reader::check reads integrity without content in its result."
       },
       {
         "status": "declared",
@@ -126,10 +134,10 @@
   ],
   "outcome": "Matched programs and provider, initialized compatible private state, a read-only integrity result, or compatible program recovery without rewriting history.",
   "effects": [
-    "Installation changes owned program/provider selectors. Coordinated configure initializes an absent database. Existing content is preserved; no version is appended."
+    "Installation changes owned program/provider selectors. The Bazaar deployment recipe initializes an absent database. Existing content is preserved; no version is appended."
   ],
   "authority": [
-    "Bazaar owns its program selection and private database. The Cell coordinator owns deployment ordering."
+    "Bazaar owns its program selection and private database. The Cell manifest executor owns declared instruction ordering and exit-status tracking."
   ],
   "success": [
     "For a program operation, owned programs and provider selectors select the supplied release. For a database operation, selected schema-one identity and integrity checks pass. Coordinated deployment performs setup without an additional verification gate."

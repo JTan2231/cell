@@ -1,13 +1,13 @@
 {
   "id": "emt.installation.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install and operate EMT",
   "summary": "Install matched EMT program and provider bytes, configure paused state, and operate its worker and owned maintenance without silently approving a failure halt.",
   "use_when": [
-    "The current user must install matched EMT bytes, configure or activate its worker, inspect readiness or recover a coordinated update."
+    "The current user must install matched EMT bytes, configure or activate its worker, inspect readiness or inspect a failed installation instruction."
   ],
   "do_not_use_when": [
     "The user needs another recipient, sender authentication, continuous repair, or a replacement for product-owned recovery."
@@ -45,7 +45,7 @@
   ],
   "effects": [
     "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects.",
-    "Coordinated setup resolves missing receiving settings through Email before maintenance, initializes state if absent, records a durable migration receipt, prepares a disabled exact definition, and activates after every hold is released. It preserves original absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent."
+    "The declared deploy instruction resolves a missing receiving domain through Email, initializes or migrates local state, saves configuration, configures the EMT route and publishes the exact worker definition with intended enabled state. It creates no maintenance hold or migration receipt and drains no exchanges. It preserves absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent."
   ],
   "authority": [
     "EMT owns its configuration, admission, state, maintenance holds and installation. Clockwork owns scheduling and exact failure-halt continuation; Nucleus owns jobs; Email owns transport and credentials."
@@ -54,7 +54,7 @@
     "Complete program and state setup, known maintenance counts and preserved or requested schedule, pause and halt intent. Installation does not establish readiness. Interpret Email acceptance and domain success separately."
   ],
   "failure_and_recovery": [
-    "Stop on missing authority, failed setup, unknown drain, unestablished hold ownership or initialized direct selector recovery. Use coordinator recovery with original receipt and intent; preserve uncertain exchanges and mail identities."
+    "Stop on missing authority or failed setup. Installation failure leaves prior effects in place; inspect them before an explicit next operation. No automatic repeat, rollback or recovery occurs. Explicit maintenance requires known drain and exact hold ownership. Preserve uncertain exchanges and mail identities; initialized direct selector recovery is unsupported."
   ],
   "privacy": [
     "Correspondence and pointers remain private and retained. Nucleus and email providers keep separate copies. Logs and ordinary status omit bodies."
@@ -68,7 +68,7 @@
     {
       "id": "emt.service",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 7
     },
     {
       "id": "emt.quota-notices",
@@ -99,7 +99,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The chosen installation or operational effect is authorized, dependencies and receiving domain are established, initialized maintenance configuration is valid, and any changed configuration is paused and drained."
+        "statement": "The chosen installation or operational effect is authorized and setup paths and receiving domain are supplied or resolvable. Manual configuration and migration commands retain their paused and drained prerequisites. The deploy instruction uses ordinary product admission and runner locks, without acquiring maintenance holds or checking application health."
       },
       {
         "status": "declared",
@@ -115,7 +115,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Program/provider selection, configuration, doctor and schedule observations, known drain status, migration receipt evidence and preserved or explicitly selected activation intent."
+        "statement": "Program/provider selection and setup effects, instruction exit status and log, and preserved or explicitly selected activation intent. Doctor observations and maintenance drain evidence belong to separately invoked product commands."
       }
     ],
     "data_semantics": [
@@ -127,7 +127,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "emt/worker selects the exact Clockwork binding; OWNER identifies the operation hold; INCIDENT_ID selects exact halt continuation; the migration receipt preserves recovery identity."
+        "statement": "emt/worker selects the exact Clockwork binding; OWNER identifies an explicit maintenance hold; INCIDENT_ID selects exact halt continuation. The executor identifies each instruction and its retained log."
       }
     ],
     "completeness_and_freshness": [
@@ -149,11 +149,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Prepare dependencies and refresh Clockwork brokers before routing. Coordinated initialized updates capture intent, hold/drain, preserve migration evidence, install bytes, select a disabled definition and restore captured intent after configuration."
+        "statement": "The declared deploy instruction publishes matched bytes, initializes or migrates local state, saves configuration and publishes an exact worker definition under ordinary admission and runner locks. It neither suspends scheduling nor holds or drains exchanges."
       },
       {
         "status": "declared",
-        "statement": "Fresh deployment activates after configuration unless explicit paused/enabled settings override. An existing absent binding stays absent unless activation is requested. Recovery reuses original receipt and intent; direct initialized selector recovery is unsupported."
+        "statement": "Fresh deployment activates after configuration unless explicit paused/enabled settings override. An existing absent binding stays absent unless activation is requested. Interrupted instructions are not repeated or recovered automatically; direct initialized selector recovery is unsupported."
       }
     ],
     "operational_limits": [
@@ -219,11 +219,11 @@
   "automation": "none",
   "steps": [
     "Establish authority, dependencies, prompt selection, receiving domain and stable paths before maintenance or activation.",
-    "Install matched bytes before initialization, or use maintained coordinated deployment for initialized updates.",
+    "Install matched bytes before initialization, or execute the declared manifest instruction for initialized updates.",
     "Initialize paused state, configure drained work, inspect doctor, then resume and enable only authorized intent.",
     "Inspect separate pause, schedule, holds and exact halt evidence; approve exact failure-halt continuation separately.",
-    "Hold with an exact owner, drain known work, preserve private state and original migration evidence before release.",
-    "Inspect selected release metadata and preserved or explicitly requested operator intent; retain unresolved holds on recovery failure."
+    "Use an exact owner and known drained work for separately requested manual maintenance; preserve private state before release.",
+    "Inspect instruction exit status and log. Inspect completed effects after failure or interruption before an explicit next operation."
   ],
   "checkpoints": [
     "The selected EMT binary and provider versions match.",

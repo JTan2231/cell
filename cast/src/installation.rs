@@ -6,11 +6,7 @@ use cell_install::transaction::LockKind;
 /// Initialize missing discovery state without collecting from any provider.
 /// # Errors
 /// Rejects unknown setup fields and failed initialization.
-pub fn lifecycle(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> cell_install::Result<serde_json::Value> {
-    use cell_install::adapter::Operation;
+fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
     #[derive(Default, serde::Deserialize)]
     #[serde(deny_unknown_fields)]
     struct Settings {
@@ -37,38 +33,26 @@ pub fn lifecycle(
             "Cast setup paths must be absolute existing inputs",
         ));
     }
-    if operation == Operation::Configure
-        || operation == Operation::Recover
-            && context
-                .request
-                .recovery
-                .as_ref()
-                .is_some_and(|recovery| recovery["any_apply_started"] == true)
-            && context.home.join(".local/bin/cast").exists()
-    {
-        // Recovery can select a retained CLI with an older output interface.
-        // Setup uses the same state APIs and product lock as the current CLI.
-        let directory = settings
-            .state_dir
-            .or_else(|| {
-                std::env::var_os("CAST_STATE_DIR")
-                    .filter(|path| !path.is_empty())
-                    .map(std::path::PathBuf::from)
-            })
-            .unwrap_or_else(|| context.home.join(".local/share/cast"));
-        let store = crate::store::Store::init(&directory)
-            .map_err(|_| cell_install::Error::new("Cast state initialization failed"))?;
-        let _lock = store.lock().map_err(|_| {
-            cell_install::Error::new("Cast setup could not acquire the product lock")
-        })?;
-        if let Some(path) = settings.config_file {
-            let config = serde_json::from_slice(&std::fs::read(path)?)?;
-            store
-                .set_config(&config)
-                .map_err(|_| cell_install::Error::new("Cast configuration replacement failed"))?;
-        }
+    let directory = settings
+        .state_dir
+        .or_else(|| {
+            std::env::var_os("CAST_STATE_DIR")
+                .filter(|path| !path.is_empty())
+                .map(std::path::PathBuf::from)
+        })
+        .unwrap_or_else(|| context.home.join(".local/share/cast"));
+    let store = crate::store::Store::init(&directory)
+        .map_err(|_| cell_install::Error::new("Cast state initialization failed"))?;
+    let _lock = store
+        .lock()
+        .map_err(|_| cell_install::Error::new("Cast setup could not acquire the product lock"))?;
+    if let Some(path) = settings.config_file {
+        let config = serde_json::from_slice(&std::fs::read(path)?)?;
+        store
+            .set_config(&config)
+            .map_err(|_| cell_install::Error::new("Cast configuration replacement failed"))?;
     }
-    Ok(serde_json::json!({"configured":operation == Operation::Configure}))
+    Ok(())
 }
 
 #[must_use]
@@ -111,6 +95,14 @@ pub fn specification() -> Spec {
         ))),
         lock_kind: LockKind::Directory,
         lock_at_state: false,
-        maintained: false,
     }
+}
+
+/// Install declared files and apply this product's requested setup.
+/// # Errors
+/// Returns installation or setup failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    configure(context)?;
+    Ok(())
 }

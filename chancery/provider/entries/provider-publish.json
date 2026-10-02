@@ -1,6 +1,6 @@
 {
   "id": "chancery.provider.publish",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -33,7 +33,7 @@
   ],
   "failure_and_recovery": [
     "Reject the change before deployment if schema validation or product CI fails.",
-    "If deployment fails, restore the product release and provider selector together.",
+    "If deployment fails, inspect retained effects and use the owning product's explicit recovery operation when recovery is requested.",
     "If one installed bundle later becomes invalid, leave other providers available and repair or redeploy only the owning product."
   ],
   "privacy": [
@@ -59,7 +59,7 @@
     {
       "id": "chancery.bundle.validate",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     },
     {
       "id": "chancery.directory.discover",
@@ -92,7 +92,7 @@
     "Identify the durable user outcome and owning product before choosing an entry ID or mode.",
     "Use current product contracts to author provider scope, optional schema-4 overview, distinct feature and operation entries, and self-contained operating essentials. Keep full feature explanations in their capability manuals and preserve request boundaries, normalized claims, effects, authority, success, recovery, privacy, interfaces, dependencies, and substantive reliances.",
     "Validate the source bundle with the candidate Chancery reader before changing installed selectors.",
-    "Stage the unchanged bundle inside the owning product's content-addressed release and make its installer own exactly one registry selector.",
+    "Stage the unchanged bundle inside the owning product's immutable release and make its installer own exactly one registry selector.",
     "Exercise product CI and deployment rollback, deploy the owning release, and separately register each updated participating program inventory.",
     "Run Chancery doctor and confirm that product, provider-filtered list, show, and exact-ID resolve expose the installed overview and contracts with their full meaning, scope, basis, gaps, and status."
   ],
@@ -175,7 +175,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "This operation does not authorize taking over another provider's selector or editing an installed content-addressed bundle in place."
+        "statement": "This operation does not authorize taking over another provider's selector or editing an installed immutable bundle in place."
       }
     ],
     "lifecycle_and_consistency": [
@@ -191,7 +191,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "The operation stops when ownership, supported current behavior, dependency authority, safe bundle content, or coherent selector rollback cannot be established."
+        "statement": "The operation stops when ownership, supported current behavior, dependency authority, safe bundle content, or supported explicit selector recovery cannot be established."
       },
       {
         "status": "unsupported",

@@ -58,33 +58,7 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
             details(&mut out, "Summary", &value["summary"], 0);
             status(&mut out, &value["state"]);
         }
-        Command::Export {
-            output: Some(_), ..
-        } => {
-            let _ = writeln!(out, "Exported JSON snapshot: {}", text(&value["exported"]));
-        }
-        Command::Export { output: None, .. } => {
-            out.push_str("Cast discovery snapshot\n");
-            field(&mut out, "Snapshot revision", &value["snapshot_revision"]);
-            field(&mut out, "Captured at", &value["captured_at"]);
-            let _ = writeln!(
-                out,
-                "Retained companies: {}\nRetained jobs: {}\nSources: {}",
-                items(&value["companies"]).len(),
-                items(&value["jobs"]).len(),
-                items(&value["source_health"]).len()
-            );
-            for item in items(&value["companies"]) {
-                company(&mut out, item);
-            }
-            for item in items(&value["jobs"]) {
-                job(&mut out, item);
-            }
-            for item in items(&value["source_health"]) {
-                source(&mut out, item);
-            }
-            details(&mut out, "Query coverage", &value["coverage"], 0);
-        }
+        Command::Export { output, .. } => export(&mut out, value, output.is_some()),
         Command::Company { .. } => company(&mut out, value),
         Command::Job {
             command: JobCommand::Show { .. },
@@ -119,10 +93,37 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
         Command::Sources { .. } => page(&mut out, "Sources", value),
         Command::Unresolved { .. } => page(&mut out, "Unresolved records", value),
         Command::Search { query, .. } => {
-            page(&mut out, &format!("Search results for {query}"), value)
+            page(&mut out, &format!("Search results for {query}"), value);
         }
     }
     out
+}
+
+fn export(out: &mut String, value: &Value, saved: bool) {
+    if saved {
+        let _ = writeln!(out, "Exported JSON snapshot: {}", text(&value["exported"]));
+        return;
+    }
+    out.push_str("Cast discovery snapshot\n");
+    field(out, "Snapshot revision", &value["snapshot_revision"]);
+    field(out, "Captured at", &value["captured_at"]);
+    let _ = writeln!(
+        out,
+        "Retained companies: {}\nRetained jobs: {}\nSources: {}",
+        items(&value["companies"]).len(),
+        items(&value["jobs"]).len(),
+        items(&value["source_health"]).len()
+    );
+    for item in items(&value["companies"]) {
+        company(out, item);
+    }
+    for item in items(&value["jobs"]) {
+        job(out, item);
+    }
+    for item in items(&value["source_health"]) {
+        source(out, item);
+    }
+    details(out, "Query coverage", &value["coverage"], 0);
 }
 
 fn text(value: &Value) -> String {

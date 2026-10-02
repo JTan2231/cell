@@ -1,7 +1,7 @@
 # Chancery installation
 
 Use [Install and recover the Chancery reader](../provider/manuals/installation-operate.md)
-for candidate selection, verification, installation, post-install registration,
+for candidate selection, installation metadata, post-install registration,
 selector ownership, and retained-release recovery.
 
 Read the installed procedure and its feature contracts with

@@ -1,6 +1,6 @@
 {
   "id": "clew.state",
-  "contract_version": 4,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -26,7 +26,7 @@
     "Doctor establishes local schema-three ledger integrity at invocation. Installation performs setup without artifact-integrity, ledger-integrity, or Cast readiness checks."
   ],
   "failure_and_recovery": [
-    "Foreign selectors, changed bytes, stale expected selections, incompatible state, unsafe migration mappings and unresolved holds stop the operation. Preserve recovery evidence.",
+    "Foreign selectors, stale expected selections, incompatible state, unsafe migration mappings and existing admission holds stop the operation. Completed deployment effects remain without automatic retry, rollback or product recovery. Preserve evidence and inspect current product state before an authorized new attempt.",
     "Program recovery preserves ledger and email state. Select programs compatible with the retained schema and reconcile uncertain writes and acceptance before replay."
   ],
   "privacy": [
@@ -81,7 +81,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Local state must be private and compatible. Direct installation selects supplied program and provider bytes. Coordinated configuration requires drained run-owned email maintenance; migration requires the sole hold. A nonempty schema-one migration additionally requires exact Platter mappings."
+        "statement": "Local state must be private and compatible. Direct installation selects supplied program and provider files. Product deployment setup uses ordinary admission; an existing hold can refuse it. A nonempty schema-one migration additionally requires exact Platter mappings. Deployment creates no hold and drains no email."
       }
     ],
     "inputs": [
@@ -105,7 +105,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Content hashes identify immutable cell-install-v2 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
+        "statement": "Opaque UUIDs identify immutable cell-install-v3 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
       }
     ],
     "completeness_and_freshness": [
@@ -123,7 +123,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The file transaction selects programs and the matching complete provider atomically. Email maintenance captures intent, holds admission, suspends the binding, drains sends, and restores captured or explicit intent while preserving halts. Older-ledger migration excludes writers, commits schema three, application associations, aliases, and exact write requests in one transaction. Old writers are rejected afterward."
+        "statement": "Individual file-selector replacements are atomic; failed deployment retains completed changes. The product command initializes or migrates state and selects its daily definition directly under ordinary admission while preserving saved or explicit enabled intent and failure halts. Older-ledger migration excludes writers and commits schema three, application associations, aliases and exact write requests in one transaction. Old writers are rejected afterward. Explicit email maintenance retains its separate owner and admission rules."
       }
     ],
     "operational_limits": [
@@ -143,7 +143,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only cell-install-v2 program releases, ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
       },
       {
         "status": "unspecified",
@@ -171,7 +171,7 @@
       },
       {
         "status": "declared",
-        "statement": "Clockwork owns binding intent, activation and failure halts preserved by coordinated email maintenance. Clew owns its exact runner and release definition.",
+        "statement": "Clockwork owns binding selection, activation and failure halts. Clew owns its exact runner and release definition. Product deployment preserves saved or explicitly supplied enabled intent without temporary suspension.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

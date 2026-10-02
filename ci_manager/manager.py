@@ -367,8 +367,6 @@ class Worker:
         if "signing_policy" not in job:
             return  # Retained jobs do not acquire a new admission policy.
         policy = job["signing_policy"]
-        if signing.policy_digest(policy) != job.get("signing_policy_digest"):
-            raise signing.SigningError("retained signing policy digest does not match its snapshot")
         signing.assert_current(policy)
 
     def signing_policy_file(self, job: dict) -> Path:
@@ -384,6 +382,16 @@ class Worker:
         selection = job["last_receipt"]["selection"]
         return sorted(set(selection["product_tests"] + selection["platform_products"]
                           + (job["deploy_products"] or [])))
+
+    def prepared_build_snapshot_file(self, job: dict) -> Path:
+        path = self.directory(job) / f"production-{len(job['validations']) - 1}.snapshot.json"
+        snapshot = job["production_receipt"]["preparation"]
+        if path.exists():
+            if json.loads(path.read_text()) != snapshot:
+                raise ManagerError("retained prepared build snapshot differs from the production receipt")
+        else:
+            atomic_json(path, snapshot)
+        return path
 
     def release_builds_deferred(self, job: dict) -> bool:
         return (job.get("release_builds_deferred", False) is True
@@ -439,7 +447,7 @@ class Worker:
                 return
         else:
             receipt = {"schema_version": 1, "state": "passed", "source_commit": candidate,
-                       "signing_policy_digest": job["signing_policy_digest"], "products": [],
+                       "signing_policy": policy, "products": [],
                        "preparation": {"candidates": {}}}
         job["production_receipt"] = receipt
         self.verify_production(job)
@@ -456,20 +464,24 @@ class Worker:
         if (not isinstance(receipt, dict) or receipt.get("schema_version") != 1
                 or receipt.get("state") != "passed"
                 or receipt.get("source_commit") != job["candidate_commit"]
-                or receipt.get("signing_policy_digest") != job["signing_policy_digest"]
                 or receipt.get("products") != products):
-            raise ManagerError("acceptance has no matching successful production signing receipt")
+            raise ManagerError("acceptance has no matching successful production preparation receipt")
         preparation = receipt.get("preparation")
         if (not isinstance(preparation, dict)
                 or not isinstance(preparation.get("candidates"), dict)
-                or sorted(preparation["candidates"]) != products):
+                or sorted(preparation["candidates"]) != products
+                or (products and preparation.get("source_key") != job["candidate_commit"])):
             raise ManagerError("production signing receipt does not cover its product selection")
-        if (products and job["last_receipt"]["selection"].get("release_builds_deferred", False)
-                and preparation.get("release_check") is not True):
-            raise ManagerError("production signing receipt has no release check evidence")
+        # Older receipts retain the policy inside preparation. Empty legacy
+        # preparations have no code to verify and require only the job policy.
+        receipt_policy = receipt.get("signing_policy", preparation.get("signing_policy"))
+        if (products or "signing_policy" in receipt) and receipt_policy != job["signing_policy"]:
+            raise ManagerError("production signing receipt has another signing policy")
         if products and job["last_receipt"]["selection"].get("release_builds_deferred", False):
+            if preparation.get("release_check") is not True:
+                raise ManagerError("production signing receipt has no release check evidence")
             result_path = self.directory(job) / f"production-{len(job['validations']) - 1}" / "result.json"
-            if receipt.get("preparation_digest") != production_candidate.digest(result_path):
+            if json.loads(result_path.read_text()) != preparation:
                 raise ManagerError("production build receipt changed after preparation")
         for product, record in preparation["candidates"].items():
             if (not isinstance(record, dict) or not isinstance(record.get("candidate_dir"), str)
@@ -479,12 +491,6 @@ class Worker:
             expected = self.directory(job) / f"production-{len(job['validations']) - 1}" / "candidates" / product
             if path != expected:
                 raise ManagerError("production signing receipt names a candidate outside its preparation")
-            manifest = production_candidate.verify(path, signing_policy=job["signing_policy"])
-            if (manifest.get("source_commit") != job["candidate_commit"]
-                    or manifest.get("source_key") != preparation.get("source_key")
-                    or manifest.get("product") != product
-                    or manifest.get("candidate_id") != record["candidate_id"]):
-                raise ManagerError("production signing receipt has a mismatched candidate")
 
     def accepting(self, job: dict) -> None:
         receipt = job["last_receipt"]
@@ -504,6 +510,8 @@ class Worker:
             products = sorted(set(selection["product_tests"] + selection["platform_products"]))
         job["deployment_request"] = {"request_id": f"ci:{job['id']}:deployment:1",
                                       "source_commit": candidate, "products": products}
+        if job.get("policy", {}).get("manifest_executor") == 1:
+            job["deployment_request"]["manifest_executor"] = 1
         self.save(job, "deploying")
 
     def deployment_command(self, job: dict, command: str) -> list[str]:
@@ -517,7 +525,7 @@ class Worker:
                 if job["last_receipt"]["selection"].get("release_builds_deferred", False):
                     args += ["--prepared-build", str(self.directory(job)
                              / f"production-{len(job['validations']) - 1}" / "result.json"),
-                             "--prepared-build-digest", job["production_receipt"]["preparation_digest"]]
+                             "--prepared-build-snapshot-file", str(self.prepared_build_snapshot_file(job))]
         return args
 
     def deployment_read(self, job: dict, action: str) -> dict:
@@ -548,12 +556,14 @@ class Worker:
             job["waiting_reason"] = "deployment"
             self.save(job)
             return
-        if state == "terminal":
+        if state in {"terminal", "interrupted"}:
             result = observed
         else:
             action = "reconcile" if state == "needs_reconciliation" else "start" if state == "not_found" else None
             if action is None:
                 raise ManagerError("unknown deployment operation state")
+            if job.get("policy", {}).get("manifest_executor") != 1:
+                raise ManagerError("retained deployment protocol cannot execute; inspect its recorded effects")
             # A retained deployment identity makes a repeated start safe. Child
             # invocation files are distinct observations of that same operation.
             ordinal = job.get("deployment_observations", 0)
@@ -572,15 +582,15 @@ class Worker:
                 job["deployment_observations"] = ordinal + 1
                 self.save(job)
                 return
-            if result.get("operation_state") != "terminal":
+            if result.get("operation_state") not in {"terminal", "interrupted"}:
                 if (action == "start" and type(child.get("exit_code")) is int and child["exit_code"] != 0
-                        and type(result.get("schema")) is int and result["schema"] == 1
+                        and type(result.get("schema")) is int and result["schema"] in {1, 2}
                         and result.get("state") == "stopped" and type(result.get("exit_code")) is int
                         and result["exit_code"] == child["exit_code"] and "operation_state" not in result):
                     # A stopped invocation can precede admission. Prove that
                     # the same operation is still absent before stopping CI.
                     observed = self.deployment_read(job, "status")
-                    if (type(observed.get("schema")) is not int or observed["schema"] != 1
+                    if (type(observed.get("schema")) is not int or observed["schema"] not in {1, 2}
                             or observed.get("request_id") != request["request_id"]):
                         raise ManagerError("deployment status does not match the requested operation")
                     if (result.get("request_id", request["request_id"]) != request["request_id"]
@@ -599,6 +609,9 @@ class Worker:
                 return
         if result.get("source_commit") != request["source_commit"] or result.get("request_id") != request["request_id"]:
             raise ManagerError("deployment receipt does not match the admitted operation")
+        if job.get("policy", {}).get("manifest_executor") == 1:
+            self.finish_manifest_deployment(job, result)
+            return
         atomic_json(self.directory(job) / "deployment.json", result)
         job["deployment_result"] = result
         installed = result.get("state") in {"succeeded", "installed", "cleanup_failed"}
@@ -610,6 +623,31 @@ class Worker:
         else:
             self.finish(job, "failed", "Deployment failed or recovery did not establish successful installation.",
                         unresolved=result.get("maintenance", {}).get("state") not in {"released", "not_started"})
+
+    def finish_manifest_deployment(self, job: dict, result: dict) -> None:
+        request = job["deployment_request"]
+        if (type(result.get("schema")) is not int or result["schema"] != 2
+                or result.get("manifest_executor") != 1
+                or not isinstance(result.get("products"), list)
+                or not all(isinstance(name, str) for name in result["products"])
+                or sorted(result["products"]) != sorted({"krisis" if name == "decisions" else name
+                                                        for name in request["products"]})
+                or result.get("state") not in {"succeeded", "failed", "interrupted"}
+                or not isinstance(result.get("steps"), list)):
+            raise ManagerError("deployment receipt does not match the manifest execution contract")
+        completed = (result["state"] == "succeeded" and type(result.get("exit_code")) is int
+                     and result["exit_code"] == 0 and bool(result["steps"])
+                     and all(isinstance(step, dict) and step.get("state") == "succeeded"
+                             for step in result["steps"]))
+        if result["state"] == "succeeded" and not completed:
+            raise ManagerError("deployment success has incomplete instruction results")
+        atomic_json(self.directory(job) / "deployment.json", result)
+        job["deployment_result"] = result
+        job["installation_completed"] = completed
+        if completed:
+            self.finish(job, "succeeded", "Deployment instructions completed for the accepted candidate.")
+        else:
+            self.finish(job, "failed", "Deployment instructions " + result["state"] + ".")
 
     def notifying(self, job: dict) -> None:
         notice = job["notification"]
@@ -660,7 +698,7 @@ class Worker:
                 next_phase = "repair_wait"
         elif phase == "deploying" and job.get("deployment_request"):
             observed = self.deployment_read(job, "status")
-            if observed.get("operation_state") in {"terminal", "active", "needs_reconciliation", "not_found"}:
+            if observed.get("operation_state") in {"terminal", "interrupted", "active", "needs_reconciliation", "not_found"}:
                 next_phase = "deploying"
         elif phase == "checking":
             ordinal = len(job.get("validations", []))

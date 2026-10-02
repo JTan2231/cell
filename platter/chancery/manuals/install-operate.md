@@ -1,7 +1,7 @@
 # Install and maintain Platter
 
-Installation places resources and performs setup under the documented maintenance
-boundary. It does not gate completion on persistent-state validation, artifact
+Installation places resources and runs the declared product setup command under
+ordinary admission and activity locks. It does not gate completion on artifact
 integrity audits, or runtime readiness checks. The product's ordinary diagnostics
 and runtime checks remain available separately.
 
@@ -49,10 +49,10 @@ For separately authorized installation from committed local `main`:
 
 `plan` is read-only. Deployment selects the exact local main commit and ignores
 uncommitted edits. Direct `platter-install install` and `recover` are refused;
-use the coordinator and its retained recovery procedure. When selected together,
-Cast, Annals, Email, Nucleus, and Weaver install before Platter. Maintenance
-includes affected Nucleus requesters. Unselected products need compatible
-installed interfaces and are not implicitly upgraded.
+use the instruction executor. Select required dependency updates explicitly.
+The committed declarations order selected instructions; the executor adds no
+dependencies or affected requesters. Unselected products retain their installed
+interfaces. Deployment creates no maintenance hold and drains no requester.
 
 Require Cast collection contract 5, Email's byte-payload interface, fixed Annals
 Vita reads, compatible Weaver caller identity, authenticated Nucleus, renderer
@@ -109,8 +109,8 @@ the exact Weaver job IDs retained in Platter runs. It creates no replacement
 model attempt or synthetic domain record. Preserve holds if any matching job,
 local activity, or other owner remains unresolved.
 
-The coordinator uses a selected candidate for maintenance. Affected-only
-installations use the installed command. It does not preflight state compatibility. This choice does not migrate state or start domain work.
+These commands are explicit maintenance operations. The manifest deployment
+command does not invoke hold or drain and does not operate Nucleus maintenance.
 
 Schema-one import commits before hashed file cleanup. Failure before commit
 leaves predecessor state; failure afterward retains new state, originals, and
@@ -119,14 +119,14 @@ two through six migrate retained selections and advance to seven. Every
 migration preserves captured inputs, requests, artifacts, and delivery identities.
 
 Older binaries cannot operate schema seven. Recovery needs a compatible
-candidate. File compensation does not undo migration. Do not reset records to
+candidate. Program selection does not undo migration. Do not reset records to
 force success.
 
 ## Complete an interrupted migration
 
-1. Retain the exact deployment owner, corrected compatible
+1. Retain the exact explicit maintenance owner, corrected compatible
    executable, and private completion-receipt path.
-2. Stop concurrent coordinator recovery through its deployment lock.
+2. Exclude concurrent deployment through the executor's admission lock.
 3. Require the existing sole hold, drained work, and activity locks.
 4. Complete migration and local verification with the recorded evidence:
 
@@ -135,10 +135,11 @@ CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
   --completion-receipt /absolute/private/deployment/platter-migration.json
 ```
 
-5. Resume coordinator recovery only after success.
+5. Inspect current state and complete the explicit maintenance operation after success.
 
-The completion receipt prevents a resumed installer from repeating completed
-migration. Existing schema-one receipts remain accepted without reading their
+The optional product completion receipt prevents this explicit operation from
+repeating completed migration. Manifest deployment does not create or consume
+it. Existing schema-one receipts remain accepted without reading their
 former data-copy fields. This command does not rebind dependencies, release
 holds, or establish full readiness. Omit `--completion-receipt` for ordinary
 migration. Keep unresolved recovery held; do not reset domain state.
@@ -159,12 +160,12 @@ saved. No Vita source setting is stored. Deployment supplies no missing prompt
 contents. Before a caller uses separate project editorial policy, publish its
 complete Bazaar components and selection as required by `platter.maintenance`.
 
-Cell captures and disables an existing `platter/daily` binding under maintenance.
-It selects an exact updated definition disabled and preserves timer, arguments,
-environment, working directory, output paths, incidents, and enabled intent.
+The product command captures an existing `platter/daily` binding and selects its
+updated definition directly. It preserves timer, arguments, environment,
+working directory, output paths, incidents, and saved enabled intent.
 An absent binding stays absent unless explicit activation settings are supplied.
-Optional `enabled` selects intended activation. Final activation follows all
-hold releases and never clears a failure halt or reconciles a send.
+Optional `enabled` overrides saved activation intent. Deployment temporarily
+disables no binding and never clears a failure halt or reconciles a send.
 
 For separately authorized daily activation, prepare a private definition:
 
@@ -193,9 +194,12 @@ resume permits future scheduling without retrying preparation or uncertain mail.
 
 ## Complete installation
 
-Complete resource setup, migration, program/provider publication, run-owned
-hold release, and restoration of captured activation intent. Retain migration
-completion receipts for interrupted installer recovery.
+Read the retained executor outcome for resource placement and product setup.
+A failed instruction retains completed file, migration, configuration, and
+schedule effects. The executor performs no automatic retry, rollback, or product
+recovery. Inspect current Platter state before an authorized new attempt.
+Reconcile and acknowledge executor admission separately from product recovery.
+Preserve separately acquired maintenance holds.
 Register command inventory after installation or update:
 
 ```sh

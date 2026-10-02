@@ -77,8 +77,8 @@ participate in installed discovery.
 ## 4. Couple documentation to the product release
 
 Stage the exact bundle as `share/chancery/PROVIDER_ID` under the owning
-content-addressed release. Include its bytes in the release identity and
-integrity manifest. Follow the required `chancery.bundle.validate` publication
+immutable release. Retain its files in the release inventory and
+file manifest. Follow the required `chancery.bundle.validate` publication
 guarantees and the product's own installation contract. The product installer
 owns exactly its selector under:
 
@@ -86,8 +86,9 @@ owns exactly its selector under:
 ~/Library/Application Support/Chancery/providers/PROVIDER_ID
 ```
 
-The selector should follow the product's `current` release and roll back with
-it. Chancery upgrades preserve the entire providers directory. Product runtime
+The selector should follow the product's `current` release during installation
+and explicit retained-release recovery. A failed instruction retains completed
+changes for inspection and requested recovery. Chancery upgrades preserve the entire providers directory. Product runtime
 code must not invoke the Chancery catalog as an execution dependency, and product installation must remain useful if the
 Chancery binary is absent.
 

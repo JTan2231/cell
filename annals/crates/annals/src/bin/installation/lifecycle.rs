@@ -1,8 +1,7 @@
 use super::{
     DecisionsArgs, Duration, Error, InstallArgs, Path, PathBuf, Result, Value, agent, annals, call,
-    directory, environment, expected, fs, home, install_root, json, optional_private,
-    private_directory, private_file, release, schedule, state, toml_bytes, toml_value,
-    write_private,
+    directory, expected, fs, home, install_root, json, optional_private, private_directory,
+    private_file, release, schedule, state, toml_bytes, toml_value, write_private,
 };
 use cell_install::{InstallSnapshot, PreparedRelease, ReleaseInfo, SelectionReceipt};
 use serde::{Deserialize, Serialize};
@@ -460,6 +459,146 @@ fn initialize(
     Ok(config)
 }
 
+/// Execute declared setup without admission holds, draining, or acceptance probes.
+#[allow(
+    clippy::too_many_lines,
+    reason = "Keep the ordered product setup instructions together"
+)]
+pub(super) fn deploy(args: &InstallArgs) -> Result<Value> {
+    let home = home(args.home.home.clone())?;
+    let candidate = release::prepare(args, &home)?;
+    let layout = release::layout();
+    let prior = cell_install::inspect_installation(&layout, &home, &release::legacy)?;
+    let mut transaction = cell_install::lock_installation(&layout, &home, &release::legacy)?;
+    transaction.recheck(&prior)?;
+    let _catalog = annals::api::lock_library_catalog(&state(&home))
+        .map_err(|error| Error::new(error.to_string()))?;
+    let payload = candidate.root.join("libexec/annals");
+    for named in named_libraries(&home)? {
+        call(
+            &payload,
+            &[
+                "--library".into(),
+                named.root.join("annals.db").into_os_string(),
+                "--expected-library-id".into(),
+                named.library_id.into(),
+                "--json".into(),
+                "migrate".into(),
+            ],
+            &home,
+            None,
+        )?;
+    }
+    let mut definitions = Vec::new();
+    for (key, library, decisions) in [
+        ("annals/inbox", state(&home), false),
+        (
+            "annals/decisions-inbox",
+            state(&home).join("decisions"),
+            true,
+        ),
+    ] {
+        directory(&library)?;
+        directory(&library.join("log"))?;
+        let control = schedule::inspect(&home, &args.clockwork, key)?;
+        let before = capture(&library.join("config.toml"))?;
+        let fresh = !optional_private(&library.join("annals.db"))?;
+        let initialized = if fresh {
+            Some(call(
+                &payload,
+                &[
+                    "--library".into(),
+                    library.join("annals.db").into_os_string(),
+                    "--json".into(),
+                    "init".into(),
+                    "--kind".into(),
+                    if decisions { "decisions" } else { "general" }.into(),
+                ],
+                &home,
+                None,
+            )?)
+        } else {
+            None
+        };
+        let id = if decisions {
+            initialized
+                .as_ref()
+                .and_then(|value| value.pointer("/data/library_id"))
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .or(before
+                    .as_ref()
+                    .map(|bytes| {
+                        toml_value(
+                            std::str::from_utf8(bytes)
+                                .map_err(|_| Error::new("invalid Annals config"))?,
+                        )
+                    })
+                    .transpose()?
+                    .and_then(|value| {
+                        value
+                            .get("decision_feed")
+                            .and_then(|value| value.get("expected_library_id"))
+                            .and_then(toml::Value::as_str)
+                            .map(str::to_owned)
+                    }))
+                .ok_or_else(|| Error::new("decisions configuration has no library identity"))?
+                .into()
+        } else {
+            None
+        };
+        let document = config(
+            &home,
+            &library,
+            &args.nucleus_socket,
+            before.as_deref(),
+            id.as_deref(),
+        )?;
+        write_private(&library.join("config.toml"), &document, before.is_some())?;
+        annals(
+            &payload,
+            &library.join("config.toml"),
+            &["migrate"],
+            &home,
+            None,
+        )?;
+        let definition = schedule::definition(&home, key, &library, &candidate.info)?;
+        let file = tempfile::NamedTempFile::new_in(install_root(&home))?;
+        fs::write(
+            file.path(),
+            toml::to_string(&definition)
+                .map_err(|_| Error::new("cannot render Annals Clockwork definition"))?,
+        )?;
+        let digest = schedule::register(&home, &args.clockwork, key, file.path())?;
+        definitions.push((
+            key,
+            digest,
+            args.enabled.unwrap_or(!control.present || control.enabled),
+        ));
+    }
+    let usage = state(&home).join("usage.toml");
+    write_private(
+        &usage,
+        &usage_config(&home, &args.nucleus, &args.nucleus_socket)?,
+        optional_private(&usage)?,
+    )?;
+    transaction.publish(&candidate, &prior, |_| Ok(()))?;
+    for (key, digest, enabled) in definitions {
+        let mut arguments = vec![
+            "--json".into(),
+            "binding".into(),
+            if enabled { "switch" } else { "disable" }.into(),
+            key.into(),
+        ];
+        if !enabled {
+            arguments.push("--select".into());
+        }
+        arguments.push(digest.into());
+        call(&args.clockwork, &arguments, &home, None)?;
+    }
+    Ok(json!({"release_id": candidate.info.release_id, "installed": true}))
+}
+
 pub(super) fn install(args: &InstallArgs) -> Result<Value> {
     let (owner, outer) = owner();
     install_owned(args, &owner, outer)
@@ -792,7 +931,16 @@ fn apply_library(
     }
     journal.mutation_started = true;
     journal.save(path)?;
-    if !journal.database_existed {
+    if journal.database_existed {
+        annals(
+            &payload,
+            &library.join("config.toml"),
+            &["migrate"],
+            &journal.home,
+            Some(&journal.owner),
+        )?;
+        write_private(&library.join("config.toml"), &journal.config_after, true)?;
+    } else {
         let stage = path.join("new-library");
         initialize(&payload, &journal.home, &stage, socket, decisions)?;
         let staged_config = toml_value(&fs::read_to_string(stage.join("config.toml"))?)?;
@@ -825,15 +973,6 @@ fn apply_library(
             write_private(&library.join("config.toml"), &journal.config_after, true)?;
         }
         hold(&payload, &library, &journal.home, &journal.owner, "hold")?;
-    } else {
-        annals(
-            &payload,
-            &library.join("config.toml"),
-            &["migrate"],
-            &journal.home,
-            Some(&journal.owner),
-        )?;
-        write_private(&library.join("config.toml"), &journal.config_after, true)?;
     }
     private_state(&library, decisions)?;
     if !handoff && journal.candidate_digest.is_none() {
@@ -860,19 +999,7 @@ fn apply_library(
                     .as_ref()
                     .ok_or_else(|| Error::new("Annals publication has no suspended prior"))?
                     .after,
-                |_| {
-                    for command in ["annals", "annals-usage"] {
-                        for option in ["--version", "--help"] {
-                            cell_install::command::checked(
-                                &journal.home.join(".local/bin").join(command),
-                                &[option.into()],
-                                &environment(&journal.home, Some(&journal.owner)),
-                                Duration::from_secs(30),
-                            )?;
-                        }
-                    }
-                    Ok(())
-                },
+                |_| Ok(()),
             )?,
         );
         journal.save(path)?;
@@ -1155,7 +1282,6 @@ pub(super) fn recover(home: &Path, path: &Path) -> Result<Value> {
         &release::root(home, &journal.candidate),
         &release::legacy,
     )?;
-    cell_install::signing::verify_native("annals", "annals", &journal.payload())?;
     let layout = release::layout();
     let mut tx = cell_install::lock_installation(&layout, home, &release::legacy)?;
     let _catalog_lock = annals::api::lock_library_catalog(&state(home))

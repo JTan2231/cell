@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -18,7 +18,7 @@
     "May create a named general library, append instructions, and persist Conatus configuration and feed intake.",
     "Update enqueues immutable documents and runs Annals automatic integration. Retry and re-examination can use model allowance and apply valid changes.",
     "Direct installation changes only the packaged release selection; Cell deployment also configures state and manages saved runner intent.",
-    "Cell deployment holds admission, suspends the runner, initializes absent state or rebinds the final Annals executable while preserving both library IDs, cursor, records and instructions, registers a disabled exact definition, and restores captured pause and enabled intent after all holds release."
+    "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path, preserving library IDs, cursor, records, instructions and product pause. It publishes each selected schedule with its intended enabled state under ordinary admission and runner locks. It creates no maintenance hold, suspends no runner, drains no work and performs no health or signature audit."
   ],
   "authority": [
     "Conatus owns intake, baseline, handoff, framing and views. Annals owns library content, graph interpretation, model submission and recovery. Clockwork owns activation; Nucleus owns execution."
@@ -115,7 +115,7 @@
       },
       {
         "status": "declared",
-        "statement": "Optional deployment settings: state_dir, decisions_config, annals_state_dir, library and enabled. Existing library selections cannot change. config returns only persistent paths and library IDs; maintenance exposes owner-scoped holds and drain."
+        "statement": "Optional deployment settings: state_dir, decisions_config, annals_state_dir, library, enabled and daily_email_enabled. Existing library selections cannot change. config returns only persistent paths and library IDs; separately invoked maintenance exposes owner-scoped holds and drain."
       }
     ],
     "outputs": [
@@ -161,7 +161,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment holds admission, suspends the runner, initializes absent state or rebinds the final Annals executable while preserving both library IDs, cursor, records and instructions, registers a disabled exact definition, and restores captured pause and enabled intent after all holds release."
+        "statement": "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path and publishes intended schedule selections. Existing library IDs, cursor, records, instructions, pause and incidents remain unchanged. It uses ordinary admission and runner locks without holds, schedule suspension or drain. Failure leaves completed effects in place. Interruption requires inspection before an explicit next operation, without automatic repeat, rollback or recovery."
       },
       {
         "status": "declared",
@@ -267,7 +267,7 @@
     {
       "id": "conatus.service",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 7
     },
     {
       "id": "conatus.library.explore",

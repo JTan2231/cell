@@ -218,7 +218,10 @@ fn current(paths: &Paths) -> Result<Option<String>> {
     read_link(&paths.install.join("current"))?
         .map(|path| {
             let value = path.to_str().ok_or("invalid current selector")?;
-            if !value.strip_prefix("releases/").is_some_and(valid_hash) {
+            if !value
+                .strip_prefix("releases/")
+                .is_some_and(cell_install::valid_release_id)
+            {
                 return fail("invalid Semantics current selector");
             }
             read_release(&paths.install.join(&path))?;
@@ -469,7 +472,6 @@ impl Paths {
         Ok(result["data"].clone())
     }
     pub fn initialize(&self, payload: &Path, watermark: Option<&str>) -> Result<()> {
-        cell_install::signing::verify_native("semantics", "semantics", payload)?;
         semantics::store::Store::open(&self.database)?;
         if let Some(watermark) = watermark {
             let output = Command::new(payload)
@@ -916,6 +918,52 @@ fn retain_failure(
     }
 }
 
+/// Place the declared release and configure its database and worker definition.
+pub(super) fn deploy(args: &Candidate, enabled: Option<bool>) -> Result<()> {
+    let paths = Paths::new(&args.home)?;
+    paths.prepare()?;
+    let prepared = prepare(args)?;
+    let layout = layout();
+    let prior = cell_install::inspect_installation(&layout, &paths.home, &legacy)?;
+    let mut transaction = cell_install::lock_installation(&layout, &paths.home, &legacy)?;
+    let binding_output =
+        paths.command(&paths.clockwork, &["--json", "binding", "show", KEY], None)?;
+    let binding: Value = serde_json::from_slice(&binding_output.stdout)
+        .or_else(|_| serde_json::from_slice(&binding_output.stderr))?;
+    let captured = if binding_output.status.success() {
+        binding["data"]["enabled"]
+            .as_bool()
+            .ok_or("Clockwork returned no enabled state")?
+    } else if binding.pointer("/error/code").and_then(Value::as_str) == Some("binding_not_found") {
+        true
+    } else {
+        return fail("Clockwork could not read the selected worker binding");
+    };
+    paths.initialize(&prepared.root.join("libexec/semantics"), None)?;
+    let manifest: clockwork::api::Manifest =
+        serde_json::from_value(definition(&paths, &prepared.root)?)?;
+    let instruction = tempfile::NamedTempFile::new_in(&paths.install)?;
+    fs::write(instruction.path(), manifest.to_toml()?)?;
+    let definition = paths.clock(&[
+        "definition",
+        "register",
+        instruction
+            .path()
+            .to_str()
+            .ok_or("definition path is not UTF-8")?,
+    ])?;
+    let digest = definition["digest"]
+        .as_str()
+        .ok_or("Clockwork returned no definition reference")?;
+    transaction.publish(&prepared, &prior, |_| Ok(()))?;
+    if enabled.unwrap_or(captured) {
+        paths.clock(&["binding", "switch", KEY, digest])?;
+    } else {
+        paths.clock(&["binding", "disable", KEY, "--select", digest])?;
+    }
+    Ok(())
+}
+
 pub(super) fn install(args: &Candidate) -> Result<Value> {
     if args.final_decisions_watermark.is_some() && !args.keep_maintenance {
         return fail("legacy Annals activation requires retained maintenance");
@@ -1262,12 +1310,5 @@ pub(super) fn uninstall(home: &HomeArgs) -> Result<()> {
         return fail("Semantics had dual scheduler admission; maintenance remains");
     }
     tx.suspend(&installed, &public_paths())?;
-    Ok(())
-}
-
-pub(super) fn recover_lock(home: &HomeArgs) -> Result<()> {
-    let paths = Paths::new(home)?;
-    let layout = layout();
-    let _lock = cell_install::transaction::lock_installation(&layout, &paths.home, &legacy)?;
     Ok(())
 }

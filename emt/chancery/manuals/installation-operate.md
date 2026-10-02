@@ -1,8 +1,7 @@
 # Install and operate EMT
 
 Use this operation to install matched EMT bytes, configure an installation,
-activate its worker, inspect readiness or recover a
-coordinated update. EMT owns its configuration, correspondence, maintenance
+activate its worker, inspect readiness or inspect a failed installation. EMT owns its configuration, correspondence, maintenance
 holds and installation. Clockwork owns the worker schedule and failure halt;
 Nucleus owns jobs; Email owns transport and credentials.
 
@@ -58,7 +57,7 @@ alone do not prove readiness.
    `emt --register-usage` to register command inventory without product work.
 
 This installs bytes without initializing state, starting agents, sending mail
-or enabling a schedule. Use the coordinated procedure below for initialized
+or enabling a schedule. Use the manifest procedure below for initialized
 updates; direct initialized selector recovery is unsupported.
 
 ## Initialize, configure and activate
@@ -123,37 +122,34 @@ unestablished hold ownership or unresolved external effects. Never release
 another owner's hold or silently resume a halt. Nucleus restart cannot resume
 old agent processes.
 
-## Update and recover through the coordinator
+## Execute installation instructions
 
-1. Run the authorized initialized update through `./deploy.sh emt`. The
-   coordinator captures configuration and worker intent, disables the worker,
-   holds and drains EMT, records migration evidence, installs matched bytes,
-   selects a disabled exact definition and releases its own holds after setup.
+1. Read `nucleus manual` and review `./deploy.sh plan emt`. Select each required
+   product explicitly; the executor does not infer dependencies or compatibility.
 2. Supply setup configuration or `enabled` and `paused` intent only when
-   authorized. Omitted settings preserve saved values. Fresh deployment
-   defaults to activation after configuration; an existing absent binding remains
-   absent unless activation is explicitly requested. Incoming-mail progress
-   changes are not setup inputs.
-3. Verify the retained coordinator migration receipt, completed schema and
-   deployment owner. Confirm restored pause, enabled state and existing
-   failure-halt evidence. A requester-only update leaves Nucleus admission open;
-   Nucleus replacement waits for EMT exchanges before holding the service.
-4. Run the next authorized ordinary `./deploy.sh emt` command after an
-   interrupted phase to let the coordinator recover its retained transaction.
-   Read `nucleus manual` for shared coordination. Reuse the original migration
-   receipt and captured configuration. Restore a disabled exact definition
-   before release, then apply captured operator intent.
-5. Run `emt --register-usage` and inspect installed release metadata after installation or update.
+   authorized. Omitted settings preserve saved values. Fresh deployment defaults
+   to activation after configuration. An existing absent binding remains absent
+   unless activation is requested. Incoming-mail progress is not a setup input.
+3. Run `./deploy.sh emt`. Its declared installer instruction publishes matched
+   bytes, initializes or migrates local state, saves configuration and selects
+   the worker definition with its intended enabled state. It uses ordinary
+   admission and runner locks, without creating holds or draining exchanges.
+4. Inspect the retained instruction exit status and log. A successful execution
+   proves completion of the declared instructions. Use ordinary EMT diagnostics
+   separately when the authorized endpoint requires product readiness.
+5. Inspect effects after a failed or interrupted instruction before an explicit
+   next operation. The executor retains completed effects and does not repeat,
+   roll back or recover an instruction automatically.
 
-Retain unresolved holds when recovery evidence cannot be established. Stop an
-initialized direct-selector recovery attempt. Installation, initialization,
-configuration, admission and scheduling remain separate effects.
+Direct initialized selector recovery remains unsupported. Explicit maintenance,
+product pause, schedule enablement and exact failure-halt approval are separate
+operations. Installation does not clear an existing halt or retry a domain action.
 
 ## Verify the endpoint
 
 Installation performs setup without artifact-integrity, state-integrity, or
-operational-readiness checks. Require known maintenance counts and preserve the
-authorized schedule, pause, and halt intent. Ordinary doctor and worker checks
+operational-readiness checks. Preserve the authorized schedule, pause and halt
+intent. Explicit maintenance requires known drain counts. Doctor and worker checks
 remain separate. Interpret each operation receipt separately.
 Email acceptance proves submission to the provider; product evidence establishes
 intervention success. Receiving authorization and final delivery require their
