@@ -137,6 +137,13 @@ Calling `cell-ci install` from an installed release selects that release's own
 bytes; it does not find newer source automatically. The repository's
 `./ci.sh install` selects that checkout's manager package.
 
+Production preparation uses the build, candidate, and inventory modules pinned
+in the installed manager release. Product descriptors can declare canonical
+checkout-relative roots such as `clew` or `products/clew`. Install a manager that
+supports the new source paths before submitting a directory relocation. Keep
+the current layout while validating that compatibility change, then use the
+paused, drained installation procedure above before submitting the move.
+
 Installation can also replace the worker while one explicitly cancelled job is
 blocked in its checking phase. Admission must be paused. The job must have no
 pending recovery request, accepted source, model attempts, unresolved model
