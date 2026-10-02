@@ -143,6 +143,7 @@ class NotificationTests(unittest.TestCase):
     def test_finish_preserves_frozen_payload_and_key(self):
         worker = Worker.__new__(Worker)
         worker.store = mock.Mock()
+        worker.cleanup_worktree = mock.Mock()
         job = self.job(notification={"subject": "old subject", "body": "old body", "key": "old key"})
         original = job["notification"].copy()
         worker.finish(job, "succeeded", "new message")

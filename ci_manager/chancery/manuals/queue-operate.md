@@ -172,7 +172,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.8.0 uses queue contract 10 and retains journal
+arguments. Manager release 0.8.1 uses queue contract 11 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true` and
 `policy.manifest_executor = 1`. The latter selects deployment receipt schema 2.
 Retained schema-1 deployment outcomes remain readable. The new manager does
@@ -239,9 +239,10 @@ identity rejects admission. A retry with the same request key returns the
 original job and signing snapshot. It does not adopt later configuration.
 
 Submission authorizes the defined bounded patch loop, private candidate commits,
-advancement of `refs/ci/accepted`, the selected exact-source deployment, and the
-deterministic outcome email. It does not authorize remote Git publication,
-credential changes, arbitrary emails, or deletion of retained work.
+advancement of `refs/ci/accepted`, the selected exact-source deployment, removal
+of the settled job worktree, and the deterministic outcome email. It does not
+authorize remote Git publication, credential changes, arbitrary emails, or
+deletion of retained records.
 
 Repeat `--deploy PRODUCT` to select deployment products explicitly. Without that
 selection, the manager uses products covered by the passing validation's product
@@ -462,8 +463,8 @@ Process disappearance and elapsed time do not establish successful completion.
 Resume refuses a blocked or unresolved active job. Service restart does not
 clear that condition. Do not edit the journal, reset accepted history, delete
 private refs, or invent a new provider identity to conceal an uncertain result.
-There is no automatic journal migration, artifact cleanup, or unsupported-schema
-recovery path.
+There is no automatic journal migration, retained-artifact pruning, or
+unsupported-schema recovery path.
 
 Inspect the installed user service separately:
 
@@ -573,10 +574,27 @@ Launchd starts the worker from its installed release with output directed to
 `/dev/null`. The worker validates storage and opens its own external stdout and
 stderr logs. Launchd does not open removable-volume paths before process startup.
 
+The manager removes each job's complete worktree directory and its Git
+registration when validation, repair, and deployment have settled. This applies
+to successful, failed, cancelled, and already-included jobs. Removal starts
+after the outcome is saved and before the outcome email. An unresolved operation
+keeps its worktree until recovery establishes that the operation has settled.
+
+The worker also removes settled worktrees from older jobs and retries interrupted
+or failed cleanup. Before removal, it saves the exact private Git registration
+directory when one exists. This permits recovery of partial registration removal.
+Job status reports `worktree_cleanup.state` as `pending`, `removed`, or `failed`,
+its `updated` Unix timestamp, the optional `registration` directory, and an
+`error` for failed cleanup.
+
+Cleanup failure preserves the job outcome and notification. The worker retries
+on a later loop; it does not repeat validation or deployment.
+
 The manager retains exact model requests and final patch responses, candidate
-identities, CI logs and receipts, deployment correlations, and notification
-payloads and receipts. It provides no automatic pruning. Protect these files as
-private source and operational data. Provider retention remains separate.
+identities and refs, CI logs and receipts, deployment correlations, and
+notification payloads and receipts. It provides no automatic pruning of these
+records. Protect these files as private source and operational data. Provider
+retention remains separate.
 
 Signing configuration is a separate private host file at
 `~/Library/Application Support/Cell/signing.json`. It stays outside Git,
@@ -591,8 +609,9 @@ Installed programs, source Git metadata, service configuration, credentials,
 and live product state retain their host locations. Nucleus retains its own
 runtime records. Drive loss blocks work and does not authorize a fresh queue,
 retry, deletion, or success inference. Reconnect the same volume and use the
-existing recovery interfaces. Clear working material only after all owners
-have stopped and all operations have settled.
+existing recovery interfaces. The worker owns settled job worktree cleanup.
+Clear other working material only after all owners have stopped and all
+operations have settled.
 
 Nucleus may transmit source and diagnostics read by the agent to its model
 provider. Sending the outcome discloses product and check names, failed test

@@ -507,6 +507,12 @@ private input and candidate refs, and its private worktrees. `./ci.sh submit COM
 and `cell-ci submit COMMIT` submit to this manager. Bare `./ci.sh` does not
 validate; the manager invokes the internal validator for each candidate.
 
+The manager removes each settled job's complete worktree and Git registration
+before notification. Unresolved operations keep their worktrees for recovery.
+The worker also cleans settled historical jobs and retries failed cleanup.
+Journal records, private refs, candidate commits, logs and receipts remain
+retained. Read the CI operation contract for cleanup status and recovery.
+
 New submissions skip tests by default and retain other checks. Use
 `./ci.sh submit COMMIT --run-tests` to run the selected tests. Existing jobs
 retain their frozen test policy. Validation receipts and outcome emails state

@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 10,
+  "contract_version": 11,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -97,11 +97,12 @@
     "Deterministic fixes reuse the existing strict Clippy invocation's complete, nonconflicting MachineApplicable suggestion groups for tracked files and run the formatter once for selected Cargo packages. The validator prepares one retained patch in a temporary tracked snapshot, without changing the committed candidate, and stops before tests and later product stages when that patch is available. The manager records a private child candidate and validates it against the same base before acceptance. This path invokes no model and consumes no model repair point.",
     "The worker requests deployment of the exact accepted commit and sends a deterministic job-outcome email to Email's fixed personal recipient.",
     "Installation selects manager and provider files and configures the current-user service. Pause, cancellation, recovery and maintenance alter only their declared queue or operation state.",
-    "New jobs freeze policy.manifest_executor=1, preflight and freeze the host signing policy and retain release_builds_deferred=true. For a supported candidate, confined validation defers release compilation to one trusted production release check before source acceptance, even when tests are skipped. Deployment receives the frozen signing selection and prepared-build candidate references. Retained jobs keep their earlier release-build behavior."
+    "New jobs freeze policy.manifest_executor=1, preflight and freeze the host signing policy and retain release_builds_deferred=true. For a supported candidate, confined validation defers release compilation to one trusted production release check before source acceptance, even when tests are skipped. Deployment receives the frozen signing selection and prepared-build candidate references. Retained jobs keep their earlier release-build behavior.",
+    "After saving a settled outcome, the worker removes the complete private job worktree and its Git registration before notification. It also cleans settled historical jobs and retries failed or interrupted cleanup under singleton worker ownership."
   ],
   "authority": [
     "The manager owns serial delivery policy and retained job results; it does not decide provider execution, CI gate success, installed product health, or final inbox delivery.",
-    "Submission grants standing authority for the defined bounded repair, accepted-ref update, selected exact-source deployment and frozen outcome notification. Inspection does not grant submission authority.",
+    "Submission grants standing authority for the defined bounded repair, accepted-ref update, selected exact-source deployment, settled worktree removal and frozen outcome notification. Inspection does not grant submission authority.",
     "Development main and the submitter's worktree remain outside the manager's mutation boundary. Accepted automatic repairs remain in accepted and private candidate history."
   ],
   "success": [
@@ -117,10 +118,11 @@
     "A completed stopped deployment start fails the job before admission only after the coordinator reports not_found for that exact request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated results require process reconciliation and explicit operator acknowledgement; product inspection or recovery is a separate authorized operation.",
     "After an installation that qualifies for the cancelled validation exception, recover JOB reconciles the retained supervisor result and recognizes cancellation before reading the aggregate validation receipt. A completed validation already recorded in job history can also prove cancellation when no newer validation artifacts exist and its candidate and receipt path match. Missing or mismatched terminal evidence remains blocked. Recovery does not rerun a completed stale validation; installation itself does not complete or validate the job.",
     "Outcome email uses one frozen key and payload for at most two Email invocations, at least five minutes apart and within 23 hours. Unproved acceptance after that boundary blocks continuation without a replacement message.",
-    "Missing or unusable signing identity rejects new submission. A changed policy, failed signing command or non-compilation production-preparation failure stops before acceptance without requesting model repair or selecting another signer. Only a source compilation failure during a deferred production release check enters ordinary bounded repair. Retained jobs without release_builds_deferred keep terminal production-preparation failures; jobs without a signing snapshot keep their earlier acceptance path."
+    "Missing or unusable signing identity rejects new submission. A changed policy, failed signing command or non-compilation production-preparation failure stops before acceptance without requesting model repair or selecting another signer. Only a source compilation failure during a deferred production release check enters ordinary bounded repair. Retained jobs without release_builds_deferred keep terminal production-preparation failures; jobs without a signing snapshot keep their earlier acceptance path.",
+    "Worktree cleanup failure records worktree_cleanup.state=failed and an error without changing the CI outcome or frozen notification. The worker retries on later loops and after restart. Unknown or unresolved operations retain their worktrees until recovery settles them."
   ],
   "privacy": [
-    "Job state retains private source identities, deterministic fix patches and candidate commits, model requests and final responses, diagnostics, deployment records, and notification payloads. There is no automatic pruning.",
+    "Job state retains private source identities, deterministic fix patches and candidate commits, model requests and final responses, diagnostics, deployment records, and notification payloads. These records and private refs are not automatically pruned. Settled worktrees are removed; unresolved operations keep their trees for recovery.",
     "The agent can read source, contracts and diagnostics through ordinary shell tools under the Nucleus read-only sandbox. Provider disclosure follows Nucleus's execution boundary.",
     "New deterministic emails lead with the outcome and product or check names, include available failed test names or a short diagnostic, and distinguish validation, deployment, recovery, and cleanup failures. Unknown causes remain explicit. Emails omit job and commit IDs, model names, repair budgets, and local artifact paths. Receipts do not promise installed versions or individual final installation states; messages do not infer them. Previously frozen messages keep their exact bytes and key. Emails do not attach the repository, model reasoning, or full CI transcripts."
   ],
@@ -215,6 +217,10 @@
       {
         "status": "declared",
         "statement": "When deterministic fixes are available, aggregate validation state autofix reports a retained patch before tests and later product stages. The manager records an autofixing phase, patch evidence and private candidate commit. This result is not passing validation; the corrected candidate must complete the required gate scope."
+      },
+      {
+        "status": "declared",
+        "statement": "Job status reports worktree_cleanup: state is pending, removed or failed, updated is the Unix time of that cleanup observation, registration is the exact private Git administration directory when known, and error is present on failure. The registration identity is saved before removal so a partially removed administration directory can be cleaned after restart. removed means the complete worktree directory and its exact Git registration are absent. Cleanup and CI outcomes remain separate."
       }
     ],
     "data_semantics": [
@@ -305,6 +311,10 @@
       {
         "status": "declared",
         "statement": "For a successful deferred production preparation, deployment receives its result.json through --prepared-build and its retained preparation object through --prepared-build-snapshot-file. The coordinator rejects a changed result object before admission and retains the same path and parsed snapshot for its operation and builder. It checks matching source, signing policy, requested product identities and candidate references, then copies declared candidates into its retained operation. It does not scan executable inventory, reverify signatures, execute application probes or expand the selected set. Missing or changed supplied artifacts stop deployment; reuse is not test evidence."
+      },
+      {
+        "status": "declared",
+        "statement": "After a successful, failed, cancelled or already-included outcome is saved, the singleton worker removes the complete job worktree and its Git registration when no unresolved model, validation, production or deployment operation needs it. Removal precedes notification and does not wait for Email acceptance. The worker also cleans settled historical jobs and retries failed or interrupted cleanup. Journal records, private refs, candidate commits and operation evidence remain retained."
       }
     ],
     "operational_limits": [
@@ -326,13 +336,13 @@
       },
       {
         "status": "unsupported",
-        "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic artifact pruning, and blind retry of unresolved provider work are not supported."
+        "statement": "Concurrent automated repair loops, automatic merge-conflict repair, direct model patch application, manager self-deployment, automatic retained-artifact pruning, and blind retry of unresolved provider work are not supported."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.8.0 uses journal schema 1, queue contract 10, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
+        "statement": "Manager release 0.8.1 uses journal schema 1, queue contract 11, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
       },
       {
         "status": "declared",
