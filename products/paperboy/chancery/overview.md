@@ -12,8 +12,7 @@ activation through Clockwork.
 Paperboy retains configuration and product logs. Clockwork retains immutable
 definitions, binding selection, incidents, and activation history. Email owns
 fixed-recipient submission and reports provider acceptance. Paperboy retains
-no email body, report history, or retry queue. Its retired SQLite database
-remains untouched.
+no email body, report history, or retry queue.
 
 Scheduled logs can retain execution result metadata, including an accepted
 provider message ID. They provide no retained-payload recovery interface.

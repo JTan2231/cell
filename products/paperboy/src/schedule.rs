@@ -410,14 +410,10 @@ mod tests {
     }
 
     #[test]
-    fn enablement_refuses_legacy_and_other_job_runners() {
+    fn enablement_requires_the_selected_job_runner() {
         assert!(selected_runner(
             "daily",
             &["execute".into(), "--job".into(), "daily".into()]
-        ));
-        assert!(!selected_runner(
-            "daily",
-            &["run".into(), "--scheduled".into()]
         ));
         assert!(!selected_runner(
             "daily",

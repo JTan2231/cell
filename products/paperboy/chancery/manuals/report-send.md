@@ -184,15 +184,7 @@ objective is promised.
 
 ## Compatibility and command usage
 
-Paperboy 0.3.0 uses this manifest-render contract and TOML version one. It does
-not open or migrate the retired
-`~/Library/Application Support/Paperboy/paperboy.sqlite` database. Old briefs,
-agent requests, summaries, and send attempts remain untouched. The new CLI
-provides no legacy report, preview, retry, reconciliation, or maintenance
-operations. Retained legacy programs and upstream state keep their own rules;
-see `paperboy.install.operate` before cutover or recovery.
-
-Contract five replaces the conversation and decision-report interface. Scripts
+Paperboy uses this manifest-render contract and TOML version one. Scripts
 can use other installed products under those products' contracts. Paperboy
 itself depends only on Clockwork and Email for scheduling and submission.
 No general future compatibility window or deprecation period is promised.

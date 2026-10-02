@@ -175,28 +175,6 @@ rerunning a job when a duplicate matters. A new run executes the renderer again;
 it is not recovery of the earlier payload. Paperboy provides no preview, saved
 report, retry, reconciliation, or maintenance CLI.
 
-## Replace a legacy conversation-report installation
-
-Paperboy 0.3.0 is incompatible with the older conversation and decision-report
-CLI. It preserves
-`~/Library/Application Support/Paperboy/paperboy.sqlite` without opening,
-copying, or migrating it. It does not convert old reports into renderer jobs.
-An absent manifest initializes empty; no legacy daily report is activated.
-
-During an upgrade from installed 0.1.x or 0.2.x, product setup uses the exact old
-executable to acquire a deployment-owned maintenance hold. It disables and
-settles `paperboy/daily`, then drains the old requester. Cutover requires drained
-state and zero nonterminal legacy Nucleus jobs. If this cannot be established,
-setup stops. Preserve the old hold and retained deployment evidence when cutover
-fails.
-
-The legacy hold remains as an admission fence after successful replacement.
-Do not release it to admit old work beside new renderer schedules. Old briefs,
-accepted summaries, uncertain sends, and Nucleus records keep their historical
-meaning. The new CLI cannot resume or reconcile them. Inspect legacy evidence
-and use its matching retained program and provider contracts for any separately
-authorized recovery. Recovery must not enable overlapping old and new timers.
-
 ## Privacy and command usage
 
 Treat manifest commands, subjects, paths, schedule metadata, and logs as private

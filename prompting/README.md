@@ -27,9 +27,6 @@ first model request, then retains every rendered request for recovery. For examp
 {"schema_version":1,"entries":{"weaver.narrative.instructions":1,"weaver.tools.read_decisions.description":1,"weaver.tools.submit_document.description":1}}
 ```
 
-The seed retains Paperboy components and its selection for historical jobs.
-Paperboy 0.3.0 executes manifest renderers and no longer retrieves prompts.
-
 Publish component versions before publishing the selection that names them.
 This makes each product's selected set consistent without assuming that Bazaar
 provides a transaction across reads. A selection change affects new requests.
@@ -85,7 +82,7 @@ owner's next selection.
 
 New dynamic toolset versions encode the selection version above the product's
 historical range: Annals adds 2; Platter adds 3; Krisis, Semantics, and Weaver
-add 1. Legacy Paperboy toolsets also add 1. Annals versions input schema IDs
+add 1. Annals versions input schema IDs
 because its schema fields contain editable descriptions. Old toolset identities keep the original text
 from selection 1. Structural schema changes still require a code change and
 the requester's compatibility procedure.

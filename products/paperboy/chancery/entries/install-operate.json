@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -10,7 +10,7 @@
     "Install or update Paperboy, initialize or validate its manifest, publish configured schedules, inspect schedule selection, or control one selected job."
   ],
   "do_not_use_when": [
-    "The request is to execute a job now, resume a legacy brief, retry a saved email, modify another product, or infer inbox delivery."
+    "The request is to execute a job now, retry a saved email, modify another product, or infer inbox delivery."
   ],
   "outcome": "Matching Paperboy programs and provider bytes are selected; configured jobs have exact Clockwork schedule selections with preserved existing enabled intent and new jobs disabled.",
   "interfaces": [
@@ -57,8 +57,7 @@
   ],
   "effects": [
     "Installation selects matching program and provider files, initializes only a missing default manifest, and applies configured schedule snapshots. It does not execute renderers or send their output.",
-    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email.",
-    "Legacy 0.1.x or 0.2.x cutover acquires a hold through the exact old executable, disables and settles paperboy/daily, and requires a drained legacy requester with zero nonterminal jobs. The old database remains unopened by the new runtime and its hold remains as an admission fence."
+    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email."
   ],
   "authority": [
     "Paperboy owns its manifest and schedule selection. Clockwork owns atomic per-key transitions, runtime history, overlap and failure halts. Cell deployment owns instruction execution and retained receipts; renderer and Email success remain separate."
@@ -68,11 +67,11 @@
   ],
   "failure_and_recovery": [
     "Multi-job apply is not atomic. Earlier successful transitions remain after a later failure. Inspect schedule status, correct the reported problem, and reapply the same manifest. Retain Clockwork history and established incidents.",
-    "Failed deployment retains completed effects and executes no automatic rollback or recovery. Unsettled legacy work stops cutover and preserves its old admission hold. Inspect retained evidence before an explicitly authorized new attempt.",
+    "Failed deployment retains completed effects and executes no automatic rollback or recovery. Inspect retained evidence before an explicitly authorized new attempt.",
     "An established scheduling halt requires exact incident approval through Clockwork. Enable, disable, apply, and installation do not clear it. Approval does not retry a renderer or uncertain email."
   ],
   "privacy": [
-    "Manifests, schedule arguments, paths, subjects, and logs are private local data. Clockwork retains activation metadata, not renderer bodies. The legacy SQLite database and historical upstream records remain unchanged."
+    "Manifests, schedule arguments, paths, subjects, and logs are private local data. Clockwork retains activation metadata, not renderer bodies."
   ],
   "dependencies": [
     {
@@ -92,7 +91,7 @@
     }
   ],
   "does_not_authorize": [
-    "Catalog presence does not authorize installation, enabling a renderer job, releasing legacy admission holds, deleting retained state, retrying email, or clearing a failure incident."
+    "Catalog presence does not authorize installation, enabling a renderer job, deleting retained state, retrying email, or clearing a failure incident."
   ],
   "promise": {
     "consumers": [
@@ -104,7 +103,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select committed source and required dependency updates explicitly. Schedule operations require installed Paperboy and supported Clockwork. Legacy cutover must establish old requester drain before replacement. Script execution and schedule enable require separate standing authority."
+        "statement": "Select committed source and required dependency updates explicitly. Schedule operations require installed Paperboy and supported Clockwork. Script execution and schedule enable require separate standing authority."
       }
     ],
     "inputs": [
@@ -150,7 +149,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; multi-job apply retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new job. Legacy setup preserves its admission fence after cutover."
+        "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; multi-job apply retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new job."
       }
     ],
     "operational_limits": [
@@ -162,7 +161,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation contract eight replaces single-daily report setup with manifest job schedules. Paperboy 0.3.0 preserves the retired SQLite database without opening or migrating it. No legacy report recovery, maintenance, preview, or saved-send operations are exposed."
+        "statement": "Installation selects manifest job schedules. The version-one TOML manifest is the configuration authority. Product installation and Clockwork selection remain separate from renderer execution."
       },
       {
         "status": "unspecified",

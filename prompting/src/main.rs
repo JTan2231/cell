@@ -46,7 +46,6 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 | "conatus"
                 | "krisis"
                 | "semantics"
-                | "paperboy"
                 | "platter"
                 | "weaver"
                 | "emt"

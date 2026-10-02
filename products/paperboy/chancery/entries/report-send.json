@@ -131,7 +131,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Report contract five replaces the legacy conversation and decision-report commands. TOML version one is the configuration format. Paperboy 0.3.0 leaves the retired SQLite database unopened and exposes no legacy preview, retry, reconciliation, or maintenance CLI."
+        "statement": "TOML version one is the configuration format. Paperboy exposes literal renderer execution and stdout submission without retained payloads or a send-recovery interface."
       },
       {
         "status": "unspecified",

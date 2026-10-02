@@ -19,7 +19,7 @@
       ],
       "completeness": "complete",
       "excludes": [
-        "Help/version, internal execution handoff, source-specific adapters, agent execution, configurable recipients, retained messages, report history, retry queues, email reconciliation, and legacy report recovery."
+        "Help/version, internal execution handoff, source-specific adapters, agent execution, configurable recipients, retained messages, report history, retry queues, email reconciliation."
       ]
     },
     "shared_access_and_trust": [
@@ -31,7 +31,7 @@
       "CLI usage recording requires nonempty CODEX_THREAD_ID. The private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded and recording errors preserve results."
     ],
     "compatibility_and_retirement": [
-      "Paperboy 0.3.0 and report contract five replace the legacy report interface. TOML manifest version one is separate from product and Clockwork schemas. The retired SQLite database remains unopened and unchanged; new runtime exposes no legacy recovery operations."
+      "TOML manifest version one is separate from product and Clockwork schemas. No general future compatibility or deprecation window is promised."
     ],
     "operational_limits": [
       "Renderer execution is bounded to 1200 seconds, stdout to 64000 UTF-8 bytes, stderr diagnostics to 4096 bytes, Email observation to 120 seconds, and Clockwork activation to 1380 seconds. Different jobs can run concurrently; one scheduled binding skips overlap. No trigger-delay or inbox-delivery objective is promised."
