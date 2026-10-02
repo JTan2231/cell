@@ -276,23 +276,18 @@ checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
 name = "cast"
-version = "0.4.4"
+version = "0.5.0"
 dependencies = [
  "cell-install",
  "chancery-usage",
  "clap",
  "fs2",
- "futures-util",
  "iatreion-api",
- "regex",
- "reqwest",
  "rusqlite",
- "scraper",
  "serde",
  "serde_json",
  "sha2",
  "time",
- "tokio",
  "url",
  "uuid",
 ]
@@ -1783,7 +1778,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platter"
-version = "0.2.21"
+version = "0.2.22"
 dependencies = [
  "annals",
  "anyhow",
@@ -1986,18 +1981,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
  "bitflags",
-]
-
-[[package]]
-name = "regex"
-version = "1.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-automata",
- "regex-syntax",
 ]
 
 [[package]]

@@ -1,8 +1,4 @@
-use cast::{
-    Result,
-    runner::{self, RunOptions},
-    store::Store,
-};
+use cast::{Result, store::Store};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use std::path::PathBuf;
@@ -14,7 +10,7 @@ fn emit_iatreion_snapshot() -> bool {
         "cast",
         env!("CARGO_PKG_VERSION"),
         "cast/discovery",
-        "cast.discovery.collect",
+        "cast.discovery.explore",
     ) {
         chancery_usage::observe("cast", "status-snapshot");
         println!("{snapshot}");
@@ -25,11 +21,7 @@ fn emit_iatreion_snapshot() -> bool {
 }
 
 #[derive(Parser)]
-#[command(
-    name = "cast",
-    version,
-    about = "Private, deterministic company and job discovery"
-)]
+#[command(name = "cast", version, about = "Private company and job records")]
 struct Cli {
     #[arg(long, global = true, env = "CAST_STATE_DIR")]
     state_dir: Option<PathBuf>,
@@ -52,16 +44,6 @@ enum Command {
     Config {
         #[command(subcommand)]
         command: ConfigCommand,
-    },
-    Run {
-        #[arg(long)]
-        due: bool,
-        #[arg(long)]
-        force: bool,
-        #[arg(long)]
-        source: Option<String>,
-        #[arg(long)]
-        max_requests: Option<u64>,
     },
     #[command(alias = "snapshot")]
     Export {
@@ -127,16 +109,7 @@ enum ShowCommand {
 }
 #[derive(Subcommand)]
 enum JobCommand {
-    Show {
-        id: String,
-    },
-    Refresh {
-        id: String,
-    },
-    /// Resolve or collect one supplied public job URL.
-    Collect {
-        url: String,
-    },
+    Show { id: String },
 }
 #[derive(Subcommand)]
 enum SourceCommand {
@@ -150,14 +123,13 @@ enum SourceCommand {
     },
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     if emit_iatreion_snapshot() {
         return;
     }
     let cli = chancery_usage::cli::parse::<Cli>("cast", "");
     let json_output = cli.json;
-    if let Err(error) = execute(cli).await {
+    if let Err(error) = execute(cli) {
         if json_output {
             eprintln!(
                 "{}",
@@ -171,7 +143,7 @@ async fn main() {
 }
 
 #[allow(clippy::too_many_lines)]
-async fn execute(cli: Cli) -> Result<()> {
+fn execute(cli: Cli) -> Result<()> {
     let directory = cli.state_dir.unwrap_or_else(|| {
         PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share/cast")
     });
@@ -203,23 +175,6 @@ async fn execute(cli: Cli) -> Result<()> {
             let config = serde_json::from_slice(&std::fs::read(file)?)?;
             store.set_config(&config)?;
             json!({"configured":true})
-        }
-        Command::Run {
-            force,
-            source,
-            max_requests,
-            ..
-        } => {
-            runner::run(
-                &store,
-                RunOptions {
-                    force: *force,
-                    provider: source.clone(),
-                    max_requests: *max_requests,
-                    only_source: None,
-                },
-            )
-            .await?
         }
         Command::Export { output, .. } => {
             if let Some(path) = output {
@@ -283,36 +238,6 @@ async fn execute(cli: Cli) -> Result<()> {
                 .find(|j| j.id == *id)
                 .ok_or("job not found")?,
         )?,
-        Command::Job {
-            command: JobCommand::Refresh { id },
-        } => {
-            let job = store
-                .snapshot()?
-                .jobs
-                .into_iter()
-                .find(|j| j.id == *id)
-                .ok_or("job not found")?;
-            let source = if let Ok(source) = store.source(&job.source_id) {
-                source
-            } else {
-                store.add_source(&job.company_id, &job.url)?
-            };
-            runner::run(
-                &store,
-                RunOptions {
-                    force: true,
-                    only_source: Some(source.id),
-                    ..Default::default()
-                },
-            )
-            .await?
-        }
-        Command::Job {
-            command: JobCommand::Collect { url },
-        } => serde_json::to_value(cast::models::JobSelection {
-            schema_version: 1,
-            job: runner::collect_job(&store, url).await?,
-        })?,
         Command::Source {
             command: SourceCommand::Add { url, company_id },
         } => serde_json::to_value(store.add_manual_source(url, company_id.as_deref())?)?,

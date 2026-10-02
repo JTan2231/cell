@@ -1,7 +1,7 @@
 use crate::agent::CareerEntry;
 use annals::api::{CliClient, Request, Response, WorkCommand, WorkShowArgs};
 use anyhow::{Context, Result, bail, ensure};
-use cast::models::{Job, JobSelection, Snapshot};
+use cast::models::{Job, Snapshot};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,25 +32,19 @@ pub fn discovery(executable: &Path) -> Result<Snapshot> {
     Ok(snapshot)
 }
 
-pub fn collect_job(executable: &Path, url: &str) -> Result<Job> {
-    let parsed = url::Url::parse(url)?;
-    validate_public_url(&parsed)?;
-    let output = std::process::Command::new(executable)
-        .env("CHANCERY_USAGE_INTERNAL", "1")
-        .args(["job", "collect", url, "--json"])
-        .output()?;
-    ensure!(
-        output.status.success(),
-        "Cast job collection failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let selected: JobSelection = serde_json::from_slice(&output.stdout)?;
-    ensure!(selected.schema_version == 1, "unsupported Cast job result");
-    ensure!(
-        cast::adapters::job_url_matches(&selected.job, url).map_err(anyhow::Error::msg)?,
-        "Cast returned a different job"
-    );
-    Ok(selected.job)
+pub fn retained_job(executable: &Path, url: &str) -> Result<Job> {
+    cast::adapters::validate_job_url(url).map_err(anyhow::Error::msg)?;
+    let mut selected = None;
+    for job in discovery(executable)?.jobs {
+        if job_url_matches(&job, url)? {
+            ensure!(
+                selected.is_none(),
+                "job URL matches multiple retained Cast jobs"
+            );
+            selected = Some(job);
+        }
+    }
+    selected.context("job URL is not retained by Cast; Cast collection is unavailable")
 }
 
 pub fn job_url_matches(job: &Job, url: &str) -> Result<bool> {

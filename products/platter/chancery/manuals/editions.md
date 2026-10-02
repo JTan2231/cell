@@ -53,11 +53,16 @@ platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' \
 
 The occurrence ID contains 1 through 80 ASCII letters, digits, underscores or
 hyphens. It uses the existing ad hoc edition namespace. A new occurrence
-captures the configured local date, asks Cast for the normal job record,
-prepares or resumes its normal packet, performs the ordinary freshness check,
+captures the configured local date, selects one retained job from Cast's export
+by canonical supported ATS identity or normalized public URL, prepares or
+resumes its normal packet, performs the ordinary freshness check,
 freezes one ordinary edition and sends it. It creates no separate packet,
 edition or workflow type. One mutation admission lock covers the complete
 operation.
+
+An unknown URL, an ambiguous match, or a supported ATS board URL without a
+posting identity fails before preparation. This selection performs no Cast
+collection.
 
 The command uses the existing packet when normal preparation already has a
 ready one. It explicitly enables the selected job, and the successful freeze

@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 14,
+  "contract_version": 15,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -89,18 +89,13 @@
   "dependencies": [
     {
       "id": "platter.maintenance",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
-    },
-    {
-      "id": "cast.discovery.collect",
-      "min_contract": 5,
-      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",
@@ -134,7 +129,7 @@
     }
   ],
   "does_not_authorize": [
-    "Preparing packets, sending email, collecting jobs, consuming Cast API-key budgets or submitting replacement Nucleus work.",
+    "Preparing packets, sending email or submitting replacement Nucleus work.",
     "Installing or enabling a daily schedule, changing provider credentials/billing or upgrading unselected dependencies.",
     "Resetting sent flags, deleting retained artifacts, changing fixed resume content or bypassing an unresolved maintenance hold."
   ],
@@ -206,7 +201,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 14 preserves the stable operation ID and explicit maintenance interfaces while replacing automatic coordinator phases and recovery with a product deploy command and opaque execution receipts. Supported in-place migrations retain their product-owned transactional and hashed source-cleanup rules."
+        "statement": "Operation contract 15 removes the Cast collection prerequisite. It preserves the product deploy command, explicit maintenance interfaces, opaque execution receipts, and product-owned transactional and hashed source-cleanup rules."
       }
     ],
     "reliances": [
@@ -219,7 +214,7 @@
       },
       {
         "status": "declared",
-        "statement": "Runtime prerequisite probes rely on supported Cast export and exact job-URL commands, Annals commands and Email attachment support; unselected installations are not upgraded implicitly.",
+        "statement": "Runtime prerequisites rely on Cast retained export, Annals commands and Email attachment support; unselected installations are not upgraded implicitly.",
         "target": "runtime-dependencies",
         "kind": "readiness"
       },

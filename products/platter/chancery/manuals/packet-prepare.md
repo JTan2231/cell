@@ -207,11 +207,12 @@ platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' --id OCCURRENCE_ID
 ```
 
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens. A new occurrence
-asks Cast to resolve or collect that exact URL, enables its normal job, prepares
-or reuses its tailored packet, checks freshness, freezes one ordinary edition,
-and sends. Freeze makes that job ineligible again. Unsupported, ambiguous, or
-board-only URLs fail before preparation. A declined, stale, or unavailable
-packet creates no edition or email. Exact retries use the original date and
+selects one retained job from Cast's export by canonical supported ATS identity
+or normalized public URL, enables that job, prepares or reuses its tailored
+packet, checks freshness, freezes one ordinary edition, and sends. Freeze makes
+that job ineligible again. Unknown URLs, ambiguous matches, and supported ATS
+board URLs without a posting identity fail before preparation. A declined,
+stale, or unavailable packet creates no edition or email. Exact retries use the original date and
 retained send path before Cast or preparation. Reuse for another URL or an
 existing multi-packet retained-material edition is refused.
 

@@ -1,9 +1,3 @@
-mod careers;
-mod discovery;
-
-pub use careers::verify;
-pub use discovery::{discover, prepare_query};
-
 /// Returns a canonical board URL only for an explicitly supported ATS host.
 #[must_use]
 pub fn canonical_board_url(input: &str) -> Option<String> {
@@ -32,14 +26,6 @@ pub fn ats_provider(input: &str) -> Option<&'static str> {
 /// Returns an error when the URL is not public or names a supported ATS board
 /// without identifying one posting.
 pub fn job_url_matches(job: &Job, input: &str) -> Result<bool, String> {
-    Ok(JobSelector::from_url(input)?.matches(&job.source_key, &job.url))
-}
-
-/// Matches an extracted posting before it enters the retained library.
-///
-/// # Errors
-/// Returns the same URL validation errors as `job_url_matches`.
-pub fn job_draft_matches(job: &crate::models::JobDraft, input: &str) -> Result<bool, String> {
     Ok(JobSelector::from_url(input)?.matches(&job.source_key, &job.url))
 }
 
@@ -76,82 +62,8 @@ pub fn plausible_company_name(name: &str) -> bool {
         .any(|prefix| lower.starts_with(prefix))
 }
 
-fn unsupported_shared_ats(url: &Url) -> bool {
-    url.host_str().is_some_and(|host| {
-        ["join.com", "curriculo.me"]
-            .iter()
-            .any(|shared| host == *shared || host.ends_with(&format!(".{shared}")))
-    })
-}
-
-use crate::{
-    http::public_url,
-    models::{Evidence, Job},
-};
-use reqwest::Url;
-use scraper::{Html, Selector};
-use serde_json::Value;
-use std::collections::BTreeSet;
-
-fn string(value: &Value, field: &str) -> Option<String> {
-    value
-        .get(field)
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-        .map(ToOwned::to_owned)
-}
-
-fn id(value: &Value, field: &str) -> Option<String> {
-    value.get(field).and_then(|v| {
-        v.as_str()
-            .map(ToOwned::to_owned)
-            .or_else(|| v.as_u64().map(|id| id.to_string()))
-    })
-}
-
-fn evidence(url: &str, kind: &str, note: impl Into<String>) -> Evidence {
-    Evidence {
-        source_url: url.into(),
-        kind: kind.into(),
-        note: note.into(),
-        parser_version: Some("cast-adapters-v3".into()),
-        ..Default::default()
-    }
-}
-
-fn text(html: &str) -> String {
-    Html::parse_fragment(html)
-        .root_element()
-        .text()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn links(html: &str, base: &Url) -> Vec<(Url, String)> {
-    let document = Html::parse_document(html);
-    let selector = Selector::parse("a[href], iframe[src]")
-        .unwrap_or_else(|_| unreachable!("constant selector"));
-    let mut seen = BTreeSet::new();
-    document
-        .select(&selector)
-        .filter_map(|element| {
-            let raw = element
-                .value()
-                .attr("href")
-                .or_else(|| element.value().attr("src"))?;
-            let mut url = base.join(raw).ok()?;
-            url.set_fragment(None);
-            public_url(url.as_str()).ok()?;
-            if !seen.insert(url.as_str().to_owned()) {
-                return None;
-            }
-            Some((url, element.text().collect::<Vec<_>>().join(" ")))
-        })
-        .collect()
-}
+use crate::{http::public_url, models::Job};
+use url::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Board {
@@ -368,6 +280,7 @@ fn directory_host(host: &str) -> bool {
     .any(|item| host == *item || host.ends_with(&format!(".{item}")))
 }
 
+#[cfg(test)]
 fn employer_domain(url: &Url) -> Option<String> {
     let host = url
         .host_str()?

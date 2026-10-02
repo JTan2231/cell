@@ -4,7 +4,7 @@ PRODUCT_NAME=Cast
 PRODUCT_DIR=products/cast
 STATUS_SCHEMA=1
 STATUS_COMMAND=cast
-STATUS_UNITS='cast/discovery|on_demand||cast.discovery.collect'
+STATUS_UNITS='cast/discovery|on_demand||cast.discovery.explore'
 CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
 DEPLOY_PROFILE=rust-install-v1
@@ -20,4 +20,4 @@ RELEASE_UNITS='cast|Cast|package|products/cast/Cargo.toml|cast-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='cast|target/release/cast|cast
 cast|target/release/cast-install|cast-install'
-PROVIDERS='cast|cast|products/cast/chancery|5'
+PROVIDERS='cast|cast|products/cast/chancery|4'

@@ -32,12 +32,14 @@ It does not rebuild the release or restore product data. There is no installer
 `verify` or `verify-release` command. Ordinary runtime checks keep their existing
 behavior.
 
-Installation creates no database, schedule, provider request, or collection.
+Installation creates no database, schedule, or provider request. Cast performs
+no collection in this release.
 
 ## Frontend credentials and trust
 
-The Rust payload reads `THEIRSTACK_API_KEY` and `BRAVE_SEARCH_API_KEY` from its
-environment. The installed zsh frontend suppresses trace and output while it
+The retained diagnostic path reads `THEIRSTACK_API_KEY` and
+`BRAVE_SEARCH_API_KEY` presence from its environment without using the keys
+for collection. The installed zsh frontend suppresses trace and output while it
 sources `~/.zshrc`. It extracts those keys and starts the payload with only
 `HOME`, fixed system `PATH`, optional `CAST_STATE_DIR`, the two provider keys,
 and the command-usage values `CODEX_THREAD_ID`, `CHANCERY_USAGE_DB`,
@@ -64,7 +66,9 @@ current values. State selection uses `state_dir`, then a nonempty inherited
 
 Setup does not invoke the selected CLI or source shell configuration. Explicit
 retained-release recovery selects programs and leaves state configuration unchanged.
-Deployment creates no collection schedule.
+Deployment creates no collection schedule. Setup retains the existing
+discovery schema; it neither activates the unused current model definitions nor
+migrates existing data into them.
 
 Read `cast.state` for private state selection, configuration, and state
 recovery. Program installation and discovery state have separate lifecycles.

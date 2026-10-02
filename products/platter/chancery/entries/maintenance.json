@@ -1,6 +1,6 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -77,13 +77,13 @@
     },
     {
       "id": "platter.preparation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "platter.editions",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "nucleus.execution.operate",
@@ -144,7 +144,7 @@
       },
       {
         "status": "declared",
-        "statement": "Doctor checks local state/configured PDF, executable identities, supported Cast exact URL command, Email byte payload, renderer, compatible Weaver, and strict authenticated Nucleus. It does not establish initialized source libraries or inspect the external binding. State-only reads require no external service/renderer readiness."
+        "statement": "Doctor checks local state/configured PDF, executable identities, Email byte payload, renderer, compatible Weaver, and strict authenticated Nucleus. It does not establish initialized source libraries or inspect the external binding. State-only reads require no external service/renderer readiness."
       }
     ],
     "access": [
