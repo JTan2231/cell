@@ -1,223 +1,214 @@
-# Install and schedule Paperboy
+# Install Paperboy and select renderer schedules
 
-Use this operation to deploy Paperboy, inspect readiness, and control its daily
-Clockwork binding. Installation, schedule activation, and report sending are
-separate effects. Catalog presence does not authorize any of them.
+Use this operation to install Paperboy, prepare its manifest, and control exact
+job schedules through Clockwork. Installation, schedule activation, and script
+execution are separate effects. Read `paperboy.report.send` for the manifest,
+renderer output, email result, privacy, and execution limits.
 
 ## Prepare and deploy
 
-Cell deployment executes the explicitly selected products' instructions from
-committed local `main`. Complete the required development checks before
-publication or deployment. Select required dependency updates explicitly.
-From the Cell root:
+Cell deployment uses committed source and an explicitly selected product set.
+Complete the required development checks before publication or deployment.
+Select any required Clockwork or Email update explicitly:
 
 ```sh
 ./deploy.sh plan paperboy
 ./deploy.sh paperboy
 ```
 
-Decision reports require the Annals feed's `start` operation. Deploy the updated
-Annals and Paperboy together when adding this support:
+The shared builder prepares artifacts. The executor runs product-owned setup
+instructions to select matching Paperboy program and Chancery provider bytes.
+Paperboy uses the installed Clockwork and Email interfaces. It invokes neither
+Nucleus nor source-specific products.
 
-```sh
-./deploy.sh plan annals paperboy
-./deploy.sh annals paperboy
-```
+Installation accepts no product settings. It uses the default manifest;
+an alternate interactive `--manifest` selection does not change this scope.
+Installation initializes a missing default manifest and applies its configured
+schedule snapshots. New jobs stay disabled. Existing jobs retain their enabled
+intent; removed jobs are disabled. Installation does not execute a renderer,
+send its output, or clear a Clockwork failure incident. An empty manifest selects
+no active renderer job.
 
-The shared builder prepares artifacts. The executor runs Paperboy's product
-command to select program and provider files and perform setup. It creates no
-maintenance hold, drains no requester, and temporarily disables no binding.
-Paperboy owns its private database and recovery. Nucleus owns
-execution and credentials; Conversations owns history reads; Email owns submission;
-Clockwork owns activation, durable scheduling halts and incident notification.
+Installation succeeds when its declared setup instructions complete. It does
+not establish source access, Email authentication, renderer correctness, or
+future schedule delivery. The executor retains completed effects on failure;
+it performs no automatic rollback or application recovery. Inspect the retained
+deployment receipt and schedule state before an explicit new attempt.
 
-Deployment initializes an absent schema-one database or opens existing supported
-state without copying it. Unsupported versions stop it.
-Installation performs setup without artifact-integrity, state-integrity, or
-operational-readiness checks. It succeeds when its setup commands complete.
-Ordinary doctor and report checks remain separate.
-Direct installer publication and rollback are unavailable; use the coordinator.
+Direct installer publication and selector-only recovery are unavailable. Use
+the coordinator for program selection. Inspect maintained installation separately
+with `paperboy-install inspect`; that read establishes no operational readiness.
 
-## State and inspection
+## Initialize and inspect configuration
 
-The private database is
-`~/Library/Application Support/Paperboy/paperboy.sqlite`.
-It retains briefs, exact agent requests and tool replies, accepted summaries,
-and email attempts. Records can contain private conversation text.
+The default manifest is
+`~/Library/Application Support/Paperboy/paperboy.toml`. Select another manifest
+with a global absolute `--manifest` path:
 
 ```sh
 paperboy init
+paperboy list
 paperboy doctor
-paperboy doctor --report decisions --annals-config /absolute/decisions.toml
-paperboy-install inspect
-```
-
-`init` creates empty schema-one state. Doctor reports product readiness; inspect
-reports the maintained installation. A program selection does not prove that a
-scheduled binding selects that release.
-
-## Maintain admission and initialize state
-
-```sh
-paperboy --json maintenance hold OWNER
-paperboy --json maintenance status
-paperboy --json maintenance drain
-paperboy --json maintenance release OWNER
-CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate
-```
-
-A run-owned hold fences new work and survives interruption. Drain accounts for
-live admissions and all nonterminal Paperboy Nucleus jobs. Keep the hold until
-work has settled and the prior or candidate installation is coherent. Release
-only the operation's owner; preserve other holds and operator state.
-
-The controlled migration command initializes absent schema-one state or opens
-existing supported state. It preserves retained briefs, attempts, summaries and
-email outcomes. There is no legacy database migration or direct incompatible
-rollback. Nucleus authentication remains separately owned.
-
-## Select the daily schedule
-
-After an authorized installation, select the current installed executable:
-
-```sh
-paperboy schedule enable
+paperboy --manifest /absolute/paperboy.toml list
 paperboy schedule status
-paperboy schedule disable
+paperboy schedule status daily-report
 ```
 
-The single daily binding selects one report kind. To select decision reports:
+`init` writes version-one empty configuration only when the selected manifest is
+absent. It validates and preserves existing files. `list` reports the configured jobs. Doctor
+validates the manifest and required executable paths without executing scripts
+or sending email. A valid path does not prove that the renderer or Email can
+complete its work.
+
+Schedule status reads Clockwork's retained binding metadata. It reports selected
+definitions, enabled intent, and failure-halt evidence. It does not prove that
+launchd will deliver a future trigger or that a report was delivered.
+
+Paperboy's aggregate `status-snapshot` describes manifest configuration and
+local readiness. It is read-only evidence, not a renderer execution, email test,
+or complete report for each dynamic Clockwork job binding.
+
+## Apply schedule snapshots
+
+After editing the selected manifest:
 
 ```sh
-paperboy schedule enable --report decisions --annals-config /absolute/decisions.toml
+paperboy apply
+paperboy --manifest /absolute/paperboy.toml apply
 ```
 
-This replaces the daily conversation selection. Run `schedule enable` without
-source options to select conversations. Ad hoc reports remain independent.
-Decision reports use documents accepted by Annals during the requested interval.
-The absolute config must identify a decisions library and its expected persistent
-ID. Schedule arguments retain this selection across deployment. Doctor with the
-same source options checks the read-only Annals starting-cursor operation.
+Apply validates the entire manifest and registers all immutable definitions
+before changing binding selection. Each job maps to `paperboy/JOB_ID`. The
+manifest ID is stable across changes to command, subject, or schedule. Renaming
+it creates another binding and retires the prior ID when it is removed.
 
-Conversation schedules retain the selected Conversations Codex executable in
-`CONVERSATIONS_CODEX`. To replace this pin after an app update, enable the
-conversation schedule with an explicit absolute path:
+The selected manifest is the complete desired job set for the `paperboy/`
+namespace. `--manifest` changes the configuration source, not that namespace.
+Applying another manifest disables bindings absent from that file.
+
+Each definition captures the installed Paperboy release, job ID, renderer argv,
+subject, absolute Email wrapper path, schedule, and literal launch context. The
+scheduled runner uses this snapshot without reading the manifest again. Apply
+is required to publish manifest edits to scheduled execution. Renderer file
+bytes and source data are not frozen by the snapshot.
+
+Apply preserves enabled intent for existing bindings. It selects new bindings
+in a disabled state. It disables removed bindings while retaining their selected
+definitions, incidents, and history. An identical selection needs no transition.
+Apply never executes a renderer or activates a new job.
+
+A dedicated product schedule lock serializes Paperboy schedule mutations.
+Clockwork serializes each binding transition and activation. Different jobs can
+run concurrently. Clockwork skips overlap for the same scheduled binding.
+Manual execution does not become a Clockwork occurrence or its retained history.
+
+Multi-job application is not atomic. A later transition can fail after earlier
+bindings have changed. Inspect status, correct the reported problem, and apply
+the same manifest again. Paperboy does not discard prior transition evidence or
+undo completed selections. Concurrent direct same-user Clockwork mutations are
+outside Paperboy's serialized operation.
+
+## Enable or disable one job
+
+After an authorized apply, explicitly enable a selected job:
 
 ```sh
-CONVERSATIONS_CODEX=/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex \
-  paperboy schedule enable
+paperboy schedule enable daily-report
+paperboy schedule status daily-report
+paperboy schedule disable daily-report
 ```
 
-This command selects conversation reports. Decision report schedules do not
-use the Conversations executable. Deployment preserves the selected
-environment, including an explicit Conversations pin.
+Enable and disable require a job ID. Status can select one ID or show the
+Paperboy bindings. Enabling permits future scheduled renderer executions and
+real email sends. Disabling prevents new scheduled admission; Clockwork settles
+an existing activation under its supported transition rules. Disabling retains
+selection, history, and incidents. It does not cancel an independent manual run.
 
-Enable registers and selects the exact `paperboy/daily` Clockwork definition.
-It succeeds when Clockwork commits that binding. The schedule starts at local
-09:00, has no run-at-load trigger, skips overlap, and limits an activation to
-2,100 seconds. It requires a macOS GUI login session. No start-delay or inbox
-arrival guarantee is provided. The product-owned schema-two definition declares
-`halt-until-approved` and uses the installed Email wrapper for incident mail.
+The schedule has no run-at-load trigger. Interval values are whole seconds;
+calendar values use the host's local hour and minute. Clockwork uses current-user
+LaunchAgents and requires a macOS GUI login domain. Sleep, wake, login, clock,
+and timezone changes affect delivery. Paperboy promises no maximum trigger delay,
+catch-up count, or inbox arrival time.
 
-The runner reports exactly 86,400 seconds ending at the most recent local
-09:00. It does not replay older missed mornings. Local timezone changes affect
-future triggers; daylight-saving changes can produce gaps or overlaps.
+Each activation has a 1,380-second outer timeout and `overlap = "skip"`.
+The installed Paperboy runner uses its product root as the Clockwork working
+directory, then executes the renderer from its executable's parent directory.
+Product outputs append to private files under
+`~/Library/Application Support/Paperboy/logs`: `JOB_ID.stdout.log` and
+`JOB_ID.stderr.log`. These logs contain Paperboy result metadata and bounded
+error diagnostics. Captured renderer stdout is not copied into them.
+Paperboy prepares definition-registration TOML files under
+`~/Library/Application Support/Paperboy/schedule-definitions` and removes them
+after successful registration. A failed candidate can remain for diagnosis.
+These files contain command metadata, not rendered bodies or pending sends.
 
-Coordinated deployment updates the selected digest and preserves enabled
-intent and Clockwork failure incidents. Enable or disable does not clear an incident.
-Retain releases pinned by schedules, including disabled selections.
+## Inspect a failure and approve future scheduling
 
-## Failure and recovery
+Each definition declares `halt-until-approved`. A startup failure, crash, timeout,
+or nonzero Paperboy completion ends that activation. Clockwork permits later
+activations during its pending service-health episode. By default, five failed
+read-only checks, at least 60 seconds apart, establish the halt and alert
+eligibility. Healthy or inactive checks clear pending episodes. Read
+`clockwork.schedule.operate` for the complete installed failure policy.
 
-A process lock serializes runs and schedule mutations. A failed deployment
-retains completed file, state, and schedule changes. The executor stops and
-performs no automatic retry, rollback, or application recovery. Inspect current
-product state before an explicit new attempt. Preserve any separately acquired
-maintenance holds. Unknown command or email outcomes remain uncertain.
+Inspect the exact binding and incident:
 
-Accepted summaries and submission receipts survive later runtime failures.
-Resume an interrupted brief with `paperboy run --brief BRIEF_ID`. A terminal
-agent failure requires explicit `--retry-agent` for a new job. Ambiguous
-admission reuses the exact retained request.
+```sh
+clockwork incident list paperboy/daily-report
+clockwork incident show INCIDENT_ID
+```
 
-For uncertain email, inspect Resend before using `paperboy reconcile` with an
-acceptance receipt or confirmed nonacceptance. Never infer absence from a timeout.
-A retained submission receipt does not establish final inbox delivery.
+Resolve the cause before explicitly approving future admission:
 
-A startup failure, crash, timeout, or nonzero report completion ends the current
-activation. Clockwork permits later activations before the shared service-health
-threshold. By default, five consecutive failed read-only checks, at least 60
-seconds apart, halt the binding and make its alert eligible together. Healthy
-or inactive checks clear a pending episode. Inspect `clockwork incident list paperboy/daily` and
-`clockwork incident show INCIDENT_ID`. After repair, explicitly approve future
-scheduling with `clockwork binding resume paperboy/daily INCIDENT_ID`. This
-does not retry a brief, create a new agent attempt, reconcile an uncertain send,
-or reset its message identity. Use the selected Paperboy recovery operation
-separately. Maintenance release and deployment never clear the failure halt.
+```sh
+clockwork binding resume paperboy/daily-report INCIDENT_ID
+```
 
-## Privacy and operational limits
+Approval clears that incident's halt. It does not enable a disabled binding,
+execute the renderer, or retry a prior email. Reinstallation, apply, enable,
+and disable preserve established incidents.
 
-Report runs read normal-user conversation history through Conversations or
-accepted Krisis documents through Annals and
-process it through Nucleus. Final report text leaves for Resend and the personal
-inbox provider. The agent has no workspace, local execution, web, or mail tool.
-Email's installed wrapper loads credentials. Secrets stay out of Paperboy state,
-agent requests, and Clockwork definitions.
+Paperboy keeps no saved body or structured send-recovery ledger. Logs can retain
+result metadata, including an accepted provider message ID. Email timeout or
+interruption can leave acceptance unknown. Inspect Resend before explicitly
+rerunning a job when a duplicate matters. A new run executes the renderer again;
+it is not recovery of the earlier payload. Paperboy provides no preview, saved
+report, retry, reconciliation, or maintenance CLI.
 
-One product runner can be active. Agent execution is limited to 1,200 seconds;
-total agent wait to 1,800 seconds; Email invocation observation to 180 seconds.
-History pages contain at most 100 records. Final bodies contain at most 64,000
-UTF-8 bytes. There is no automatic local pruning, unlimited retry guarantee,
-source-completeness promise, or language certification. Keep database state
-private; Nucleus and mail-provider retention are separate.
+## Replace a legacy conversation-report installation
 
-## Deployment configuration and activation
+Paperboy 0.3.0 is incompatible with the older conversation and decision-report
+CLI. It preserves
+`~/Library/Application Support/Paperboy/paperboy.sqlite` without opening,
+copying, or migrating it. It does not convert old reports into renderer jobs.
+An absent manifest initializes empty; no legacy daily report is activated.
 
-The product deployment command captures `paperboy/daily`, selects program files,
-then initializes absent state or opens supported state under ordinary admission
-and the runner lock. It retargets and selects the definition directly, preserving
-schedule, arguments, environment, output paths, and failure incidents. The
-optional `enabled` setting overrides saved enabled intent. With no setting, an
-absent binding remains absent and a disabled binding stays disabled.
+During an upgrade from installed 0.1.x or 0.2.x, product setup uses the exact old
+executable to acquire a deployment-owned maintenance hold. It disables and
+settles `paperboy/daily`, then drains the old requester. Cutover requires drained
+state and zero nonterminal legacy Nucleus jobs. If this cannot be established,
+setup stops. Preserve the old hold and retained deployment evidence when cutover
+fails.
 
-An existing maintenance hold can refuse ordinary setup. Deployment does not
-release that hold. Reconcile an interrupted executor receipt and acknowledge its
-admission separately from authorized product recovery. The same request ID
-returns the retained result and executes no instruction again.
+The legacy hold remains as an admission fence after successful replacement.
+Do not release it to admit old work beside new renderer schedules. Old briefs,
+accepted summaries, uncertain sends, and Nucleus records keep their historical
+meaning. The new CLI cannot resume or reconcile them. Inspect legacy evidence
+and use its matching retained program and provider contracts for any separately
+authorized recovery. Recovery must not enable overlapping old and new timers.
 
-## Command usage
+## Privacy and command usage
 
-After each installation or update, run `paperboy --register-usage`.
-This registers command inventory without product work.
+Treat manifest commands, subjects, paths, schedule metadata, and logs as private
+local data. A renderer runs with normal-user access and owns its source and
+configuration choices. Email loads its credentials and submits only successful
+nonempty output. The product stores no rendered body or acceptance ledger.
+Clockwork retains activation and incident metadata; its notification path uses
+its own supported Email contract.
 
-CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private
-journal records command identity, time, and thread ID, not arguments, output,
-or outcomes. Internal product calls are excluded. Recording errors do not
-change command results.
-
-## Bazaar prompt selection
-
-Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.paperboy selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text.
-
-Read `cell.prompts.paperboy` with Bazaar's supported `get` interface. Its content
-is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. Publish component text first, then publish
-the complete selection. A text append alone does not change the selected set.
-Missing or invalid selections stop new request preparation before model admission.
-
-Import the migration seed before deploying these callers. Preserve selection
-version 1 and all referenced text versions for compatibility. Runtime reads never
-perform this import. Deployment does not supply missing prompt contents.
-
-The caller freezes resolved instructions with the existing request or domain
-snapshot. Retries retain that selection. Later edits do not rewrite saved work.
-Models, permissions, schemas, tool execution, domain commits, and recovery remain
-product-owned. Annals library instructions remain
-immutable domain captures selected through their existing product operations.
-
-For an edit, use `bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the
-returned version, and publish a complete selection with `bazaar update
-cell.prompts.paperboy --file /absolute/selection.json`. Use an explicit
-`bazaar --database /absolute/private/bazaar.sqlite3` prefix when the caller uses
-`CELL_BAZAAR_DATABASE`. To roll back, append the prior selection content. Keep
-private text out of logs and retain historical versions.
+After each installation or update, run `paperboy --register-usage`. This records
+command inventory without executing product work. CLI usage recording requires
+a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity,
+time, and thread ID, not arguments, output, or outcomes. Internal product calls
+are excluded. Recording errors preserve command results. Product runtime does
+not invoke the Chancery catalog.

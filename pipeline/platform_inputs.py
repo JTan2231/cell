@@ -34,8 +34,8 @@ PRODUCT_RUNTIME_INPUTS = {
                   "semantics/src/main.rs"),
     "platter": ("platter/src/main.rs", "platter/src/cli.rs", "platter/src/store.rs",
                 "platter/src/readiness.rs"),
-    "paperboy": ("paperboy/src/main.rs", "paperboy/src/operations.rs",
-                 "paperboy/src/store.rs", "paperboy/src/lib.rs"),
+    "paperboy": ("paperboy/src/main.rs", "paperboy/src/manifest.rs",
+                 "paperboy/src/schedule.rs", "paperboy/src/lib.rs"),
     "weaver": ("weaver-narrative/src/main.rs", "weaver-narrative/src/operations.rs",
                "weaver-narrative/src/store.rs", "weaver-narrative/src/lib.rs",
                "weaver-narrative/src/schema.sql", "weaver-narrative/src/agent.rs"),
@@ -57,7 +57,7 @@ SHARED_INPUTS = {
 # introduced product also gets this suite. cell-maintenance has fewer consumers.
 MAINTENANCE_CONSUMERS = frozenset((
     "nucleus", "annals", "decisions", "semantics",
-    "platter", "paperboy", "weaver", "clew",
+    "platter", "weaver", "clew",
 ))
 
 PLATFORM_PACKAGES = frozenset(("cell-install", "cell-maintenance"))

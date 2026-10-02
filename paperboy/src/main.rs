@@ -1,205 +1,203 @@
-use anyhow::{Result, ensure};
+#![cfg_attr(test, allow(clippy::unwrap_used))]
+
+use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Parser)]
 #[command(
     version,
-    about = "Research conversations or accepted decisions and email an ASD-STE100 report"
+    about = "Run manifest-defined renderers and email their successful stdout"
 )]
 struct Cli {
     #[arg(long, global = true)]
     json: bool,
+    /// Absolute TOML manifest path. Defaults to Paperboy/paperboy.toml.
+    #[arg(long, global = true)]
+    manifest: Option<PathBuf>,
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Initialize an absent private report database.
+    /// Create an absent empty manifest without overwriting configuration.
     Init,
-    /// Generate and send one report, or resume its exact retained assignment.
-    Run {
-        #[arg(long,conflicts_with_all=["scheduled","brief"])]
-        ad_hoc: bool,
-        #[arg(long, conflicts_with = "brief")]
-        scheduled: bool,
-        #[arg(long)]
-        brief: Option<String>,
-        #[arg(long, requires = "brief")]
-        retry_agent: bool,
-        #[command(flatten)]
-        source: SourceArgs,
-        /// Inclusive period start in RFC3339, for an ad hoc report.
-        #[arg(long, requires_all = ["ad_hoc", "until"], conflicts_with_all = ["scheduled", "brief"])]
-        from: Option<chrono::DateTime<chrono::FixedOffset>>,
-        /// Exclusive period end in RFC3339, for an ad hoc report.
-        #[arg(long, requires_all = ["ad_hoc", "from"], conflicts_with_all = ["scheduled", "brief"])]
-        until: Option<chrono::DateTime<chrono::FixedOffset>>,
-    },
-    /// List report metadata; the limit applies to briefs.
-    List {
-        #[arg(long, default_value_t = 20)]
-        limit: usize,
-    },
-    /// Read one brief, its exact email text, and its attempt history.
-    Show { id: String },
-    /// Show the stored email without starting an agent or sending it.
-    Preview { id: String },
-    /// Operate the pinned daily local 09:00 Clockwork activation.
+    /// Read configured jobs. Does not execute scripts or submit email.
+    List,
+    /// Execute one configured job and submit its successful stdout.
+    Run { id: String },
+    /// Apply schedule snapshots. New jobs are disabled; existing intent is kept.
+    Apply,
+    /// Enable or disable an applied job, or inspect selected schedules.
     Schedule {
-        #[arg(value_parser=["enable","disable","status"])]
+        #[arg(value_parser = ["enable", "disable", "status"])]
         operation: String,
-        #[command(flatten)]
-        source: SourceArgs,
+        id: Option<String>,
     },
-    /// Resolve an uncertain submission using separately observed provider evidence.
-    Reconcile {
-        attempt: String,
-        #[arg(long, conflicts_with = "not_accepted")]
-        receipt: Option<String>,
+    /// Check manifest and executable files without executing renderers or Email.
+    Doctor,
+    /// Read aggregate product-owned readiness. Clockwork owns individual runs.
+    StatusSnapshot,
+    /// Exact selected command used by Clockwork. Reads no mutable manifest.
+    #[command(hide = true)]
+    Execute {
         #[arg(long)]
-        not_accepted: bool,
-    },
-    /// Inspect deployment readiness without creating a report or model job.
-    Doctor {
-        #[command(flatten)]
-        source: SourceArgs,
-    },
-    /// Initialize or verify schema-one state under deployment maintenance.
-    Migrate,
-    /// Hold, drain, inspect, or release requester admission.
-    Maintenance {
-        #[arg(value_parser=["hold","drain","status","release"])]
-        operation: String,
-        owner: Option<String>,
+        job: String,
+        #[arg(long, allow_hyphen_values = true)]
+        subject: String,
+        #[arg(long)]
+        email: PathBuf,
+        #[arg(last = true, num_args = 1.., allow_hyphen_values = true)]
+        render: Vec<String>,
     },
 }
 
-#[derive(clap::Args)]
-struct SourceArgs {
-    /// Report source. Defaults to conversations.
-    #[arg(long, value_enum)]
-    report: Option<paperboy::ReportKind>,
-    /// Explicit identity-bound Annals decisions-library config.
-    #[arg(long)]
-    annals_config: Option<PathBuf>,
-}
-
-impl SourceArgs {
-    fn options(&self, period: Option<(i64, i64)>) -> paperboy::operations::ReportOptions {
-        paperboy::operations::ReportOptions {
-            kind: self.report.unwrap_or_default(),
-            annals_config: self.annals_config.clone(),
-            period,
-        }
-    }
+fn selected_manifest(cli: &Cli) -> Result<PathBuf> {
+    cli.manifest
+        .clone()
+        .map_or_else(paperboy::manifest_path, Ok)
 }
 
 async fn execute(cli: &Cli) -> Result<Value> {
-    let root = paperboy::state_root()?;
     match &cli.command {
         Commands::Init => {
-            let _guard = paperboy::gate(&root).enter()?;
-            let _lock = paperboy::store::runner_lock(&root)?;
-            paperboy::store::Store::initialize(&root)?;
-            Ok(json!({"initialized":true,"schema_version":1}))
+            let path = selected_manifest(cli)?;
+            Ok(
+                json!({"initialized":paperboy::manifest::Manifest::initialize(&path)?,"manifest":path,"version":1}),
+            )
         }
-        Commands::Run {
-            ad_hoc,
-            scheduled,
-            brief,
-            retry_agent,
-            source,
-            from,
-            until,
-        } => {
-            ensure!(
-                *ad_hoc || *scheduled || brief.is_some(),
-                "choose --ad-hoc, --scheduled, or --brief ID"
-            );
-            ensure!(
-                brief.is_none() || source.report.is_none() && source.annals_config.is_none(),
-                "--brief uses its retained report source"
-            );
-            let period = from
-                .zip(*until)
-                .map(|(from, until)| (from.timestamp(), until.timestamp()));
-            paperboy::operations::run(
-                &root,
-                *ad_hoc,
-                brief.as_deref(),
-                *retry_agent,
-                &source.options(period),
+        Commands::List => {
+            let manifest = paperboy::manifest::Manifest::load(&selected_manifest(cli)?)?;
+            Ok(json!({"version":manifest.version,"jobs":manifest.jobs}))
+        }
+        Commands::Run { id } => {
+            let manifest = paperboy::manifest::Manifest::load(&selected_manifest(cli)?)?;
+            let job = manifest.job(id)?;
+            paperboy::runtime::run(
+                id,
+                job.subject(id),
+                &job.render,
+                &paperboy::home()?.join(".local/bin/email"),
             )
             .await
         }
-        Commands::List { limit } => paperboy::store::Store::open(&root)?.list(*limit),
-        Commands::Show { id } => paperboy::operations::show(&root, id),
-        Commands::Preview { id } => {
-            let brief = paperboy::store::Store::open(&root)?.brief(id)?;
-            Ok(json!({"brief_id":brief.id,"subject":brief.subject,"body":brief.body}))
+        Commands::Apply => {
+            let manifest = paperboy::manifest::Manifest::load(&selected_manifest(cli)?)?;
+            paperboy::schedule::apply(&paperboy::state_root()?, &manifest)
         }
-        Commands::Schedule { operation, source } => {
+        Commands::Schedule { operation, id } => {
+            let root = paperboy::state_root()?;
+            if operation == "status" {
+                paperboy::schedule::status(&root, id.as_deref())
+            } else {
+                let id = id
+                    .as_deref()
+                    .context("schedule enable/disable requires a job ID")?;
+                if operation == "enable" {
+                    paperboy::manifest::Manifest::load(&selected_manifest(cli)?)?.job(id)?;
+                }
+                paperboy::schedule::set_enabled(&root, id, operation == "enable")
+            }
+        }
+        Commands::Doctor => doctor(&selected_manifest(cli)?),
+        Commands::StatusSnapshot => Ok(status_snapshot(cli)),
+        Commands::Execute {
+            job,
+            subject,
+            email,
+            render,
+        } => {
             ensure!(
-                operation == "enable" || source.report.is_none() && source.annals_config.is_none(),
-                "source options apply to schedule enable"
+                cli.manifest.is_none(),
+                "execute uses its selected arguments, not a manifest override"
             );
-            paperboy::operations::schedule(
-                &root,
-                operation,
-                source.report.unwrap_or_default(),
-                source.annals_config.as_deref(),
-            )
-        }
-        Commands::Reconcile {
-            attempt,
-            receipt,
-            not_accepted,
-        } => paperboy::operations::reconcile(&root, attempt, receipt.as_deref(), *not_accepted),
-        Commands::Doctor { source } => {
-            paperboy::operations::doctor(&root, &source.options(None)).await
-        }
-        Commands::Migrate => paperboy::operations::migrate(&root),
-        Commands::Maintenance { operation, owner } => {
-            paperboy::operations::maintenance(&root, operation, owner.as_deref()).await
+            paperboy::runtime::run(job, subject, render, email).await
         }
     }
+}
+
+fn doctor(path: &std::path::Path) -> Result<Value> {
+    let manifest = paperboy::manifest::Manifest::load(path)?;
+    for job in manifest.jobs.values() {
+        paperboy::runtime::executable(std::path::Path::new(&job.render[0]))?;
+    }
+    for command in ["clockwork", "email"] {
+        paperboy::runtime::executable(&paperboy::home()?.join(".local/bin").join(command))?;
+    }
+    Ok(
+        json!({"ready":true,"scope":"manifest and executable files only","job_count":manifest.jobs.len()}),
+    )
+}
+
+fn status_snapshot(cli: &Cli) -> Value {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    let local = selected_manifest(cli).and_then(|path| doctor(&path));
+    let (readiness, reasons, evidence) = match local {
+        Ok(result) => (
+            "ready",
+            vec![],
+            json!({"counts":[{"name":"configured_jobs","value":result["job_count"],"unit":"jobs","scope":"selected manifest"}]}),
+        ),
+        Err(error) => (
+            "blocked",
+            vec![json!({"code":"local_prerequisites_unavailable","summary":format!("{error:#}")})],
+            json!({}),
+        ),
+    };
+    json!({
+        "schema_version":1,"product_id":"paperboy","provider_release":env!("CARGO_PKG_VERSION"),
+        "observed_at_start":now,"observed_at_end":now,"complete":false,
+        "units":[{
+            "id":"paperboy/jobs","owning_product_id":"paperboy","intent":"on_demand",
+            "admission":{"state":"unknown","reasons":[]},"activity":"unknown",
+            "readiness":{"state":readiness,"scope":"manifest and executable files only","reasons":reasons},
+            "evidence":evidence,"inspection":[{"capability_id":"paperboy.install.operate"}]
+        }],
+        "diagnostics":[{"code":"product_observation_incomplete","summary":"Clockwork owns per-job enablement, activity and execution history; Email acceptance is not retained by Paperboy"}]
+    })
 }
 
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    if let Some(snapshot) = iatreion_api::requested_status_snapshot_json(
-        "paperboy",
-        env!("CARGO_PKG_VERSION"),
-        vec![iatreion_api::declared_unit(
-            "paperboy",
-            "paperboy/daily",
-            Some("paperboy/daily"),
-            iatreion_api::Intent::Active,
-            "paperboy.install.operate",
-        )],
-        false,
-    ) {
-        chancery_usage::observe("paperboy", "status-snapshot");
-        println!("{snapshot}");
-        return std::process::ExitCode::SUCCESS;
-    }
     let cli = chancery_usage::cli::parse::<Cli>("paperboy", "");
-    match execute(&cli).await {
+    match interruptible_execute(&cli).await {
         Ok(value) => {
-            println!("{}", json!({"ok":true,"data":value}));
+            if matches!(cli.command, Commands::StatusSnapshot) {
+                println!("{value}");
+            } else if cli.json {
+                println!("{}", json!({"ok":true,"data":value}));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+                );
+            }
             std::process::ExitCode::SUCCESS
         }
         Err(error) => {
-            if let Some(code) = nucleus_core::quota_condition(error.as_ref()) {
-                println!("{}", json!({"ok":true,"data":{"outcome":code}}));
-                return std::process::ExitCode::SUCCESS;
+            if cli.json {
+                eprintln!("{}", json!({"ok":false,"error":format!("{error:#}")}));
+            } else {
+                eprintln!("paperboy: {error:#}");
             }
-            eprintln!("{}", json!({"ok":false,"error":error.to_string()}));
             std::process::ExitCode::FAILURE
         }
+    }
+}
+
+async fn interruptible_execute(cli: &Cli) -> Result<Value> {
+    use tokio::signal::unix::{SignalKind, signal};
+    let mut terminate = signal(SignalKind::terminate()).context("cannot observe SIGTERM")?;
+    let mut interrupt = signal(SignalKind::interrupt()).context("cannot observe SIGINT")?;
+    tokio::select! {
+        result = execute(cli) => result,
+        _ = terminate.recv() => anyhow::bail!("Paperboy interrupted by SIGTERM; inspect any unconfirmed send before resending"),
+        _ = interrupt.recv() => anyhow::bail!("Paperboy interrupted by SIGINT; inspect any unconfirmed send before resending"),
     }
 }
 
@@ -208,36 +206,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn explicit_period_requires_both_bounds_and_an_ad_hoc_run() {
-        let args = [
+    fn selected_execution_preserves_literal_renderer_arguments() {
+        let cli = Cli::try_parse_from([
             "paperboy",
-            "run",
-            "--ad-hoc",
-            "--report",
-            "decisions",
-            "--annals-config",
-            "/private/decisions.toml",
-            "--from",
-            "2026-09-09T09:00:00-05:00",
-            "--until",
-            "2026-09-10T09:00:00-05:00",
-        ];
-        assert!(Cli::try_parse_from(args).is_ok());
-        assert!(Cli::try_parse_from(&args[..9]).is_err());
-        let mut scheduled = args;
-        scheduled[2] = "--scheduled";
-        assert!(Cli::try_parse_from(scheduled).is_err());
-        assert!(
-            Cli::try_parse_from([
-                "paperboy",
-                "schedule",
-                "enable",
-                "--report",
-                "decisions",
-                "--annals-config",
-                "/private/decisions.toml"
-            ])
-            .is_ok()
-        );
+            "execute",
+            "--job",
+            "report",
+            "--subject",
+            "-Subject",
+            "--email",
+            "/private/email",
+            "--",
+            "/private/render",
+            "--daily",
+            "two words",
+        ])
+        .unwrap();
+        let Commands::Execute {
+            render, subject, ..
+        } = cli.command
+        else {
+            panic!("expected execution");
+        };
+        assert_eq!(render, ["/private/render", "--daily", "two words"]);
+        assert_eq!(subject, "-Subject");
+        assert!(Cli::try_parse_from(["paperboy", "run", "--brief", "old"]).is_err());
+        assert!(Cli::try_parse_from(["paperboy", "reconcile", "old"]).is_err());
     }
 }

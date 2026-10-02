@@ -1655,28 +1655,19 @@ checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
 
 [[package]]
 name = "paperboy"
-version = "0.2.4"
+version = "0.3.0"
 dependencies = [
- "annals-api",
  "anyhow",
  "cell-install",
- "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
- "chrono",
  "clap",
  "clockwork",
- "conversations",
+ "email",
  "fs2",
- "iatreion-api",
- "nucleus-client",
- "nucleus-core",
- "rusqlite",
  "serde",
  "serde_json",
  "tokio",
  "toml",
- "uuid",
 ]
 
 [[package]]

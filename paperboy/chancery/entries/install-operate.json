@@ -1,89 +1,82 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Install and schedule Paperboy",
-  "summary": "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "title": "Install Paperboy and select renderer schedules",
+  "summary": "Install Paperboy, initialize its TOML manifest, apply per-job Clockwork snapshots, and explicitly enable or disable selected renderer jobs.",
   "use_when": [
-    "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner."
+    "Install or update Paperboy, initialize or validate its manifest, publish configured schedules, inspect schedule selection, or control one selected job."
   ],
   "do_not_use_when": [
-    "The request is to mutate source tasks, contact another recipient, certify STE compliance, or infer final inbox delivery."
+    "The request is to execute a job now, resume a legacy brief, retry a saved email, modify another product, or infer inbox delivery."
   ],
-  "outcome": "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "outcome": "Matching Paperboy programs and provider bytes are selected; configured jobs have exact Clockwork schedule selections with preserved existing enabled intent and new jobs disabled.",
   "interfaces": [
     {
-      "label": "Initialize private state",
-      "invocation": "paperboy init"
+      "label": "Plan product deployment",
+      "invocation": "./deploy.sh plan paperboy"
     },
     {
-      "label": "Deploy committed main",
+      "label": "Deploy committed source",
       "invocation": "./deploy.sh paperboy"
-    },
-    {
-      "label": "Enable the current release daily",
-      "invocation": "paperboy schedule enable"
-    },
-    {
-      "label": "Replace the daily Conversations executable pin",
-      "invocation": "CONVERSATIONS_CODEX=<ABSOLUTE_CODEX_PATH> paperboy schedule enable"
-    },
-    {
-      "label": "Disable the daily binding",
-      "invocation": "paperboy schedule disable"
-    },
-    {
-      "label": "Read selected schedule",
-      "invocation": "paperboy schedule status"
-    },
-    {
-      "label": "Read readiness",
-      "invocation": "paperboy doctor"
     },
     {
       "label": "Inspect maintained installation",
       "invocation": "paperboy-install inspect"
     },
     {
-      "label": "Initialize or open deployment state",
-      "invocation": "CELL_DEPLOYMENT_RUN_ID=OWNER paperboy migrate"
+      "label": "Initialize an absent manifest",
+      "invocation": "paperboy init"
     },
     {
-      "label": "Maintain admission",
-      "invocation": "paperboy --json maintenance hold|drain|status|release [OWNER]"
+      "label": "Apply configured schedule snapshots",
+      "invocation": "paperboy apply"
     },
     {
-      "label": "Select the daily decision report",
-      "invocation": "paperboy schedule enable --report decisions --annals-config <DECISIONS_CONFIG>"
+      "label": "Enable one configured job",
+      "invocation": "paperboy schedule enable JOB_ID"
+    },
+    {
+      "label": "Disable one selected job",
+      "invocation": "paperboy schedule disable JOB_ID"
+    },
+    {
+      "label": "Read Paperboy schedule selection",
+      "invocation": "paperboy schedule status [JOB_ID]"
+    },
+    {
+      "label": "Validate configuration without execution",
+      "invocation": "paperboy doctor"
+    },
+    {
+      "label": "Read aggregate local status evidence",
+      "invocation": "paperboy status-snapshot --json"
     }
   ],
   "effects": [
-    "Installation selects product and provider files. Product setup creates empty schema-one state or opens supported existing state without copying it under ordinary admission and the runner lock. Explicit schedule enable or disable changes only paperboy/daily.",
-    "The product command retargets and selects the existing daily definition directly, preserving timer, arguments, environment, outputs and failure incidents. It preserves saved enabled intent unless enabled is explicitly supplied. Deployment creates no hold, drains no requester and temporarily disables no binding."
+    "Installation selects matching program and provider files, initializes only a missing default manifest, and applies configured schedule snapshots. It does not execute renderers or send their output.",
+    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email.",
+    "Legacy 0.1.x or 0.2.x cutover acquires a hold through the exact old executable, disables and settles paperboy/daily, and requires a drained legacy requester with zero nonterminal jobs. The old database remains unopened by the new runtime and its hold remains as an admission fence."
   ],
   "authority": [
-    "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
+    "Paperboy owns its manifest and schedule selection. Clockwork owns atomic per-key transitions, runtime history, overlap and failure halts. Cell deployment owns instruction execution and retained receipts; renderer and Email success remain separate."
   ],
   "success": [
-    "A report exists when its summary commits; a send succeeds when acceptance is retained. Installation succeeds when product setup commands complete, without artifact-integrity, state-integrity or operational-readiness checks. Schedule enable succeeds when Clockwork commits its binding."
+    "Initialization succeeds when the absent manifest is written or existing valid configuration is preserved. Apply succeeds after every requested selection and removal transition completes. Installation succeeds when declared instructions complete. None establishes renderer correctness, future timer delivery, or inbox receipt."
   ],
   "failure_and_recovery": [
-    "Retain failed or uncertain operation state and completed deployment effects. The executor performs no automatic retry, rollback or application recovery. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling uncertain email. Preserve separately acquired maintenance holds.",
-    "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout ends the current activation. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending failure episode. An established halt requires exact continuation approval; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear established halts."
+    "Multi-job apply is not atomic. Earlier successful transitions remain after a later failure. Inspect schedule status, correct the reported problem, and reapply the same manifest. Retain Clockwork history and established incidents.",
+    "Failed deployment retains completed effects and executes no automatic rollback or recovery. Unsettled legacy work stops cutover and preserves its old admission hold. Inspect retained evidence before an explicitly authorized new attempt.",
+    "An established scheduling halt requires exact incident approval through Clockwork. Enable, disable, apply, and installation do not clear it. Approval does not retry a renderer or uncertain email."
   ],
   "privacy": [
-    "Source text can enter private tool replies and Nucleus records; final email text leaves for Resend and the personal inbox provider. Secrets never enter prompts, product records or Clockwork definitions."
+    "Manifests, schedule arguments, paths, subjects, and logs are private local data. Clockwork retains activation metadata, not renderer bodies. The legacy SQLite database and historical upstream records remain unchanged."
   ],
   "dependencies": [
     {
-      "id": "conversations.history.explore",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
-    },
-    {
-      "id": "nucleus.execution.operate",
+      "id": "paperboy.report.send",
       "min_contract": 5,
       "max_contract_exclusive": 6
     },
@@ -96,180 +89,113 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 5,
       "max_contract_exclusive": 6
-    },
-    {
-      "id": "annals.decision-account.exchange",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "bazaar.string.read",
-      "min_contract": 1,
-      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
-    "Catalog presence does not authorize an ad hoc send, enabling the schedule, changing providers, deleting private records, or treating uncertain acceptance as absence."
+    "Catalog presence does not authorize installation, enabling a renderer job, releasing legacy admission holds, deleting retained state, retrying email, or clearing a failure incident."
   ],
   "promise": {
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and authorized installed local Paperboy runner."
+        "statement": "The current user and authorized Cell product-deployment operations."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Cell deployment uses committed local main and an explicit selected product set. Select required dependency updates explicitly. Product setup uses ordinary admission and the runner lock; an existing hold can refuse it. Schedule enable requires the selected installed Paperboy executable. Installation and schedule authority are separate from discovery."
-      },
-      {
-        "status": "declared",
-        "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.paperboy selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+        "statement": "Select committed source and required dependency updates explicitly. Schedule operations require installed Paperboy and supported Clockwork. Legacy cutover must establish old requester drain before replacement. Script execution and schedule enable require separate standing authority."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Brief identity or occurrence, absolute requested timeframe, source pointers, and versioned fixed agent instructions. The initial task contains no preloaded conversation content."
-      },
-      {
-        "status": "declared",
-        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. A repeated executor request ID returns retained evidence and executes no instruction again; a new attempt requires a new request ID."
-      },
-      {
-        "status": "declared",
-        "statement": "CONVERSATIONS_CODEX selects an absolute Codex executable for conversation reads. Schedule enable captures this selection in its environment. Supply an explicit replacement when repinning a conversation schedule; coordinated deployment preserves its selected environment. Decision report schedules do not use this executable."
-      },
-      {
-        "status": "declared",
-        "statement": "--report decisions selects Annals acceptance-time reporting and requires an absolute --annals-config for an identity-bound decisions library. The default kind is conversations. Ad hoc --from and --until accept an inclusive/exclusive RFC3339 interval."
+        "statement": "An absolute --manifest path or the default manifest and literal configured job definitions. Enable and disable require one job ID; status accepts an optional ID. Init writes an empty version-one manifest only if absent. Installation accepts no product settings and always uses the default manifest. The selected manifest governs the complete paperboy/ binding namespace; alternate paths do not isolate bindings."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON envelopes expose requested brief/attempt selections and acceptance receipts. Preview exposes the exact stored subject/body. Errors describe the failed operation; process success is not inbox receipt."
+        "statement": "Configured-job validation, immutable definition selections, binding enabled and halt metadata, aggregate local status evidence, and retained deployment instruction outcomes. These observations do not run a renderer."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "A brief owns one requested interval and accepted immutable summary. An agent attempt owns one exact job request and durable tool replies. An email attempt represents one Email invocation. Source retrieval remains agent-directed."
-      },
-      {
-        "status": "declared",
-        "statement": "The single paperboy/daily binding selects either conversations or decisions through retained runner arguments. Selecting decision reports replaces the daily conversation selection; ad hoc reports remain independent."
+        "statement": "The manifest is configuration authority; applied definitions are scheduled command snapshots. Existing jobs retain enabled intent, new jobs are disabled, and removed jobs retain disabled selection and history. Status represents retained binding metadata rather than guaranteed future activation. Scheduled logs can retain result metadata, including an accepted provider message ID, but no body or structured send-recovery ledger."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Brief and attempt IDs are stable UUIDs. Daily identities distinguish report kind and local 09:00 cutoff; ad hoc identities are independent. Record and filter times use Unix seconds; Annals accepted_at uses RFC3339. Windows are inclusive/exclusive and default to 86400 seconds; explicit ad hoc bounds replace that duration."
+        "statement": "Each stable manifest ID maps to paperboy/JOB_ID. Changing its configuration changes the immutable definition; renaming it creates a different binding. Durations use whole seconds and calendar schedules use the host local hour and minute."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "History is read live on demand. Provider page failures remain errors. Tool pagination reports selected_count, offset, next_offset and has_more for the filtered metadata or message collection. Brief list limits only brief metadata. No snapshot, machine-wide event completeness or independent generated-text accuracy is asserted."
+        "statement": "Apply validates all configured jobs and registers their definitions before binding mutations. Status reads selected Clockwork metadata at invocation. The product aggregate status-snapshot describes configuration and readiness, not each dynamic binding or execution history. Initialization validates and preserves an existing manifest rather than replacing it."
       },
       {
         "status": "unspecified",
-        "statement": "No maximum source age, launch delay, model start/completion time or inbox receipt time is promised."
+        "statement": "No maximum activation delay, catch-up count, or final email-delivery latency is promised."
       }
     ],
     "access": [
       {
         "status": "declared",
-        "statement": "The typed Nucleus client and Conversations library perform agent execution and on-demand reads. Clockwork uses its provider-owned typed CLI client. Email uses its installed credential-loading CLI. Agent workspace, local execution and web access are disabled. The decision tool uses annals_api::Client::{start,watermark,read_page} against the selected config."
+        "statement": "Current-user local interfaces use the provider-owned Clockwork and Email clients. Scheduled definitions launch the exact installed Paperboy program from the product root; renderer launch context is defined by paperboy.report.send. launchd schedule delivery requires a macOS GUI login domain."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Explicit run-owned holds block admissions, and explicit drain counts all nonterminal Paperboy jobs. The deployment command uses ordinary admission and the runner lock to initialize or open supported state after program selection. It creates and releases no hold and invokes no doctor. Completed effects remain after failure."
-      },
-      {
-        "status": "declared",
-        "statement": "The product command retargets and selects the existing daily definition directly, preserving timer, arguments, environment, outputs and failure incidents. It preserves saved enabled intent unless enabled is explicitly supplied. Deployment creates no hold, drains no requester and temporarily disables no binding."
-      },
-      {
-        "status": "declared",
-        "statement": "Callers resolve cell.prompts.paperboy to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+        "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; multi-job apply retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new job. Legacy setup preserves its admission fence after cutover."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "One active product runner, 1200-second active agent timeout, 1800-second total agent wait, 2100-second Clockwork timeout, and 180-second Email invocation observation. History pages contain up to 100 records; final body is at most 64000 UTF-8 bytes. Decision pages have at most 200 events and 4 MiB of document bytes."
-      },
-      {
-        "status": "unspecified",
-        "statement": "No throughput, future history-retention, automatic language certification, unlimited retry or unlimited deduplication guarantee."
+        "statement": "Manifest maximum 1 MiB. Per-job schedules use overlap skip, run-at-load false, and a 1380-second outer timeout. Different jobs can run concurrently. Interval range is 1 through 31536000 seconds; local hour 0 through 23 and minute 0 through 59. Logs append under the private Paperboy logs directory."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Private schema 1, daily-report and decision-report toolsets: historical version 1 and new selection version plus 1. Existing conversation requests retain their meaning. No database migration is required for decision source pointers."
+        "statement": "Installation contract eight replaces single-daily report setup with manifest job schedules. Paperboy 0.3.0 preserves the retired SQLite database without opening or migrating it. No legacy report recovery, maintenance, preview, or saved-send operations are exposed."
       },
       {
         "status": "unspecified",
-        "statement": "No general future compatibility window or deprecation period."
-      },
-      {
-        "status": "declared",
-        "statement": "Selection version 1 preserves the migration baseline for historical execution. Changed tool descriptions use new immutable Nucleus toolset identities; permission policy and structural schemas remain caller-owned."
+        "statement": "No general future compatibility or deprecation window is promised."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Conversations supplies normalized local history and stable source identities.",
-        "target": "conversations",
-        "kind": "data",
-        "contract": "conversations.history.explore"
-      },
-      {
-        "status": "declared",
-        "statement": "Nucleus supplies constrained execution, mailbox durability and managed authentication.",
-        "target": "nucleus",
+        "statement": "The Paperboy renderer feature defines manifest input, execution, exact stdout handoff, email success, privacy, and limits.",
+        "target": "paperboy",
         "kind": "control",
-        "contract": "nucleus.execution.operate"
+        "contract": "paperboy.report.send"
       },
       {
         "status": "declared",
-        "statement": "Email supplies fixed personal-recipient submission and provider acceptance.",
-        "target": "email",
-        "kind": "control",
-        "contract": "email.message.send"
-      },
-      {
-        "status": "declared",
-        "statement": "Clockwork supplies exact release activation, the shared service-health delay for halt-until-approved, retained incident notification, exact continuation approval, schedule selection and runtime history.",
+        "statement": "Clockwork supplies definition registration, exact binding transitions, scheduling, overlap, runtime records, incidents, and continuation approval.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"
       },
       {
         "status": "declared",
-        "statement": "Cell prepares artifacts and executes explicitly ordered instructions. Paperboy owns its setup, state and schedule operations. Executor reconciliation records unknown effects and acknowledgement releases only executor admission; no application recovery is inferred.",
+        "statement": "Email supplies the selected fixed-recipient wrapper and submission boundary; applying a schedule does not test credentials or send.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Cell deployment executes explicitly selected product instructions and retains completed or unknown effects. It infers no application recovery or rollback.",
         "target": "cell-deployment",
         "kind": "control"
-      },
-      {
-        "status": "declared",
-        "statement": "Annals supplies unchanged accepted Krisis documents, acceptance times and feed start/watermark/page reads through its typed CLI client. Decision reports require the start operation.",
-        "target": "annals",
-        "kind": "data",
-        "contract": "annals.decision-account.exchange"
-      },
-      {
-        "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
-        "target": "bazaar",
-        "kind": "data",
-        "contract": "bazaar.string.read"
       }
     ]
   },
