@@ -6,11 +6,11 @@ organize information and carry out ongoing work.
 Think of it as a small office on a computer. Different tools keep records,
 research questions, prepare documents, and coordinate assignments. For example:
 
-- [Annals](annals/README.md) keeps documents and helps you find ideas and
+- [Annals](products/annals/README.md) keeps documents and helps you find ideas and
   the original passages that support them.
-- [Conatus](conatus/README.md) records what you want and helps you see how
+- [Conatus](products/conatus/README.md) records what you want and helps you see how
   your decisions relate to those wants.
-- [Platter](platter/README.md) uses job descriptions and recorded career
+- [Platter](products/platter/README.md) uses job descriptions and recorded career
   experience to prepare tailored résumés and short briefs.
 
 I am exploring how AI assistants with different responsibilities can work
@@ -34,4 +34,4 @@ outcome. `cell-ci submit COMMIT` uses the same path.
 
 Each product directory has a README and detailed documentation. For shared
 topology, compatibility, and the sequence of changes, start with the
-[Nucleus ecosystem operator manual](nucleus/docs/operator-manual.md).
+[Nucleus ecosystem operator manual](infrastructure/nucleus/docs/operator-manual.md).
