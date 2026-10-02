@@ -1,0 +1,142 @@
+{
+  "id": "mantic.forecast.calculate",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Forecast Mantic remaining funds",
+  "summary": "Subtract expected configured expense occurrences from a supplied starting amount over inclusive dates. Print totals, shortfall date, and optional details without retaining the run.",
+  "use_when": [
+    "The caller wants a remaining-funds projection from one saved config, a supplied amount, and a calendar period."
+  ],
+  "do_not_use_when": [
+    "The caller needs observed bank balances, payment status, income modeling, retained runs, or automatic result delivery."
+  ],
+  "outcome": "One independent forecast is printed from a consistent configuration snapshot and transient inputs.",
+  "effects": [
+    "Reads selected configuration read-only, generates occurrences and calculates checked cent totals in memory, then prints the result. No Mantic state is changed.",
+    "Agent CLI dispatch can separately append metadata-only Chancery usage."
+  ],
+  "authority": [
+    "Mantic owns calculation and recurrence rules. The caller owns supplied amount and dates; stored expected expenses do not prove actual payments."
+  ],
+  "success": [
+    "The command prints the complete forecast within supported bounds. Negative remainders are successful results and identify the first shortfall date."
+  ],
+  "failure_and_recovery": [
+    "Invalid input, missing or unsupported state, unknown config, overflow, or more than 100,000 selected occurrences fails without a normal partial forecast or config change. Correct inputs or select a compatible program before retrying."
+  ],
+  "privacy": [
+    "The command retains no starting amount, period, run identity, occurrence, result, balance, or payment record. Printed output can contain private config and amount data."
+  ],
+  "does_not_authorize": [
+    "Retaining or sharing output outside the caller's chosen destination, changing definitions, accessing banks, or treating a projection as an actual account balance."
+  ],
+  "interfaces": [
+    {
+      "label": "Calculate a forecast",
+      "invocation": "/Users/joey/.local/bin/mantic [--database ABSOLUTE_PATH] [--json] forecast CONFIG AMOUNT [--from DATE] --until DATE [--details]"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "mantic.config.manage",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local users and machine callers calculate transient expected-expense forecasts."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "One selected named config exists in initialized supported state. Dates are valid, until is on or after from, and amounts use one currency with two decimal places."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "CONFIG selects one saved definition. AMOUNT is signed starting funds before from-day expenses. --from defaults to local today; --until is required. Both boundary dates are inclusive."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "JSON schema one returns config_id, config_name, starting_amount_cents, from, until, total_expenses_cents, remainder_cents, nullable first_shortfall, and all occurrences with date, item_id, item_name, amount_cents, and remainder_cents. Readable text adds occurrences with --details."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Occurrences derive from original first_due anchors. Month/year recurrence clamps unavailable days while preserving the original anchor. Item end_date is inclusive. Occurrences sort by date then item ID. Earlier expenses do not reduce supplied starting funds."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Money is signed 64-bit cents. Dates are calendar dates. Config/item IDs belong to the selected database. No run ID or persisted balance identity exists."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "A forecast covers every expense occurrence selected by the inclusive period and cutoffs from one committed config snapshot. Output reports resolved dates; no run timestamp or history is retained."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The local CLI is the supported boundary. The selected database is opened read-only. --json is required when parsing machine output."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Reads load one consistent configuration snapshot; calculation occurs in memory. Identical explicit inputs, configuration, and engine version give the same result. A negative starting amount yields first_shortfall equal to from."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Dates range from 0001-01-01 through 9999-12-31. Checked signed 64-bit cents and at most 100,000 selected occurrences are required; excess fails instead of truncating."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No forecast-latency or database-capacity objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Product release, state schema one, JSON output schema one, and entry version are separate. Direct SQLite integration, variable expenses, income rules, holiday adjustment, actual payment tracking, and automatic retention are unsupported."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Agent CLI dispatch attempts metadata-only command usage through Chancery's Rust journal API; missing attribution and internal calls are skipped, and recording failures preserve Mantic results.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.usage.record"
+      },
+      {
+        "status": "declared",
+        "statement": "Forecasting reads the saved current config and owned expense definitions through Mantic's store.",
+        "target": "mantic",
+        "kind": "data",
+        "contract": "mantic.config.manage"
+      }
+    ]
+  },
+  "manual": "manuals/forecast-calculate.md"
+}

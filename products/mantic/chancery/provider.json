@@ -1,0 +1,45 @@
+{
+  "schema_version": 4,
+  "provider": {
+    "id": "mantic",
+    "name": "Mantic",
+    "release": "0.1.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Mantic owns current named configs, exclusive expense-item ownership, validated fixed expense schedules, checked integer-cent forecasts, private-state initialization, and matched program/provider installation."
+    ],
+    "not_authoritative_for": [
+      "Callers supply amounts, dates, definitions, edit authority, currency interpretation, and output-retention decisions. Mantic does not observe actual accounts, expense occurrence, or payment status."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Mantic CLI outcomes for initialization, config and item management, transient forecasts, direct installation, deployment setup, inspection, retained-release selection, and usage inventory registration in this release."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version, implementation helpers, direct SQLite integration, income rules, variable amounts, payment tracking, run or balance retention, bank access, models, daemons, and scheduling."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Interfaces are local-user CLI and filesystem operations. Reading a config or catalog does not authorize changing it."
+    ],
+    "shared_privacy_and_retention": [
+      "One private database retains only current config definitions and schema metadata; edits replace definitions without history. Forecast inputs, occurrences, results, and balances are not retained. Caller-selected stdout destinations are outside Mantic retention.",
+      "Optional Chancery usage contains command identity, observation time, and thread correlation, with no arguments, bodies, output, or outcome."
+    ],
+    "compatibility_and_retirement": [
+      "Product release 0.1.0, persistent schema one, CLI output schema one, provider schema four, and entry contract versions have independent meanings. Ordinary commands reject unsupported state without automatic migration."
+    ],
+    "operational_limits": [
+      "Amounts use signed 64-bit integer cents and two decimal places. Expense amounts are positive. Calendar dates are 0001-01-01 through 9999-12-31, and one forecast selects at most 100,000 occurrences. No wall-clock, database-capacity, or future migration-window objective is promised."
+    ]
+  },
+  "overview": "overview.md",
+  "entries": [
+    "entries/config-manage.json",
+    "entries/forecast-calculate.json",
+    "entries/installation.json",
+    "entries/install-operate.json"
+  ]
+}

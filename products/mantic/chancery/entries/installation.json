@@ -1,0 +1,138 @@
+{
+  "id": "mantic.installation",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Understand Mantic installation and private state",
+  "summary": "Inspect matched immutable program and provider selection, explicit empty-state initialization, schema-one compatibility, and retained-release recovery that preserves configs.",
+  "use_when": [
+    "The caller needs Mantic program, provider, state ownership, compatibility, or recovery guarantees."
+  ],
+  "do_not_use_when": [
+    "The caller wants to restore earlier definitions, introduce a service or schedule, or treat installation as forecast success."
+  ],
+  "outcome": "The caller can inspect selected programs or select a matched compatible retained release without changing stored definitions.",
+  "effects": [
+    "Installation stages programs and provider bytes and changes owned selectors. Deployment additionally initializes only empty or supported default state. Direct install/recover do not initialize state.",
+    "Separate --register-usage can initialize supported empty Chancery state and register Mantic commands."
+  ],
+  "authority": [
+    "Mantic owns its installed release and provider selectors. Config definitions remain independent private state. The installer record establishes selection, not calculation success."
+  ],
+  "success": [
+    "Inspect reports the intended current release and matched provider selection. Deployment separately reports completion of initialization; installation does not prove live domain success."
+  ],
+  "failure_and_recovery": [
+    "A failed instruction retains completed changes for inspection. An expected-current mismatch or foreign selector stops selection. Explicit recovery selects programs/provider together and does not restore data."
+  ],
+  "privacy": [
+    "Immutable releases contain no private configuration or forecast output. Private state stays outside releases. No installation command sends config data to a service."
+  ],
+  "does_not_authorize": [
+    "Taking over foreign selectors, modifying immutable releases, replacing populated state, editing configs, or restoring data through program rollback."
+  ],
+  "interfaces": [
+    {
+      "label": "Inspect selection",
+      "invocation": "/Users/joey/.local/bin/mantic-install inspect [--home ABSOLUTE_PATH]"
+    },
+    {
+      "label": "Install supplied release",
+      "invocation": "mantic-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--expected-current absent|releases/ID]"
+    },
+    {
+      "label": "Recover retained release",
+      "invocation": "/Users/joey/.local/bin/mantic-install recover --release ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--expected-current absent|releases/ID]"
+    },
+    {
+      "label": "Register inventory",
+      "invocation": "/Users/joey/.local/bin/mantic --register-usage"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local operators inspect, install, deploy, or recover Mantic programs and documentation."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Source programs and provider are a matched supported release; paths are absolute; foreign selectors must not be taken over. Deployment settings are empty."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Install accepts binary and provider bundle paths. Inspect selects a home. Recover accepts an exact retained release. Optional expected-current guards absent or releases/ID selection. Deploy consumes a schema-two request on stdin and initializes default state after publication."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Selection and inspection report the installed immutable release. Deployment establishes selection and initialization as separate local effects. Usage registration reports its separate journal outcome."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Current identifies selected program and provider bytes, not a saved balance or valid forecast. Private schema-one state contains only current config definitions."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Opaque release UUID identifies retained files beneath Mantic/install/releases. Persistent schema, output schema, provider schema, release version, and entry versions are independent."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Inspect reads current installation selection only; no database validity, live readiness, retained-file integrity, or native signature audit is inferred."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The installer uses current-user local filesystem surfaces. --home isolates install paths and is not a runtime database override."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Matched programs and provider move together. Provider selector follows the current Mantic release. Failed instructions preserve completed changes for inspection; recover does not restore configs."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "unspecified",
+        "statement": "No release-count, installation-latency, or future migration-window objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Release 0.1.0 supports persistent schema one. Ordinary commands do not migrate or initialize state. Recover must select a program compatible with existing state; no older schema migration exists."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Explicit command inventory registration and optional metadata-only agent command observation use Chancery's owning Rust journal API. Program/provider publication remains useful without the Chancery reader.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.usage.record"
+      }
+    ]
+  },
+  "manual": "manuals/installation.md"
+}

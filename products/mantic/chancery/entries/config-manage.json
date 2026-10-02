@@ -1,0 +1,147 @@
+{
+  "id": "mantic.config.manage",
+  "contract_version": 1,
+  "kind": "capability",
+  "mode": "use",
+  "support": "supported",
+  "title": "Manage Mantic configs and expected expenses",
+  "summary": "Initialize one private database and create, read, edit, or delete named configs and their fixed expense recurrence rules. Preserve current definitions only.",
+  "use_when": [
+    "The caller wants to initialize Mantic state or create, read, edit, rename, or delete its calculation configs and expense items."
+  ],
+  "do_not_use_when": [
+    "The caller wants to record payments, save a balance or forecast run, share an item among configs, or integrate directly with SQLite."
+  ],
+  "outcome": "Mantic returns selected current definitions or atomically applies an authorized definition change in the selected single database.",
+  "effects": [
+    "Initialization can create private directories and empty schema-one state. Edits atomically change current definitions. Config deletion also deletes its owned items.",
+    "Agent command dispatch can separately append metadata-only Chancery usage."
+  ],
+  "authority": [
+    "Mantic validates definitions and owns committed configuration state. The caller supplies expense meaning and authorizes edits."
+  ],
+  "success": [
+    "A successful read returns complete selected current definitions. A successful write reports the resulting definition or deletion after commit."
+  ],
+  "failure_and_recovery": [
+    "Invalid input or a failed transaction preserves prior definitions. Missing or unsupported state stops ordinary commands; initialize empty state explicitly or select a compatible program.",
+    "After interruption, inspect current definitions before repeating a create or add. No write idempotency key or retained revision exists."
+  ],
+  "privacy": [
+    "Private state retains config names, item labels, amounts, schedules, and schema metadata. Config history, balances, runs, payment state, and generated occurrences are not retained."
+  ],
+  "does_not_authorize": [
+    "Changing another product, sharing private output, modifying SQLite directly, or replacing populated state."
+  ],
+  "interfaces": [
+    {
+      "label": "Initialize definitions",
+      "invocation": "/Users/joey/.local/bin/mantic init"
+    },
+    {
+      "label": "Create a config",
+      "invocation": "/Users/joey/.local/bin/mantic config create NAME"
+    },
+    {
+      "label": "Read a config",
+      "invocation": "/Users/joey/.local/bin/mantic config show NAME"
+    },
+    {
+      "label": "Add an expense item",
+      "invocation": "/Users/joey/.local/bin/mantic item add CONFIG NAME AMOUNT --first DATE [--every UNIT [--interval N]] [--end DATE]"
+    },
+    {
+      "label": "Update an expense item",
+      "invocation": "/Users/joey/.local/bin/mantic item update ID [--name NAME] [--amount AMOUNT] [--first DATE] [--every UNIT] [--interval N] [--end DATE | --clear-end] [--once]"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "chancery.usage.record",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Local users and authorized agents manage reusable calculation definitions through Mantic's CLI."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Ordinary commands require initialized supported state; init accepts empty or supported schema-one state. Config names are unique, case-sensitive, trimmed, nonempty, and free of controls."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Commands select one invocation-wide database and accept config names or item IDs, positive integer-cent expense amounts, a first due date, optional day/week/month/year recurrence and positive interval, and an optional inclusive cutoff."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Reads return complete selected current definitions. Writes report resulting records or deletion. --json uses schema-one success result envelopes on stdout and coded operation errors on stderr."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "config holds only ID and name; config_item holds ID, exclusive config reference, label, amount_cents, first_due, nullable paired recurrence unit/interval, and nullable end_date. Definitions are current editable state without revisions."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Config and item integer IDs are local to the selected database. Config names select configs. Item names are nonunique labels. All monetary values use integer cents in one caller-chosen currency with two decimal places; dates are calendar dates."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Lists and show cover all committed selected configs or items at their read boundary. No stored revision, current-balance timestamp, run timestamp, or active-config selection exists."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported boundary is the local CLI and current-user filesystem permissions. Default state is ~/Library/Application Support/Mantic/mantic.db; --database requires an absolute invocation-wide path."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Each validated change commits atomically. Config deletion cascades to owned items. Unspecified update fields retain their values. Forecasts never advance stored schedule anchors."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Amounts fit signed 64-bit cents, expenses are positive, recurrence intervals are 1 through 4,294,967,295, and dates range from 0001-01-01 through 9999-12-31. SQLite contention uses a five-second busy timeout without a hard wall-clock objective."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No database-capacity, read-latency, write-latency, or future migration-window objective is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Initial state and CLI output schemas are independently one. Unsupported or foreign state fails; ordinary commands do not initialize, migrate, or repair it."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Agent CLI dispatch attempts metadata-only command usage through Chancery's Rust journal API; missing attribution and internal calls are skipped, and recording failures preserve Mantic results.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.usage.record"
+      }
+    ]
+  },
+  "manual": "manuals/config-manage.md"
+}
