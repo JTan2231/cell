@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import uuid
+from time import sleep
 
 from ci_manager import VERSION
 from ci_manager import workspace
@@ -788,4 +789,4 @@ class Worker:
                     else:
                         self.finish(job, "failed", str(exception),
                                     unresolved=bool(job.get("model_unresolved")) or job["phase"] in {"checking", "preparing", "deploying"})
-            time.sleep(2)
+            sleep(2)

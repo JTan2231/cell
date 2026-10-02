@@ -114,7 +114,7 @@ class WorktreeCleanupTests(unittest.TestCase):
                           notification_blocked=True)]
         with mock.patch("ci_manager.manager.workspace.root"), mock.patch.object(
                 self.worker, "claim", return_value=None), mock.patch(
-                "ci_manager.manager.time.sleep", side_effect=RuntimeError("stop fixture loop")):
+                "ci_manager.manager.sleep", side_effect=RuntimeError("stop fixture loop")):
             with self.assertRaisesRegex(RuntimeError, "stop fixture loop"):
                 self.worker.run()
         for job in jobs:
