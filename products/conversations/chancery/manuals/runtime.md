@@ -107,8 +107,8 @@ Deployment does not run `doctor`, read history, or change Codex authentication.
 It starts no service. The optional doctor command retains its normal App Server
 handshake and metadata behavior; it is separate from installation.
 
-Krisis and Paperboy embed the Conversations library. Rebuild and deploy each
-consumer to apply library changes. Replacing the CLI does not update them.
+Krisis embeds the Conversations library. Rebuild and deploy it to apply
+library changes. Replacing the CLI does not update Krisis.
 
 ## Command usage
 
