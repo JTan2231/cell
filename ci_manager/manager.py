@@ -725,13 +725,22 @@ class Worker:
             return
         phase = job.get("stopped_phase")
         next_phase = None
-        if job.get("model_unresolved") and job.get("attempts"):
-            view = self.nucleus.get(job["attempts"][-1]["nucleus_job_id"])
-            terminal = terminal_result(view) if view is not None else None
-            if terminal and terminal.get("attempt_state") == "lost":
-                job["last_error"] = "Nucleus still reports lost execution; orphan containment is not established."
+        if (job.get("model_unresolved") or phase == "repair_wait") and job.get("attempts"):
+            attempt = job["attempts"][-1]
+            try:
+                view = self.nucleus.get(attempt["nucleus_job_id"])
+                terminal = terminal_result(view) if view is not None else None
+            except IntegrationError as exception:
+                job["last_error"] = str(exception)
             else:
-                next_phase = "repair_wait"
+                if terminal and terminal.get("attempt_state") == "lost":
+                    job["last_error"] = "Nucleus still reports lost execution; orphan containment is not established."
+                else:
+                    # Fresh observation permits replay of this exact request,
+                    # including one known absent after a rejected admission.
+                    attempt["transport_failures"] = 0
+                    job["model_unresolved"] = view is not None
+                    next_phase = "repair_wait"
         elif phase == "deploying" and job.get("deployment_request"):
             observed = self.deployment_read(job, "status")
             if observed.get("operation_state") in {"terminal", "interrupted", "active", "needs_reconciliation", "not_found"}:

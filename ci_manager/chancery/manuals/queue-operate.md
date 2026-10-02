@@ -111,8 +111,8 @@ the running manager. Service start and stop do not clear queue pause, retained
 jobs, maintenance owners, or unresolved effects.
 
 Installation normally requires paused admission and no active job. Service stop
-always requires both conditions. Installation has only the exception for
-cancelled validation described below.
+always requires both conditions. Installation permits the two exceptions below
+when evidence establishes that execution has stopped or was not admitted.
 Installation keeps the queue paused and loads the service. It pins a
 immutable release under `~/.local/share/cell-ci/releases/` and selects
 the matching executable and provider through `current`. It refuses foreign
@@ -168,11 +168,25 @@ this cancellation from proceeding through normal outcome handling. Inspect the
 retained outcome before resuming admission. The ordinary service-stop command
 does not use this installation exception.
 
+Installation can also replace a worker blocked in `repair_wait` before model
+admission. Admission must be paused. The job must have no pending recovery
+request, unresolved model execution, accepted source, or deployment. The latest
+frozen repair request must match the recorded attempt and current candidate.
+Matching validation supervisor evidence must prove that validation exited.
+Nucleus must report `not_found` for that exact repair identity. Unavailable,
+admitted, lost, or mismatched evidence does not qualify.
+
+The installer checks this proof before stopping its owned service and again
+under the worker lock. It preserves the job, candidate, frozen request, budget
+and queue. Run `cell-ci recover JOB` after installation. Recovery observes the
+same provider identity and continues the existing request through the normal
+repair path. Installation itself does not complete or validate the job.
+
 Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.8.1 uses queue contract 11 and retains journal
+arguments. Manager release 0.8.2 uses queue contract 11 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true` and
 `policy.manifest_executor = 1`. The latter selects deployment receipt schema 2.
 Retained schema-1 deployment outcomes remain readable. The new manager does
@@ -449,6 +463,13 @@ admission and sends no outcome email. Inspect an active failure before resuming.
 
 Recovery reconciles the recorded operation through its owning provider. It does
 not blindly repeat a merge, patch, model invocation, deployment, or email.
+
+For a blocked repair, recovery reads the exact retained Nucleus identity even
+when the earlier failure occurred before admission. An authoritative `not_found`
+allows the worker to submit the same frozen request with the same identity. An
+existing invocation remains the same attempt. Recovery resets the transport
+retry count after an authoritative observation and consumes no additional repair
+point. Unavailable observation and lost execution remain blocked.
 
 A cancelled validation with matching terminal supervisor evidence can finish
 cancellation even when its aggregate result is already recorded. This preserves

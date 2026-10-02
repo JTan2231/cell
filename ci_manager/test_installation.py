@@ -1,6 +1,7 @@
 """Check manager release inventories and compatible selection without file hashes."""
 
 from contextlib import ExitStack
+import copy
 import json
 from pathlib import Path
 import sys
@@ -9,7 +10,8 @@ import unittest
 from unittest import mock
 
 from ci_manager import installation
-from ci_manager.storage import ManagerError
+from ci_manager.integrations import TransportError
+from ci_manager.storage import ManagerError, Store
 
 
 class InstallationTests(unittest.TestCase):
@@ -60,6 +62,208 @@ class InstallationTests(unittest.TestCase):
         wrapper.write_bytes(installation._launcher(str(self.python), legacy))
         wrapper.chmod(0o555)
         return legacy
+
+    def installed_paths(self):
+        previous = self.release()
+        paths = {"programs": self.programs, "current": self.programs / "current",
+                 "wrapper": self.root / "bin/cell-ci", "provider": self.root / "providers/ci-manager",
+                 "plist": self.root / "agents/manager.plist"}
+        installation._link(paths["current"], f"releases/{previous.name}")
+        installation._link(paths["wrapper"], str(paths["current"] / "bin/cell-ci"))
+        installation._link(paths["provider"], str(paths["current"] / "ci_manager/chancery"))
+        installation._write_file(paths["plist"], installation._plist(previous))
+        return previous, paths
+
+    def prepared_repair(self):
+        store = Store(self.root / "state", create=True)
+        self.addCleanup(store.db.close)
+        directory = store.root / "jobs/fixture"
+        directory.mkdir(parents=True)
+        worktree = directory / "worktree"
+        worktree.mkdir()
+        candidate = "b" * 40
+        request_path = directory / "repair-1.request.json"
+        request = {"version": 1, "id": "ci-fixture-repair-1",
+                   "requester": {"program": "ci-manager", "id": "fixture"},
+                   "prompt": "Frozen prompt from the previous worker.",
+                   "invocation": {"cwd": str(worktree), "workspaceAccess": "read-only"}}
+        request_path.write_text(json.dumps(request))
+        validator = directory / "validation-0.request.json"
+        validator.write_text(json.dumps({
+            "command": [str(self.python), str(worktree / "pipeline/select_changes.py"), "run",
+                        "--base", "a" * 40, "--candidate", candidate, "--json"],
+            "cwd": str(worktree), **{key: str(directory / f"validation-0.{suffix}")
+                for key, suffix in (("stdout", "stdout"), ("stderr", "stderr"),
+                                    ("started", "started.json"), ("result", "result.json"))}}))
+        (directory / "validation-0.result.json").write_text(json.dumps(
+            {"request": str(validator), "exit_code": 1}))
+        data = {"base_commit": "a" * 40, "candidate_commit": candidate,
+                "stopped_phase": "repair_wait", "model_unresolved": False,
+                "policy": {"luna_attempts": 3, "terra_attempts": 1},
+                "attempts": [{"number": 1, "nucleus_job_id": request["id"],
+                              "request": str(request_path), "parent": candidate}],
+                "validations": [{"candidate": candidate,
+                                 "receipt": str(directory / "validation-0.json")}]}
+        for identity, phase in (("fixture", "blocked"), ("queued", "queued")):
+            store.db.execute("""INSERT INTO jobs
+                (id,submission_key,phase,created,updated,data) VALUES (?,?,?,?,?,?)""",
+                (identity, identity, phase, 1.0, 1.0, json.dumps(data if phase == "blocked" else {})))
+        return store, store.job("fixture"), request_path
+
+    def host_fixture(self, stack, store, paths):
+        stack.enter_context(mock.patch.object(installation.sys, "platform", "darwin"))
+        stack.enter_context(mock.patch.object(installation, "__file__", str(self.source / "installation.py")))
+        stack.enter_context(mock.patch.object(installation, "_paths", return_value=paths))
+        stack.enter_context(mock.patch.object(installation, "state_root", return_value=store.root))
+
+    def journal(self, store):
+        return [tuple(row) for row in store.db.execute("SELECT * FROM jobs ORDER BY sequence")]
+
+    def test_prepared_repair_requires_authoritative_absence_and_retains_frozen_request(self):
+        store, job, request_path = self.prepared_repair()
+        retained = request_path.read_bytes()
+        with mock.patch.object(installation, "NucleusClient") as client:
+            client.return_value.get.return_value = None
+            installation._require_idle(store, allow_install=True)
+            client.return_value.get.assert_called_once_with("ci-fixture-repair-1")
+            with self.assertRaises(ManagerError):
+                installation._require_idle(store)
+        self.assertEqual(request_path.read_bytes(), retained)
+        self.assertEqual(store.job("fixture"), job)
+
+    def test_install_refuses_unresolved_or_uncorrelated_repair_evidence(self):
+        store, job, request_path = self.prepared_repair()
+        original = copy.deepcopy(job)
+        variants = ({"stopped_phase": "checking"}, {"model_unresolved": True},
+                    {"model_unresolved": None}, {"accepted": True}, {"acceptance_intent": {"candidate": "x"}},
+                    {"deployment_request": {"id": "x"}}, {"deployment_result": {"state": "lost"}},
+                    {"attempts": []}, {"candidate_commit": "c" * 40})
+        with mock.patch.object(installation, "NucleusClient") as client:
+            for changed in variants:
+                with self.subTest(changed=changed):
+                    self.assertFalse(installation._prepared_repair_not_admitted(store, original | changed))
+            for changed in ({"number": 2}, {"number": True}, {"nucleus_job_id": "other"},
+                            {"request": str(request_path.parent / "other.json")}, {"parent": "c" * 40},
+                            {"state": "completed"}, {"terminal": {"attempt_state": "lost"}},
+                            {"patch": "/retained.patch"}):
+                with self.subTest(attempt=changed):
+                    changed_job = copy.deepcopy(original)
+                    changed_job["attempts"][-1].update(changed)
+                    self.assertFalse(installation._prepared_repair_not_admitted(store, changed_job))
+            store.set("recovery_request", "fixture")
+            self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+            store.set("recovery_request", None)
+            (request_path.parent / "validation-0.result.json").unlink()
+            self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+            client.assert_not_called()
+
+    def test_install_refuses_changed_frozen_request_or_missing_request(self):
+        store, job, request_path = self.prepared_repair()
+        request = json.loads(request_path.read_bytes())
+        variants = ({"id": "another"}, {"requester": {"program": "ci-manager", "id": "other"}},
+                    {"invocation": {"cwd": "/other", "workspaceAccess": "read-only"}},
+                    {"invocation": {"cwd": str(request_path.parent / "worktree"), "workspaceAccess": "write"}})
+        with mock.patch.object(installation, "NucleusClient") as client:
+            for changed in variants:
+                with self.subTest(changed=changed):
+                    request_path.write_text(json.dumps(request | changed))
+                    self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+            request_path.unlink()
+            self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+            client.assert_not_called()
+
+    def test_install_refuses_admitted_lost_and_unavailable_nucleus_jobs(self):
+        store, job, _ = self.prepared_repair()
+        with mock.patch.object(installation, "NucleusClient") as client:
+            for state in ("accepted", "running", "completed", "lost"):
+                with self.subTest(state=state):
+                    client.return_value.get.return_value = {"summary": {"state": state}}
+                    self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+            client.return_value.get.side_effect = TransportError("unavailable")
+            self.assertFalse(installation._prepared_repair_not_admitted(store, job))
+
+    def test_install_rechecks_absence_and_preserves_active_and_queued_jobs(self):
+        previous, paths = self.installed_paths()
+        store, job, request_path = self.prepared_repair()
+        before, retained = self.journal(store), request_path.read_bytes()
+        events = []
+        with ExitStack() as stack:
+            self.host_fixture(stack, store, paths)
+            client = stack.enter_context(mock.patch.object(installation, "NucleusClient"))
+            client.return_value.get.side_effect = lambda identity: events.append("get")
+            stack.enter_context(mock.patch.object(installation, "_stop_if_loaded",
+                                                  side_effect=lambda plist: events.append("stop") or True))
+            launch = stack.enter_context(mock.patch.object(installation, "_launchctl"))
+            result = installation.install()
+        self.assertEqual(events, ["get", "stop", "get"])
+        self.assertEqual(installation._selected_release(paths).name, result["release"])
+        self.assertNotEqual(result["release"], previous.name)
+        self.assertEqual(self.journal(store), before)
+        self.assertEqual(store.job("fixture"), job)
+        self.assertEqual(request_path.read_bytes(), retained)
+        self.assertTrue(store.get("paused"))
+        launch.assert_called_once_with("bootstrap", f"gui/{installation.os.getuid()}", str(paths["plist"]))
+
+    def test_install_refuses_before_stop_and_restores_service_after_failed_recheck(self):
+        previous, paths = self.installed_paths()
+        store, _, request_path = self.prepared_repair()
+        before, retained = self.journal(store), request_path.read_bytes()
+        with ExitStack() as stack:
+            self.host_fixture(stack, store, paths)
+            client = stack.enter_context(mock.patch.object(installation, "NucleusClient"))
+            stop = stack.enter_context(mock.patch.object(installation, "_stop_if_loaded", return_value=True))
+            prepare = stack.enter_context(mock.patch.object(installation, "_prepare_release"))
+            launch = stack.enter_context(mock.patch.object(installation, "_launchctl"))
+            client.return_value.get.side_effect = TransportError("unavailable")
+            with self.assertRaises(ManagerError):
+                installation.install()
+            stop.assert_not_called()
+            client.return_value.get.side_effect = [None, {"summary": {"state": "running"}}]
+            with self.assertRaisesRegex(ManagerError, "installation failed"):
+                installation.install()
+            stop.assert_called_once()
+            prepare.assert_not_called()
+            launch.assert_called_once_with("bootstrap", f"gui/{installation.os.getuid()}", str(paths["plist"]))
+        self.assertEqual(installation._selected_release(paths), previous)
+        self.assertEqual(self.journal(store), before)
+        self.assertEqual(request_path.read_bytes(), retained)
+
+    def test_service_stop_keeps_strict_idle_requirement(self):
+        _, paths = self.installed_paths()
+        store, _, _ = self.prepared_repair()
+        with ExitStack() as stack:
+            self.host_fixture(stack, store, paths)
+            client = stack.enter_context(mock.patch.object(installation, "NucleusClient"))
+            stop = stack.enter_context(mock.patch.object(installation, "_stop_if_loaded"))
+            with self.assertRaises(ManagerError):
+                installation.service("stop")
+            client.assert_not_called()
+            stop.assert_not_called()
+
+    def test_failed_repair_maintenance_install_restores_selection_and_retains_job(self):
+        previous, paths = self.installed_paths()
+        old_plist = paths["plist"].read_bytes()
+        store, _, request_path = self.prepared_repair()
+        before, retained = self.journal(store), request_path.read_bytes()
+        with ExitStack() as stack:
+            self.host_fixture(stack, store, paths)
+            client = stack.enter_context(mock.patch.object(installation, "NucleusClient"))
+            client.return_value.get.return_value = None
+            stack.enter_context(mock.patch.object(installation, "_stop_if_loaded", side_effect=[True, False]))
+            launch = stack.enter_context(mock.patch.object(
+                installation, "_launchctl", side_effect=[ManagerError("fixture bootstrap failure"), None]))
+            worker_lock = stack.enter_context(mock.patch.object(
+                installation, "_worker_lock_after_stop", wraps=installation._worker_lock_after_stop))
+            with self.assertRaisesRegex(ManagerError, "installation failed"):
+                installation.install()
+        self.assertEqual(client.return_value.get.call_count, 2)
+        self.assertEqual(launch.call_count, 2)
+        self.assertEqual(worker_lock.call_count, 2)
+        self.assertEqual(installation._selected_release(paths), previous)
+        self.assertEqual(paths["plist"].read_bytes(), old_plist)
+        self.assertEqual(self.journal(store), before)
+        self.assertEqual(request_path.read_bytes(), retained)
+        self.assertTrue(store.get("paused"))
 
     def test_new_releases_have_independent_opaque_ids_and_mode_inventory(self):
         first, second = self.release(), self.release()

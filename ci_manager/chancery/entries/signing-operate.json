@@ -191,7 +191,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.8.1 publishes signing contract 3 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
+        "statement": "Manager release 0.8.2 publishes signing contract 3 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
       },
       {
         "status": "unspecified",
