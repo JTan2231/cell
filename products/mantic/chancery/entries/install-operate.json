@@ -1,0 +1,154 @@
+{
+  "id": "mantic.install.operate",
+  "contract_version": 1,
+  "kind": "operation",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Install or recover Mantic",
+  "summary": "Install matched Mantic programs and provider, explicitly initialize private definitions, register command inventory, or recover a compatible retained release without restoring data.",
+  "use_when": [
+    "The caller authorizes Mantic installation, update, or retained-release recovery."
+  ],
+  "do_not_use_when": [
+    "The caller wants to edit expense definitions, restore historical config data, or operate an unrelated product."
+  ],
+  "outcome": "The intended matched release is selected, its provider is readable, and explicitly required initialization and command registration have separate verified outcomes.",
+  "effects": [
+    "Stages and selects Mantic programs and provider. Deployment setup or explicit init can initialize empty default private state. Registration can separately change Chancery command inventory."
+  ],
+  "authority": [
+    "The user authorizes installation or recovery. Mantic owns its selectors and state initialization; Chancery owns documentation checks and usage registration."
+  ],
+  "success": [
+    "Inspect reports the intended release. Config list reads supported selected state. Installed doctor/product/list/show/resolve expose the intended version-matched publication. Usage registration completes separately."
+  ],
+  "failure_and_recovery": [
+    "Stop on foreign ownership, mismatched releases, unexpected current selection, unsupported state, failed explicit registration, or unknown retained effects. Inspect completed changes before recovery; preserve definitions."
+  ],
+  "privacy": [
+    "Install/recover disclose no definitions or results to a service. Configuration state remains outside program releases; Chancery usage contains metadata only."
+  ],
+  "does_not_authorize": [
+    "Editing configs, replacing populated state, sharing private output, scheduling, taking foreign selectors, editing immutable releases, or using program recovery to restore data."
+  ],
+  "interfaces": [
+    {
+      "label": "Direct installation",
+      "invocation": "mantic-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--expected-current absent|releases/ID]"
+    },
+    {
+      "label": "Retained recovery",
+      "invocation": "/Users/joey/.local/bin/mantic-install recover --release ABSOLUTE_PATH [--expected-current absent|releases/ID]"
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "mantic.installation",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    }
+  ],
+  "session_surfaces": [
+    "Mantic release source paths",
+    "local installation filesystem",
+    "installed Mantic and Chancery CLIs"
+  ],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Inspect target selection with the trusted installer.",
+    "Install matched program/provider paths guarded by expected-current. Initialize empty state explicitly when required.",
+    "Register the selected command inventory, inspect selection, read config list, and verify the installed provider.",
+    "For recovery, preserve definitions and select one exact retained compatible release, then repeat relevant checks."
+  ],
+  "checkpoints": [
+    "Match supplied program and provider release before selecting it.",
+    "Guard the observed prior selection; preserve foreign-owned selectors.",
+    "Treat selection, state initialization, usage registration, catalog verification, and calculation success as separate evidence."
+  ],
+  "adaptation": [
+    "Use the Cell manager deployment recipe for integrated delivery, or the trusted direct installer for an authorized manual action.",
+    "Use the same absolute home on isolated installer invocations and select runtime databases separately."
+  ],
+  "stop_when": [
+    "A release is mismatched, ownership is foreign, expected-current differs, state is unsupported, registration fails, or retained effects are unknown."
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "An authorized local operator or interactive agent follows this procedure to select Mantic releases."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Installation or recovery is authorized. Matched absolute source paths or an exact compatible retained release are available; prior selection and ownership are inspected."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "The procedure takes matched program/provider paths, optional isolated home and expected selection, or an exact retained release path."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Verified selection and provider publication, optional explicit state initialization, and separate command-inventory registration are the required observed outcomes."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Installation selection does not prove a forecast, config validity, actual funds, or payment success. Program recovery preserves current definitions without restoring older data."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Opaque release identity and expected-current releases/ID guard local program selection; no monetary or forecast unit is defined by installation."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Checks inspect the selected installation and indexed provider at invocation time. The manager retains its own separate delivery-stage outcomes."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "Actions use trusted local installers and current-user filesystem access; no daemon, model, network, or schedule is operated."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Inspect before changes, guard expected selection, select matched programs/provider, then verify initialization and registration separately. Failed instructions can retain completed changes."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Stop on mismatched sources, foreign ownership, unexpected selection, unsupported state, failed registration, or unknown effects."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Recover only programs compatible with existing persistent state. This initial release supports schema one; no config-history restoration or older-schema migration is available."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Installation steps rely on Mantic's declared selection, initialization, compatibility, and recovery guarantees.",
+        "target": "mantic",
+        "kind": "control",
+        "contract": "mantic.installation"
+      }
+    ]
+  },
+  "manual": "manuals/install-operate.md"
+}

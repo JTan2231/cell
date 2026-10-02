@@ -18,6 +18,7 @@ PRODUCT_INPUTS = (
 # points also belong to the installation boundary, even inside product code.
 PRODUCT_RUNTIME_INPUTS = {
     "bazaar": ("infrastructure/bazaar/src/api.rs",),
+    "mantic": ("products/mantic/src/store.rs", "products/mantic/src/lib.rs"),
     "conatus": ("products/conatus/src/main.rs", "products/conatus/src/store.rs"),
     "clew": ("products/clew/src/store.rs", "products/clew/src/main.rs", "products/clew/src/lib.rs",
              "products/clew/src/delivery.rs"),
