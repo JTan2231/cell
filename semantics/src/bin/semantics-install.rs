@@ -42,9 +42,7 @@ enum Action {
         home: HomeArgs,
     },
     #[command(hide = true)]
-    Adapter {
-        operation: String,
-    },
+    Deploy,
 }
 
 #[derive(Args)]
@@ -75,7 +73,7 @@ struct Candidate {
 
 fn run(action: Action) -> Result<Value> {
     match action {
-        Action::Adapter { operation } => adapter::run(&operation),
+        Action::Deploy => adapter::deploy(),
         Action::Install(args) => Ok(json!({"ok":true,"data":lifecycle::install(&args)?})),
         Action::Inspect(home) => Ok(json!({"ok":true,"data":lifecycle::inspect(&home)?})),
         Action::Uninstall(home) => {
@@ -96,7 +94,7 @@ fn run(action: Action) -> Result<Value> {
 fn main() -> ExitCode {
     rustix::process::umask(rustix::fs::Mode::from_bits_truncate(0o077));
     let cli = Cli::parse();
-    let adapter = matches!(cli.command, Action::Adapter { .. });
+    let adapter = matches!(cli.command, Action::Deploy);
     match run(cli.command) {
         Ok(value) => {
             println!("{value}");

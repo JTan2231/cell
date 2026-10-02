@@ -87,9 +87,8 @@ Holds belong to an exact owner. Hold stops new discovery while drain advances
 existing exchanges. Maintenance status reports `protocol_version`, holds,
 `drained` and outstanding exchanges. Unknown counts are not zero. Release
 removes only the selected owner's hold and does not approve a failure halt.
-A requester-only update leaves Nucleus admission open. Nucleus replacement
-waits for EMT exchanges before holding Nucleus. Restart cannot resume an old
-agent process; the owning product must inspect uncertain effects.
+Restart cannot resume an old agent process. The owning product must inspect
+uncertain effects before an attended maintenance operation changes Nucleus.
 
 Migration accepts only schema one and requires drained work. `emt migrate`
 checks existing state and returns `schema_version:1`. With no database, it
@@ -104,44 +103,39 @@ EMT has no activity mirror, operation ledger or credential copy. Ordinary status
 and logs omit bodies; explicit reads, model prompts and email expose selected
 content. No future support lifetime or retention horizon is promised.
 
-## Matched installation and coordinated recovery
+## Matched installation instructions
 
 The installer stages the binary, matching installer and Chancery bundle in an
 immutable `cell-install-v3` release. Before initialization, `emt-install install`
-accepts `--binary ABS`, `--bundle ABS`, `--home` and `--expected-current`. This
-installs bytes without initializing state, starting agents, sending mail or
-enabling a schedule. The product selector publishes the bundle with its release.
+accepts `--binary ABS`, `--bundle ABS`, `--home` and `--expected-current`.
+This installs bytes without initializing state or selecting a schedule. The
+product selector publishes the bundle with its release.
 
-Initialized updates use `./deploy.sh emt`. The coordinator captures configuration
-and worker intent, disables the worker, holds and drains EMT, records a migration
-receipt, installs the matched release, selects a disabled exact worker definition,
-and releases admission and restores enabled state while
-preserving operator pauses and failure halts. Configuration must be valid before
-maintenance. Shared cleanup recognizes EMT's root and preserves active pins.
+`./deploy.sh emt` executes the declared `emt-install deploy` instruction.
+The installer publishes the matched release, initializes or migrates its local
+schema-one state, saves the requested configuration, configures the Clockwork
+EMT route and publishes the intended worker definition. It uses ordinary
+product admission and runner locks. It creates no maintenance hold, drains no
+exchanges and performs no application-health or signature audit.
 
 Product setup accepts current configuration fields and an `enabled` boolean.
 It does not accept incoming-mail progress changes. Omitted settings preserve
-saved values. A fresh valid deployment uses the default worker schedule with
-activation enabled and domain pause removed after configuration; explicit
-`paused` or `enabled` overrides that default. An initialized product's absent
-binding remains absent unless activation is explicitly requested.
+saved values. A fresh deployment uses the default worker schedule with
+activation enabled and product pause removed; explicit `paused` or `enabled`
+overrides that default. An initialized product's absent binding remains absent
+unless activation is explicitly requested. Existing schedules retain their
+intended enabled state, and existing failure halts remain in force.
 
-A missing receiving domain is resolved through Email `receive settings` before
-maintenance. A domain supplied with EMT or selected Email setup takes precedence.
-An empty or ambiguous result requires an explicit domain. Deployment does not
-inspect received mail to infer account settings.
+A domain supplied with EMT or selected Email setup takes precedence. Otherwise,
+the installer resolves a missing receiving domain through Email `receive settings`.
+An empty or ambiguous result requires an explicit domain. This setup instruction
+does not inspect received mail to infer account settings.
 
-Recovery uses the original captured configuration and worker intent. It restores
-a disabled exact definition before release and then applies the captured pause
-and enabled settings. Fresh initialization's temporary pause is not operator
-intent. Existing pauses and failure-halt evidence survive each phase.
-The retained coordinator directory holds the migration receipt with completed
-schema and deployment owner. Recovery reuses this receipt and captured intent.
-Legacy receipts remain readable without accessing their old data copies.
-
-Direct selector recovery is unsupported after initialization. Use maintained
-coordinator recovery and retain unresolved holds. Never release another owner's
-hold, silently resume a halt or infer zero outstanding work from unknown counts.
+The executor records instruction completion from the exit status. Failure leaves
+completed effects in place. Interruption requires inspection of the retained
+instruction log and affected paths before an explicit next operation; it does
+not trigger migration replay, rollback or recovery. Direct selector recovery is
+unsupported after initialization. Explicit product maintenance remains separate.
 
 ## Dependencies and compatibility
 

@@ -52,27 +52,31 @@
     {
       "label": "Recover a retained program",
       "invocation": "cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY"
+    },
+    {
+      "label": "Run product deployment recipe",
+      "invocation": "cast-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
     }
   ],
   "effects": [
-    "Deployment stages a immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. It creates no collection database or schedule.",
+    "Direct installation stages an immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. The deploy recipe also initializes state and applies supplied configuration. It creates no schedule.",
     "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
     "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints.",
-    "The Cell configure phase initializes missing Cast state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
+    "The Cast deployment recipe initializes missing state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
   ],
   "authority": [
     "Cast owns its installation, state schema, configuration validation and local allowance accounting.",
     "The caller chooses collection policy and provider accounts; provider balances are managed by each provider."
   ],
   "success": [
-    "Installation selects matching commands and documentation and passes version and help checks.",
+    "Installation selects the supplied commands and documentation without executable probes.",
     "Initialization, configuration or diagnosis returns its documented local outcome.",
     "Ownership repair returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts after one committed transaction; changed jobs/companies retain identity and gain material revisions."
   ],
   "failure_and_recovery": [
-    "Deployment refuses foreign selectors and stale expected selections; a failed switch restores prior Cast selectors.",
+    "Deployment refuses foreign selectors and stale expected selections. A failed instruction retains completed changes for explicit recovery.",
     "Program rollback preserves current domain state. Do not hand-edit database rows.",
     "Resolve missing keys or provider restrictions separately; configuration changes do not purchase credits or reset accumulated usage."
   ],
@@ -151,18 +155,22 @@
       {
         "status": "declared",
         "statement": "Stop on foreign public selectors, displaced active ownership or unsupported recovery."
+      },
+      {
+        "status": "declared",
+        "statement": "Deploy accepts one bounded schema-two recipe request on stdin. The product command owns its setup; the shared executor uses process exit status only. Deployment runs no application execution probe, native-signature audit, maintenance hold, drain, or automatic rollback."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The existing operation ID and contract version remain compatible. Required feature contracts provide complete explanations; program recovery does not restore state and older programs can reject automatic_excluded_ats."
+        "statement": "The operation retains its ID; this contract removes automatic executable checks and selector rollback. Required feature contracts provide complete explanations; program recovery does not restore state and older programs can reject automatic_excluded_ats."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Program selection and recovery follow Cast-owned release verification and selector rules.",
+        "statement": "Program selection and recovery follow Cast-owned release metadata and selector rules.",
         "target": "cast",
         "kind": "control",
         "contract": "cast.installation"

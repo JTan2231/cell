@@ -233,7 +233,9 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
                 manifest = candidate.stage_build(source, product, staging / "candidates" / product,
                                                  item["binary_spec"],
                                                  target=cache / "target" / configuration["target"],
-                                                 source_key=source_key, signing_policy=policy)
+                                                 source_key=source_key, signing_policy=policy,
+                                                 versions={name: record["version"]
+                                                           for name, record in item["binaries"].items()})
                 return product, {"candidate_id": manifest["candidate_id"], "source_key": manifest["source_key"],
                                  "candidate_dir": str(output / "candidates" / product)}
 
@@ -254,7 +256,7 @@ def prepare(source: Path, products: list[str], output: Path, unit: str | None = 
 def prepare_supplied(source: Path, products: list[str], output: Path, unit: str | None,
                      policy: dict[str, Any] | None, source_key: str, prepared_build: Path, *,
                      prepared_build_snapshot: dict[str, Any] | None, release_check: bool) -> dict[str, Any]:
-    """Copy verified supplied bundles and compile only the missing product scope."""
+    """Copy referenced supplied bundles and compile only missing products."""
     started = time.monotonic()
     if not prepared_build.is_absolute() or prepared_build.is_symlink():
         raise BuildError("prepared build must be an absolute non-symbolic result file")
@@ -288,14 +290,12 @@ def prepare_supplied(source: Path, products: list[str], output: Path, unit: str 
         if not directory.is_absolute():
             raise BuildError(f"prepared candidate path must be absolute: {product}")
         workspace.require_path(directory)
-        manifest = candidate.verify(directory, signing_policy=policy)
+        manifest = candidate.read_manifest(directory)
         if (manifest.get("product") != product or manifest.get("source_commit") != commit
                 or manifest.get("source_key") != source_key
                 or manifest.get("candidate_id") != record.get("candidate_id")
                 or record.get("source_key") != source_key):
             raise BuildError(f"prepared candidate does not match the selected source and identity: {product}")
-        if set(manifest["binaries"]) != executable_scope(source, product, unit):
-            raise BuildError(f"prepared candidate executable scope does not match: {product}")
         reused[product] = directory, manifest
     output.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".preparation-", dir=output.parent))
@@ -306,16 +306,12 @@ def prepare_supplied(source: Path, products: list[str], output: Path, unit: str 
         candidates = {}
         for product in selected:
             if product in reused:
-                directory, expected_manifest = reused[product]
+                directory, manifest = reused[product]
             else:
                 directory = Path(built["candidates"][product]["candidate_dir"])
-                expected_manifest = candidate.verify(directory, signing_policy=policy)
+                manifest = candidate.read_manifest(directory)
             destination = staging / "candidates" / product
-            shutil.copytree(directory, destination)
-            manifest = candidate.verify(destination, signing_policy=policy)
-            if manifest != expected_manifest:
-                raise BuildError(f"prepared candidate changed while copying: {product}")
-            candidate.seal_tree(destination)
+            shutil.copytree(directory, destination, symlinks=True)
             candidates[product] = {"candidate_id": manifest["candidate_id"], "source_key": source_key,
                                    "candidate_dir": str(output / "candidates" / product)}
         if missing:
@@ -344,7 +340,7 @@ def main() -> int:
     parser.add_argument("--unit")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
-    parser.add_argument("--prepared-build", type=Path, help="reuse verified candidates from this build result")
+    parser.add_argument("--prepared-build", type=Path, help="reuse candidate references from this build result")
     parser.add_argument("--prepared-build-snapshot-file", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--release-check", action="store_true", help=argparse.SUPPRESS)
     arguments = parser.parse_args()

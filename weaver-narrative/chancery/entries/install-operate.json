@@ -1,18 +1,18 @@
 {
   "id": "weaver.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
   "title": "Install or recover Weaver",
-  "summary": "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document.",
+  "summary": "Install the Weaver CLI and provider and save its Annals reader configuration through the product command without authoring a document.",
   "use_when": [
-    "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document."
+    "Install the Weaver CLI and provider and save its Annals reader configuration through the product command without authoring a document."
   ],
   "do_not_use_when": [
     "Publication, email, automatic scheduling, source mutation, factual certification, or restoration of the retired Weaver workflow is wanted."
   ],
-  "outcome": "Install the Weaver CLI and provider under owned maintenance and configure its Annals reader without authoring a document.",
+  "outcome": "Install the Weaver CLI and provider and save its Annals reader configuration through the product command without authoring a document.",
   "interfaces": [
     {
       "label": "Deploy",
@@ -62,7 +62,7 @@
     "Installed program/provider selection, product initialization/configuration, and release of run-owned holds establish completed setup. Installation does not establish operational readiness."
   ],
   "failure_and_recovery": [
-    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment recovery uses the coordinator and preserves unproved holds."
+    "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment retains completed effects and performs no automatic product recovery. Preserve separately acquired holds."
   ],
   "privacy": [
     "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
@@ -76,13 +76,13 @@
     },
     {
       "id": "weaver.lifecycle",
-      "min_contract": 3,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "ci-manager.queue.operate",
-      "min_contract": 8,
-      "max_contract_exclusive": 10
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "does_not_authorize": [
@@ -118,7 +118,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The procedure selects programs and provider, configures the Annals reader, initializes state as required, and releases only its own maintenance hold."
+        "statement": "The product command selects programs and provider, saves the Annals reader configuration and initializes supported state under ordinary admission and the runner lock. It creates and releases no maintenance hold."
       }
     ],
     "data_semantics": [
@@ -130,7 +130,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Source commit and retained manager job identities select the delivery. Exact run IDs own maintenance holds. These are separate from authoring document/job identities."
+        "statement": "Source commit, executor request ID and retained manager job identities select delivery. Exact run IDs own separately requested maintenance holds. These are separate from authoring document and job identities."
       }
     ],
     "completeness_and_freshness": [
@@ -152,7 +152,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The coordinator holds and drains Weaver, selects program/provider bytes, invokes product initialization, then releases its own hold. Ordinary initializer rules remain unchanged. Recovery follows the retained transaction."
+        "statement": "The executor runs the declared product command. Weaver selects program and provider files and writes reading configuration and state under ordinary admission and the runner lock. Deployment creates no hold, drains no authoring job and invokes no readiness probe. Failed instructions retain completed effects without automatic retry, rollback or product recovery."
       }
     ],
     "operational_limits": [
@@ -185,7 +185,7 @@
       },
       {
         "status": "declared",
-        "statement": "The Cell coordinator owns manual deployment selection and interrupted transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
+        "statement": "The Cell executor owns explicit instruction order, command exit status and retained execution evidence. Products own application state and recovery. No dedicated installed Chancery contract covers the executor.",
         "target": "cell-deployment",
         "kind": "control"
       }
@@ -202,29 +202,29 @@
   "steps": [
     "Select the authorized manager delivery or separate validated manual deployment route.",
     "Check explicit Annals reading configuration, compatible providers, supported state and complete Bazaar prompt selection.",
-    "Prepare private first-installation settings and preview the coordinator plan.",
-    "Use the coordinator to hold, drain, select and configure matched program/provider bytes.",
+    "Prepare private first-installation settings and preview the explicitly selected products and ordered instructions.",
+    "Run the declared product command to select program and provider files and write configuration and state under ordinary admission.",
     "Inspect release metadata and register command inventory. Use doctor separately when live diagnostics are needed.",
     "For attended maintenance, own a hold, settle exact work, prove drain, verify and release only that hold.",
-    "Use retained coordinator transaction recovery after an interrupted deployment; preserve any unproved hold."
+    "Inspect interrupted execution evidence and current product state. Complete any authorized product recovery separately, then acknowledge executor admission after the original execution has stopped."
   ],
   "checkpoints": [
     "First installation identifies an existing identity-bound Annals decisions config and only supported settings.",
-    "Complete drain and exact candidate identity precede installation or state copy.",
-    "Database, source and Nucleus checks create no model job or narrative.",
+    "The caller selects required product and dependency updates explicitly; the executor does not infer compatibility or add products.",
+    "Deployment runs no model job, narrative, source-read probe or readiness diagnostic.",
     "The installed overview, focused feature pages and resolve closure describe the matched release.",
-    "The retained delivery outcome and release of only the run-owned holds prove the requested endpoint."
+    "The retained delivery outcome establishes instruction completion. Application readiness and release of separately acquired maintenance holds require their own evidence."
   ],
   "adaptation": [
     "Reuse stored reading configuration on later deployments unless a deliberate setting changes it.",
     "Use ordinary doctor admission while unheld; while held require the deployment ID to match Weaver's sole hold.",
     "Settle retained assignments with exact resume; cancel only a named Nucleus job the authorized operation intends to abandon.",
-    "Before candidate publication retain the prior selection; after publication follow the recorded forward recovery with supported state."
+    "Retain completed deployment effects and current application state after failure. Use explicit product interfaces for recovery and a new executor request ID for an authorized new attempt."
   ],
   "stop_when": [
     "State is unsupported or missing outside an authorized initialization.",
-    "Dependency inventory or readiness is unavailable, drain is unknown, or another hold prevents the required proof.",
-    "A selector is foreign, candidate bytes changed, or the plan exceeds the authorized scope.",
-    "Recovery cannot establish the exact coherent installation and its ownership."
+    "A required setup interface is unavailable, ordinary admission is held, or an explicit maintenance operation cannot prove drain.",
+    "A selector is foreign, a declared instruction fails, or the plan exceeds the authorized scope.",
+    "An interrupted instruction has unknown effects; inspect current product state before any authorized new attempt."
   ]
 }

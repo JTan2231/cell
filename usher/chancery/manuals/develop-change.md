@@ -25,8 +25,8 @@ Cell's operator manual when shared CI, installation, or membership facts change.
 
 Keep the separate recognition and installer interfaces distinct. Preserve
 installation ownership and recovery behavior.
-Release preparation builds both executables. CI keeps the ordinary product and
-documentation checks; it does not run installer integrity or readiness gates.
+Release preparation builds both executables. CI keeps the ordinary product
+checks; it does not run installer integrity or readiness gates.
 
 Commit the changes and use `./ci.sh submit COMMIT` from the Cell root. The
 installed manager integrates, validates, attempts bounded repairs, deploys,

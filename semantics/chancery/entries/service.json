@@ -1,6 +1,6 @@
 {
   "id": "semantics.service",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -35,25 +35,29 @@
     {
       "label": "Retained-state uninstall",
       "invocation": "semantics-install uninstall --clockwork ABSOLUTE_CLOCKWORK"
+    },
+    {
+      "label": "Cell manifest command",
+      "invocation": "semantics-install deploy"
     }
   ],
   "effects": [
-    "Installation writes a immutable release including complete provider bytes, publishes owned selectors, registers/selects the exact worker, and may initialize or migrate SQLite under proved quiescence.",
+    "The manifest command writes release and provider files, publishes owned selectors, initializes or migrates SQLite through native write locks, and registers/selects the worker directly.",
     "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
     "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs.",
-    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
   ],
   "authority": [
     "Semantics owns program/provider selection, state migrations, update and worker locks, product holds, readiness checks, and product recovery.",
-    "Clockwork owns scheduled activation, process history, incident halts and notification; Nucleus owns runtime evidence. Shared coordination retains each product commit boundary."
+    "Clockwork owns scheduled activation, process history, incident halts and notification; Nucleus owns runtime evidence. The manifest executor observes instruction completion and has no application health authority."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
+    "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
   ],
   "failure_and_recovery": [
     "Foreign/changed artifacts, unsafe state files, unavailable existing runtime, or unknown ownership fail closed.",
-    "Pre-commit rollback restores selectors and at most one prior scheduler when the database schema is unchanged. Live data remains in place. Schema changes require forward recovery; unproved recovery retains maintenance and transaction evidence.",
-    "Committed transactions recover forward. Prior-null selected-candidate recovery requires explicit --forward for the authenticated exact candidate."
+    "Explicit manual install: Pre-commit rollback restores selectors and at most one prior scheduler when the database schema is unchanged. Live data remains in place. Schema changes require forward recovery; unproved recovery retains maintenance and transaction evidence.",
+    "Explicit manual install: Committed transactions recover forward. Prior-null selected-candidate recovery requires explicit --forward for the authenticated exact candidate."
   ],
   "privacy": [
     "State can contain complete private documents, meanings, paths, correlations, and history.",
@@ -66,7 +70,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "Local operators, the product installer, and the Cell deployment adapter inspect and maintain one current-user Semantics installation."
+        "statement": "Local operators maintain one current-user Semantics installation through explicit product commands. The Cell manifest invokes its opaque setup command and observes instruction completion."
       }
     ],
     "preconditions": [
@@ -122,7 +126,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+        "statement": "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
       },
       {
         "status": "declared",

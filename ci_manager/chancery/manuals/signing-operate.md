@@ -135,7 +135,7 @@ Changing the fingerprint explicitly selects another certificate. Changing the
 namespace explicitly changes all product code identifiers. Changing only the
 Keychain path locates the same selected certificate in another Keychain.
 
-## Apply and verify the policy
+## Apply the policy
 
 New macOS jobs freeze the policy at submission. A reused request key
 keeps its original snapshot. Retained jobs without a signing snapshot keep
@@ -147,15 +147,17 @@ identity `krisis` for the former `decisions` descriptor. Source versions, build
 paths, Git commits, and release directories do not enter this identifier.
 
 The designated requirement pins that identifier and the exact leaf certificate.
-Cell signs staged native code, verifies it against the selected requirement,
-then seals the signed bytes. It uses no network timestamp and applies
+Cell signs staged native code with the declared identifier and certificate.
+Successful command completion is packaging evidence. It does not establish
+application health, safety, or suitability. It uses no network timestamp and applies
 no new entitlements or Hardened Runtime options. Products that require additional
 signing inputs need an explicit policy extension.
 
 Cargo owns compilation reuse in the shared target directory. Cell signs fresh
-staged copies and verifies native signatures; it retains no extra artifact cache. CI retains a production receipt and verifies
-signed candidates before accepted-ref advancement, including jobs that skip
-tests. Deployment and release preparation apply the same configured policy.
+staged copies; it retains no extra artifact cache. CI retains a production
+command receipt before accepted-ref advancement, including jobs that skip
+tests. It checks source, requested scope, candidate references and signing
+policy correlation. It does not audit the resulting artifacts. Deployment and release preparation apply the same configured policy.
 Policy changes detected after admission stop publication.
 
 Coverage is Cell-owned native production commands, daemons, helpers, and
@@ -165,8 +167,8 @@ runtimes do not receive a Cell-native process identity through this policy.
 Scripts and other package assets remain covered by their product release
 manifests and owned file paths. Signing does not combine products' permission boundaries.
 
-Missing keys, expired certificates, locked Keychains, wrong signers, or failed
-verification stop the operation. There is no unsigned, ad hoc, alternate-name,
+Missing keys, expired certificates, locked Keychains, or a failed signing
+command stop the operation. There is no unsigned, ad hoc, alternate-name,
 certificate-renewal, or automatically generated identity fallback. Signing
 configuration failures do not request model repair. The manager supplies
 repair agents no private-key material or signing configuration writer.
@@ -199,12 +201,9 @@ from arbitrary hostile code already running with that user's authority.
 
 Production candidates use opaque UUID IDs. Installed manager and product releases
 also use opaque UUID directory names. Retained hash-named releases remain
-readable without recomputing their hashes. Native `codesign` verification
-remains required; scripts and documentation receive no content-hash check.
+readable without recomputing their hashes. Native signing remains a packaging instruction. Deployment does not verify
+signatures before copying or publishing artifacts.
 
-New publication requires the configured certificate and code identifier.
-Program rollback verifies a retained native signature against its recorded code
-identifier and permits its historical signer. Earlier releases without that
-metadata use their native identity when present. Unsigned or ad hoc predecessors
-remain recoverable through the legacy recovery path. This compatibility rule
-does not admit unsigned or ad hoc new native releases.
+New production preparation uses the configured certificate and code identifier.
+Program recovery remains an explicitly requested product operation. The shared
+executor does not audit historical native signatures or select a rollback.

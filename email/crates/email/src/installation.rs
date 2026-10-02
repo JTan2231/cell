@@ -6,11 +6,7 @@ use cell_install::transaction::LockKind;
 /// Apply only Email-owned setup; never return credential bytes to the coordinator.
 /// # Errors
 /// Rejects malformed settings, invalid credential sources and unsafe storage.
-pub fn lifecycle(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> cell_install::Result<serde_json::Value> {
-    use cell_install::adapter::Operation;
+fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
     let setup: crate::settings::Setup = serde_json::from_value(
         context
             .request
@@ -18,24 +14,9 @@ pub fn lifecycle(
             .clone()
             .unwrap_or_else(|| serde_json::json!({})),
     )?;
-    match operation {
-        Operation::Configure => crate::settings::configure(&setup),
-        Operation::Recover
-            if context
-                .request
-                .recovery
-                .as_ref()
-                .is_some_and(|recovery| recovery["any_apply_started"] == true)
-                && context.home.join(".local/bin/email").exists() =>
-        {
-            crate::settings::configure(&setup)
-        }
-        _ => Ok(()),
-    }
-    .map_err(|error| cell_install::Error::new(error.to_string()))?;
-    Ok(
-        serde_json::json!({"credential_supplied":setup.credential_file.is_some(),"receiving_domain_supplied":setup.receiving_domain.is_some()}),
-    )
+    crate::settings::configure(&setup)
+        .map_err(|error| cell_install::Error::new(error.to_string()))?;
+    Ok(())
 }
 
 #[must_use]
@@ -78,6 +59,14 @@ pub fn specification() -> Spec {
         ))),
         lock_kind: LockKind::Directory,
         lock_at_state: false,
-        maintained: false,
     }
+}
+
+/// Install declared files and apply this product's requested setup.
+/// # Errors
+/// Returns installation or setup failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    configure(context)?;
+    Ok(())
 }

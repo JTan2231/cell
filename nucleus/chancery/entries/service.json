@@ -1,11 +1,11 @@
 {
   "id": "nucleus.service",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Inspect and maintain the Nucleus service",
-  "summary": "Inspect service readiness and owned admission holds, and interpret installation, drain, restart, and recovery guarantees.",
+  "summary": "Inspect service readiness and explicit admission holds, and interpret instruction-based installation and interruption.",
   "use_when": [
     "Nucleus health, service selection, admission holds, drain, installation, restart, or removal must be understood or operated."
   ],
@@ -16,23 +16,23 @@
   "effects": [
     "Health and service reads expose runtime state. Maintenance creates or releases durable run-owned holds.",
     "Restart terminates the daemon; startup marks unfinished attempts lost. Installation can replace programs and service configuration or migrate state; uninstall retains state and logs.",
-    "macOS service installation verifies the supplied native CLI and daemon under the configured Cell certificate and permanent code identifiers before copying, then verifies the installed copies before launchd bootstrap. It does not sign or change the signing policy."
+    "Service installation copies the supplied CLI and daemon, replaces the LaunchAgent and invokes launchd. Packaging owns native signing; service installation does not audit signatures or choose a signer."
   ],
   "authority": [
     "Nucleus owns its current-user service, socket, state, runtime readiness, and maintenance holds.",
     "Requesters own workflow settlement, domain evidence, and retry decisions; a coordinator releases only its own holds."
   ],
   "success": [
-    "Installation checks native program signatures under Cell's configured signing policy and completes program, provider, and service setup under the applicable owned hold and drain. Persistent-state validation and operational readiness remain separate diagnostics.",
+    "Installation completes the requested program, provider and service setup operations. It does not prove application health, integrity, compatibility, trust, or admission readiness.",
     "Requester admission is reported separately because a quota pause can remain after successful installation."
   ],
   "failure_and_recovery": [
-    "Quiesce requesters before interruptions when admitted work must finish. Preserve named holds and recovery evidence when ownership or drain is unproved.",
-    "Use the retained cutover journal and exact candidate for supported recovery; never roll credentials or an incompatible database backward.",
-    "Missing or invalid signing configuration, unsigned or ad hoc native input, a different certificate, a wrong code identifier, or failed installed-copy verification stops service installation. It selects no alternative signer and does not re-sign input. Existing program compensation retains its captured prior-program recovery rules."
+    "Quiesce requesters through explicit maintenance operations before interruptions when admitted work must finish. Requesters own any retry decision.",
+    "A failed installation retains completed filesystem and service effects. No prior program snapshot, automatic rollback, service-cutover journal or automatic deployment recovery is created. Preserve current credentials and database state.",
+    "Inspect the retained executor step and logs, then explicitly select the next installation or service operation. Interrupted command effects are unknown."
   ],
   "privacy": [
-    "Service state, credentials, logs, cutover journals, and quota files are private. Database/mailbox records may contain complete prompts, sources, and tool values.",
+    "Service state, credentials, logs, retained executor requests and quota files are private. Database/mailbox records may contain complete prompts, sources and tool values.",
     "Credential recovery remains separate from program recovery. Program selection preserves current data."
   ],
   "interfaces": [
@@ -63,6 +63,10 @@
     {
       "label": "Release one owner",
       "invocation": "/Users/joey/.local/bin/nucleus maintenance release RUN_ID"
+    },
+    {
+      "label": "Execute manifest installation instructions",
+      "invocation": "/Users/joey/.local/bin/nucleus-install deploy"
     }
   ],
   "does_not_authorize": [
@@ -73,7 +77,7 @@
     {
       "id": "ci-manager.signing.operate",
       "min_contract": 1,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
     }
   ],
   "promise": {
@@ -86,7 +90,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Service changes select programs, documentation, a Codex runtime path, and private state. Coordinated replacement requires the run's sole drained hold and its activity guard."
+        "statement": "Service changes select programs, documentation, a Codex runtime path and private state. Explicit maintenance replacement under a named owner still requires that owner and drain. Manifest deployment does not create a hold."
       },
       {
         "status": "declared",
@@ -94,7 +98,7 @@
       },
       {
         "status": "declared",
-        "statement": "macOS service installation requires Cell's persistent signing policy and native CLI and daemon signatures from its exact configured certificate. Code identifiers use the configured namespace and permanent nucleus/nucleus and nucleus/nucleusd product/artifact keys."
+        "statement": "Program files must be usable at the selected paths. Packaging signs declared native programs; service installation does not require or audit a signing policy."
       }
     ],
     "inputs": [
@@ -104,7 +108,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation and recovery select program, provider-bundle, harness path, and retained journal metadata. Native CLI and daemon input must satisfy Cell's configured signing policy; installation does not validate provider-bundle or Codex-runtime integrity."
+        "statement": "Installation selects supplied program and provider paths plus an explicit or retained harness path. nucleus-install deploy accepts a schema-two manifest installation request with candidate references and optional codex_bin/codex_home settings. It does not validate program or provider content."
       }
     ],
     "outputs": [
@@ -140,7 +144,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Readiness reflects the live runtime at observation time. Installation does not invoke health. A deployment hold still requires its sole matching owner and complete drain."
+        "statement": "Readiness reflects the live runtime at observation time. Installation does not invoke health or establish readiness. Explicit maintenance installation retains its own owner and drain rules."
       },
       {
         "status": "unspecified",
@@ -168,11 +172,11 @@
       },
       {
         "status": "declared",
-        "statement": "The installer journals service-cutover ownership and exact candidates before replacement. Recovery reinstalls and starts the recorded candidate; successful setup removes the journal after native signature checks without invoking health."
+        "statement": "The installer atomically selects a package, copies public programs and installs the LaunchAgent. A later failure retains prior completed effects. It performs no automatic product rollback or recovery."
       },
       {
         "status": "declared",
-        "statement": "Unfinished work or unknown ownership keeps admission held. Credential recovery moves only forward. Schema changes prohibit incompatible binary-only rollback; uninstall retains state/logs."
+        "statement": "Explicit holds remain owned and require explicit release. Credential recovery moves only forward. Uninstall retains state and logs; program changes do not restore database or authentication bytes."
       }
     ],
     "operational_limits": [
@@ -202,7 +206,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Native service installation relies on Cell's persistent signing policy for exact certificate selection and permanent product/artifact identifiers. Installation reads that policy and never creates or rotates an identity.",
+        "statement": "Build packaging relies on Cell signing instructions for exact certificate selection and permanent product/artifact identifiers. Service installation does not read or change that policy.",
         "target": "ci-manager",
         "kind": "authority",
         "contract": "ci-manager.signing.operate"

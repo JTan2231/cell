@@ -25,12 +25,6 @@ pub enum ServiceError {
     InvalidCodexHome(PathBuf),
     #[error("a loaded {SERVICE_LABEL} service has no managed plist at {0}")]
     UnmanagedLoadedService(PathBuf),
-    #[error("Cell signature verification failed for {path}: {source}")]
-    Signing {
-        path: PathBuf,
-        #[source]
-        source: cell_install::Error,
-    },
     #[error("{operation} failed for {path}: {source}")]
     Io {
         operation: &'static str,
@@ -46,22 +40,11 @@ pub enum ServiceError {
     },
     #[error("unexpected output from id -u: {0:?}")]
     InvalidUid(String),
-    #[error(
-        "installation failed: {install}; restoring the previous installation also failed: {rollback}"
-    )]
-    InstallRollback { install: String, rollback: String },
     #[error("unable to inspect database schema at {path}: {source}")]
     Database {
         path: PathBuf,
         #[source]
         source: rusqlite::Error,
-    },
-    #[error(
-        "automatic binary rollback is unsafe because the database schema changed from {before:?} to {after:?}; keep the candidate binaries and current data for forward recovery"
-    )]
-    SchemaRollbackUnsafe {
-        before: Option<i64>,
-        after: Option<i64>,
     },
 }
 
@@ -126,102 +109,6 @@ pub struct InstallResult {
     pub codex_home: PathBuf,
 }
 
-#[derive(Debug)]
-struct FileSnapshot {
-    bytes: Vec<u8>,
-    mode: u32,
-}
-
-#[derive(Debug)]
-struct PreviousInstallation {
-    daemon: Option<FileSnapshot>,
-    cli: Option<FileSnapshot>,
-    launch_agent: Option<FileSnapshot>,
-    database_schema_version: Option<i64>,
-    was_loaded: bool,
-}
-
-impl PreviousInstallation {
-    fn capture(paths: &ServicePaths, was_loaded: bool) -> Result<Self, ServiceError> {
-        Ok(Self {
-            daemon: snapshot_file(&paths.daemon)?,
-            cli: snapshot_file(&paths.cli)?,
-            launch_agent: snapshot_file(&paths.launch_agent)?,
-            database_schema_version: database_schema_version(&paths.database)?,
-            was_loaded,
-        })
-    }
-
-    fn restore(
-        &self,
-        paths: &ServicePaths,
-        target: &str,
-        replace_service: bool,
-    ) -> Result<(), ServiceError> {
-        let current_schema = database_schema_version(&paths.database)?;
-        if current_schema != self.database_schema_version {
-            return Err(ServiceError::SchemaRollbackUnsafe {
-                before: self.database_schema_version,
-                after: current_schema,
-            });
-        }
-        if replace_service
-            && launchctl([OsStr::new("print"), OsStr::new(target)])?
-                .status
-                .success()
-        {
-            bootout(target)?;
-        }
-
-        restore_file(&paths.daemon, self.daemon.as_ref())?;
-        restore_file(&paths.cli, self.cli.as_ref())?;
-        restore_file(&paths.launch_agent, self.launch_agent.as_ref())?;
-
-        // Authentication is forward-only. Either the old daemon can refresh it
-        // before bootout or the replacement can refresh it before a later
-        // health-check rollback. Restoring a byte snapshot here could therefore
-        // resurrect a stale, already-consumed refresh token.
-
-        if self.was_loaded && replace_service {
-            command_success(
-                "/bin/launchctl",
-                &Command::new("/bin/launchctl")
-                    .arg("bootstrap")
-                    .arg(target_domain()?)
-                    .arg(&paths.launch_agent)
-                    .output()
-                    .map_err(|source| ServiceError::Io {
-                        operation: "restore prior LaunchAgent",
-                        path: paths.launch_agent.clone(),
-                        source,
-                    })?,
-            )?;
-        }
-        Ok(())
-    }
-}
-
-fn database_schema_version(path: &Path) -> Result<Option<i64>, ServiceError> {
-    if !path.exists() {
-        return Ok(None);
-    }
-    let connection = rusqlite::Connection::open_with_flags(
-        path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )
-    .map_err(|source| ServiceError::Database {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    connection
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .map(Some)
-        .map_err(|source| ServiceError::Database {
-            path: path.to_path_buf(),
-            source,
-        })
-}
-
 /// A stopped service can be installed under an existing deployment hold only
 /// when its retained jobs and attempts have already settled. This read never
 /// creates a database, migrates state, or changes an attempt.
@@ -264,8 +151,6 @@ pub fn install(
     require_macos()?;
     let cli_source = canonical_current_executable()?;
     let daemon_source = find_daemon(&cli_source, daemon_source)?;
-    verify_cell_signature(&cli_source, "nucleus")?;
-    verify_cell_signature(&daemon_source, "nucleusd")?;
     paths.create_directories()?;
     let codex = find_codex(codex_source)?;
     let source_codex_home = find_codex_home(codex_home_source)?;
@@ -273,63 +158,44 @@ pub fn install(
     let was_loaded = launchctl([OsStr::new("print"), OsStr::new(&target)])?
         .status
         .success();
-    let previous = PreviousInstallation::capture(&paths, was_loaded)?;
-    if was_loaded && previous.launch_agent.is_none() {
+    if was_loaded && !is_regular_file(&paths.launch_agent) {
         return Err(ServiceError::UnmanagedLoadedService(
             paths.launch_agent.clone(),
         ));
     }
 
-    let mut service_replaced = false;
-    let operation = (|| {
-        // Stage every file while an existing service continues running its old
-        // executable inode. Only a completely staged installation is stopped.
-        copy_executable(&daemon_source, &paths.daemon)?;
-        if cli_source != paths.cli {
-            copy_executable(&cli_source, &paths.cli)?;
-        }
-        verify_cell_signature(&paths.cli, "nucleus")?;
-        verify_cell_signature(&paths.daemon, "nucleusd")?;
-        let plist = render_plist(&paths, &codex);
-        atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
-        command_success(
-            "/bin/launchctl",
-            &launchctl([OsStr::new("enable"), OsStr::new(&target)])?,
-        )?;
-
-        if was_loaded {
-            bootout(&target)?;
-        }
-        service_replaced = true;
-        // Credential authority may be refreshed by a running daemon. Import it
-        // only after the previous service is fully stopped. Authentication is
-        // deliberately excluded from rollback so later refreshes remain
-        // authoritative even if bootstrap fails.
-        prepare_owned_codex_home(&paths.codex_home, source_codex_home.as_deref())?;
-        command_success(
-            "/bin/launchctl",
-            &Command::new("/bin/launchctl")
-                .arg("bootstrap")
-                .arg(target_domain()?)
-                .arg(&paths.launch_agent)
-                .output()
-                .map_err(|source| ServiceError::Io {
-                    operation: "run launchctl bootstrap",
-                    path: PathBuf::from("/bin/launchctl"),
-                    source,
-                })?,
-        )
-    })();
-
-    if let Err(error) = operation {
-        if let Err(rollback) = previous.restore(&paths, &target, service_replaced) {
-            return Err(ServiceError::InstallRollback {
-                install: error.to_string(),
-                rollback: rollback.to_string(),
-            });
-        }
-        return Err(error);
+    // Stage every file while an existing service continues running its old
+    // executable inode. Only a completely staged installation is stopped.
+    copy_executable(&daemon_source, &paths.daemon)?;
+    if cli_source != paths.cli {
+        copy_executable(&cli_source, &paths.cli)?;
     }
+    let plist = render_plist(&paths, &codex);
+    atomic_write(&paths.launch_agent, plist.as_bytes(), 0o600)?;
+    command_success(
+        "/bin/launchctl",
+        &launchctl([OsStr::new("enable"), OsStr::new(&target)])?,
+    )?;
+
+    if was_loaded {
+        bootout(&target)?;
+    }
+    // Import authentication only after the previous service is stopped.
+    // Retain all completed effects if a subsequent operation fails.
+    prepare_owned_codex_home(&paths.codex_home, source_codex_home.as_deref())?;
+    command_success(
+        "/bin/launchctl",
+        &Command::new("/bin/launchctl")
+            .arg("bootstrap")
+            .arg(target_domain()?)
+            .arg(&paths.launch_agent)
+            .output()
+            .map_err(|source| ServiceError::Io {
+                operation: "run launchctl bootstrap",
+                path: PathBuf::from("/bin/launchctl"),
+                source,
+            })?,
+    )?;
 
     let owned_codex_home = paths.codex_home.clone();
     Ok(InstallResult {
@@ -677,53 +543,6 @@ fn copy_executable(source: &Path, destination: &Path) -> Result<(), ServiceError
         source: source_error,
     })?;
     atomic_write(destination, &bytes, 0o755)
-}
-
-fn verify_cell_signature(path: &Path, artifact: &str) -> Result<(), ServiceError> {
-    cell_install::signing::verify_native("nucleus", artifact, path).map_err(|source| {
-        ServiceError::Signing {
-            path: path.to_owned(),
-            source,
-        }
-    })
-}
-
-fn snapshot_file(path: &Path) -> Result<Option<FileSnapshot>, ServiceError> {
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(source) => {
-            return Err(ServiceError::Io {
-                operation: "inspect installed file",
-                path: path.to_path_buf(),
-                source,
-            });
-        }
-    };
-    if !metadata.file_type().is_file() {
-        return Err(ServiceError::Io {
-            operation: "snapshot installed file",
-            path: path.to_path_buf(),
-            source: io::Error::new(io::ErrorKind::InvalidInput, "path is not a regular file"),
-        });
-    }
-    let bytes = fs::read(path).map_err(|source| ServiceError::Io {
-        operation: "snapshot installed file",
-        path: path.to_path_buf(),
-        source,
-    })?;
-    Ok(Some(FileSnapshot {
-        bytes,
-        mode: metadata.permissions().mode() & 0o777,
-    }))
-}
-
-fn restore_file(path: &Path, snapshot: Option<&FileSnapshot>) -> Result<(), ServiceError> {
-    if let Some(snapshot) = snapshot {
-        atomic_write(path, &snapshot.bytes, snapshot.mode)
-    } else {
-        remove_installed_file(path)
-    }
 }
 
 fn atomic_write(path: &Path, bytes: &[u8], mode: u32) -> Result<(), ServiceError> {

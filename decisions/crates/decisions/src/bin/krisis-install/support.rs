@@ -499,35 +499,6 @@ pub fn binding_receipt(paths: &Paths) -> Result<BTreeMap<String, String>> {
     Ok(result)
 }
 
-pub fn maintenance(
-    paths: &Paths,
-    binary: &Path,
-    operation: &str,
-    owner: Option<&str>,
-) -> Result<Value> {
-    let mut arguments = args(&[
-        "--database",
-        text(&paths.database)?,
-        "--json",
-        "maintenance",
-        operation,
-    ]);
-    if let Some(owner) = owner {
-        arguments.push(owner.into());
-    }
-    let bytes = checked(paths, binary, &arguments, &BTreeMap::new(), 60)?;
-    let value: Value = serde_json::from_slice(&bytes)?;
-    let data = cell_install::command::maintenance(&value)?;
-    require(
-        data["protocol_version"] == 1
-            && data["contract_version"] == 1
-            && data["holds"].is_array()
-            && data["drained"].is_boolean(),
-        "installed Krisis admission is incompatible",
-    )?;
-    Ok(data.clone())
-}
-
 pub fn inspect_result(current: Option<&cell_install::transaction::ReleaseInfo>) -> Value {
     current.map_or_else(
         || json!({"current":"absent","release_id":null}),

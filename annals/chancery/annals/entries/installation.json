@@ -1,6 +1,6 @@
 {
   "id": "annals.installation",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -13,18 +13,19 @@
     "The actual task is ordinary source retention, interpretation, corpus administration, or inbox operation.",
     "An operation requires unsupported direct state editing, storage cleanup, a foreign schedule takeover, or unapproved destructive replacement."
   ],
-  "outcome": "The selected installation or owned maintenance boundary is understood or inspected without confusing installed release evidence with domain success.",
+  "outcome": "Completion of the selected placement and setup instructions, or the separately documented explicit manual installation, maintenance or recovery result. Deployment completion does not establish application health.",
   "effects": [
-    "The Cell product adapter composes the primary deployer with the exact installed release's dedicated decisions provisioner, establishes per-library run-owned admission, preserves operator pauses and prior schedule enabled booleans, and retains Annals' existing migration and recovery boundaries.",
+    "The schema-2 annals-install deploy command places the release, creates or migrates the primary, decisions and registered libraries in place, writes configuration, and selects the two inbox schedules without holds or draining.",
+    "The maintenance, ownership-proof and compensation procedures for explicitly invoked `annals-install install`, `provision-decisions`, `recover` and `migrate-to-user` do not run from schema-2 `deploy`.",
     "Stages and atomically selects a complete immutable release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
-    "Registers an immutable Clockwork definition for `annals/inbox`. Before disabling or replacing a prior selection, verifies that its digest resolves to the complete current Annals release definition. Establishes maintenance, migrates the library, and atomically switches the binding after the release is ready.",
-    "During legacy system migration, the child deployer returns an inert rendered definition under maintenance; the outer migration durably commits the permanent user-state root before it registers or selects that definition.",
-    "Removes or restores a legacy LaunchDaemon or LaunchAgent only when its complete plist, owner, and mode match the exact Annals rendering; migration also proves the system service absent before removing its files or clearing maintenance, and additional launchd keys are foreign.",
-    "The decisions provisioner creates the separate database with its immutable decisions role. Existing state must retain that role after the supported schema check. It owns only that database's bound spool, config, logs, and `annals/decisions-inbox` definition. It shares the Annals update lock and never changes `annals/inbox`.",
-    "Before opening decisions state or selecting its schedule, the provisioner checks existing mutable control files and both fixed logs. They must be operator-owned private regular files with one hard link. It creates absent logs privately and rejects symbolic or hard-linked targets.",
-    "With `--keep-maintenance`, records and retains an Annals-owned decisions maintenance hold for an outer cutover; a later successful invocation clears only that matching owned hold.",
-    "A failed pre-commit cutover restores compatible program, configuration and schedule state while retaining current library and spool data.",
-    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Registers an immutable Clockwork definition for `annals/inbox`. Before disabling or replacing a prior selection, verifies that its digest resolves to the complete current Annals release definition. Establishes maintenance, migrates the library, and atomically switches the binding after the release is ready.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: During legacy system migration, the child deployer returns an inert rendered definition under maintenance; the outer migration durably commits the permanent user-state root before it registers or selects that definition.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Removes or restores a legacy LaunchDaemon or LaunchAgent only when its complete plist, owner, and mode match the exact Annals rendering; migration also proves the system service absent before removing its files or clearing maintenance, and additional launchd keys are foreign.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: The decisions provisioner creates the separate database with its immutable decisions role. Existing state must retain that role after the supported schema check. It owns only that database's bound spool, config, logs, and `annals/decisions-inbox` definition. It shares the Annals update lock and never changes `annals/inbox`.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Before opening decisions state or selecting its schedule, the provisioner checks existing mutable control files and both fixed logs. They must be operator-owned private regular files with one hard link. It creates absent logs privately and rejects symbolic or hard-linked targets.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: With `--keep-maintenance`, records and retains an Annals-owned decisions maintenance hold for an outer cutover; a later successful invocation clears only that matching owned hold.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: A failed pre-commit cutover restores compatible program, configuration and schedule state while retaining current library and spool data.",
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
   ],
   "authority": [
     "Annals owns its installed programs, library, spool, schedule requirements, configuration, migration, maintenance, domain result, and recovery.",
@@ -32,16 +33,16 @@
     "Nucleus remains separately authoritative for Codex execution and authentication and is not stopped or replaced by an Annals deployment."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves existing data, operator pauses, and incident halts."
+    "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
   ],
   "failure_and_recovery": [
     "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
-    "Coordinated inspection stops before effects when an installed executable lacks maintenance admission support; bootstrap that compatibility release through the existing documented deployers and quiescence procedure. Adapter recovery stops on a retained installer marker or unfinished transaction rather than clearing it or another owner's hold.",
-    "Do not remove maintenance, edit spool receipts, or replace library files manually after interrupted deployment; inspect and use the documented recovery procedure.",
-    "A measured closed inbox storage gate does not itself reject a deployment, but `storage_probe_failed` can reject status inspection and insufficient physical space can fail release staging, migration, or rollback writes.",
-    "A failed ordinary update preserves current data and restores compatible program and control state before work resumes.",
-    "Before child installation begins, a legacy migration failure can restore the system installation without registering a definition. Phase installing, or rewritten with child evidence, retains moved state and outer and child recovery evidence. A committed interruption or unproved system-service retirement retains maintenance and its handoff for idempotent completion.",
-    "A decisions provisioning failure before binding commit preserves current database state and restores compatible program, config and exact attributable prior schedule state. Unprovable compatibility or restoration keeps maintenance and transaction evidence.",
+    "The manifest command does not inspect installed maintenance support or perform automatic recovery. An interrupted command leaves completed effects in place; inspect the retained command log and use explicit product procedures when needed.",
+    "After an interrupted schema-2 deploy command, inspect its retained log and current selections before further instructions; completed effects remain in place. For a retained explicit manual transaction, use `annals-install recover` without deleting its maintenance or editing spool receipts.",
+    "The schema-2 deploy command does not probe storage readiness. Actual staging, migration or publication writes can fail for insufficient space. Separately invoked diagnostics can report `storage_probe_failed`.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: A failed ordinary update preserves current data and restores compatible program and control state before work resumes.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Before child installation begins, a legacy migration failure can restore the system installation without registering a definition. Phase installing, or rewritten with child evidence, retains moved state and outer and child recovery evidence. A committed interruption or unproved system-service retirement retains maintenance and its handoff for idempotent completion.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: A decisions provisioning failure before binding commit preserves current database state and restores compatible program, config and exact attributable prior schedule state. Unprovable compatibility or restoration keeps maintenance and transaction evidence.",
     "The installer supplies no data backup, data restore, or reset mode. Existing data backup artifacts are unchanged."
   ],
   "privacy": [
@@ -90,8 +91,8 @@
       "invocation": "/Users/joey/.local/bin/annals-usage doctor"
     },
     {
-      "label": "Cell deployment adapter",
-      "invocation": "annals-install adapter"
+      "label": "Cell manifest command",
+      "invocation": "annals-install deploy"
     }
   ],
   "dependencies": [
@@ -130,8 +131,8 @@
     "Running `annals/release.sh`, which commits, tags, and pushes.",
     "Resetting an existing library or spool.",
     "Clearing user data as storage remediation, or lowering or disabling the inbox storage reserve, without the user's explicit consent for the exact target and scope.",
-    "Disabling a same-key Clockwork binding or removing a same-label plist or installed pathname without proving its exact Annals release or rendered-file identity.",
-    "Concurrent same-user direct Clockwork mutation of `annals/inbox` during deployment or migration; ownership inspection and binding mutation are not a compare-and-swap, and a detected change fails closed behind the maintenance recovery gate.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Disabling a same-key Clockwork binding or removing a same-label plist or installed pathname without proving its exact Annals release or rendered-file identity.",
+    "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Concurrent same-user direct Clockwork mutation of `annals/inbox` during deployment or migration; ownership inspection and binding mutation are not a compare-and-swap, and a detected change fails closed behind the maintenance recovery gate.",
     "Using decisions-library authority to mutate the primary `annals/inbox` binding, the primary library or spool, Nucleus, release bytes, or a foreign `annals/decisions-inbox` definition.",
     "Deleting prior generations, logs, or retained failed envelopes."
   ],
@@ -149,23 +150,23 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Coordinated updates require maintenance support from each currently installed affected executable before holds or product effects; a new candidate cannot fence an old public command. All affected holds and product/dependency drain must be proved before selected products are applied."
+        "statement": "The schema-2 `annals-install deploy` command takes the declared candidate and source paths plus optional boolean enabled settings. It does not inspect installed maintenance support, hold or drain work, suspend scheduling, check readiness or recover automatically."
       },
       {
         "status": "declared",
-        "statement": "Candidate Annals and Annals Usage binaries have passed the product gate, and the caller supplies absolute candidate binary, Nucleus binary, Nucleus socket, and compatible Clockwork paths with enough physical capacity for staging and recovery writes."
+        "statement": "For explicit `annals-install install`, select the binaries and provider bundles and supply absolute candidate, Nucleus socket and Clockwork paths. Writes require enough physical capacity. CI validation is separate from installer command completion."
       },
       {
         "status": "declared",
-        "statement": "An ordinary update requires every selected `annals/inbox` definition to match the complete current Annals release and executable contract field for field; legacy system migration requires the binding to be absent or disabled with no selected digest before commit."
+        "statement": "Explicit `annals-install install` compares the selected `annals/inbox` definition with the current release. Explicit `migrate-to-user` requires an absent or disabled binding without a selected digest before commit. Schema-2 `deploy` reads enabled intent and selects its new definition directly."
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning requires a complete cell-install-v3 content release. Its exact release-local Rust installer supplies compiled configuration and native definition rendering. A selected prior decisions definition must match the dedicated state and a recorded Annals content release field for field."
+        "statement": "Explicit `annals-install provision-decisions` takes a retained cell-install-v3 release and checks the selected prior decisions definition against its dedicated state and recorded release. Schema-2 `deploy` creates or migrates decisions state and selects its new definition directly."
       },
       {
         "status": "declared",
-        "statement": "Existing decisions config, database sidecars, spool control and identity files, maintenance state, and fixed logs must be operator-owned private regular files with exactly one hard link; the database must carry the immutable decisions role."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Existing decisions config, database sidecars, spool controls and identity files, maintenance and logs require private operator ownership and one hard link. The library retains its immutable decisions role."
       },
       {
         "status": "declared",
@@ -175,11 +176,11 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected library path and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
+        "statement": "Maintenance accepts the selected library path and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
       },
       {
         "status": "declared",
-        "statement": "Primary deployment accepts absolute Annals, Annals Usage, Nucleus binary, Nucleus socket, and Clockwork binary paths; decisions provisioning instead accepts one exact absolute content-release root, Nucleus socket, Clockwork binary, and optional --keep-maintenance."
+        "statement": "Explicit `annals-install install` accepts absolute binary, provider, Nucleus socket and Clockwork paths. Explicit `provision-decisions` takes a retained release root, socket, Clockwork path and optional --keep-maintenance. Schema-2 `deploy` takes candidate/source paths and settings on stdin."
       },
       {
         "status": "unsupported",
@@ -193,15 +194,15 @@
       },
       {
         "status": "declared",
-        "statement": "Success selects a complete cell-install-v3 immutable release. It contains both independently versioned payloads, the exact Rust installer and native frontend/runner roles, both provider bundles, and a strict file inventory. The installer verifies configuration and a compatible library/spool generation before selecting the exact native Clockwork definition."
+        "statement": "Schema-2 `deploy` completes release placement, configuration, library initialization or migration, and direct schedule selection. The release contains both payloads, the installer, frontend/runner roles and provider bundles. It does not verify native signatures, execute --version or --help, or establish runtime readiness. The explicit manual routines retain their configuration, private-state ownership and transaction guards."
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning success returns one body-free ok/data envelope containing the absolute config path, persistent library ID, exact Clockwork key and definition digest, selected/enabled booleans, maintenance state, and content release ID."
+        "statement": "Explicit `annals-install provision-decisions` returns a body-free ok/data envelope with config path, library ID, Clockwork key and digest, selected/enabled state, maintenance and release ID. Schema-2 `deploy` returns command completion and release ID; the executor uses its exit code."
       },
       {
         "status": "declared",
-        "statement": "Verification exposes installed versions, Nucleus health, Annals statistics and inbox status, and Annals Usage diagnostics without submitting model work."
+        "statement": "Separately invoked operator diagnostics expose versions, Nucleus health, Annals statistics, inbox status and Annals Usage diagnosis. These observations are not schema-2 deployment gates."
       }
     ],
     "data_semantics": [
@@ -215,11 +216,11 @@
       },
       {
         "status": "declared",
-        "statement": "Maintenance is an Annals deployment boundary distinct from operator pause and storage gate; it clears only after the complete cutover commits."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Maintenance is distinct from operator pause and the storage gate; these manual routines clear only their own maintenance after commit. Schema-2 deploy leaves existing maintenance in place."
       },
       {
         "status": "declared",
-        "statement": "A measured closed storage gate does not itself reject deployment, while an unreadable probe or insufficient physical capacity can fail required inspection or writes."
+        "statement": "A closed storage gate does not itself reject release placement. Schema-2 deploy runs no storage-readiness probe; actual writes can fail if physical capacity is insufficient. Explicit diagnostics can separately report probe failures."
       }
     ],
     "identity_and_units": [
@@ -229,13 +230,13 @@
       },
       {
         "status": "declared",
-        "statement": "Storage checks and reserve comparisons use filesystem bytes; freshness and service checks are observations made during the selected deployment."
+        "statement": "Separately invoked storage checks and reserve comparisons use filesystem bytes. Runtime freshness and service checks are point-in-time diagnostics, not schema-2 deployment evidence."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The current selector changes only after the staged release, configuration, library migration, spool, provider bundles, and service checks form one complete candidate generation."
+        "statement": "The schema-2 command publishes the staged release after its requested configuration and library setup instructions complete. It does not gate publication on service checks. Explicit manual install and recovery follow their transaction commit rules."
       },
       {
         "status": "declared",
@@ -271,7 +272,7 @@
       },
       {
         "status": "declared",
-        "statement": "The primary deployer discovers registered catalog libraries, records their identity and paths, fences command admission, drains admitted work, and performs transactional schema migrations in place. Program recovery preserves all current library data and instruction history. It does not restore earlier data."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: The primary deployer discovers registered catalog libraries, records their identity and paths, fences command admission, drains admitted work, and performs transactional schema migrations in place. Program recovery preserves all current library data and instruction history. It does not restore earlier data."
       },
       {
         "status": "declared",
@@ -279,23 +280,23 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves existing data, operator pauses, and incident halts."
+        "statement": "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
       },
       {
         "status": "declared",
-        "statement": "Deployment stages and registers an inactive exact-release definition, then establishes maintenance. It verifies and disables only an exact current-release Clockwork selection and stops any owned legacy LaunchAgent. It captures recovery state, migrates the current library, switches selectors and one Clockwork binding, verifies the result, then clears maintenance."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Deployment stages and registers an inactive exact-release definition, then establishes maintenance. It verifies and disables only an exact current-release Clockwork selection and stops any owned legacy LaunchAgent. It captures recovery state, migrates the current library, switches selectors and one Clockwork binding, verifies the result, then clears maintenance."
       },
       {
         "status": "declared",
-        "statement": "The former-system migration is the exception to pre-commit definition registration: its child renders an inert definition under maintenance, and the outer migration durably records the target state as permanent before registering and selecting it. RunAtLoad remains maintenance-gated until the system service is proved absent and exact legacy retirement completes. System-state rollback is limited to failure before child installation begins. Phase installing, or rewritten with child evidence, retains the moved state and outer and child recovery evidence instead of moving state back."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: The former-system migration is the exception to pre-commit definition registration: its child renders an inert definition under maintenance, and the outer migration durably records the target state as permanent before registering and selecting it. RunAtLoad remains maintenance-gated until the system service is proved absent and exact legacy retirement completes. System-state rollback is limited to failure before child installation begins. Phase installing, or rewritten with child evidence, retains the moved state and outer and child recovery evidence instead of moving state back."
       },
       {
         "status": "declared",
-        "statement": "Rollback restores the exact prior definition only when that binding was enabled, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled binding remains disabled without transient activation; its inactive selected digest may remain the candidate digest. If exclusive restoration cannot be proved, Annals leaves unproved scheduler state untouched, keeps maintenance, removes its public selectors, and retains private recovery material."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Rollback restores the exact prior definition only when that binding was enabled, or restores the prior owned legacy LaunchAgent, never both. A previously absent or disabled binding remains disabled without transient activation; its inactive selected digest may remain the candidate digest. If exclusive restoration cannot be proved, Annals leaves unproved scheduler state untouched, keeps maintenance, removes its public selectors, and retains private recovery material."
       },
       {
         "status": "declared",
-        "statement": "An ordinary pre-commit failure preserves current library and spool data. Program rollback requires compatibility with the retained data before admission resumes."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: An ordinary pre-commit failure preserves current library and spool data. Program rollback requires compatibility with the retained data before admission resumes."
       },
       {
         "status": "declared",
@@ -303,11 +304,11 @@
       },
       {
         "status": "declared",
-        "statement": "Decisions provisioning prepares absent state under maintenance, registers an inactive definition, drains owned work, migrates existing state transactionally in place, and selects annals/decisions-inbox. It clears only its own gate unless --keep-maintenance was requested."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Decisions provisioning prepares absent state under maintenance, registers an inactive definition, drains owned work, migrates existing state transactionally in place, and selects annals/decisions-inbox. It clears only its own gate unless --keep-maintenance was requested."
       },
       {
         "status": "declared",
-        "statement": "The primary `annals/inbox` binding and general library stay available throughout decisions provisioning; both deployment paths serialize through Annals' shared update lock."
+        "statement": "Explicit `annals-install provision-decisions` changes only decisions state and its binding; the primary library and binding remain separate. All installer writes serialize on the Annals update lock."
       },
       {
         "status": "declared",
@@ -335,7 +336,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Supported library migration and retained legacy instruction provenance are defined by annals.libraries. Program rollback requires compatibility with every current library. An incompatible prior program leaves maintenance and transaction evidence retained."
+        "statement": "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Supported library migration and retained legacy instruction provenance are defined by annals.libraries. Program rollback requires compatibility with every current library. An incompatible prior program leaves maintenance and transaction evidence retained."
       },
       {
         "status": "declared",
@@ -343,7 +344,7 @@
       },
       {
         "status": "declared",
-        "statement": "Annals and Annals Usage package versions, provider releases, library schema, Nucleus protocol, and installed generation are checked as separate axes and cut over together where the package owns them."
+        "statement": "Package versions, provider releases, library schema, Nucleus protocol and release IDs have separate meanings. Schema-2 deploy records declared paths and performs setup without a compatibility or readiness audit."
       },
       {
         "status": "declared",
@@ -368,7 +369,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment and unattended inbox processing rely on Clockwork schedule contract 4 for immutable definition registration, one selected binding, non-overlap, activation history, and its launchd projection.",
+        "statement": "Schedule setup and unattended inbox processing rely on the declared Clockwork schedule contract for definition registration, one selected binding, non-overlap, activation history and launchd projection.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

@@ -1,18 +1,18 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Install and schedule Paperboy",
-  "summary": "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "summary": "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
   "use_when": [
-    "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner."
+    "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner."
   ],
   "do_not_use_when": [
     "The request is to mutate source tasks, contact another recipient, certify STE compliance, or infer final inbox delivery."
   ],
-  "outcome": "Deploy Paperboy under requester maintenance, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
+  "outcome": "Deploy Paperboy through its product setup command, inspect readiness, and enable or disable its exact installed daily local 09:00 runner.",
   "interfaces": [
     {
       "label": "Initialize private state",
@@ -60,17 +60,17 @@
     }
   ],
   "effects": [
-    "Installation selects exact product and provider artifacts under maintenance; explicit schedule enable/disable changes only paperboy/daily. Initialization creates empty schema-one state or opens supported existing state without copying it.",
-    "Cell configuration initializes or opens supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
+    "Installation selects product and provider files. Product setup creates empty schema-one state or opens supported existing state without copying it under ordinary admission and the runner lock. Explicit schedule enable or disable changes only paperboy/daily.",
+    "The product command retargets and selects the existing daily definition directly, preserving timer, arguments, environment, outputs and failure incidents. It preserves saved enabled intent unless enabled is explicitly supplied. Deployment creates no hold, drains no requester and temporarily disables no binding."
   ],
   "authority": [
     "Paperboy owns summary and occurrence success; providers retain their source, execution, activation, credential and transport authority."
   ],
   "success": [
-    "A report exists when its summary commits; a send succeeds when acceptance is retained. Installation succeeds after setup and release of run-owned holds, without artifact-integrity, state-integrity, or operational-readiness checks. Schedule enable succeeds when Clockwork commits its binding."
+    "A report exists when its summary commits; a send succeeds when acceptance is retained. Installation succeeds when product setup commands complete, without artifact-integrity, state-integrity or operational-readiness checks. Schedule enable succeeds when Clockwork commits its binding."
   ],
   "failure_and_recovery": [
-    "Retain failed or uncertain operation state. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling an uncertain email. Preserve maintenance holds when recovery cannot prove safety.",
+    "Retain failed or uncertain operation state and completed deployment effects. The executor performs no automatic retry, rollback or application recovery. Resume the same brief and exact request; use a new job only for explicit retry after terminal failure. Inspect Resend before reconciling uncertain email. Preserve separately acquired maintenance holds.",
     "The product-owned schema-two daily definition declares halt-until-approved. Nonzero report completion, start failure, crash or timeout ends the current activation. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks clear a pending failure episode. An established halt requires exact continuation approval; failed brief retry and uncertain-email reconciliation remain separate Paperboy operations. Binding changes and maintenance do not clear established halts."
   ],
   "privacy": [
@@ -121,7 +121,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Cell coordinated deployment uses committed local main, compatible candidate and Nucleus requester maintenance closure. Schedule enable requires the selected installed Paperboy executable. Explicit installation and schedule authority are separate from discovery."
+        "statement": "Cell deployment uses committed local main and an explicit selected product set. Select required dependency updates explicitly. Product setup uses ordinary admission and the runner lock; an existing hold can refuse it. Schedule enable requires the selected installed Paperboy executable. Installation and schedule authority are separate from discovery."
       },
       {
         "status": "declared",
@@ -135,7 +135,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. Completion receipts avoid repeating initialization and accept legacy schema-one receipts without reading former data-copy fields."
+        "statement": "Deployment accepts optional enabled. Without it, absent bindings remain absent and existing disabled bindings remain disabled. A repeated executor request ID returns retained evidence and executes no instruction again; a new attempt requires a new request ID."
       },
       {
         "status": "declared",
@@ -187,11 +187,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Run-owned holds block admissions and drain counts all nonterminal Paperboy jobs. The installer selects program/provider bytes, initializes or opens supported state and releases maintenance. It does not invoke doctor. Existing schedule intent and halts are preserved."
+        "statement": "Explicit run-owned holds block admissions, and explicit drain counts all nonterminal Paperboy jobs. The deployment command uses ordinary admission and the runner lock to initialize or open supported state after program selection. It creates and releases no hold and invokes no doctor. Completed effects remain after failure."
       },
       {
         "status": "declared",
-        "statement": "Cell configuration initializes or opens supported Paperboy state and retargets the existing daily definition disabled, preserving timer, arguments, environment, outputs and failure incidents. Final activation restores saved enabled intent after all maintenance releases."
+        "statement": "The product command retargets and selects the existing daily definition directly, preserving timer, arguments, environment, outputs and failure incidents. It preserves saved enabled intent unless enabled is explicitly supplied. Deployment creates no hold, drains no requester and temporarily disables no binding."
       },
       {
         "status": "declared",
@@ -253,7 +253,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell release preparation, coordinated installation and shared file transactions own build, hold ordering and artifact compensation.",
+        "statement": "Cell prepares artifacts and executes explicitly ordered instructions. Paperboy owns its setup, state and schedule operations. Executor reconciliation records unknown effects and acknowledgement releases only executor admission; no application recovery is inferred.",
         "target": "cell-deployment",
         "kind": "control"
       },

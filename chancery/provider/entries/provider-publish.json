@@ -33,7 +33,7 @@
   ],
   "failure_and_recovery": [
     "Reject the change before deployment if schema validation or product CI fails.",
-    "If deployment fails, restore the product release and provider selector together.",
+    "If deployment fails, inspect retained effects and use the owning product's explicit recovery operation when recovery is requested.",
     "If one installed bundle later becomes invalid, leave other providers available and repair or redeploy only the owning product."
   ],
   "privacy": [
@@ -191,7 +191,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "The operation stops when ownership, supported current behavior, dependency authority, safe bundle content, or coherent selector rollback cannot be established."
+        "statement": "The operation stops when ownership, supported current behavior, dependency authority, safe bundle content, or supported explicit selector recovery cannot be established."
       },
       {
         "status": "unsupported",

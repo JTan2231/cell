@@ -1,4 +1,4 @@
-//! Artifact publication uses the shared maintained installation boundary.
+//! Product-owned program and schedule installation.
 use cell_install::{legacy::LegacySpec, simple::Spec, transaction::LockKind};
 
 #[must_use]
@@ -20,24 +20,31 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: false,
-        maintained: true,
     }
 }
 
 #[must_use]
 pub fn main() -> std::process::ExitCode {
+    if std::env::args()
+        .nth(1)
+        .is_none_or(|value| matches!(value.as_str(), "--help" | "-h"))
+    {
+        println!(
+            "paperboy-install {}\n\ndeploy < REQUEST.json\ninspect [--home ABS]\n\nDeploy selects files and applies owned setup. Failed instructions retain completed effects. Direct install and selector-only recovery are unsupported.",
+            env!("CARGO_PKG_VERSION")
+        );
+        return std::process::ExitCode::SUCCESS;
+    }
     if matches!(
         std::env::args().nth(1).as_deref(),
         Some("install" | "recover")
     ) {
-        eprintln!("Paperboy installation and recovery require the Cell deployment coordinator");
+        eprintln!(
+            "use paperboy-install deploy for installation; inspect retained effects and use product interfaces for recovery"
+        );
         return std::process::ExitCode::FAILURE;
     }
-    cell_install::simple::main_with_lifecycle(
-        &specification(),
-        env!("CARGO_PKG_VERSION"),
-        lifecycle,
-    )
+    cell_install::simple::main_with_deployment(&specification(), env!("CARGO_PKG_VERSION"), deploy)
 }
 
 #[derive(Default, serde::Deserialize)]
@@ -46,25 +53,17 @@ struct Settings {
     enabled: Option<bool>,
 }
 
-/// Keep the daily selection coherent with the installed program.
+/// Install program files, initialize owned state, and publish the daily schedule.
 /// # Errors
-/// Refuses altered bindings and unavailable selected releases.
-pub fn lifecycle(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> cell_install::Result<serde_json::Value> {
-    lifecycle_inner(context, operation).map_err(|error| cell_install::Error::new(error.to_string()))
+/// Returns installation or product setup failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    deploy_inner(context).map_err(|error| cell_install::Error::new(format!("{error:#}")))
 }
 
-fn lifecycle_inner(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> anyhow::Result<serde_json::Value> {
+fn deploy_inner(context: &cell_install::adapter::Context) -> anyhow::Result<()> {
     use anyhow::Context as _;
-    use cell_install::adapter::Operation;
     use clockwork::deployment::ScheduleState;
     use serde_json::json;
-    const KEY: &str = "paperboy/daily";
     let settings: Settings = serde_json::from_value(
         context
             .request
@@ -72,82 +71,31 @@ fn lifecycle_inner(
             .clone()
             .unwrap_or_else(|| json!({})),
     )?;
-    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?);
-    if operation == Operation::Inspect {
-        return Ok(json!({"schedule":ScheduleState::capture(&clockwork, KEY)?}));
-    }
-    let state: ScheduleState =
-        serde_json::from_value(context.prior()?["lifecycle"]["schedule"].clone())?;
-    if operation == Operation::Hold {
-        if context.request.recovery.is_some() {
-            if ScheduleState::capture(&clockwork, KEY)?.binding.is_some() {
-                clockwork.disable(KEY, None)?;
-            }
-        } else {
-            state.suspend(&clockwork, KEY)?;
-        }
-    }
-    let forward = context
-        .request
-        .recovery
-        .as_ref()
-        .and_then(|r| r.get("any_apply_started"))
-        == Some(&json!(true))
-        && context.home.join(".local/bin/paperboy").exists();
-    if (operation == Operation::Configure || operation == Operation::Recover && forward)
-        && context.selected()
-    {
-        cell_install::migration::install_once(
-            &context.request.run_dir.join("paperboy-migration.json"),
-            || {
-                cell_install::command::json(
-                    &context.home.join(".local/bin/paperboy"),
-                    &["--json".into(), "migrate".into()],
-                    &std::collections::BTreeMap::from([(
-                        "CELL_DEPLOYMENT_RUN_ID".into(),
-                        context.request.run_id.clone().into(),
-                    )]),
-                    std::time::Duration::from_secs(600),
-                )?;
-                Ok(())
-            },
-        )?;
-    }
-    if (operation == Operation::Configure || operation == Operation::Recover && forward)
-        && (state.binding.is_some() || settings.enabled.is_some())
-    {
+    let state = ScheduleState::capture_installed(&context.home, "paperboy/daily")?;
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    let root = crate::state_root()?;
+    let _admission = crate::gate(&root).enter()?;
+    let _runner = crate::store::runner_lock(&root)?;
+    crate::store::Store::initialize(&root)?;
+    if state.binding.is_some() || settings.enabled.is_some() {
+        let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?);
         let executable = std::fs::canonicalize(context.home.join(".local/bin/paperboy"))?;
         let release = executable
             .parent()
             .and_then(std::path::Path::parent)
             .context("Paperboy release missing")?;
-        let fallback = crate::operations::schedule_definition(&crate::state_root()?)?;
         let definition = state.retarget(
-            fallback,
+            crate::operations::schedule_definition(&root)?,
             release,
             &executable,
             cell_install::file_digest(&executable)?,
         )?;
-        ScheduleState::prepare(
+        state.publish(
             &clockwork,
             &definition,
             &context.request.run_dir.join("paperboy-definition.toml"),
+            settings.enabled,
         )?;
     }
-    if operation == Operation::Activate {
-        anyhow::ensure!(
-            crate::gate(&crate::state_root()?)
-                .status()?
-                .holds
-                .is_empty(),
-            "Paperboy activation requires released maintenance"
-        );
-        let enabled = if context.request.recovery.is_some() && !forward {
-            None
-        } else {
-            settings.enabled
-        };
-        state.activate(&clockwork, KEY, enabled)?;
-    }
-    Ok(json!({"configured":operation == Operation::Configure}))
+    Ok(())
 }

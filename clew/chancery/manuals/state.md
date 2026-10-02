@@ -71,8 +71,10 @@ package version, feature contract version, and database schema are separate
 identities. Provider pages and overview participate in release identity and
 release selection.
 
-The shared `cell-install-v3` transaction atomically selects public commands and
-the Clew provider. Foreign selectors and stale expected selections stop publication. The installer accepts `--home ABSOLUTE_PATH` and
+The shared `cell-install-v3` helper selects public commands and the Clew provider
+with atomic replacements of individual selectors. Failed publication retains
+completed changes. Foreign selectors and stale expected selections stop
+publication. The installer accepts `--home ABSOLUTE_PATH` and
 `--expected-current absent|releases/ID`. Direct installation selects program
 files only. It does not initialize or migrate state.
 
@@ -82,26 +84,26 @@ rows, retry uncertain mail, or approve a scheduling incident. No older
 installation format or automatic schema downgrade is supported. Preserve
 unresolved installation evidence when recovery fails.
 
-## Coordinated email maintenance
+## Product deployment and email maintenance
 
-Deployment captures `clew/daily-email`, holds new email admission, suspends the
-binding, and drains admitted sends. Configure initializes empty schema-three state,
-migrates supported schema-one or schema-two state, or checks compatible state.
-It prepares a disabled definition for the exact selected release when an
-existing binding or explicit schedule setting requires one.
+The deployment command captures `clew/daily-email`, selects program files, and
+enters ordinary admission. It initializes empty schema-three state, migrates
+supported schema-one or schema-two state, or opens compatible state. It then
+retargets and selects the owned daily definition directly. Deployment creates no
+hold, drains no send, and temporarily disables no binding.
 
-Activation restores captured or explicit enabled intent after the run's
-maintenance hold is released. Omitted `daily_email_enabled` preserves intent; an absent binding
-stays absent. Explicit true grants standing authority for the
-`clew.digest.email` feature's exact daily content. Explicit false prepares
-a disabled selection. Existing schedule policy, disabled intent, and failure
-halts remain intact. No lifecycle operation approves an incident.
+Omitted `daily_email_enabled` preserves saved intent; an absent binding stays
+absent. Explicit true grants standing authority for the `clew.digest.email`
+feature's exact daily content. Explicit false selects disabled intent. Existing
+schedule policy and failure halts remain intact. No deployment step approves an
+incident.
 
-Schema-three ledger reads and short writes can continue during email maintenance.
-A scheduled send deliberately skipped under deployment maintenance returns
-success. Coordinated recovery keeps email admission held until program and
-schedule selections are coherent. Unresolved or foreign holds remain stop
-conditions; do not remove them to force activation.
+Explicit email maintenance retains its ordinary owner and admission rules.
+Schema-three ledger reads and short writes can continue during that maintenance.
+A scheduled send deliberately skipped under maintenance returns success. An
+existing hold can refuse ordinary deployment setup; deployment does not release
+it. Failed instructions retain completed effects without automatic retry,
+rollback, or product recovery. Inspect current product state before a new attempt.
 
 Clockwork owns registration, activation, and failure halts under
 `clockwork.schedule.operate`. Clew owns its release-pinned definition and email
@@ -110,9 +112,9 @@ runner. Definition generation does not register, activate, or send. The
 
 ## Ledger migration
 
-Only coordinated deployment migrates supported schema-one or schema-two ledgers
-to schema three. Configure requires the sole run-owned email maintenance hold
-and drained sends. Migration excludes concurrent ledger writers.
+The product deployment command migrates supported schema-one or schema-two
+ledgers to schema three under ordinary admission. Migration excludes concurrent
+ledger writers. It does not create a maintenance hold or drain email.
 
 Schema-two conversion is local. It moves canonical Cast job identity into the
 external reference model and marks existing job reports as explicit application

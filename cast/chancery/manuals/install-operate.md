@@ -43,23 +43,17 @@ explicitly authorized manual installation or recovery:
 2. Supply `--home PATH` if selecting another operator home. Supply
    `--expected-current absent|releases/ID` when the exact prior selection is
    required.
-3. Verify the selected command versions and help output:
-
-   ```sh
-   cast --version
-   cast --help
-   cast-install --help
-   ```
+3. Read `cast-install inspect` for the selected release metadata. Run ordinary
+   diagnostic commands separately when diagnosis is requested.
 
 4. Inspect the matching publication with `chancery product cast` and
    `chancery show cast.installation` when Chancery is available.
 5. Run `cast --register-usage` after installation or update. This registers
    command inventory without product work.
 
-Installation selects a content-addressed payload, frontend, installer, and
+Installation selects a retained payload, frontend, installer, and
 exact provider bundle through one atomic `current` release. It creates no
-database or schedule and sends no provider request. A failed switch restores
-prior Cast selectors. Catalog presence and version checks do not prove remote
+database or schedule and sends no provider request. A failed switch retains completed selector changes for explicit recovery. Catalog presence and version checks do not prove remote
 authentication or current provider allowance.
 
 ## Initialize, diagnose, or replace configuration
@@ -105,12 +99,11 @@ charges. Do not erase state to clear allowance or treat an absent error as
 complete coverage. Running collection is a separate invocation under
 `cast.discovery.collect`.
 
-The Cell coordinator uses Cast's native state APIs and product lock after
+The Cast deployment recipe uses native state APIs and the product lock after
 program selection. Its optional `state_dir` and `config_file` settings are
 absolute paths. A supplied file replaces complete configuration; omitted
 settings preserve current values. Setup does not invoke the selected CLI or
-source shell configuration, so it also supports a retained CLI without
-`--json`. This setup creates no collection schedule.
+source shell configuration, so it does not depend on the CLI output protocol. This setup creates no collection schedule.
 
 Ordinary Cast commands print readable text by default. Add the global `--json`
 flag when a caller parses their output. The JSON success schemas and snapshot
@@ -176,12 +169,12 @@ request and does not establish current posting availability.
    cast-install recover --release ABSOLUTE_RELEASE_DIRECTORY
    ```
 
-3. Verify command identity, help output, and matching documentation. Register
-   usage after the selection.
+3. Read selected release metadata and matching documentation. Register usage
+   after the selection.
 4. Keep collection and any requested diagnosis separate from program recovery.
 
 The installer reads retained legacy or `cell-install-v3` metadata before
-selection. Use a trusted installer. Keep retained release files unchanged. A failed switch restores the prior selectors.
+selection. Use a trusted installer. Keep retained release files unchanged. A failed switch retains completed selector changes.
 
 An abruptly killed deployer can leave `.update-lock`. Confirm that no Cast
 deployer is running before removing a stale installation lock and rerunning
@@ -196,3 +189,12 @@ program/state pair.
 Keep state, exports, and diagnostics private. Cast starts no Nucleus, CRM,
 Email, or computer-use work. Chancery reads documentation only; neither its
 catalog nor successful local checks grants authority for new external work.
+
+## Deployment recipe
+
+`cast-install deploy` reads one schema-two Cell recipe request from stdin.
+The product command selects supplied programs, initializes missing state, and applies supplied configuration through the product lock.
+The manifest executor runs this instruction and records its exit status. It does
+not inspect application output or create a maintenance hold, drain work, or
+recover prior effects. A failed instruction leaves completed changes in place.
+Use the product's explicit recovery operation when recovery is required.

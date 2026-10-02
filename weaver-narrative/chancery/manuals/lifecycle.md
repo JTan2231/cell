@@ -82,8 +82,8 @@ application directory are named Weaver. The Cell source and active Semantics
 project are `weaver-narrative`. The predecessor `weaver` project is permanently
 retired; its workflow records are not imported or replaced.
 
-The maintained installer uses the shared Cell immutable file transaction
-and adapter. Public binary and Chancery selectors follow the selected release.
+The maintained installer uses the shared Cell file placement helper.
+Public binary and Chancery selectors follow the selected release.
 It refuses foreign selectors and unsupported legacy installation formats. Direct installer `install` and `recover` are refused;
 use the Cell coordinator. Read-only inspection remains available. Uninstall detaches owned selectors and retains private state.
 
@@ -94,19 +94,22 @@ Compatible Annals and Nucleus releases are installation dependencies. Bazaar
 prompt contents must already exist before new authoring preparation; deployment
 does not supply missing prompt text.
 
-The coordinator holds and drains Weaver, selects the immutable program/provider
-release, and initializes or configures state through the product initializer.
-It performs no separate artifact-integrity, state-integrity, source-read, or
-Nucleus-readiness checks. Ordinary product checks remain unchanged. It releases only its own hold. Installation
+The instruction executor runs Weaver's product command to select program and
+provider files and write configuration and state under ordinary admission and
+the runner lock. It creates no maintenance hold and drains no authoring job.
+It performs no artifact-integrity, state-integrity, source-read, or
+Nucleus-readiness checks. Ordinary diagnostics remain separate. Installation
 publishes program bytes locally. It does not author or publish a narrative,
 send email, retry a job, or guarantee future model availability.
 
-An interrupted deployment uses the coordinator's retained transaction recovery.
-Before candidate publication, the prior installation remains selected. After
-publication, Weaver can finish forward with the recorded reading configuration
-and supported database. Unproved recovery retains the named hold. The Cell
-coordinator owns this cross-product procedure; no dedicated installed Chancery
-contract covers it. This remains a resolver gap.
+A failed deployment retains completed file, configuration, and state changes.
+The executor performs no automatic retry, rollback, or product recovery. An
+interrupted command has unknown application effects. Inspect current product
+state and perform any authorized recovery through its owning interfaces before
+acknowledging executor admission. Acknowledgement does not establish recovery.
+Separately acquired maintenance holds remain owned by their original callers.
+No dedicated installed Chancery contract covers the executor; this remains a
+resolver gap.
 
 ## State and privacy
 

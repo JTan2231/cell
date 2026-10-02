@@ -5,7 +5,7 @@
   "mode": "operate",
   "support": "supported",
   "title": "Understand Usher installation and release selection",
-  "summary": "Install, inspect, or recover Usher programs and their provider selector. Installation performs setup and basic execution checks.",
+  "summary": "Install, inspect, or recover Usher programs and their provider selector. Deployment runs the product-owned file and setup recipe.",
   "use_when": [
     "Usher programs should be installed, inspected, or recovered."
   ],
@@ -15,16 +15,16 @@
   ],
   "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "effects": [
-    "Copy supplied programs and documentation into retained releases and select owned public paths atomically. Preserve other product selectors and separate product data."
+    "Copy supplied programs and documentation into retained releases and update owned public paths under installation locks. Preserve other product selectors and separate product data."
   ],
   "authority": [
     "Usher owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
   ],
   "success": [
-    "Owned command and provider selectors follow the installed release. Basic help/version invocations complete. No artifact-integrity, persistent-state, or operational-readiness gate is run."
+    "Owned command and provider selectors follow the supplied release. Installation runs no signature audit, executable probe, or operational-readiness gate."
   ],
   "failure_and_recovery": [
-    "Refuse foreign public selectors or stale expected-current selections. File-operation or basic execution failures restore prior selectors when possible. Recovery selects retained program files and leaves product data unchanged."
+    "Refuse foreign public selectors or stale expected-current selections. An instruction failure retains completed file and selector changes for explicit recovery. Recovery selects retained program files and leaves product data unchanged."
   ],
   "privacy": [
     "The installer retains immutable executable and documentation releases and file manifests under the selected local home. It creates no domain database, retains no credentials or domain bodies, and makes no network or model call."
@@ -45,6 +45,10 @@
     {
       "label": "Recover retained release",
       "invocation": "ABSOLUTE_RETAINED_RELEASE/package/install recover --release ABSOLUTE_RELEASE_DIRECTORY [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]"
+    },
+    {
+      "label": "Run product deployment recipe",
+      "invocation": "usher-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
     }
   ],
   "promise": {
@@ -99,13 +103,17 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product and catalog locks serialize atomic publication. Expected-current guards detect changed selection. File-operation or basic execution failures restore the prior selection when possible. Recovery reads retained metadata without integrity validation and preserves separate product state."
+        "statement": "Product and catalog locks serialize publication with atomic selector updates. Expected-current guards detect changed selection. An instruction failure retains completed file and selector changes for explicit recovery. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation copies files and performs required setup plus basic help/version execution checks. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
+        "statement": "Installation copies files and performs product-owned setup without running executable probes or native-signature audits. It runs no installer verify command, database integrity check, provider validation, or readiness probe. Explicit ordinary diagnostic commands keep their existing behavior."
+      },
+      {
+        "status": "declared",
+        "statement": "Deploy accepts one bounded schema-two recipe request on stdin. The product command owns its setup; the shared executor uses process exit status only. Deployment runs no application execution probe, native-signature audit, maintenance hold, drain, or automatic rollback."
       }
     ],
     "compatibility_and_evolution": [

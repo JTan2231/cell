@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.signing.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -44,10 +44,10 @@
     "Initial creation generates one RSA 3072-bit self-signed code-signing certificate with SHA-256 signature and 3650-day validity, imports its certificate and key into the login Keychain, authorizes /usr/bin/codesign for that key, and adds current-user code-signing trust. macOS can require native user authorization.",
     "Initial creation uses private temporary staging for generation files and removes them when setup exits. It retains the certificate and private key in Keychain, with no retained certificate or private-key export in the host filesystem.",
     "Explicit configuration preflights the exact selected certificate and private key before atomically writing the normalized fixed host signing policy. Configuration writers serialize with queue and deployment admission and refuse unsettled work.",
-    "Production preparation signs and verifies staged native executables before sealing. CI, cache reuse, upgrades, and installation read the policy without changing it."
+    "Production preparation runs native signing instructions for staged executables. Completion is command evidence, without an application or retained-artifact audit. CI, cache reuse, upgrades, and installation read the policy without changing it."
   ],
   "authority": [
-    "The user owns explicit certificate and namespace selection. Cell owns policy validation, snapshot retention, identifier derivation, and publication checks. macOS Keychain owns private-key storage and use authorization.",
+    "The user owns explicit certificate and namespace selection. Cell owns policy validation, snapshot retention, identifier derivation, and signing-command execution. macOS Keychain owns private-key storage and use authorization.",
     "New CI jobs and deployment operations use their retained signing snapshot. A policy mismatch stops publication instead of choosing a current or alternative identity.",
     "The filesystem and current-user operating boundary protects configuration from routine source, cache and repair writes. It is not a security boundary against arbitrary hostile code with full current-user authority."
   ],
@@ -55,10 +55,10 @@
     "Status reports the selected fingerprint, namespace, Keychain and readiness only after the exact certificate and private-key preflight succeeds. With --json it returns policy and ready=true.",
     "Initial creation reports the selected fingerprint, namespace and Keychain after certificate import, trust setup, key-use preflight and private configuration publication. With --json it returns policy.",
     "Explicit configure reports the selected fingerprint, namespace and Keychain after preflight and atomic configuration publication. With --json it returns policy. Configuration selection alone does not prove that every product was redeployed.",
-    "Production success requires native signatures and declared inventory matching the retained policy and preparation. Full adoption or rotation additionally requires the full intended product rollout and its retained outcome."
+    "Production success requires completion of the declared build and signing commands with matching retained source, scope and policy correlation. CI and deployment do not reverify executable inventory or native signatures. Full adoption or rotation additionally requires the full intended product rollout and its retained outcome."
   ],
   "failure_and_recovery": [
-    "Missing configuration, inaccessible or expired identity, locked Keychain, wrong signer, or failed verification stops admission or publication with no unsigned, ad hoc, certificate-name, generated-identity or renewal fallback. Signing configuration failures do not invoke model repair.",
+    "Missing configuration, inaccessible or expired identity, locked Keychain, failed signing command stops admission or publication with no unsigned, ad hoc, certificate-name, generated-identity or renewal fallback. Signing configuration failures do not invoke model repair.",
     "Creation refuses existing configuration or a Cell Local Signing certificate in the selected login Keychain. Partial setup can leave a Keychain import without configuration; use configure to select that existing identity after its key is usable. Creation never silently replaces it.",
     "Configuration failure preserves the previous file. An unavailable selected certificate or key blocks signing until that identity is usable or the user explicitly configures another identity. Verify status before admission resumes.",
     "Reissuing a certificate with the same key changes its fingerprint and requires explicit selection. Existing immutable releases are not re-signed in place.",
@@ -167,7 +167,7 @@
       },
       {
         "status": "declared",
-        "statement": "Staged native artifacts are signed, externally verified against the expected signer and identifier, then sealed. Retained candidates and pre-acceptance production receipts are reverified. A changed policy after admission stops publication. Immutable historical releases retain their original bytes."
+        "statement": "Staged native artifacts are signed with the selected certificate and identifier. Retained command receipts are checked for execution correlation; candidate contents and signatures are not reverified by CI or deployment. A changed policy after admission stops publication. Immutable historical releases retain their original bytes."
       },
       {
         "status": "declared",
@@ -191,7 +191,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.7.0 publishes signing contract 2 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
+        "statement": "Manager release 0.8.0 publishes signing contract 3 and policy schema 1. Unsupported schemas, profiles or fields fail closed. Manager replacement preserves the fixed host signing configuration and retained job snapshots. Jobs without a signing snapshot do not acquire one."
       },
       {
         "status": "unspecified",
@@ -213,7 +213,7 @@
       },
       {
         "status": "declared",
-        "statement": "Publication, cache retention and sequential product rollout rely on Cell's release builder, coordinator and product installers. Their retained operation evidence remains authoritative and has no dedicated coordinator Chancery contract.",
+        "statement": "Signing-command execution and sequential instruction execution rely on Cell's release builder and coordinator. Products own application setup and recovery commands. Their retained operation evidence remains authoritative and has no dedicated coordinator Chancery contract.",
         "target": "cell-deployment",
         "kind": "control"
       }

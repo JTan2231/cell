@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "clockwork",
+  "order": 8,
+  "steps": [
+    {
+      "id": "install",
+      "kind": "run",
+      "argv": [
+        "{candidate_dir}/bin/clockwork-install",
+        "deploy"
+      ],
+      "stdin": "deployment_request"
+    }
+  ]
+}

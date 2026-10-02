@@ -1,11 +1,11 @@
 {
   "id": "conatus.service",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Understand Conatus installation and scheduled activation",
-  "summary": "Read matched release selection, product maintenance, independent update and email schedules, failure halts, coordinated configuration and retained-release recovery.",
+  "summary": "Read matched release selection, explicit product maintenance, independent update and email schedules, failure halts and installation instruction behavior.",
   "use_when": [
     "Release, provider, maintenance, schedule identity, activation, deployment or scheduling failure behavior must be understood."
   ],
@@ -17,7 +17,7 @@
   "effects": [
     "Installation selects a immutable executable and matching complete provider bundle; it initializes no state or schedule.",
     "Definition generation writes a new immutable definition and private logs directory without registration or activation.",
-    "Maintenance holds durable admission. Coordinated deployment captures both binding intents, suspends them, configures coherent pinned state and restores captured intent after holds release."
+    "Explicit maintenance holds durable admission. The deploy instruction publishes programs, initializes absent state or updates the Annals path and publishes each selected runner with its intended enabled state under ordinary admission and runner locks."
   ],
   "authority": [
     "Conatus owns installation selection, product maintenance, generated definitions and output. Clockwork owns registration, activation and incidents. Annals and Email own their domain readiness and outcomes."
@@ -113,7 +113,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Inspect describes selected release metadata. Both bindings are captured and restored during deployment. Clockwork history describes activations while Conatus receipts describe domain work."
+        "statement": "Inspect describes selected release metadata. Installation reads existing bindings to preserve their intended selections and enabled state. Clockwork history describes activations while Conatus receipts describe domain work."
       },
       {
         "status": "unspecified",
@@ -137,11 +137,11 @@
       },
       {
         "status": "declared",
-        "statement": "Coordinated deployment holds admission, suspends both exact bindings and drains admitted commands and prior runner lock. It initializes absent state or rebinds final Annals while preserving library identities, cursor, records and instructions. Existing library selections cannot change. It restores captured pause and each enabled intent only after all holds release and preserves incidents."
+        "statement": "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals executable while preserving library identities, cursor, records, instructions and pause. Existing library selections cannot change. Each selected binding retains its timer, arguments, environment and output paths; the executable and Clockwork pin change to the new selection with intended enabled state. No maintenance hold, schedule suspension, drain, health check or signature audit occurs. Existing incidents remain in force."
       },
       {
         "status": "declared",
-        "statement": "Optional settings state_dir, decisions_config and annals_state_dir are absolute; library and separate enabled/daily_email_enabled select intent. Fresh defaults use installed Annals state, decisions/config.toml and library conatus. An absent binding remains absent unless its enabled setting is supplied; omitted email intent preserves prior selection and intent. Recovery completes coherent configuration before its own hold release."
+        "statement": "Optional settings state_dir, decisions_config and annals_state_dir are absolute; library and separate enabled/daily_email_enabled select intent. Fresh defaults use installed Annals state, decisions/config.toml and library conatus. An absent binding remains absent unless its enabled setting is supplied; omitted email intent preserves prior selection and intent. Failure leaves completed effects in place. Interruption requires inspection and an explicit next operation, without automatic replay, rollback or recovery."
       }
     ],
     "operational_limits": [

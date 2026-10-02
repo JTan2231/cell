@@ -1,36 +1,20 @@
 //! Shared installer entry point for products whose installation selects program
 //! bytes without owning a database or service lifecycle.
 
-use crate::adapter::{self, Context, Operation};
+use crate::adapter::{self, Context};
 use crate::legacy::{self, LegacySpec};
 use crate::transaction::{
     self as tx, InstallLayout, InstallSnapshot, LockKind, LockSpec, PreparedRelease, ProviderSpec,
     PublicEntry, PublicKind, ReleaseInfo, ReleasePlan, SourceFile,
 };
-use crate::{Error, Result, command};
+use crate::{Error, Result};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::time::Duration;
 
-/// Product-owned configuration and scheduling around the shared file transaction.
-/// Inspect returns a durable baseline in `prior.lifecycle`. Other operations
-/// must be idempotent: the coordinator can retry them after interruption.
-pub type Lifecycle = fn(&Context, Operation) -> Result<Value>;
-
-fn no_lifecycle(context: &Context, _: Operation) -> Result<Value> {
-    if context
-        .request
-        .settings
-        .as_ref()
-        .is_some_and(|value| value != &json!({}))
-    {
-        return Err(Error::new("this product has no deployment settings"));
-    }
-    Ok(json!({}))
-}
+/// One product-owned recipe. Its completion is reported by process exit only.
+pub type Deployment = fn(&Context) -> Result<()>;
 
 pub struct Spec {
     pub product: &'static str,
@@ -42,7 +26,6 @@ pub struct Spec {
     pub wrapper: Option<&'static [u8]>,
     pub lock_kind: LockKind,
     pub lock_at_state: bool,
-    pub maintained: bool,
 }
 
 impl Spec {
@@ -295,31 +278,6 @@ fn plan(spec: &Spec, release_version: &str, args: &Input, scratch: &Path) -> Res
     })
 }
 
-fn smoke(spec: &Spec, home: &Path, release: &ReleaseInfo) -> Result<()> {
-    let environment = BTreeMap::from([("HOME".into(), home.as_os_str().to_owned())]);
-    let public = home.join(".local/bin").join(spec.product);
-    for argument in ["--version", "--help"] {
-        command::checked(
-            &public,
-            &[argument.into()],
-            &environment,
-            Duration::from_secs(30),
-        )?;
-    }
-    if release
-        .files
-        .contains_key(&format!("bin/{}-install", spec.product))
-    {
-        command::checked(
-            &home.join(format!(".local/bin/{}-install", spec.product)),
-            &["--version".into()],
-            &environment,
-            Duration::from_secs(30),
-        )?;
-    }
-    Ok(())
-}
-
 fn scratch(directory: Option<&Path>) -> std::io::Result<tempfile::TempDir> {
     match directory {
         Some(directory) => tempfile::Builder::new()
@@ -344,221 +302,38 @@ fn install(
     let prepared = tx::prepare_release(&layout, &args.home, &plan)?;
     let mut transaction = tx::lock_installation(&layout, &args.home, &legacy)?;
     transaction.recheck(&before)?;
-    transaction.publish(&prepared, &before, |release| {
-        smoke(spec, &args.home, release)
-    })?;
+    transaction.publish(&prepared, &before, |_| Ok(()))?;
     Ok(prepared.info)
 }
 
-fn current(spec: &Spec, home: &Path) -> Result<InstallSnapshot> {
-    tx::inspect_installation(&spec.layout(), home, &|root| spec.read_legacy(root))
-}
-
-fn maintained(spec: &Spec, context: &Context, operation: &str, owner: bool) -> Result<Value> {
-    let binary = if context.selected() || current(spec, &context.home)?.current.is_none() {
-        context.binary(spec.product)?
-    } else {
-        context.home.join(".local/bin").join(spec.product)
-    };
-    maintained_at(spec, context, operation, owner, &binary)
-}
-
-fn maintained_at(
-    _spec: &Spec,
-    context: &Context,
-    operation: &str,
-    owner: bool,
-    binary: &Path,
-) -> Result<Value> {
-    let mut args: Vec<OsString> = vec!["--json".into(), "maintenance".into(), operation.into()];
-    if owner {
-        args.push(context.request.run_id.clone().into());
-    }
-    let env = BTreeMap::from([(
-        "CELL_DEPLOYMENT_RUN_ID".into(),
-        context.request.run_id.clone().into(),
-    )]);
-    let result = command::json(binary, &args, &env, Duration::from_secs(660))?;
-    let status = command::maintenance(&result)?;
-    if status.get("protocol_version") != Some(&json!(1)) {
-        return Err(Error::new("unsupported maintenance protocol"));
-    }
-    Ok(status.clone())
-}
-
-#[allow(clippy::too_many_lines)] // Keep fixed protocol operations and their shared baseline together.
-fn adapter_run(
-    spec: &Spec,
-    release_version: &str,
-    operation: Operation,
-    lifecycle: Lifecycle,
-) -> Result<Value> {
-    let context = Context::read(
-        spec.product,
-        spec.source_directory,
-        &format!("{}-install", spec.product),
-        release_version,
-    )?;
-    let mut args = Input {
+/// Copy the supplied product files and select their public paths.
+///
+/// # Errors
+/// Returns file, ownership, locking, or selector publication failures.
+pub fn deploy_program(spec: &Spec, version: &str, context: &Context) -> Result<ReleaseInfo> {
+    let args = Input {
         home: context.home.clone(),
         binary: Some(context.binary(spec.product)?),
         bundle: Some(context.request.source_root.join(spec.provider_source)),
         release: None,
         expected: None,
     };
-    if operation == Operation::Inspect {
-        let lifecycle = lifecycle(&context, operation)?;
-        let snapshot = current(spec, &context.home)?;
-        let runtime = if spec.maintained {
-            let status = maintained(spec, &context, "status", false)?;
-            if status["holds"] != json!([]) {
-                return Err(Error::new("another operation holds product maintenance"));
-            }
-            status
-        } else {
-            Value::Null
-        };
-        return Ok(adapter::reply(
-            "ready",
-            "owned installation inspected",
-            json!({"installation":snapshot,"runtime":runtime,"lifecycle":lifecycle}),
-        ));
-    }
-    let prior: InstallSnapshot = serde_json::from_value(
-        context
-            .prior()?
-            .get("installation")
-            .cloned()
-            .ok_or_else(|| Error::new("prior installation evidence missing"))?,
-    )?;
-    let observed = match current(spec, &context.home) {
-        Ok(value) => value,
-        Err(_) if operation == Operation::Recover && context.selected() => {
-            let forward = context
-                .request
-                .recovery
-                .as_ref()
-                .and_then(|value| value.get("any_apply_started"))
-                == Some(&Value::Bool(true));
-            let scratch = scratch(Some(&context.request.run_dir))?;
-            let plan = plan(spec, release_version, &args, scratch.path())?;
-            let prepared = tx::prepare_release(&spec.layout(), &context.home, &plan)?;
-            if spec.maintained && forward {
-                let binary = context.binary(spec.product)?;
-                let status = maintained_at(spec, &context, "status", false, &binary)?;
-                if status["holds"] != json!([context.request.run_id]) || status["drained"] != true {
-                    return Err(Error::new(
-                        "partial installation recovery requires drained run-owned hold",
-                    ));
-                }
-            }
-            let layout = spec.layout();
-            let legacy = |root: &Path| spec.read_legacy(root);
-            let mut transaction = tx::lock_installation(&layout, &context.home, &legacy)?;
-            transaction
-                .recover(&prior, &prepared, forward, |release| {
-                    smoke(spec, &context.home, release)
-                })?
-                .after
-        }
-        Err(error) => return Err(error),
-    };
-    let before_apply = matches!(
-        operation,
-        Operation::Hold | Operation::Drain | Operation::Apply
-    );
-    if before_apply && context.request.recovery.is_none() && observed != prior {
-        return Err(Error::new("installation changed since inspection"));
-    }
-    let product_data = lifecycle(&context, operation)?;
-    if operation == Operation::Drain && product_data.get("waiting") == Some(&json!(true)) {
-        return Ok(adapter::reply(
-            "waiting",
-            "product work is still settling",
-            product_data,
-        ));
-    }
-    let data = match operation {
-        Operation::Hold if spec.maintained => maintained(spec, &context, "hold", true)?,
-        Operation::Drain if spec.maintained => {
-            let status = maintained(spec, &context, "drain", false)?;
-            if status["holds"] != json!([context.request.run_id]) {
-                return Err(Error::new("drain requires sole run-owned hold"));
-            }
-            if status["drained"] != true {
-                return Ok(adapter::reply(
-                    "waiting",
-                    "admitted product work is still settling",
-                    status,
-                ));
-            }
-            status
-        }
-        Operation::Apply => {
-            if !context.selected() {
-                return Err(Error::new("cannot install an affected-only product"));
-            }
-            if spec.maintained {
-                let status = maintained(spec, &context, "status", false)?;
-                if status["holds"] != json!([context.request.run_id]) || status["drained"] != true {
-                    return Err(Error::new("installation requires drained run-owned hold"));
-                }
-            }
-            args.expected = Some(prior.current.as_ref().map_or_else(
-                || "absent".to_owned(),
-                |release| format!("releases/{}", release.release_id),
-            ));
-            json!(install(
-                spec,
-                release_version,
-                &args,
-                Some(&context.request.run_dir),
-            )?)
-        }
-        Operation::Recover => {
-            let is_prior = observed == prior;
-            if let Some(release) = &observed.current {
-                smoke(spec, &context.home, release)?;
-            }
-            json!({"installation":observed,"safe_to_release":true,"installed":if is_prior {"prior"} else {"candidate"}})
-        }
-        Operation::Release if spec.maintained => maintained(spec, &context, "release", true)?,
-        Operation::Hold | Operation::Drain | Operation::Release => json!({"drained":true}),
-        Operation::Configure | Operation::Activate => product_data,
-        Operation::Inspect => return Err(Error::new("invalid adapter dispatch")),
-    };
-    let status = match operation {
-        Operation::Inspect => "ready",
-        Operation::Hold => "held",
-        Operation::Drain => "drained",
-        Operation::Apply => "applied",
-        Operation::Configure => "configured",
-        Operation::Recover => "recovered",
-        Operation::Release => "released",
-        Operation::Activate => "activated",
-    };
-    Ok(adapter::reply(
-        status,
-        "product installation operation completed",
-        data,
-    ))
+    install(spec, version, &args, Some(&context.request.run_dir))
+}
+
+fn current(spec: &Spec, home: &Path) -> Result<InstallSnapshot> {
+    tx::inspect_installation(&spec.layout(), home, &|root| spec.read_legacy(root))
 }
 
 #[allow(clippy::too_many_lines)] // Keep the fixed installer operations and their proofs together.
-fn execute(
-    spec: &Spec,
-    release_version: &str,
-    arguments: &[String],
-    lifecycle: Lifecycle,
-) -> Result<Value> {
+fn execute(spec: &Spec, release_version: &str, arguments: &[String]) -> Result<Value> {
     let (operation, remaining) = arguments
         .split_first()
         .ok_or_else(|| Error::new("installer operation is required"))?;
     if operation == "adapter" {
-        if remaining.len() != 1 {
-            return Err(Error::new("adapter requires one operation"));
-        }
-        return adapter_run(spec, release_version, remaining[0].parse()?, lifecycle);
+        return Err(Error::new(
+            "the deployment adapter protocol is retired; use deploy",
+        ));
     }
     let args = input(remaining)?;
     let data = match operation.as_str() {
@@ -584,7 +359,7 @@ fn execute(
                     info: info.clone(),
                 },
                 &before,
-                |release| smoke(spec, &args.home, release),
+                |_| Ok(()),
             )?;
             json!(info)
         }
@@ -634,34 +409,49 @@ fn execute(
     Ok(json!({"ok":true,"data":data}))
 }
 
-/// Run a product's stateless installation boundary; direct runtime state remains
-/// outside this entry point. The maintained coordinator route is explicit.
+/// Run a product's program-file installation boundary.
 #[must_use]
 pub fn main(spec: &Spec, version: &str) -> ExitCode {
-    main_with_lifecycle(spec, version, no_lifecycle)
+    main_inner(spec, version, None)
 }
 
-/// Run a product installer with its owned deployment lifecycle.
+/// Run the explicit product recipe without a coordinator lifecycle protocol.
 #[must_use]
-pub fn main_with_lifecycle(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
-    main_inner(spec, version, lifecycle)
+pub fn main_with_deployment(spec: &Spec, version: &str, deployment: Deployment) -> ExitCode {
+    main_inner(spec, version, Some(deployment))
 }
 
-fn main_inner(spec: &Spec, version: &str, lifecycle: Lifecycle) -> ExitCode {
+fn main_inner(spec: &Spec, version: &str, deployment: Option<Deployment>) -> ExitCode {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
+    if arguments == ["deploy"] {
+        let result = Context::read(
+            spec.product,
+            spec.source_directory,
+            &format!("{}-install", spec.product),
+            version,
+        )
+        .and_then(|context| {
+            if let Some(deployment) = deployment {
+                deployment(&context)
+            } else {
+                deploy_program(spec, version, &context).map(|_| ())
+            }
+        });
+        return adapter::finish_deployment(result);
+    }
     if arguments == ["--version"] || arguments == ["-V"] {
         println!("{}-install {version}", spec.product);
         return ExitCode::SUCCESS;
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "{}-install {version}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nClockwork uninstall detaches only owned selectors.",
+            "{}-install {version}\n\ndeploy < REQUEST.json\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nClockwork uninstall detaches only owned selectors.",
             spec.product
         );
         return ExitCode::SUCCESS;
     }
     let adapter = arguments.first().is_some_and(|value| value == "adapter");
-    let result = execute(spec, version, &arguments, lifecycle);
+    let result = execute(spec, version, &arguments);
     if adapter {
         return adapter::finish(result);
     }

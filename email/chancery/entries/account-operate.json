@@ -59,7 +59,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and product deployment adapters with setup or account-settings-read authority."
+        "statement": "The current user and product deployment recipes with setup or account-settings-read authority."
       }
     ],
     "preconditions": [

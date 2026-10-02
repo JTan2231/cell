@@ -45,9 +45,9 @@ arguments, and direct validation flags are not supported CI entry points.
 
 New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
 to run selected tests. `--skip-tests` selects the default explicitly. The
-validator retains syntax, formatting, lint, provider, documentation and build checks. It skips Rust tests and shared Python regression
-suites. The receipt records `selection.tests_skipped`; product selection still
-controls automatic deployment.
+validator retains syntax, formatting, lint, provider and build checks. It skips
+Rust tests and shared Python regression suites. The receipt records
+`selection.tests_skipped`. Product selection still controls automatic deployment.
 
 ### Prepare or update the test runner
 
@@ -131,7 +131,7 @@ checks, applicable provider checks, and formatting. One heavy `cell.clippy`
 gate then runs Clippy for the combined Cargo package set from selected products
 and shared Rust suites. It keeps all target checks and the strict lint rules.
 The shared test gate follows Clippy when tests are enabled. The second product
-phase runs applicable provider checks and documentation. Ordinary validator calls
+phase runs applicable provider checks. Ordinary validator calls
 then run one heavy `cell.build.release` gate for the combined selected product
 package set. Shared infrastructure Python regression suites remain separate
 required checks.
@@ -174,8 +174,8 @@ repair path after revalidation. Older candidates keep check-only behavior.
 Nextest builds and discovers the tests before it runs them. Each test runs in
 its own process. A free worker can execute a test from any selected product or
 shared suite. The run uses no automatic retries and continues after test
-failures. CI does not run doctests. Build or discovery failure does not establish
-completed test coverage.
+failures. CI does not run doctests or generate Rust API documentation. Build or
+discovery failure does not establish completed test coverage.
 
 `platform_inputs.py` is the explicit platform input map. Product installer
 sources, packaging, migrations, schemas, maintenance modules, selected runtime
@@ -253,7 +253,7 @@ frozen job policy requires signed production preparation. The validator omits
 the shared release gate and records `selection.release_builds_deferred` as true.
 The mandatory production build remains before acceptance. Older jobs and
 callers keep the shared release gate. This flag does not omit provider checks,
-documentation, Clippy, or selected tests.
+Clippy, or selected tests.
 
 CI does not run installation persistent-state, general artifact-integrity, or operational-readiness
 checks, or retain test assertions requiring those removed checks. Ordinary
@@ -293,7 +293,7 @@ deployment handoff.
 
 Release and deployment use the shared release builder below. Each product
 seals its runtime executables and dedicated `PRODUCT-install`. The coordinator
-invokes that sealed installer's Rust adapter. The shared `cell-install` library
+executes the product's declared manifest instructions. The shared `cell-install` library
 owns program publication and file replacement. Product Rust code owns lifecycle and
 recovery. Credential and scheduled-job shell frontends remain versioned assets.
 
@@ -307,7 +307,7 @@ Cargo defaults to at most eight jobs.
 Cargo owns compilation reuse and freshness. Cell copies its compiler outputs,
 signs native executables, and records source identity with opaque candidate IDs.
 Cell computes no artifact, policy, configuration, or build-cache hashes. Native
-signature verification remains required before source acceptance. See
+signing completes before source acceptance. Deployment does not audit signatures. See
 [deployment](../deployment/README.md)
 for invocation, candidate identity, and cache retention.
 

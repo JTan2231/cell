@@ -79,7 +79,9 @@ def render(job: dict) -> tuple[str, str]:
     if job.get("installation_completed", job.get("installation_verified", False)):
         title = "deployed"
         lines = [f"{scope or 'Selected products'} deployed successfully.",
-                 "Required checks passed and installation completed."]
+                 "Required checks passed and deployment instructions completed."
+                 if deployment.get("manifest_executor") == 1
+                 else "Required checks passed and installation completed."]
         if deployment.get("state") == "cleanup_failed":
             title = "deployed; cleanup failed"
             lines += ["", "Installation completed, but release cleanup failed."]
@@ -128,7 +130,8 @@ def render(job: dict) -> tuple[str, str]:
             lines.append("Required checks passed; the changes were accepted.")
         if phase == "deploying" or deployment:
             lines.append("Successful deployment was not established.")
-            recovery = deployment.get("recovery", {}).get("state")
+            recovery = (deployment.get("recovery", {}).get("state")
+                        if deployment.get("manifest_executor") != 1 else None)
             if recovery == "succeeded":
                 lines.append("Deployment recovery completed.")
             elif recovery == "failed":

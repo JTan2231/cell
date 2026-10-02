@@ -36,10 +36,9 @@ requester must preserve admission, pending Nucleus work and domain state.
 
 The read-only Cell deployment plan reports the intended operation. Cutover
 selects an exact committed local `main` source and ignores uncommitted edits.
-It creates no source release, commit, tag, or push. When selected together,
-Cast, Annals, Email, Nucleus, and Weaver install before Platter. Maintenance
-includes Nucleus and affected requesters. Unselected products require compatible
-installed maintenance interfaces and are not implicitly upgraded. The supported
+It creates no source release, commit, tag, or push. The caller selects required
+product and dependency updates explicitly. Committed declarations order that
+selection. The executor adds no products or requester maintenance. The supported
 CI, build, deployment, and recovery procedures belong to `platter.install.operate`.
 
 Cast must support collection contract 5 for `job collect`: exact-job retention
@@ -51,13 +50,15 @@ authenticated Nucleus remain separate prerequisites.
 Immutable installation files and prior releases remain beneath
 `~/Library/Application Support/Platter/install/releases/ID`. The
 `cell-install-v3` manifest records exact executable and provider versions,
-file modes, digests and public entry mappings. `package/install` retains the
+file modes and public entry mappings. An opaque UUID identifies each prepared
+release. `package/install` retains the
 installer. The owned `current` selector publishes the matching
 `~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
 `providers/platter` selector together. Manifests contain no private domain
-content. Cell cleanup follows separate rules for unreferenced release history.
-Foreign selectors stop publication; installation does not audit release bytes. Product and catalog writer locks protect atomic selection and
-file compensation.
+content. Deployment does not prune retained product releases.
+Foreign selectors stop publication; installation does not audit release bytes.
+Product and catalog writer locks serialize individual atomic selector changes.
+Failed publication retains completed changes without automatic compensation.
 
 All durable runtime content and maintenance holds live in schema-seven
 `packets.sqlite3` at the canonical root. Fresh state uses
@@ -82,10 +83,11 @@ freshness, size, failure, and download-time semantics.
 Owner holds are durable database rows and do not expire. A process holds an
 advisory activity lock on the state directory for its entire mutating
 command. Holds prevent admission while allowing existing work to finish.
-Installation admission requires the sole matching owner and drained local
-activity. The predecessor maintenance gate and runner lock are also observed
-while present, so a coordinated transition accounts for old binaries already
-running. Empty predecessor gate files are retired on a drained final release.
+The product deployment command uses ordinary admission and activity locks.
+An existing hold can refuse setup. Explicit owner-scoped migration uses the
+sole matching hold and proved drain. The predecessor maintenance gate and
+runner lock remain observed while present. Explicit release can retire empty
+predecessor gate files after drain.
 
 Maintenance reads job-summary pages for `platter` and `job-packets`. When packet
 executions retain Weaver assignments, it also reads `weaver` summaries and
@@ -99,15 +101,10 @@ predecessor runner have settled. It creates no replacement jobs or synthetic
 domain records. Unresolved jobs and other hold owners prevent cutover.
 Requester holds/draining precede Nucleus's hold, and Nucleus is released last.
 
-For selected Platter, the coordinator uses its candidate for maintenance before
-publication. Affected-only Platter uses the installed command. This choice does
-not preflight database compatibility. Ordinary maintenance commands retain their
-admission rules.
-
-Candidate maintenance uses the existing protocol, durable owners, activity locks,
-and drain rules. It does not migrate state, prepare packets, or send mail. The
-same choice applies during recovery and release before publication. Affected-only Platter uses the installed command. Installation does not require
-a post-publication readiness observation.
+Manifest deployment creates no maintenance hold, invokes no drain, and does not
+release existing holds. Explicit maintenance commands retain their ordinary
+admission and ownership rules. Installation requires no post-publication
+readiness observation.
 
 Migration is an explicit one-way schema-one to schema-seven import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
@@ -124,7 +121,7 @@ information. Reinvocation verifies every remaining source hash before removing
 only manifest files. No production migration is implied by a source edit.
 
 Old binaries cannot operate schema seven. Recovery after this boundary requires
-a compatible candidate. Installation file compensation does not undo schema
+a compatible candidate. Program selection does not undo schema
 migration. Preserve holds after unresolved recovery.
 
 Schema-two through schema-six migration adds ordered `edition_packets` records
@@ -135,13 +132,14 @@ interpreting a daily brief as a complete tailored packet or deriving packet
 selection from the shared attachment. Migration starts no model work.
 
 Migration verifies retained local state. It does not check dependency readiness
-before deployment updates the retained executable paths. The coordinator does not run full readiness verification after configuration.
+before deployment updates retained executable paths. The deployment command
+does not run doctor or full readiness verification after setup.
 
 ## Interrupted migration completion
 
 To complete an interrupted migration with a corrected compatible Platter
-executable, retain the exact deployment owner and private completion receipt
-path. Stop concurrent coordinator recovery through its deployment lock.
+executable, retain the exact explicit maintenance owner and private completion
+receipt path. Exclude concurrent deployment through its admission lock.
 Run the corrected command under the existing sole owner hold:
 
 ```sh
@@ -150,13 +148,14 @@ CELL_DEPLOYMENT_RUN_ID=OWNER /absolute/corrected/platter --json migrate \
 ```
 
 The command requires drained work and the existing activity locks. It completes
-the migration and local state verification before it writes the coordinator's
-completion receipt. Repetition uses that receipt to avoid repeating completed
+the migration and local state verification before it writes the explicitly
+requested product completion receipt. Repetition uses that receipt to avoid repeating completed
 migration. Existing schema-one completion receipts remain accepted without
 reading their former data-copy fields. The command checks local state but does
 not rebind dependencies, release holds or establish full deployment readiness.
-Resume coordinator recovery after the command succeeds. Omit
-`--completion-receipt` for ordinary migration.
+Inspect current product state and complete the explicit maintenance operation
+after success. Manifest deployment does not create or consume a completion
+receipt. Omit `--completion-receipt` for ordinary migration.
 
 ## Runtime diagnosis and installation inspection
 
@@ -178,16 +177,19 @@ platter-install inspect
 ```
 
 `inspect` accepts `--home ABSOLUTE_PATH` and reads installation metadata.
-`platter-install adapter OP` remains the coordinator boundary for inspect,
-hold, drain, apply, configure, release, activate and recover. Apply requires
-run-owned maintenance. It does not audit candidate or installed bytes.
-Affected-only products are not upgraded. Interrupted or unsafe recovery retains its owner hold.
+`platter-install deploy` is the product command invoked by the committed
+manifest with JSON file references and settings on stdin. It selects program
+files, migrates or initializes state, imports explicitly supplied templates,
+updates dependency paths, and selects saved or explicit schedule intent.
+The old adapter phase protocol is retired. Deployment performs no artifact
+audit, automatic hold, drain, or application recovery.
 
 Deployment initializes a missing resume only from an explicit setup path and
 creates or enables a missing binding only from explicit activation settings. It
 prepares no packets and sends no email. Domain artifacts
-and accepted editions have no automatic pruning. Candidate workspaces and
-installation release history remain under Cell's separate retention rules.
+and accepted editions have no automatic pruning. Completed executor receipts and
+logs remain retained; interrupted execution preserves working material. Product
+releases and live state are not pruned by deployment.
 
 ## Daily definition and retained activation intent
 
@@ -219,11 +221,10 @@ Review and register that definition through Clockwork, preserving any intended
 existing timer, environment and output-path configuration. Clockwork retains
 the failure halt independently of definition selection and enabled state.
 
-Cell deployment captures the prior digest and enabled state, disables the
-binding under maintenance, and selects an updated exact definition disabled.
-It preserves timer, environment, working directory and private output paths.
-Activation restores the intended state after all holds release. Recovery
-retains the prior evidence and selects only a coherent installed release.
+The product deployment command captures the prior digest and enabled state and
+selects an updated definition directly. It preserves timer, environment,
+working directory, private output paths, and failure incidents. It temporarily
+disables no binding. Omitted `enabled` preserves saved intent.
 
 Inspect `clockwork binding show platter/daily` and its selected definition for
 the actual schedule. `clockwork history platter/daily --limit 20` reports
@@ -236,7 +237,7 @@ is resolved, `clockwork binding resume platter/daily INCIDENT_ID` explicitly
 permits future scheduling. It creates no preparation attempt and does not
 reconcile an uncertain edition. No deployment step clears this incident.
 
-Cell deployment captures and disables `platter/daily`. During configuration it
+The product deployment command captures `platter/daily`. During setup it
 migrates supported state, initializes a missing template from the supplied
 `resume` absolute path, and updates Cast, Email and Weaver executable references
 to the final installed releases. The `resume` setting cannot replace an initialized template. The optional
@@ -254,13 +255,15 @@ and omitted when configuration is saved. No Vita source setting is stored.
 The optional `enabled` setting selects intended activation. An absent binding
 stays absent when no activation setting is supplied. Existing definitions keep
 their schedule, arguments, renderer environment and output paths and select
-the new exact Platter program disabled. Final activation restores intent after
-all holds release. It never clears a Clockwork halt or reconciles a send.
+the new exact Platter program with saved or explicit enabled intent. It never
+clears a Clockwork halt or reconciles a send.
 
-Each deployment retains migration completion metadata. Repeating an interrupted
-installer run uses that receipt without repeating completed migration. If the
-receipt is absent, the product migration resumes its transaction and hashed
-source cleanup. Old data-copy files remain untouched.
+A failed deployment retains completed file, migration, configuration, and
+schedule effects. The executor stops and performs no automatic retry, rollback,
+or product recovery. Reconcile an interrupted receipt and inspect current
+product state before acknowledging executor admission or making a new attempt.
+The product migration retains its transactional import and hashed source-cleanup
+rules. Old data-copy files remain untouched.
 
 ## Weaver readiness boundary
 
@@ -268,8 +271,8 @@ Require Weaver authoring contract 2 and its caller-supplied request identity.
 Platter pins the selected installed Weaver executable. Doctor checks that
 `weaver write --help` exposes `--id` and, for initialized Platter state, checks
 Weaver's read-only doctor. This creates no model job. Weaver must be deployed
-before the new Platter release. The shared deployment dependency declaration
-orders the selected releases and maintenance. No unrelated Weaver jobs belong
+before using the new Platter workflow. The caller selects updates explicitly;
+the committed declarations order selected instructions. No unrelated Weaver jobs belong
 to Platter's cancellation or recovery authority.
 
 ## Prompt prerequisites

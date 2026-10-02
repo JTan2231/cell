@@ -211,14 +211,7 @@ pub(crate) fn write_manifest(
     spec: &InstallSpec,
     versions: BTreeMap<String, String>,
 ) -> Result<Manifest> {
-    let (mut files, _) = inventory(root)?;
-    let mut signing = crate::signing::Verifier::default();
-    for (path, file) in &mut files {
-        let key = crate::signing::artifact_key(spec.product, path, false);
-        if let Ok(key) = key {
-            file.code_identifier = signing.identifier(spec.product, &key, &root.join(path))?;
-        }
-    }
+    let (files, _) = inventory(root)?;
     let manifest = Manifest {
         format: FORMAT.to_owned(),
         product: spec.product.to_owned(),

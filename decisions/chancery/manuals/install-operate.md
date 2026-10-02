@@ -36,19 +36,28 @@ integrity, or check dependency readiness. Its setup operations still create and
 migrate state, maintain holds, and publish the requested
 configuration. Ordinary product commands retain their runtime checks.
 
-## Run-owned deployment admission
+## Cell manifest command and explicit maintenance
 
-The coordinator's `apply` phase stages release files.
-`configure` runs product configuration, migration and selector publication with
-scheduling disabled. `release` removes only the named admission hold.
-After every affected hold is released, `activate` restores the captured enabled
-state of the current selected definition. An originally disabled binding stays
-disabled. Clockwork incident halts and product pauses remain in force.
+The Cell manifest runs `krisis-install deploy` once with a schema-2 request on
+stdin. It places release files, performs observer activation and migration,
+writes the hook and Annals pin receipt, registers the observer definition, and
+selects `krisis/observer` directly. Activation preserves an existing write-once
+baseline. The command pins the installed Annals decisions library; it does not
+choose a legacy Semantics activation watermark.
 
-Drain returns `waiting` while admitted commands or durable Nucleus jobs remain.
-It neither cancels nor retries those jobs. A completely absent Nucleus
-installation with no Nucleus database has no durable jobs to drain. An
-unavailable existing runtime is not treated as an empty job inventory.
+The command does not acquire application maintenance, drain live or durable
+work, suspend scheduling, retire legacy schedules, check readiness, or recover
+automatically. Native state and publication locks protect actual writes.
+An interrupted command can leave completed effects in place. Inspect its
+retained log, hook, receipt and current selection before a further operation.
+Explicit manual final cutover and recovery keep their documented procedures.
+
+Settings accept an optional `codex_bin` path and boolean `enabled`. Omission
+preserves the existing Codex pin and enabled intent; a new schedule uses the
+product's default Codex path and defaults enabled. Existing application
+maintenance, product pauses and Clockwork incident halts remain in force.
+
+Use explicit product admission commands when an authorized operation needs them:
 
 ```text
 krisis --database DATABASE --json maintenance status
@@ -56,71 +65,17 @@ krisis --database DATABASE --json maintenance hold RUN_ID
 krisis --database DATABASE --json maintenance release RUN_ID
 ```
 
-The private sibling `<database>.cell-maintenance` is separate from the
-installer's `.clockwork-maintenance` marker and receipt. These commands never
-open, initialize, or migrate SQLite; status leaves an absent gate absent.
-Their JSON has `protocol_version: 1`, `contract_version: 1`, `holds`, and
-`drained`. Drain describes participating live commands. The product must
-separately verify that durable observations and dependency jobs have stopped.
+The durable sibling `<database>.cell-maintenance` gate is separate from the
+manual installer's marker. Hold fences public commands before database access.
+Release removes only the named owner. IDs contain 1–128 ASCII letters, digits,
+hyphens, underscores or periods and cannot begin with a period. The manifest
+executor neither invokes these commands nor interprets their output.
 
-Any hold fences every other public CLI and typed client command before
-database access, including status and doctor, since opening state can migrate
-it. Existing commands may settle. Holds survive process exit; repeated hold
-and release are idempotent. Release removes only its named owner and preserves
-the observer baseline. IDs contain 1–128 ASCII letters, digits, hyphens,
-underscores, or periods and cannot begin with a period.
-
-Controlled commands set `CELL_DEPLOYMENT_RUN_ID` for the exact sole hold and
-exclusive drained activity. With no hold they use ordinary admission. Only
-doctor can use this identity to prove deliberately held Nucleus readiness;
-runtime drain, authentication, harness, product capability, and protocol
-checks still apply. Observation processing requires normal Nucleus admission.
-
-The sealed Rust `krisis-install adapter OP` boundary composes preparation and explicit final cutover while
-preserving captured schedule enabled booleans and baseline identity. It does
-not infer a legacy Semantics activation watermark. An ordinary Annals binary
-or config pin update proves the prior definition against its release and old
-receipt target, requires the same persistent decisions-library ID, then records the new target. A foreign receipt or changed
-library ID stops the transition.
-
-Coordinated inspection requires maintenance support from installed public
-executables before effects. Unsupported old binaries need their compatibility
-release through the documented deployer and writer-quiescence procedure; a
-candidate gate cannot fence them. Recovery stops on retained installer
-maintenance or an unfinished product transaction and leaves the outer hold
-for the existing recovery procedure. It never deletes those markers or
-another owner's hold to force progress.
-
-Installation and coordinated deployment do not run doctor or audit artifact
-bytes. They prepare the requested files, configuration, migration and activation
-baseline under maintenance. Runtime doctor remains available separately.
-
-The package builds both `krisis` and `krisis-install`. New releases retain the
-exact Rust helper at `bin/krisis-install` and `package/install`, with a complete
-`cell-install-v3` artifact manifest. Static frontend and observer scripts remain
-release data. The shared Rust library copies artifacts and owns selector transactions; Krisis owns hook, database, admission, and scheduler lifecycle.
-`krisis-install inspect` checks the selected installation. Retained
-`package/install install` uses its sibling package data and explicit exact
-payload/dependency pins. Source invocation supplies `--source-root` for the
-absolute Decisions product source directory. Legacy formats 2, 3, and 4 remain
-readable migration inputs; archived shell deployers do not install the new
-manifest. Uninstall uses `krisis-install uninstall --clockwork ABSOLUTE_PATH` and
-retains current/previous, releases, private state, receipts, and maintenance.
-
-For a source build, prepare with:
-
-```text
-krisis-install install --source-root ABSOLUTE_DECISIONS_SOURCE --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX
-```
-
-After the separate cutover prerequisites are proved, repeat the same inputs
-with `--final-cutover`. Add `--keep-maintenance` only after a successful exact
-preparation to retain its authenticated gate through external verification.
-Repeat the same inputs with `--release-maintenance` to release that gate after
-proving the exact current command, providers, hook, receipt, enabled observer,
-and retired legacy schedules. `--home` selects an absolute operator home;
-`--expected-current absent|releases/ID` optionally refuses a changed selector.
-The marker and receipt are distinct from the coordinator's named CLI hold.
+The package includes `krisis` and `krisis-install`; the latter is retained as
+`package/install`. Explicit manual installation takes exact payload and
+Annals/Codex pins. `--final-cutover`, `--keep-maintenance` and
+`--release-maintenance` remain separate manual operations. Uninstall retains
+state, releases, receipts and history.
 
 ## Inspect worker operation
 

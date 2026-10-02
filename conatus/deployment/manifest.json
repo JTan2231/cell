@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "conatus",
+  "order": 12,
+  "steps": [
+    {
+      "id": "install",
+      "kind": "run",
+      "argv": [
+        "{candidate_dir}/bin/conatus-install",
+        "deploy"
+      ],
+      "stdin": "deployment_request"
+    }
+  ]
+}

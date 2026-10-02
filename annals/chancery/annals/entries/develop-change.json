@@ -67,8 +67,8 @@
     },
     {
       "id": "annals.installation",
-      "min_contract": 4,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.work.retain",
@@ -167,7 +167,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library’s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."
+        "statement": "Annals preserves source bytes and enforces structural and evidence invariants. Each library\u2019s stored instructions define what concepts and parent connections mean; broader/narrower conceptual scope is the default instruction document, not a universal edge meaning."
       },
       {
         "status": "declared",

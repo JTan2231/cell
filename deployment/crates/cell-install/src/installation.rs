@@ -5,7 +5,6 @@ use crate::artifact::{
 use crate::{Disposition, Error, InstallSpec, Installation, ReleaseInput, Result, read_release};
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{Read, Seek, SeekFrom};
 use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -273,57 +272,10 @@ impl Drop for Lock {
     }
 }
 
-fn command(program: &Path, argument: &str, home: &Path) -> Result<String> {
-    // Installed commands use owned public selectors; supplied sources were
-    // checked as literal regular files before reaching this helper.
-    let program = fs::canonicalize(program)?;
-    regular(&program)?;
-    let output = tempfile::tempfile()?;
-    let mut child = Command::new(&program)
-        .arg(argument)
-        .env("HOME", home)
-        .stdin(Stdio::null())
-        .stdout(output.try_clone()?)
-        .stderr(Stdio::null())
-        .spawn()?;
-    let deadline = Instant::now() + Duration::from_secs(30);
-    let status = loop {
-        if output.metadata()?.len() > 1024 * 1024 {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(Error::new("installed smoke output exceeded its limit"));
-        }
-        if let Some(status) = child.try_wait()? {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(Error::new("installed smoke command timed out"));
-        }
-        thread::sleep(Duration::from_millis(10));
-    };
-    if !status.success() {
-        return Err(Error::new("installed version/help check failed"));
-    }
-    if output.metadata()?.len() > 1024 * 1024 {
-        return Err(Error::new("installed smoke output exceeded its limit"));
-    }
-    // A separately opened descriptor starts at offset zero after the child writes.
-    let mut output = output;
-    output.seek(SeekFrom::Start(0))?;
-    let mut text = String::new();
-    output.take(1024 * 1024 + 1).read_to_string(&mut text)?;
-    if text.len() > 1024 * 1024 {
-        return Err(Error::new("installed smoke output exceeded its limit"));
-    }
-    Ok(text.trim().to_owned())
-}
-
 fn versions(
     spec: &InstallSpec,
     input: &ReleaseInput,
-    home: &Path,
+    _home: &Path,
 ) -> Result<BTreeMap<String, String>> {
     if input
         .binaries
@@ -343,7 +295,6 @@ fn versions(
         ));
     }
     let mut versions = BTreeMap::new();
-    let mut signing = crate::signing::Verifier::default();
     for name in spec.commands {
         let path = &input.binaries[*name];
         if !path.is_absolute() || regular(path)?.mode() & 0o111 == 0 {
@@ -351,22 +302,13 @@ fn versions(
                 "candidate must be an absolute executable regular file",
             ));
         }
-        signing.verify(spec.product, name, path)?;
-        let result = command(path, "--version", home)?;
-        let value = result.strip_prefix(&format!("{name} ")).unwrap_or(&result);
-        versions.insert((*name).to_owned(), value.to_owned());
-        command(path, "--help", home)?;
+        versions.insert((*name).to_owned(), String::new());
     }
     if !input.installer.is_absolute() || regular(&input.installer)?.mode() & 0o111 == 0 {
         return Err(Error::new(
             "recovery installer must be an absolute executable regular file",
         ));
     }
-    signing.verify(
-        spec.product,
-        &format!("{}-install", spec.product),
-        &input.installer,
-    )?;
     Ok(versions)
 }
 
@@ -386,17 +328,10 @@ fn stage(
     let root = stage.path();
     fs::create_dir(root.join("bin"))?;
     fs::create_dir(root.join("package"))?;
-    let mut signing = crate::signing::Verifier::default();
     for (name, source) in &input.binaries {
         copy_file(source, &root.join("bin").join(name), 0o755)?;
-        signing.verify(spec.product, name, &root.join("bin").join(name))?;
     }
     copy_file(&input.installer, &root.join("package/install"), 0o755)?;
-    signing.verify(
-        spec.product,
-        &format!("{}-install", spec.product),
-        &root.join("package/install"),
-    )?;
     let bundle = root.join(format!("share/chancery/{}", spec.provider));
     fs::create_dir_all(bundle.join("entries"))?;
     fs::create_dir(bundle.join("manuals"))?;
@@ -565,64 +500,12 @@ fn validate_scratch_tree(
     Ok(())
 }
 
-fn smoke(spec: &InstallSpec, paths: &Paths, release: &Installation) -> Result<()> {
-    let commands = if simple_format(&release.format) {
-        spec.commands
-    } else {
-        &spec.commands[..1]
-    };
-    for name in commands {
-        let executable = paths.home.join(".local/bin").join(name);
-        command(&executable, "--version", &paths.home)?;
-        command(&executable, "--help", &paths.home)?;
-    }
-    Ok(())
-}
-
-fn release_files(
-    paths: &Paths,
-    release: &Installation,
-) -> Result<BTreeMap<String, crate::FileEntry>> {
-    let root = paths.install.join(&release.current);
-    if simple_format(&release.format) {
-        let manifest: crate::Manifest =
-            serde_json::from_slice(&fs::read(root.join("manifest.json"))?)?;
-        if manifest.release_id != release.release_id {
-            return Err(Error::new("recorded signing release identity changed"));
-        }
-        let (mut files, _) = inventory(&root)?;
-        files.remove("manifest.json");
-        if !crate::artifact::inventory_matches(&files, &manifest.files) {
-            return Err(Error::new("release inventory or modes changed"));
-        }
-        Ok(manifest.files)
-    } else {
-        crate::legacy::manifest(&root.join("manifest.txt"))?;
-        Ok(inventory(&root)?.0)
-    }
-}
-
-fn verify_signing(
-    spec: &InstallSpec,
-    paths: &Paths,
-    release: &Installation,
-    recorded_recovery: bool,
-) -> Result<()> {
-    let root = paths.install.join(&release.current);
-    let files = release_files(paths, release)?;
-    if recorded_recovery {
-        crate::signing::verify_recorded_files(spec.product, &root, &files)
-    } else {
-        crate::signing::verify_files(spec.product, &root, &files)
-    }
-}
-
 fn publish(
     spec: &InstallSpec,
     paths: &Paths,
     target: &Installation,
     before: &View,
-    recorded_recovery: bool,
+    _recorded_recovery: bool,
     check: impl FnOnce() -> Result<()>,
 ) -> Result<Installation> {
     let _catalog = Lock::acquire(paths.catalog.join(".catalog-update-lock"), paths.uid)?;
@@ -632,15 +515,6 @@ fn publish(
             "stale deployment: selectors changed before publication",
         ));
     }
-    verify_signing(spec, paths, target, recorded_recovery)?;
-    let recorded_prior = before[&paths.install.join("current")]
-        .as_ref()
-        .map(|selected| -> Result<_> {
-            let root = paths.install.join(selected);
-            let release = read_release(spec, &root)?;
-            Ok((root, release_files(paths, &release)?))
-        })
-        .transpose()?;
     let mut after = before.clone();
     if before[&paths.install.join("current")] != Some(PathBuf::from(&target.current)) {
         after.insert(
@@ -677,53 +551,13 @@ fn publish(
                 "installed release differs from the prepared candidate",
             ));
         }
-        verify_signing(spec, paths, target, recorded_recovery)?;
-        smoke(spec, paths, target)?;
         check()?;
         Ok(installed)
     })();
-    match result {
-        Ok(installed) => Ok(installed),
-        Err(mut error) => {
-            error.disposition = compensate(paths, before, &after, recorded_prior.as_ref());
-            if error.disposition == Disposition::Restored && inspect_with(spec, paths).is_err() {
-                error.disposition = Disposition::Uncertain;
-            }
-            Err(error)
-        }
-    }
-}
-
-fn compensate(
-    paths: &Paths,
-    before: &View,
-    after: &View,
-    recorded_prior: Option<&(PathBuf, BTreeMap<String, crate::FileEntry>)>,
-) -> Disposition {
-    if recorded_prior.is_some_and(|(root, files)| {
-        crate::signing::verify_recorded_files(paths.product, root, files).is_err()
-    }) {
-        return Disposition::Uncertain;
-    }
-    let Ok(actual) = view(paths) else {
-        return Disposition::Uncertain;
-    };
-    if actual
-        .iter()
-        .any(|(path, target)| target != &before[path] && target != &after[path])
-    {
-        return Disposition::Uncertain;
-    }
-    for (path, target) in before {
-        if atomic_selector(paths, path, target.as_deref()).is_err() {
-            return detach(paths, before, after);
-        }
-    }
-    if view(paths).is_ok_and(|actual| actual == *before) {
-        Disposition::Restored
-    } else {
-        detach(paths, before, after)
-    }
+    result.map_err(|mut error| {
+        error.disposition = Disposition::Uncertain;
+        error
+    })
 }
 
 fn detach(paths: &Paths, before: &View, after: &View) -> Disposition {
@@ -753,8 +587,8 @@ fn detach(paths: &Paths, before: &View, after: &View) -> Disposition {
 ///
 /// # Errors
 /// Returns an error for unsafe or stale installation state, invalid candidates,
-/// unavailable locks, or failed publication/smoke checks. The error disposition
-/// states whether selector changes were restored, detached, or remain uncertain.
+/// unavailable locks, or failed publication. A publication failure retains completed
+/// selector changes and reports uncertainty.
 pub fn install(
     spec: &InstallSpec,
     home: &Path,
@@ -826,7 +660,7 @@ pub fn restore(
 /// # Errors
 /// Returns an error when the selection cannot be attributed to the supplied
 /// prior/candidate, when paths or releases are unsafe, or when locks, repair,
-/// or installed smoke checks fail. It never replaces an unknown selection.
+/// or publication checks fail. It never replaces an unknown selection.
 pub fn recover_installation(
     spec: &InstallSpec,
     home: &Path,

@@ -1,6 +1,6 @@
 {
   "id": "semantics.project.operate",
-  "contract_version": 11,
+  "contract_version": 12,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -20,7 +20,7 @@
   "effects": [
     "Authorized procedures can change project/intake state, prepare a restricted reconciliation job, or install/migrate/publish the matching product release. Required features own the detailed effect and consistency guarantees.",
     "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state.",
-    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
@@ -28,7 +28,7 @@
     "A participating project's source and tests remain runtime authority; its root AGENTS.md owns participation instructions."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves data, operator pauses, and incident halts."
+    "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
   ],
   "failure_and_recovery": [
     "Stop on failing prerequisites, active or unproved prior jobs, foreign artifacts, changed ownership evidence, or unproved recovery.",
@@ -77,8 +77,8 @@
     },
     {
       "id": "semantics.service",
-      "min_contract": 4,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "session_surfaces": [
@@ -89,7 +89,7 @@
   "automation": "none",
   "steps": [
     "Read the required Semantics feature contracts and shared Nucleus operator manual. Inspect the exact Annals decisions library, Nucleus, Clockwork, retained state, prompt selection, and owned publication. Inspect Conversations only for retained historical jobs that require it.",
-    "For deployment, build a green candidate and run the content-addressed deployer; verify doctor and all owned selectors before registering projects.",
+    "For Cell deployment, submit the committed candidate to CI. The manifest runs the declared placement and setup instructions. Run doctor separately when runtime diagnosis is required before using projects.",
     "Add the exact Semantics-Project marker to the project's root AGENTS.md, register the canonical folder at the current watermark, and seed only existing authoritative vocabulary when needed; after verifying HEAD, the source file may be separately removed under normal project authority.",
     "Inspect repository HEAD, intake state, the one-shot worker report, Clockwork binding and activation history, and body-free product logs before relying on periodic maintenance.",
     "Pause before maintenance; resume only after markers and dependencies are healthy. Uninstall only with the retained-state boundary understood."
@@ -97,7 +97,7 @@
   "checkpoints": [
     "Registration and moves require an exact line in a regular root AGENTS.md; nested or approximate markers do not participate.",
     "Registration captures the current Annals watermark; moves preserve cursor histories. Each new document becomes separate intake for each participating project after its own activation point, with relevance decided by its agent.",
-    "Before candidate access, verify owned release/selector/marker/log evidence, suspend public work and scheduling, hold the worker flock, prove SQLite closed, and preserve the live database and sidecars. Retain authenticated holds and recovery evidence under the semantics.service rules.",
+    "For explicit semantics-install install, retained recovery or legacy watermark cutover, follow the documented ownership, worker-lock and transaction procedure in semantics.service. Schema-2 deploy instead runs its declared placement and setup without application holds, draining, schedule suspension or readiness checks.",
     "Nucleus receives the handed document and repository with workspace none, no shell, and no web. No additional source lookup or metadata is required. Semantics owns the commit transaction.",
     "Retirement requires a paused project. Pending or paused intake with zero attempts and no retained Nucleus request becomes ignored with reason project_retired in the same transaction. Other unresolved intake blocks retirement without changing state. Source bytes, repository history, and cursors remain retained; the old folder may be absent."
   ],
@@ -222,7 +222,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 11 retains stable operating routes, requires explicit JSON for machine reads, and uses retained-state forward recovery. Provider release, persistent schema, immutable requests, and entry contracts retain separate versions."
+        "statement": "Operation contract 12 retains stable operating routes, requires explicit JSON for machine reads, and uses retained-state forward recovery. Provider release, persistent schema, immutable requests, and entry contracts retain separate versions."
       }
     ],
     "reliances": [

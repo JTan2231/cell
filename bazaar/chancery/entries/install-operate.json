@@ -27,6 +27,10 @@
     {
       "label": "Deploy when authorized",
       "invocation": "./deploy.sh bazaar"
+    },
+    {
+      "label": "Run product deployment recipe",
+      "invocation": "bazaar-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
     }
   ],
   "promise": {
@@ -64,6 +68,10 @@
       {
         "status": "declared",
         "statement": "The procedure stops for foreign or unsupported state, invalid or nonprivate paths, foreign selectors, changed release bytes, stale expected selection, or failed configure or verification. Content updates require separate authorization. Detailed state limits are owned by the required bazaar.installation feature."
+      },
+      {
+        "status": "declared",
+        "statement": "Deploy accepts one bounded schema-two recipe request on stdin. The product command owns its setup; the shared executor uses process exit status only. Deployment runs no application execution probe, native-signature audit, maintenance hold, drain, or automatic rollback."
       }
     ],
     "compatibility_and_evolution": [
@@ -79,7 +87,7 @@
       },
       {
         "status": "declared",
-        "statement": "Coordinated installation relies on the Cell deployment coordinator for ordering and its separate authorized deployment procedure. No dedicated installed contract covers that shared coordinator.",
+        "statement": "The Cell manifest executor runs declared instructions in product order and checks their exit status. Bazaar owns file selection and default-state initialization. The executor imposes no application readiness, maintenance, or recovery policy.",
         "target": "cell-deployment",
         "kind": "control"
       }
@@ -87,7 +95,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The coordinator selects Bazaar from committed local main. Bazaar accepts no deployment settings. Direct installation takes absolute --binary and --bundle paths and optional --home and --expected-current. CLI --database selects an explicit private database."
+        "statement": "The manifest executor supplies the schema-two recipe request. Bazaar accepts no deployment settings. Direct installation takes absolute --binary and --bundle paths and optional --home and --expected-current. CLI --database selects an explicit private database."
       }
     ],
     "outputs": [
@@ -117,10 +125,10 @@
   ],
   "outcome": "Selected Bazaar programs and compatible initialized state, or the requested read-only check.",
   "effects": [
-    "Installation changes owned program/provider selectors. Coordinated configure initializes an absent database. Existing content is preserved; no version is appended."
+    "Installation changes owned program/provider selectors. The Bazaar deployment recipe initializes an absent database. Existing content is preserved; no version is appended."
   ],
   "authority": [
-    "Bazaar owns its program selection and private database. The Cell coordinator owns deployment ordering."
+    "Bazaar owns its program selection and private database. The Cell manifest executor owns declared instruction ordering and exit-status tracking."
   ],
   "success": [
     "For a program operation, owned programs and provider selectors select the supplied release. For a database operation, selected schema-one identity and integrity checks pass. Coordinated deployment performs setup without an additional verification gate."

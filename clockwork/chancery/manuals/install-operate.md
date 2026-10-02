@@ -1,7 +1,7 @@
 # Install or diagnose Clockwork
 
-Installation places resources and performs setup under the documented maintenance
-boundary. It does not gate completion on persistent-state validation, artifact
+Installation places resources and runs the declared product setup commands.
+It does not gate completion on persistent-state validation, artifact
 integrity audits, or runtime readiness checks. The product's ordinary diagnostics
 and runtime checks remain available separately.
 
@@ -10,7 +10,7 @@ rollback, selector detach, or explicit state migration. Read the required
 `clockwork.installation` and `clockwork.schedule.operate` contracts for release,
 state, and schedule details. Direct program installation changes owned program
 and provider selectors; it does not operate product definitions or bindings.
-Coordinated deployment also suspends and refreshes captured broker bindings.
+Manifest deployment also refreshes existing enabled broker bindings.
 
 Public `clockwork` commands print plain text by default. Add `--json` when
 a script or typed integration must parse a result. The flagged response
@@ -27,25 +27,26 @@ schemas and the private broker output are unchanged.
 The installer prepares resource directories and publishes command and provider
 selectors. It does not audit release bytes, compare provider versions, validate
 persistent state, or run doctor. It preserves owned-path boundaries, writer
-locks, and selector compensation. Runtime diagnosis remains available separately
+locks, and atomic selector replacements. Failed instructions retain completed
+changes. Runtime diagnosis remains available separately
 through `clockwork doctor`; that command's state effects are unchanged.
 
 ## Coordinate broker refresh
 
-1. Authorize coordinated Cell deployment separately, then use
-   `./deploy.sh clockwork`. It captures the complete binding inventory before
-   maintenance and disables each binding while retaining selection and halts.
-2. Let product adapters prepare their definitions under their own holds. After
-   holds are released, verify that each captured enabled binding is restored
-   through the final broker and that its generated plist pins that release.
-   Previously disabled bindings stay disabled. This phase precedes EMT activation.
-3. Recover an interruption from the retained original inventory. Re-establish
-   suspension before configuration repair. Preserve captured intent and open
-   incidents; do not infer intent from temporary deployment disablement.
+1. Authorize Cell deployment separately, then use `./deploy.sh clockwork`.
+   Select any product updates explicitly; the executor adds no products.
+2. Let the product command select Clockwork files. If its runtime database exists,
+   it lists current bindings and switches each enabled binding to the same
+   definition digest through the selected broker. Disabled bindings stay disabled.
+   It creates no maintenance hold and temporarily disables no binding.
+3. Inspect the retained result after interruption. Completed selector and binding
+   changes remain. Reconcile and acknowledge executor admission separately from
+   any authorized Clockwork recovery. No automatic retry or recovery follows.
 
-Stop when unknown binding or projection changes prevent coherent recovery.
-No stage approves a failure halt or retries product work. Direct installation
-and program rollback alone do not refresh pinned broker paths.
+Stop on a failed file or binding operation. Refresh preserves definitions and
+failure incidents; it approves no halt and retries no product work. A run-at-load
+definition can start product work when its enabled binding is refreshed.
+Direct installation and program rollback alone do not refresh pinned broker paths.
 
 ## Roll back a program release
 

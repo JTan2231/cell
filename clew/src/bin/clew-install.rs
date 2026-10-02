@@ -22,14 +22,14 @@ fn main() -> std::process::ExitCode {
     }
     if arguments.is_empty() || arguments == ["--help"] || arguments == ["-h"] {
         println!(
-            "clew-install {}\n\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nschedule-definition --state-dir ABS --output ABS [--home ABS]\n\nProgram installation does not initialize state or activate schedules.",
+            "clew-install {}\n\ndeploy < REQUEST.json\ninstall --binary ABS --bundle ABS [--home ABS] [--expected-current absent|releases/ID]\ninspect [--home ABS]\nrecover --release ABS [--home ABS] [--expected-current absent|releases/ID]\nschedule-definition --state-dir ABS --output ABS [--home ABS]\n\nDirect install selects program files only. Deploy also initializes state and publishes the owned schedule.",
             env!("CARGO_PKG_VERSION")
         );
         return std::process::ExitCode::SUCCESS;
     }
-    cell_install::simple::main_with_lifecycle(
+    cell_install::simple::main_with_deployment(
         &clew::installation::specification(),
         env!("CARGO_PKG_VERSION"),
-        clew::installation::lifecycle,
+        clew::installation::deploy,
     )
 }

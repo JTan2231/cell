@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy selected Cell systems from one exact committed snapshot."""
+"""Build opaque artifacts and execute explicitly ordered deployment instructions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import contextlib
 import datetime as dt
 import fcntl
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
@@ -18,9 +17,7 @@ import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import time
-import tomllib
 from typing import Any, Iterator, Sequence
 import uuid
 
@@ -30,447 +27,90 @@ if __package__ in (None, ""):
 
 from ci_broker import client as ci_client
 from ci_broker.broker import MINIMAL_ENVIRONMENT, process_token
-from deployment import candidate, signing
-from deployment.inventory import descriptor
 from ci_manager import workspace
+from deployment import candidate, manifest
+from deployment.inventory import descriptor
 
-SCHEMA = 1
-MUTATIONS = frozenset(("hold", "drain", "apply", "configure", "release", "activate", "recover"))
-EXPECTED = {"inspect": "ready", "hold": "held", "drain": "drained",
-            "apply": "applied", "release": "released",
-            "recover": "recovered", "configure": "configured", "activate": "activated"}
+SCHEMA = 2
+MANIFEST_EXECUTOR = 1
 NAME = re.compile(r"[a-z][a-z0-9-]*")
-RUN_ID = re.compile(r"[0-9a-f]{32}")
 REQUEST_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/-]{0,255}")
 COMMIT_ID = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
-RELEASE_ID = re.compile(r"(?:[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})")
-MAX_REPLY = 1024 * 1024
-MAX_DETAIL = 1024
-MAX_DIAGNOSTICS = 4096
+MAX_DETAIL = 4096
 HEARTBEAT_SECONDS = 60
 
 
 class DeploymentError(RuntimeError):
-    """A deployment cannot safely advance."""
+    """The requested execution could not complete."""
 
 
 class DeploymentBusy(DeploymentError):
-    """A deployment or one of its descendants still owns admission."""
+    """Another execution or its child owns host admission."""
+
+
+class ExecutionInterrupted(DeploymentError):
+    """The command exceeded its declared limit; application effects are unknown."""
 
 
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-def bounded_text(value: Any, limit: int, *, tail: bool = False) -> str:
-    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", str(value))
-    text = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text)
-    encoded = text.encode("utf-8", "replace")
-    if len(encoded) <= limit:
-        return text
-    suffix = "\n[truncated]"
-    size = max(0, limit - len(suffix))
-    if tail:
-        return "[truncated]\n" + (encoded[-size:] if size else b"").decode("utf-8", "ignore")
-    return encoded[:size].decode("utf-8", "ignore") + suffix
+def json_bytes(value: Any) -> bytes:
+    return (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
-def state_root() -> Path:
-    return workspace.directory("deployments")
+def bounded_text(value: Any, limit: int = MAX_DETAIL) -> str:
+    return str(value).encode("utf-8", "replace")[-limit:].decode("utf-8", "replace")
+
+
+def sync_directory(path: Path) -> None:
+    descriptor_fd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor_fd)
+    finally:
+        os.close(descriptor_fd)
 
 
 def private_directory(path: Path) -> None:
     if path.is_symlink():
-        raise DeploymentError(f"refusing symbolic state directory: {path}")
+        raise DeploymentError("executor state directory must not be symbolic")
+    missing = []
+    parent = path
+    while not parent.exists():
+        missing.append(parent)
+        parent = parent.parent
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
     info = path.stat()
     if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
-        raise DeploymentError(f"state directory must be owned by this user and mode 0700: {path}")
+        raise DeploymentError("executor state directory must be private and owned")
+    for directory in reversed(missing):
+        sync_directory(directory.parent)
 
 
 def durable_json(path: Path, value: Any) -> None:
-    if path.is_symlink():
-        raise DeploymentError(f"refusing symbolic state file: {path}")
     temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}")
     try:
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(candidate.json_bytes(value))
+        descriptor_fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor_fd, "wb") as stream:
+            stream.write(json_bytes(value))
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        sync_directory(path.parent)
     finally:
         temporary.unlink(missing_ok=True)
 
 
 def read_json(path: Path) -> dict[str, Any]:
-    candidate.regular(path)
     value = json.loads(path.read_text())
     if not isinstance(value, dict):
-        raise DeploymentError(f"expected a JSON object: {path}")
+        raise DeploymentError("JSON input must be an object")
     return value
 
 
-def git(root: Path, *arguments: str) -> str:
-    return ci_client.git(root, *arguments).decode("utf-8", "strict").strip()
-
-
-def source_file(root: Path, revision: str, relative: str) -> str:
-    return git(root, "show", f"{revision}:{relative}")
-
-
-def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
-    paths = git(root, "ls-tree", "--name-only", revision, "pipeline/products/").splitlines()
-    products: dict[str, dict[str, Any]] = {}
-    for path in paths:
-        if not path.endswith(".sh"):
-            continue
-        values = descriptor(source_file(root, revision, path))
-        identity = values["PRODUCT_ID"]
-        name = "krisis" if identity == "decisions" else identity
-        directory = values["PRODUCT_DIR"]
-        if not NAME.fullmatch(name) or not NAME.fullmatch(directory):
-            raise DeploymentError("invalid product identity in committed inventory")
-        adapter_path = f"{directory}/deployment/adapter.py"
-        metadata_path = f"{directory}/deployment/adapter.json"
-        try:
-            metadata = json.loads(source_file(root, revision, metadata_path))
-        except (RuntimeError, ValueError):
-            metadata = None
-        if metadata is not None:
-            if not isinstance(metadata, dict) or metadata.get("schema") != 1 or metadata.get("product") != name:
-                raise DeploymentError(f"invalid committed adapter declaration: {name}")
-            if "application" in metadata and (not isinstance(metadata["application"], str)
-                    or not re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", metadata["application"])):
-                raise DeploymentError(f"invalid installation application: {name}")
-            names(metadata.get("dependencies", []))
-            adapter_binary = metadata.get("adapter_binary")
-            if adapter_binary is not None:
-                if adapter_binary != f"{name}-install":
-                    raise DeploymentError(f"unsupported committed binary adapter: {name}")
-                adapter_path = None
-            else:
-                try:
-                    git(root, "cat-file", "-e", f"{revision}:{adapter_path}")
-                except RuntimeError:
-                    metadata = None
-        products[name] = {
-            "product": name, "directory": directory, "adapter": adapter_path,
-            "metadata": metadata, "profile": values["DEPLOY_PROFILE"],
-            "aliases": values.get("PRODUCT_ALIASES", "").split(),
-            "providers": {row.split("|")[0]: row.split("|")[2]
-                          for row in values.get("PROVIDERS", "").splitlines() if row},
-        }
-        if values.get("RELEASE_UNITS"):
-            unit = values["RELEASE_UNITS"].splitlines()[0].split("|")
-            manifest = tomllib.loads(source_file(root, revision, unit[3]))
-            products[name]["version"] = (manifest["workspace"]["package"] if unit[2] == "workspace-package"
-                                         else manifest["package"])["version"]
-    if not products:
-        raise DeploymentError("committed source contains no Cell product inventory")
-    for name, item in products.items():
-        if item["metadata"] is not None:
-            unknown = set(item["metadata"].get("dependencies", [])) - products.keys()
-            if unknown:
-                raise DeploymentError(f"{name} names unknown deployment prerequisites: {', '.join(sorted(unknown))}")
-            metadata = item["metadata"]
-            for field in ("companions", "maintenance_products"):
-                if set(names(metadata.get(field, []))) - products.keys():
-                    raise DeploymentError(f"{name} names an unknown {field} product")
-            ranges = metadata.get("runtime_versions", {})
-            if not isinstance(ranges, dict) or set(ranges) - set(metadata.get("dependencies", [])):
-                raise DeploymentError(f"{name} runtime compatibility must name declared dependencies")
-            for bounds in ranges.values():
-                compatible_version(None, bounds)
-            contracts = metadata.get("runtime_contracts", {})
-            if not isinstance(contracts, dict) or set(contracts) - set(metadata.get("dependencies", [])):
-                raise DeploymentError(f"{name} runtime contracts must name declared dependencies")
-            for required in contracts.values():
-                if not isinstance(required, dict) or not required:
-                    raise DeploymentError("required runtime contracts must be a nonempty object")
-                for entry, bounds in required.items():
-                    if (not isinstance(entry, str) or not re.fullmatch(r"[a-z][a-z0-9.-]*", entry)
-                            or not isinstance(bounds, dict) or set(bounds) != {"minimum", "before"}
-                            or type(bounds["minimum"]) is not int or type(bounds["before"]) is not int
-                            or not 0 < bounds["minimum"] < bounds["before"]):
-                        raise DeploymentError("required runtime contract interval is invalid")
-            bindings = metadata.get("activation_bindings", [])
-            if (not isinstance(bindings, list) or any(not isinstance(key, str)
-                    or not re.fullmatch(r"[a-z][a-z0-9-]*/[a-z][a-z0-9-]*", key) for key in bindings)
-                    or len(bindings) != len(set(bindings))):
-                raise DeploymentError(f"{name} has invalid owned activation bindings")
-    return products
-
-
-def names(value: Any) -> list[str]:
-    if not isinstance(value, list) or any(not isinstance(item, str) or not NAME.fullmatch(item)
-                                          for item in value):
-        raise DeploymentError("adapter product references must be a list of system names")
-    return value
-
-
-def ordered(selected: Sequence[str], after: dict[str, Sequence[str]]) -> list[str]:
-    pending = set(selected)
-    result: list[str] = []
-    while pending:
-        ready = sorted(name for name in pending if not (set(after.get(name, [])) & pending))
-        if not ready:
-            raise DeploymentError("selected product ordering contains a cycle")
-        result.extend(ready)
-        pending.difference_update(ready)
-    return result
-
-
-def installed_product(name: str, metadata: dict[str, Any] | None = None) -> bool:
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    # Presence is deliberately conservative. An interrupted installation with
-    # missing commands still needs its sealed product inspector and recovery.
-    paths = [home / ".local/bin" / name, home / ".local/bin" / f"{name}-install",
-             home / "Library/Application Support/Chancery/providers" / name]
-    if metadata and metadata.get("application"):
-        paths.append(home / "Library/Application Support" / metadata["application"] / "install")
-    return any(path.exists() or path.is_symlink() for path in paths)
-
-
-def version_tuple(value: str) -> tuple[int, int, int]:
-    if not isinstance(value, str) or not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", value):
-        raise DeploymentError("runtime compatibility requires a three-part release version")
-    return tuple(int(part) for part in value.split("."))
-
-
-def compatible_version(version: str | None, bounds: Any) -> bool:
-    if not isinstance(bounds, dict) or set(bounds) != {"minimum", "before"}:
-        raise DeploymentError("runtime compatibility requires minimum and exclusive before versions")
-    minimum, before = version_tuple(bounds["minimum"]), version_tuple(bounds["before"])
-    if minimum >= before:
-        raise DeploymentError("runtime compatibility version interval is empty")
-    return version is not None and minimum <= version_tuple(version) < before
-
-
-def installed_version(name: str, metadata: dict[str, Any]) -> str | None:
-    """Read an installed version for dependency selection."""
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    if not metadata.get("application"):
-        return None
-
-    install = home / "Library/Application Support" / metadata["application"] / "install"
-    try:
-        root = (install / "current").resolve(strict=True)
-        if root.parent != install / "releases" or not RELEASE_ID.fullmatch(root.name):
-            return None
-        manifest = read_json(root / "manifest.json")
-        if manifest.get("format") not in {"cell-install-v2", "cell-install-v3"} or manifest.get("product") != name:
-            return None
-        version = manifest.get("versions", {}).get(name)
-        version_tuple(version)
-        return version
-    except (OSError, ValueError, candidate.CandidateError, DeploymentError):
-        return None
-
-
-def contract_versions(item: dict[str, Any], *, root: Path | None = None,
-                      revision: str | None = None) -> dict[str, int]:
-    """Read only explicitly indexed supported promises; do not infer runtime edges."""
-    result = {}
-    home = Path(pwd.getpwuid(os.getuid()).pw_dir)
-    for provider, source in item.get("providers", {}).items():
-        def read(relative: str) -> dict[str, Any]:
-            path = Path(relative)
-            if path.is_absolute() or ".." in path.parts:
-                raise DeploymentError("provider contract path escapes its bundle")
-            if root is not None and revision is not None:
-                value = json.loads(source_file(root, revision, f"{source}/{relative}"))
-            else:
-                value = read_json(home / "Library/Application Support/Chancery/providers" / provider / path)
-            if not isinstance(value, dict):
-                raise ValueError("interface contract must be an object")
-            return value
-        try:
-            bundle = read("provider.json")
-            owner = bundle.get("provider")
-            if not isinstance(owner, dict) or owner.get("id") != provider:
-                continue
-            for relative in bundle["entries"]:
-                entry = read(relative)
-                if entry.get("support") == "supported" and type(entry.get("contract_version")) is int:
-                    if entry["id"] in result:
-                        raise DeploymentError("duplicate required interface contract")
-                    result[entry["id"]] = entry["contract_version"]
-        except (OSError, ValueError, KeyError, TypeError, candidate.CandidateError):
-            if root is not None:
-                raise DeploymentError("committed interface contracts could not be read") from None
-            return {}
-    return result
-
-
-def compatible_contracts(available: dict[str, int], required: dict[str, Any]) -> bool:
-    return all(entry in available and bounds["minimum"] <= available[entry] < bounds["before"]
-               for entry, bounds in required.items())
-
-
-def setup_settings(path: Path | None) -> dict[str, Any]:
-    if path is None:
-        return {}
-    if not path.is_absolute():
-        raise DeploymentError("settings file must be an absolute path")
-    if path.stat().st_size > MAX_REPLY:
-        raise DeploymentError("settings file exceeds one MiB")
-    value = read_json(path)
-    if any(not NAME.fullmatch(name) or not isinstance(settings, dict)
-           for name, settings in value.items()):
-        raise DeploymentError("settings must map canonical product names to configuration objects")
-    return value
-
-
-def source_commit(root: Path, selected: str | None = None) -> str:
-    if selected is not None and not COMMIT_ID.fullmatch(selected):
-        raise DeploymentError("source commit must be a complete lowercase commit ID")
-    revision = git(root, "rev-parse", "--verify", f"{selected or 'refs/heads/main'}^{{commit}}")
-    if selected is not None and revision != selected:
-        raise DeploymentError("source commit does not identify that exact commit")
-    return revision
-
-
-def requested_products(products: dict[str, dict[str, Any]], requested: Sequence[str]) -> list[str]:
-    aliases: dict[str, str] = {}
-    for name, item in products.items():
-        for alias in [name, *item["aliases"]]:
-            if alias in aliases and aliases[alias] != name:
-                raise DeploymentError(f"ambiguous system alias: {alias}")
-            aliases[alias] = name
-    aliases["annals-usage"] = "annals"
-    selected: list[str] = []
-    for value in requested:
-        name = aliases.get(value.lower())
-        if name is None:
-            raise DeploymentError(f"unknown system: {value}; available: {', '.join(sorted(products))}")
-        if products[name]["metadata"] is None:
-            raise DeploymentError(f"{name} has no deployment adapter in the selected commit")
-        if name not in selected:
-            selected.append(name)
-    if not selected:
-        raise DeploymentError("select at least one system")
-    return selected
-
-
-def plan(root: Path, requested: Sequence[str], selected_commit: str | None = None) -> dict[str, Any]:
-    revision = source_commit(root, selected_commit)
-    products = catalog(root, revision)
-    selected = requested_products(products, requested)
-    roots = list(selected)
-    reasons = {name: "requested" for name in roots}
-    pending = list(selected)
-    while pending:
-        name = pending.pop(0)
-        for dependency in names(products[name]["metadata"].get("dependencies", [])):
-            item = products[dependency]
-            if item["metadata"] is None:
-                raise DeploymentError(f"{name} needs an unavailable deployment dependency: {dependency}")
-            present = installed_product(dependency, item["metadata"])
-            bounds = products[name]["metadata"].get("runtime_versions", {}).get(dependency)
-            compatible = bounds is None or compatible_version(installed_version(dependency, item["metadata"]), bounds)
-            required = products[name]["metadata"].get("runtime_contracts", {}).get(dependency, {})
-            compatible = compatible and (not required or compatible_contracts(contract_versions(item), required))
-            if dependency not in selected and (not present or not compatible):
-                selected.append(dependency)
-                pending.append(dependency)
-                reasons[dependency] = f"{'missing' if not present else 'incompatible or unproved'} runtime dependency of {name}"
-        for companion in names(products[name]["metadata"].get("companions", [])):
-            if companion not in products or products[companion]["metadata"] is None:
-                raise DeploymentError(f"{name} names an unavailable deployment companion: {companion}")
-            if companion not in selected and installed_product(companion, products[companion]["metadata"]):
-                selected.append(companion)
-                pending.append(companion)
-                reasons[companion] = f"installed companion of {name}"
-    dependencies = {name: item["metadata"].get("dependencies", [])
-                    for name, item in products.items() if item["metadata"] is not None}
-    for name in selected:
-        for dependency, bounds in products[name]["metadata"].get("runtime_versions", {}).items():
-            if dependency in selected and not compatible_version(products[dependency].get("version"), bounds):
-                raise DeploymentError(f"{name} cannot use the committed {dependency} candidate; runtime releases are incompatible")
-        for dependency, required in products[name]["metadata"].get("runtime_contracts", {}).items():
-            if dependency in selected and not compatible_contracts(contract_versions(products[dependency], root=root, revision=revision), required):
-                raise DeploymentError(f"{name} cannot use the committed {dependency} candidate; required interface contracts are unavailable")
-    return {"schema": SCHEMA, "source_commit": revision,
-            "products": ordered(selected, dependencies), "requested_products": roots,
-            "selection_reasons": reasons, "catalog": products,
-            "publication": "none", "source_policy": "exact caller commit; working edits excluded" if selected_commit
-                else "committed local main; working edits excluded"}
-
-
-def archive_source(root: Path, revision: str, destination: Path) -> None:
-    archive = ci_client.git(root, "archive", "--format=tar", revision)
-    destination.mkdir(mode=0o700)
-    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as stream:
-        for member in stream.getmembers():
-            path = Path(member.name)
-            if path.is_absolute() or ".." in path.parts or not (member.isdir() or member.isfile()):
-                raise DeploymentError("committed runtime source contains an unsupported archive path")
-            target = destination / path
-            if member.isdir():
-                target.mkdir(mode=0o700, parents=True, exist_ok=True)
-            else:
-                target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-                incoming = stream.extractfile(member)
-                if incoming is None:
-                    raise DeploymentError("cannot read committed runtime source")
-                with incoming, target.open("xb") as output:
-                    shutil.copyfileobj(incoming, output)
-                target.chmod(0o555 if member.mode & 0o111 else 0o444)
-    candidate.seal_tree(destination)
-
-
-def create_run(root: Path, requested: Sequence[str], storage: Path | None = None,
-               *, verbose: bool = False, settings: dict[str, Any] | None = None,
-               selected_commit: str | None = None, chosen_plan: dict[str, Any] | None = None,
-               request_id: str | None = None, run_id: str | None = None,
-               signing_policy: dict[str, Any] | None = None,
-               prepared_build: dict[str, Any] | None = None) -> Path:
-    if sys.version_info < (3, 11):
-        raise DeploymentError("deployment requires Python 3.11 or newer")
-    chosen = chosen_plan if chosen_plan is not None else plan(root, requested, selected_commit)
-    policy = signing.load_policy() if signing_policy is None else signing.validate_policy(signing_policy)
-    signing.assert_current(policy)
-    signing.preflight(policy)
-    if set(settings or {}) - chosen["catalog"].keys():
-        raise DeploymentError("settings name a product outside the committed inventory")
-    storage = storage or state_root()
-    private_directory(storage)
-    run_id = run_id or uuid.uuid4().hex
-    run = storage / "active"
-    if run.exists() or run.is_symlink():
-        raise DeploymentError("an active deployment workspace already exists")
-    private_directory(run)
-    for directory in ("candidates", "steps"):
-        private_directory(run / directory)
-    data = {**chosen, "lifecycle_version": 3, "run_id": run_id, "state": "created", "created_at": now(),
-            "updated_at": now(), "repository": str(root), "run_dir": str(run),
-            "source_root": str(run / "source"), "worktree": str(run / "worktree"),
-            "python": str(Path(sys.executable).resolve()), "records": {}, "events": [],
-            "active_operation": None, "affected": [], "mutation_started": False,
-            "apply_started": False, "verbose": verbose, "diagnostics": [], "settings": settings or {},
-            "recovery": {"state": "not_needed"}, "cleanup": {"releases": "not_started", "workspace": "pending"},
-            "signing_policy": policy}
-    if request_id is not None:
-        data["request_id"] = request_id
-    if prepared_build is not None:
-        data["prepared_build"] = prepared_build
-    durable_json(run / "run.json", data)
-    try:
-        archive_source(root, chosen["source_commit"], run / "source")
-        data["state"] = "prepared_source"
-        durable_json(run / "run.json", data)
-    except Exception as error:
-        data["state"] = "stopped"
-        data["detail"] = str(error)
-        durable_json(run / "run.json", data)
-        raise
-    return run
+def state_root() -> Path:
+    return workspace.directory("deployments")
 
 
 def runtime_environment() -> dict[str, str]:
@@ -491,1059 +131,477 @@ def deployment_lock(storage: Path) -> Iterator[int]:
     descriptor_fd = os.open(storage / "deployment.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         info = os.fstat(descriptor_fd)
-        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1
-                or stat.S_IMODE(info.st_mode) != 0o600):
-            raise DeploymentError("deployment lock is not a private owned regular file")
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1:
+            raise DeploymentError("executor lock must be an owned regular file")
         try:
             fcntl.flock(descriptor_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise DeploymentBusy("another deployment or its active child holds the deployment lock") from error
+            raise DeploymentBusy("another execution or its child owns the deployment lock") from error
         yield descriptor_fd
     finally:
         os.close(descriptor_fd)
 
 
-def process_birth(pid: int) -> str | None:
-    return process_token(pid)
+def deployment_busy(storage: Path) -> bool:
+    try:
+        with deployment_lock(storage):
+            return False
+    except DeploymentBusy:
+        return True
+
+
+def git(root: Path, *arguments: str) -> str:
+    return ci_client.git(root, *arguments).decode().strip()
+
+
+def source_commit(root: Path, selected: str | None = None) -> str:
+    if selected is not None and not COMMIT_ID.fullmatch(selected):
+        raise DeploymentError("source commit must be a complete lowercase commit ID")
+    revision = git(root, "rev-parse", "--verify", f"{selected or 'refs/heads/main'}^{{commit}}")
+    if selected is not None and revision != selected:
+        raise DeploymentError("source commit does not identify that exact commit")
+    return revision
+
+
+def catalog(root: Path, revision: str) -> dict[str, dict[str, Any]]:
+    result = {}
+    for path in git(root, "ls-tree", "--name-only", revision, "pipeline/products/").splitlines():
+        if not path.endswith(".sh"):
+            continue
+        values = descriptor(git(root, "show", f"{revision}:{path}"))
+        identity = values["PRODUCT_ID"]
+        product = "krisis" if identity == "decisions" else identity
+        directory = values["PRODUCT_DIR"]
+        if not NAME.fullmatch(product) or not NAME.fullmatch(directory):
+            raise DeploymentError("invalid product identity in build inventory")
+        declaration = json.loads(git(root, "show", f"{revision}:{directory}/deployment/manifest.json"))
+        manifest.declaration(declaration, product)
+        result[product] = {"directory": directory, "aliases": values.get("PRODUCT_ALIASES", "").split(),
+                           "manifest": declaration}
+    if not result:
+        raise DeploymentError("selected source contains no deployment declarations")
+    return result
+
+
+def requested_products(inventory: dict[str, dict[str, Any]], requested: Sequence[str]) -> list[str]:
+    aliases = {}
+    for product, item in inventory.items():
+        for alias in [product, *item["aliases"]]:
+            if alias in aliases and aliases[alias] != product:
+                raise DeploymentError("ambiguous product alias")
+            aliases[alias] = product
+    aliases["annals-usage"] = "annals"
+    selected = set()
+    for requested_name in requested:
+        name = aliases.get(requested_name.lower())
+        if name is None:
+            raise DeploymentError(f"unknown product: {requested_name}")
+        selected.add(name)
+    if not selected:
+        raise DeploymentError("select at least one product")
+    # These are literal caller-owned ranks, not inferred dependency edges.
+    return sorted(selected, key=lambda name: (inventory[name]["manifest"]["order"], name))
+
+
+def plan(root: Path, requested: Sequence[str], selected_commit: str | None = None) -> dict[str, Any]:
+    revision = source_commit(root, selected_commit)
+    inventory = catalog(root, revision)
+    selected = requested_products(inventory, requested)
+    return {"schema": SCHEMA, "manifest_executor": MANIFEST_EXECUTOR, "source_commit": revision,
+            "products": selected, "instructions": [{"product": name, **step}
+                for name in selected for step in inventory[name]["manifest"]["steps"]],
+            "publication": "none"}
+
+
+def setup_settings(path: Path | None) -> dict[str, Any]:
+    return read_json(path) if path is not None else {}
 
 
 def operation_path(storage: Path, request_id: str) -> Path:
     if not REQUEST_ID.fullmatch(request_id):
-        raise DeploymentError("request ID must be 1-256 characters using letters, digits, _, ., :, / or -")
-    return storage / "operations" / f"{hashlib.sha256(request_id.encode()).hexdigest()}.json"
+        raise DeploymentError("request ID must be 1-256 supported ASCII characters")
+    return storage / "operations" / (hashlib.sha256(request_id.encode()).hexdigest() + ".json")
 
 
 def read_operation(storage: Path, request_id: str) -> dict[str, Any] | None:
     path = operation_path(storage, request_id)
-    if not path.exists() and not path.is_symlink():
+    if not path.exists():
         return None
     record = read_json(path)
-    request = record.get("request")
-    run_id = record.get("run_id")
-    if (record.get("schema") != SCHEMA or record.get("request_id") != request_id
-            or not isinstance(run_id, str) or not RUN_ID.fullmatch(run_id)
-            or not isinstance(request, dict)
-            or record.get("request_hash") != hashlib.sha256(candidate.json_bytes(request)).hexdigest()
-            or record.get("phase") not in ("admitted", "running", "finalizing", "terminal")
-            or not isinstance(record.get("products"), list)
-            or (record.get("phase") == "terminal" and not isinstance(record.get("result"), dict))):
-        raise DeploymentError("invalid retained deployment operation")
+    if record.get("request_id") != request_id or record.get("schema") not in (1, SCHEMA):
+        raise DeploymentError("retained execution identity is invalid")
     return record
 
 
 def save_operation(storage: Path, record: dict[str, Any]) -> None:
+    private_directory(storage)
     private_directory(storage / "operations")
     record["updated_at"] = now()
     durable_json(operation_path(storage, record["request_id"]), record)
 
 
-def result_from_data(data: dict[str, Any]) -> dict[str, Any]:
-    result = {"schema": SCHEMA, "run_id": data["run_id"], "state": data["state"],
-              "products": data["products"], "source_commit": data["source_commit"],
-              "detail": bounded_text(data.get("detail", ""), MAX_DETAIL),
-              "exit_code": 0 if data["state"] in ("installed", "succeeded") else 1,
-              "recovery": data.get("recovery", {"state": "not_needed"}),
-              "maintenance": maintenance_result(data), "build": data.get("build"),
-              "cleanup": dict(data.get("cleanup", {"releases": "not_started", "workspace": "pending"})),
-              "diagnostics": data.get("diagnostics", []),
-              "signing_policy": data.get("signing_policy")}
-    if "prepared_build" in data:
-        result["prepared_build"] = data["prepared_build"]
-    if data.get("request_id"):
-        result["request_id"] = data["request_id"]
+def result_from_record(record: dict[str, Any]) -> dict[str, Any]:
+    fields = ("schema", "manifest_executor", "request_id", "run_id", "source_commit", "products",
+              "state", "detail", "steps", "build", "prepared_build", "signing_policy", "started_at",
+              "finished_at", "elapsed_seconds", "run_dir", "acknowledged_at", "workspace_cleanup")
+    result = {key: record[key] for key in fields if key in record}
+    for key in ("prepared_build", "signing_policy"):
+        if key in record.get("request", {}):
+            result[key] = record["request"][key]
+    result["exit_code"] = 0 if record.get("state") == "succeeded" else 1
+    result["operation_state"] = record["phase"]
     return result
-
-
-def retain_operation_result(storage: Path, data: dict[str, Any], result: dict[str, Any],
-                            *, terminal: bool = False) -> None:
-    request_id = data.get("request_id")
-    if request_id is None:
-        return
-    record = read_operation(storage, request_id)
-    if record is None or record["run_id"] != data["run_id"]:
-        raise DeploymentError("deployment outcome has no matching admitted operation")
-    record["result"] = result
-    record["phase"] = "terminal" if terminal else "finalizing"
-    save_operation(storage, record)
-
-
-def deployment_busy(storage: Path) -> bool:
-    try:
-        descriptor_fd = os.open(storage / "deployment.lock", os.O_RDONLY | os.O_NOFOLLOW)
-    except FileNotFoundError:
-        return False
-    try:
-        try:
-            fcntl.flock(descriptor_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return True
-        return False
-    finally:
-        os.close(descriptor_fd)
 
 
 def operation_status(storage: Path, request_id: str, *, running: bool | None = None) -> dict[str, Any]:
     record = read_operation(storage, request_id)
     if record is None:
-        return {"schema": SCHEMA, "request_id": request_id, "state": "not_found",
-                "operation_state": "not_found", "exit_code": 0}
-    if record["phase"] == "terminal":
-        return {**record["result"], "operation_state": "terminal"}
-    if running is None:
-        running = deployment_busy(storage)
-    result = {**record.get("result", {}), "schema": SCHEMA, "request_id": request_id,
-              "run_id": record["run_id"], "source_commit": record["request"]["source_commit"],
-              "products": record["products"], "state": "active" if running else "interrupted",
-              "operation_state": "active" if running else "needs_reconciliation", "exit_code": 0}
-    return result
+        return {"schema": SCHEMA, "manifest_executor": MANIFEST_EXECUTOR, "request_id": request_id,
+                "state": "not_found", "operation_state": "not_found", "exit_code": 0}
+    if record["schema"] == 1:
+        if record.get("phase") == "terminal":
+            return {**record["result"], "operation_state": "terminal"}
+        return {"schema": 1, "request_id": request_id, "state": "interrupted",
+                "operation_state": "needs_reconciliation", "exit_code": 1,
+                "detail": "Legacy execution is unsupported; inspect its retained effects and use explicit product procedures."}
+    if record["phase"] == "active":
+        active = marker(storage)
+        owns_marker = active is not None and active.get("run_id") == record["run_id"]
+        live = owns_marker and (deployment_busy(storage) if running is None else running)
+        if not live:
+            result = result_from_record(record)
+            result.update(state="interrupted", operation_state="interrupted", exit_code=1)
+            return result
+    return result_from_record(record)
 
 
-def cleanup_active(storage: Path) -> None:
-    """Remove the inactive workspace; caller must hold the host deployment lock."""
-    path = storage / "active"
-    if path.is_symlink():
-        raise DeploymentError("refusing symbolic active deployment workspace")
-    if not path.exists():
-        return
-    private_directory(path)
-    data = None
-    result = None
-    if (path / "run.json").exists():
-        data = read_json(path / "run.json")
-        if unresolved(data):
-            raise DeploymentError("unfinished deployment retained for automatic recovery on the next deployment")
-        result = result_from_data(data)
-        retain_operation_result(storage, data, result)
-        repository = Path(data["repository"])
-        worktree = (path / "worktree").resolve()
-        registered = git(repository, "worktree", "list", "--porcelain").splitlines()
-        if any(line.startswith("worktree ") and Path(line.removeprefix("worktree ")).resolve() == worktree
-               for line in registered):
-            git(repository, "worktree", "remove", "--force", "--force", str(worktree))
-    # Sealed source/candidate directories must be writable before removal.
-    for directory, _, _ in os.walk(path, followlinks=False):
-        Path(directory).chmod(0o700)
-    shutil.rmtree(path)
-    if data is not None and result is not None:
-        result["cleanup"]["workspace"] = "removed"
-        retain_operation_result(storage, data, result, terminal=True)
+def marker(storage: Path) -> dict[str, Any] | None:
+    path = storage / "active" / "run.json"
+    if path.exists():
+        return read_json(path)
+    if (storage / "active").exists():
+        raise DeploymentError("active executor marker has no retained identity")
+    return None
 
 
-def unresolved(data: dict[str, Any]) -> bool:
-    return (bool(data.get("mutation_started"))
-            and data.get("state") not in ("installed", "succeeded", "cleanup_failed", "recovered")
-            and data.get("recovery", {}).get("state") != "succeeded")
-
-
-def reconcile_active(storage: Path, lock_fd: int, *, before_start: bool = True) -> None:
-    path = storage / "active"
-    if path.is_symlink():
-        raise DeploymentError("refusing symbolic active deployment workspace")
-    if not (path / "run.json").exists():
-        return
-    if not unresolved(read_json(path / "run.json")):
-        return
-    run = Run(path, lock_fd)
-    message = "cell-deploy: recovering the unfinished deployment"
-    if before_start:
-        message += " before starting the requested deployment"
-    print(message, file=sys.stderr, flush=True)
-    if run.data.get("lifecycle_version", 1) >= 3:
-        result = subprocess.call([run.data["python"], str(run.source / "deployment/cli.py"),
-                                  "_recover", str(path), str(lock_fd)],
-                                 env=runtime_environment(), pass_fds=(lock_fd,))
-        if result:
-            detail = read_json(path / "run.json").get("recovery", {}).get("detail", "pinned recovery did not finish")
-            raise DeploymentError(f"unfinished deployment could not recover: {detail}")
-        if unresolved(read_json(path / "run.json")):
-            raise DeploymentError("pinned recovery returned without resolving its transaction")
-        return
-    try:
-        run.recover()
-        run.data["recovery"] = {"state": "succeeded"}
-        run.save()
-    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-        run.data["recovery"] = {"state": "failed", "detail": bounded_text(error, MAX_DETAIL)}
-        run.data["state"] = "stopped"
-        run.save()
-        raise DeploymentError(f"unfinished deployment could not recover: {error}") from error
-
-
-def capture_diagnostics(path: Path, data: dict[str, Any], phase: str) -> None:
-    """Keep failure evidence in memory/state until the final cleanup completes."""
-    active = data.get("active_operation") or {}
-    paths = [(path / "run.log", active.get("stderr_offset", 0))]
-    if active.get("output"):
-        output = Path(active["output"])
-        if output.parent == path / "steps":
-            paths.append((output, 0))
-    evidence = []
-    for output, offset in paths:
-        with contextlib.suppress(OSError, ValueError):
-            if not output.is_file() or output.is_symlink():
-                continue
-            if output.suffix == ".out" and active.get("adapter") and output.stat().st_size > MAX_REPLY:
-                continue
-            # Adapter JSON is an internal protocol, not a diagnostic excerpt.
-            if output.suffix == ".out" and output.stat().st_size <= MAX_REPLY:
-                try:
-                    json.loads(output.read_text())
-                    continue
-                except (UnicodeError, ValueError):
-                    pass
-            with output.open("rb") as stream:
-                stream.seek(max(offset, output.stat().st_size - MAX_DIAGNOSTICS))
-                tail = stream.read(MAX_DIAGNOSTICS).decode("utf-8", "replace").strip()
-            if tail:
-                evidence.append(tail)
-    text = bounded_text("\n".join(evidence), MAX_DIAGNOSTICS, tail=True)
-    if text:
-        data.setdefault("diagnostics", []).append({"phase": phase, "text": text})
-
-
-def diagnostic_text(entries: Sequence[dict[str, str]], causes: Sequence[str]) -> str:
-    """One shared, rendered-byte budget, divided between distinct failures."""
-    distinct = []
-    for entry in entries:
-        lines = [line for line in entry["text"].splitlines()
-                 if not any(len(line) >= 20 and (cause.endswith(line) or line.endswith(cause))
-                            for cause in causes if cause)]
-        text = "\n".join(lines).strip()
-        if text and text not in [item[1] for item in distinct]:
-            distinct.append((entry["phase"], text))
-    if not distinct:
-        return ""
-    allowance = MAX_DIAGNOSTICS // len(distinct)
-    chunks = []
-    for phase, text in distinct:
-        header = f"cell-deploy: {phase} diagnostics:\n"
-        chunks.append(header + bounded_text(text, allowance - len(header.encode()) - 1, tail=True) + "\n")
-    return bounded_text("".join(chunks), MAX_DIAGNOSTICS)
-
-
-def maintenance_result(data: dict[str, Any]) -> dict[str, Any]:
-    # An attempted hold or release can take effect without a successful reply.
-    # Only a subsequent captured outcome establishes its disposition.
-    products: dict[str, str] = {}
-    for event in data.get("events", []):
-        operation = event.get("operation")
-        if operation not in ("hold", "release"):
-            continue
-        product = event["product"]
-        if event["state"] == "starting":
-            products[product] = "uncertain"
-        elif (event["state"] == "outcome" and event.get("returncode") == 0
-              and event.get("response", {}).get("status") == EXPECTED[operation]):
-            products[product] = "retained" if operation == "hold" else "released"
-    outstanding = {product: state for product, state in sorted(products.items()) if state != "released"}
-    if outstanding:
-        return {"state": "attention_required", "owner": data["run_id"], "products": outstanding}
-    return {"state": "released" if products else "not_started"}
-
-
-def print_result(result: dict[str, Any]) -> None:
-    result = dict(result)
-    entries = result.pop("diagnostics", [])
-    causes = [result.get("detail", ""), result.get("recovery", {}).get("detail", "")]
-    diagnostics = diagnostic_text(entries, causes)
-    if diagnostics:
-        print(diagnostics, end="", file=sys.stderr)
-    print(json.dumps(result, separators=(",", ":"), sort_keys=True))
-
-
-class Run:
-    def __init__(self, path: Path, lock_fd: int):
-        self.path = path
-        self.data = read_json(path / "run.json")
-        if (self.data.get("schema") != SCHEMA or not RUN_ID.fullmatch(self.data.get("run_id", ""))
-                or self.data.get("run_dir") != str(path)):
-            raise DeploymentError("invalid deployment run identity")
-        self.lock_fd = lock_fd
-        self.source = Path(self.data["source_root"])
-        self.worktree = Path(self.data["worktree"])
-        self.last_heartbeat = time.monotonic()
-
-    def save(self) -> None:
-        self.data["updated_at"] = now()
-        durable_json(self.path / "run.json", self.data)
-
-    def event(self, state: str, **fields: Any) -> None:
-        self.data["events"].append({"at": now(), "state": state, **fields})
-        self.save()
-        if self.data.get("verbose") and state in ("starting", "candidate_prepared", "quality_gate_passed", "installed", "recovered"):
-            print(json.dumps({"event": state, **fields}, separators=(",", ":")), file=sys.stderr, flush=True)
-
-    def heartbeat(self) -> None:
-        current = time.monotonic()
-        if current - self.last_heartbeat >= HEARTBEAT_SECONDS:
-            active = self.data.get("active_operation") or {}
-            operation = " ".join(filter(None, [active.get("product"), active.get("operation")]))
-            print(f"cell-deploy: still running {operation or self.data['state']}", file=sys.stderr, flush=True)
-            self.last_heartbeat = current
-
-    def record(self, product: str) -> dict[str, Any]:
-        return self.data["records"].setdefault(product, {})
-
-    def command(self, product: str, operation: str, command: Sequence[str],
-                request: dict[str, Any] | None = None, cwd: Path | None = None) -> tuple[int, Path]:
-        sequence = len(self.data["events"])
-        output_path = self.path / "steps" / f"{sequence:05d}-{product}-{operation}.out"
-        request_path = output_path.with_suffix(".request.json")
-        if request is not None:
-            durable_json(request_path, request)
-        active = {"product": product, "operation": operation, "started_at": now(),
-                  "output": str(output_path), "pid": None, "birth": None,
-                  "adapter": request is not None,
-                  "stderr_offset": (self.path / "run.log").stat().st_size if (self.path / "run.log").exists() else 0}
-        self.data["active_operation"] = active
-        if operation in MUTATIONS:
-            self.data["mutation_started"] = True
-        if operation == "apply":
-            self.data["apply_started"] = True
-        self.event("starting", product=product, operation=operation)
-        read_fd, write_fd = os.pipe()
-        process: subprocess.Popen[bytes] | None = None
-        try:
-            with contextlib.ExitStack() as stack:
-                # A heartbeat can interrupt pipe delivery before EOF. Give the
-                # adapter the complete retained request, independent of polling.
-                incoming = stack.enter_context(request_path.open("rb")) if request is not None else subprocess.DEVNULL
-                output = stack.enter_context(output_path.open("xb"))
-                errors = stack.enter_context((self.path / "run.log").open("ab"))
-                gate = [self.data["python"], str(self.source / "deployment" / "cli.py"),
-                        "_exec", str(read_fd), str(self.lock_fd), *command]
-                process = subprocess.Popen(gate, stdin=incoming,
-                                           stdout=output, stderr=errors, cwd=cwd or self.source,
-                                           env=runtime_environment(), pass_fds=(read_fd, self.lock_fd))
-                os.close(read_fd)
-                read_fd = -1
-                active["pid"] = process.pid
-                active["birth"] = process_birth(process.pid)
-                if active["birth"] is None:
-                    raise DeploymentError("cannot establish child identity before starting it")
-                self.save()
-                os.write(write_fd, b"1")
-                os.close(write_fd)
-                write_fd = -1
-                while True:
-                    self.heartbeat()
-                    timeout = max(0.1, HEARTBEAT_SECONDS - (time.monotonic() - self.last_heartbeat))
-                    try:
-                        process.wait(timeout=timeout)
-                        break
-                    except subprocess.TimeoutExpired:
-                        pass
-                active["returncode"] = process.returncode
-                active["finished_at"] = now()
-                self.save()
-                return process.returncode, output_path
-        finally:
-            if read_fd >= 0:
-                os.close(read_fd)
-            if write_fd >= 0:
-                os.close(write_fd)
-            if process is not None and process.poll() is None and active["pid"] is None:
-                process.terminate()
-
-    def candidate_for(self, product: str) -> tuple[Path | None, dict[str, Any] | None]:
-        record = self.record(product)
-        manifest = None
-        directory = None
-        if record.get("candidate_dir"):
-            directory = Path(record["candidate_dir"])
-            if "signing_policy" in self.data:
-                manifest = candidate.verify_signatures(directory, self.data["signing_policy"])
-                canonical_product = "krisis" if product == "decisions" else product
-                if (manifest.get("candidate_id") != record.get("candidate_id")
-                        or manifest.get("source_commit") != self.data["source_commit"]
-                        or manifest.get("source_key") != self.data.get("source_key")
-                        or manifest.get("product") != canonical_product):
-                    raise DeploymentError("verified candidate differs from the retained deployment selection")
-            else:
-                manifest = candidate.read_manifest(directory)
-        return directory, manifest
-
-    def sealed_adapter(self, product: str, directory: Path | None,
-                       manifest: dict[str, Any] | None) -> Path:
-        binary = self.data["catalog"][product]["metadata"].get("adapter_binary")
-        record = self.record(product)
-        if (binary != f"{product}-install"
-                or directory is None or manifest is None or not record.get("prepared")):
-            raise DeploymentError(f"{product} binary adapter requires its prepared candidate")
-        if manifest["binaries"].get(binary, {}).get("path") != f"bin/{binary}":
-            raise DeploymentError("candidate does not contain its declared binary adapter")
-        return directory / "bin" / binary
-
-    def adapter(self, product: str, operation: str) -> dict[str, Any]:
-        if operation in ("apply", "configure", "release", "activate") and "signing_policy" in self.data:
-            signing.assert_current(self.data["signing_policy"])
-        item = self.data["catalog"].get(product)
-        if item is None or item["metadata"] is None:
-            raise DeploymentError(f"required product lacks a committed deployment adapter: {product}")
-        record = self.record(product)
-        directory, manifest = self.candidate_for(product)
-        if item["metadata"].get("adapter_binary") is not None:
-            command = [str(self.sealed_adapter(product, directory, manifest)), "adapter", operation]
-        else:
-            command = [self.data["python"], str(self.source / item["adapter"]), operation]
-        request = {"schema": SCHEMA, "product": product, "run_id": self.data["run_id"],
-                   "run_dir": str(self.path), "source_root": str(self.source),
-                   "candidate_dir": str(directory) if directory else None, "candidate": manifest,
-                   "prior": record.get("prior"), "selected_products": self.data["products"],
-                   "affected_products": self.data["affected"],
-                   "activation_bindings": sorted({key for name in self.data["affected"]
-                       for key in self.data["catalog"][name]["metadata"].get("activation_bindings", [])}),
-                   "settings": self.data.get("settings", {}).get(product),
-                   "dependency_settings": {name: self.data.get("settings", {})[name]
-                       for name in item["metadata"].get("dependencies", []) if name in self.data.get("settings", {})},
-                   "recovery": record.get("recovery_context")}
-        dependencies = {}
-        for dependency in item["metadata"].get("dependencies", []):
-            dependency_dir, dependency_manifest = self.candidate_for(dependency)
-            if dependency_dir is not None and dependency_manifest is not None:
-                dependencies[dependency] = {"candidate_dir": str(dependency_dir), "candidate": dependency_manifest}
-        if dependencies:
-            request["dependency_candidates"] = dependencies
-        if self.data.get("lifecycle_version", 1) < 3:
-            for key in ("settings", "dependency_settings", "dependency_candidates", "affected_products", "activation_bindings"):
-                request.pop(key, None)
-        returncode, output = self.command(product, operation, command, request)
-        if output.stat().st_size > MAX_REPLY:
-            raise DeploymentError(f"{product} {operation} reply exceeds the protocol bound")
-        try:
-            reply = read_json(output)
-        except (OSError, ValueError, candidate.CandidateError) as error:
-            raise DeploymentError(f"{product} {operation} returned no valid outcome; state is uncertain") from error
-        if reply.get("schema") != SCHEMA or not isinstance(reply.get("data"), dict):
-            raise DeploymentError(f"{product} {operation} returned an unsupported outcome")
-        self.event("outcome", product=product, operation=operation, response=reply, returncode=returncode)
-        waiting = operation == "drain" and reply.get("status") == "waiting"
-        if returncode != 0 or not (reply.get("status") == EXPECTED[operation] or waiting):
-            raise DeploymentError(bounded_text(f"{product} {operation} stopped: {reply.get('detail', 'outcome not proved')}", MAX_DETAIL))
-        self.data["active_operation"] = None
-        self.save()
-        return reply
-
-    def prepare(self) -> None:
-        self.data["state"] = "preparing"
-        self.save()
-        repository = Path(self.data["repository"])
-        if not self.worktree.exists():
-            # Source generators check normal checkout modes (0755/0644). The
-            # enclosing run remains private; restore 0077 before writing state.
-            previous_umask = os.umask(0o022)
-            try:
-                git(repository, "worktree", "add", "--detach", str(self.worktree), self.data["source_commit"])
-            finally:
-                os.umask(previous_umask)
-        preparation = self.path / "preparation"
-        # Affected-only products need the same trustworthy installer boundary
-        # as selected products. Prepare their declared maintenance closure once,
-        # before any hold; this does not select them for installation.
-        prepared_products = set(self.data["products"])
-        for product, item in self.data["catalog"].items():
-            metadata = item["metadata"] or {}
-            if metadata.get("requester_service") in self.data["products"] and installed_product(product, metadata):
-                prepared_products.add(product)
-        pending = list(prepared_products)
-        while pending:
-            product = pending.pop()
-            metadata = self.data["catalog"][product]["metadata"]
-            for affected in names(metadata.get("maintenance_products", [])):
-                entry = self.data["catalog"].get(affected)
-                if entry is None or entry["metadata"] is None:
-                    raise DeploymentError("maintenance declaration names an unavailable product")
-                if entry["metadata"].get("adapter_binary") and affected not in prepared_products:
-                    prepared_products.add(affected)
-                    pending.append(affected)
-        self.data["maintenance_products"] = sorted(prepared_products)
-        dependencies = {dependency for product in self.data["products"]
-                        for dependency in self.data["catalog"][product]["metadata"].get("dependencies", [])}
-        self.data["dependency_products"] = sorted(dependencies - prepared_products)
-        prepared_products.update(dependencies)
-        self.data["prepared_products"] = sorted(prepared_products)
-        command = [self.data["python"], str(self.worktree / "deployment" / "build.py"),
-                   "--source-root", str(self.worktree), "--output", str(preparation)]
-        if "signing_policy" in self.data:
-            policy_path = self.path / "signing-policy.json"
-            durable_json(policy_path, self.data["signing_policy"])
-            command.extend(["--signing-policy-file", str(policy_path)])
-        if "prepared_build" in self.data:
-            supplied = self.data["prepared_build"]
-            command.extend(["--prepared-build", supplied["path"]])
-            if "snapshot" in supplied:
-                snapshot_path = self.path / "prepared-build-snapshot.json"
-                durable_json(snapshot_path, supplied["snapshot"])
-                command.extend(["--prepared-build-snapshot-file", str(snapshot_path)])
-        for product in self.data["prepared_products"]:
-            command.extend(["--product", product])
-        returncode, _ = self.command("cell", "release-build", command, cwd=self.worktree)
-        if returncode:
-            raise DeploymentError("release bundle preparation failed before installation")
-        result = read_json(preparation / "result.json")
-        if result.get("state") != "built":
-            raise DeploymentError("release build did not complete")
-        source_key = result["source_key"]
-        self.data["source_key"] = source_key
-        self.data["build"] = {key: result[key] for key in ("elapsed_seconds", "queue_seconds",
-                              "build_seconds", "reused_products", "built_products") if key in result}
-        for product in self.data["prepared_products"]:
-            record = self.record(product)
-            output = preparation / "candidates" / product
-            if "signing_policy" in self.data:
-                manifest = candidate.verify_signatures(output, self.data["signing_policy"])
-                canonical_product = "krisis" if product == "decisions" else product
-                if (manifest.get("source_commit") != self.data["source_commit"]
-                        or manifest.get("source_key") != source_key
-                        or manifest.get("product") != canonical_product):
-                    raise DeploymentError("verified candidate differs from the prepared source selection")
-            else:
-                manifest = candidate.read_manifest(output)
-            receipt = {"state": "built", "product": product, "source_key": source_key,
-                       "candidate_id": manifest["candidate_id"]}
-            record.update(prepared=True, candidate_dir=str(output), candidate_id=manifest["candidate_id"], build_receipt=receipt)
-            self.data["active_operation"] = None
-            self.event("candidate_prepared", product=product, candidate_id=manifest["candidate_id"])
-
-    def inspect(self) -> None:
-        self.data["state"] = "inspecting"
-        self.save()
-        # Retained dependencies are inspected by sealed owning adapters but do
-        # not acquire holds or configuration changes merely for being read.
-        for product in self.data.get("dependency_products", []):
-            response = self.adapter(product, "inspect")
-            self.record(product)["dependency_prior"] = response["data"]
-            self.save()
-        pending = list(self.data.get("maintenance_products", self.data.get("prepared_products", self.data["products"])))
-        inspected: set[str] = set()
-        after: dict[str, list[str]] = {}
-        while pending:
-            product = pending.pop(0)
-            if product in inspected:
-                continue
-            response = self.adapter(product, "inspect")
-            data = response["data"]
-            self.record(product)["prior"] = data
-            metadata = self.data["catalog"][product]["metadata"]
-            after[product] = [*names(metadata.get("dependencies", [])), *names(data.get("after", []))]
-            if set(after[product]) - self.data["catalog"].keys():
-                raise DeploymentError(f"{product} inspection named an unknown ordering prerequisite")
-            inspected.add(product)
-            pending.extend(name for name in names(data.get("maintenance_products", [])) if name not in inspected)
-            self.data["affected"] = sorted(inspected)
-            self.save()
-        self.data["products"] = ordered(self.data["products"], after)
-        self.data["affected"] = ordered(sorted(inspected), after)
-        if "nucleus" in self.data["affected"]:
-            command = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".local/bin/cell-ci"
-            if command.exists() or command.is_symlink():
-                selected = command.resolve(strict=True)
-                if not os.access(selected, os.X_OK):
-                    raise DeploymentError("installed CI manager maintenance command is not executable")
-                self.data["ci_manager"] = {"command": str(selected)}
-        self.save()
-
-    def ci_maintenance(self, operation: str) -> dict[str, Any]:
-        manager = self.data.get("ci_manager")
-        if manager is None:
-            return {"held": False, "drained": True, "owners": []}
-        command = Path(manager["command"])
-        if operation == "hold":
-            manager["hold_attempted"] = True
-            self.save()
-        recorded_operation = "ci-status" if operation == "status" else operation
-        returncode, output = self.command("cell-ci", recorded_operation,
-            [str(command), "maintenance", operation, "--owner", self.data["run_id"]])
-        if output.stat().st_size > MAX_REPLY:
-            raise DeploymentError("CI manager maintenance reply exceeds the protocol bound")
-        reply = read_json(output)
-        owners = reply.get("owners")
-        if (returncode or not isinstance(reply.get("held"), bool)
-                or not isinstance(reply.get("drained"), bool) or not isinstance(owners, list)
-                or not all(isinstance(owner, str) for owner in owners)):
-            raise DeploymentError("CI manager maintenance did not establish its outcome")
-        owned = self.data["run_id"] in owners
-        if operation in ("hold", "status") and not owned:
-            raise DeploymentError("CI manager did not retain this deployment's admission hold")
-        if operation == "release" and owned:
-            raise DeploymentError("CI manager did not release this deployment's admission hold")
-        status = "held" if operation == "hold" else "released" if operation == "release" else "ready"
-        self.event("outcome", product="cell-ci", operation=recorded_operation,
-                   response={"status": status}, returncode=0)
-        manager["held"] = owned
-        self.data["active_operation"] = None
-        self.save()
-        return reply
-
-    def phase(self, operation: str, products: Sequence[str]) -> None:
-        self.data["state"] = {"hold": "holding", "drain": "draining", "apply": "applying",
-                              "configure": "configuring",
-                              "release": "releasing", "activate": "activating"}[operation]
-        self.save()
-        for product in products:
-            response = self.adapter(product, operation)
-            while operation == "drain" and response["status"] == "waiting":
-                if time.monotonic() - self.last_heartbeat >= HEARTBEAT_SECONDS:
-                    print(f"cell-deploy: waiting for {product}: {bounded_text(response.get('detail', ''), MAX_DETAIL)}", file=sys.stderr, flush=True)
-                    self.last_heartbeat = time.monotonic()
-                time.sleep(1)
-                response = self.adapter(product, operation)
-            record = self.record(product)
-            record[operation] = response
-            if operation == "hold":
-                record["held"] = True
-            if operation == "release":
-                record["held"] = False
-            self.save()
-
-    def execute(self) -> None:
-        self.prepare()
-        self.inspect()
-        affected = self.data["affected"]
-        self.quiesce()
-        self.phase("apply", self.data["products"])
-        self.phase("configure", affected)
-        release_order = [product for product in affected if product != "nucleus"]
-        if "nucleus" in affected:
-            release_order.append("nucleus")
-        self.phase("release", release_order)
-        self.phase("activate", affected)
-        if self.data.get("ci_manager", {}).get("hold_attempted"):
-            self.ci_maintenance("release")
-        self.data["state"] = "installed"
-        self.data["detail"] = "Selected products configured; every run-owned maintenance hold released."
-        self.event("installed")
-
-    def quiesce(self) -> None:
-        # An admitted consumer can still need ordinary provider commands.
-        # Drain it before closing its providers, using the declared topology.
-        if self.data.get("ci_manager") is not None:
-            reply = self.ci_maintenance("hold")
-            while not reply["drained"]:
-                self.heartbeat()
-                time.sleep(1)
-                reply = self.ci_maintenance("status")
-        for product in reversed(self.data["affected"]):
-            if product != "nucleus":
-                self.phase("hold", [product])
-                self.phase("drain", [product])
-        if "nucleus" in self.data["affected"]:
-            self.phase("hold", ["nucleus"])
-            self.phase("drain", ["nucleus"])
-
-    def recover(self) -> None:
-        previous_state = self.data["state"]
-        active = self.data["active_operation"]
-        if active and active.get("pid") and process_birth(active["pid"]) == active.get("birth"):
-            raise DeploymentError("the previous operation process is still active; recovery cannot race it")
-        self.data["state"] = "recovering"
-        self.save()
-        if not self.data.get("mutation_started"):
-            self.data["active_operation"] = None
-            self.data["state"] = "recovered"
-            self.data["detail"] = "No deployment mutation started."
-            self.event("recovered")
-            return
-        affected = self.data["affected"]
-        if active and active["product"] not in affected and not (
-                active["product"] == "cell-ci" and self.data.get("ci_manager")):
-            raise DeploymentError("the uncertain operation has no captured product baseline")
-        for product in affected:
-            record = self.record(product)
-            record["recovery_context"] = {"state": previous_state, "active_operation": active,
-                                           "installed": record.get("recover", {}).get("data", {}).get("installed"),
-                                           "held": record.get("held", False),
-                                           "applied": bool(record.get("apply")),
-                                           "apply_started": any(
-                                               event.get("product") == product and event.get("operation") == "apply"
-                                               and event.get("state") == "starting" for event in self.data["events"]),
-                                           "configured": bool(record.get("configure")),
-                                           "released": bool(record.get("release")),
-                                           "activated": bool(record.get("activate")),
-                                           "configure_started": any(event.get("product") == product
-                                               and event.get("operation") == "configure" and event.get("state") == "starting"
-                                               for event in self.data["events"]),
-                                           "activation_started": any(event.get("product") == product
-                                               and event.get("operation") == "activate" and event.get("state") == "starting"
-                                               for event in self.data["events"]),
-                                           "any_apply_started": bool(self.data.get("apply_started") or any(
-                                               event.get("operation") == "apply" and event.get("state") == "starting"
-                                               for event in self.data["events"]))}
-        self.save()
-        # Release or activation can succeed without its reply. Stop admission
-        # again before repairing configuration, retaining the original intent.
-        if self.data.get("lifecycle_version", 1) >= 3 and any(event.get("operation") in ("release", "activate") and event.get("state") == "starting"
-               for event in self.data["events"]):
-            self.quiesce()
-
-        def recover_product(product: str) -> None:
-            record = self.record(product)
-            response = self.adapter(product, "recover")
-            if response["data"].get("safe_to_release") is not True:
-                raise DeploymentError(f"{product} recovery did not prove release of maintenance is safe")
-            if response["data"].get("installed") not in ("candidate", "prior"):
-                raise DeploymentError(f"{product} recovery did not identify a coherent installed generation")
-            record["recover"] = response
-            record["recovery_context"]["installed"] = response["data"]["installed"]
-            self.save()
-        for product in affected:
-            recover_product(product)
-        release_order = [product for product in affected if product != "nucleus"]
-        if "nucleus" in affected:
-            release_order.append("nucleus")
-        self.phase("release", release_order)
-        if self.data.get("lifecycle_version", 1) >= 2:
-            self.phase("activate", affected)
-        if self.data.get("ci_manager", {}).get("hold_attempted"):
-            self.ci_maintenance("release")
-        self.data["state"] = "recovered"
-        self.data["detail"] = "Products proved coherent recovery; run-owned holds released. Deployment is not reported as succeeded."
-        self.event("recovered")
-
-
-def recover_worker(path: Path, lock_fd: int) -> int:
-    run = Run(path, lock_fd)
-    try:
-        run.data["recovery"] = {"state": "running"}
-        run.save()
-        run.recover()
-        run.data["recovery"] = {"state": "succeeded"}
-        run.save()
-        return 0
-    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-        run.data.update(state="stopped", recovery={"state": "failed", "detail": bounded_text(error, MAX_DETAIL)})
-        capture_diagnostics(path, run.data, "recovery")
-        run.save()
-        return 1
-
-
-def run_worker(path: Path, lock_fd: int | None = None) -> int:
-    if lock_fd is None:
-        with deployment_lock(path.parent) as owned_fd:
-            return run_worker(path, owned_fd)
-    run = Run(path, lock_fd)
-    run.data["worker_pid"] = os.getpid()
-    run.data["worker_birth"] = process_birth(os.getpid())
-    run.save()
-    try:
-        run.execute()
-    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-        detail = bounded_text(error, MAX_DETAIL)
-        capture_diagnostics(path, run.data, "failure")
-        if run.data.get("mutation_started"):
-            run.data["recovery"] = {"state": "running"}
-            run.save()
-            try:
-                run.recover()
-                run.data["recovery"] = {"state": "succeeded"}
-            except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as recovery_error:
-                run.data["recovery"] = {"state": "failed", "detail": bounded_text(recovery_error, MAX_DETAIL)}
-                capture_diagnostics(path, run.data, "recovery")
-        run.data["state"] = "stopped"
-        run.data["detail"] = detail
-        run.event("stopped", detail=detail)
-        return 1
-    # Installed products have been configured and released. Cleanup failure
-    # must not initiate product recovery or undo that completed deployment.
-    try:
-        cleanup_command = [run.data["python"], str(run.source / "deployment" / "cleanup.py")]
-        for product in run.data.get("prepared_products", run.data["products"]):
-            if run.data["catalog"][product]["metadata"].get("adapter_binary"):
-                cleanup_command.extend(["--product", product])
-        returncode, output = run.command("cell", "cleanup", cleanup_command)
-        if returncode:
-            raise DeploymentError("installed release history cleanup failed")
-        run.data["release_history_cleanup"] = read_json(output)
-        run.data["cleanup"]["releases"] = "succeeded"
-        run.data["active_operation"] = None
-        run.data["state"] = "succeeded"
-        run.event("succeeded", cleanup=run.data["release_history_cleanup"])
-        return 0
-    except (DeploymentError, candidate.CandidateError, OSError, ValueError, RuntimeError) as error:
-        run.data["state"] = "cleanup_failed"
-        run.data["cleanup"]["releases"] = "failed"
-        run.data["detail"] = bounded_text(f"Products configured and holds released; cleanup failed: {error}", MAX_DETAIL)
-        run.event("cleanup_failed", detail=run.data["detail"])
-        capture_diagnostics(path, run.data, "cleanup")
-        run.save()
-        return 1
-
-
-def launch(path: Path, lock_fd: int) -> dict[str, Any]:
-    data = read_json(path / "run.json")
-    executable = Path(data["python"])
-    script = Path(data["source_root"]) / "deployment" / "cli.py"
-    arguments = [str(executable), str(script), "_worker", str(path), str(lock_fd)]
-    returncode = subprocess.call(arguments, env=runtime_environment(), pass_fds=(lock_fd,))
-    data = read_json(path / "run.json")
-    if returncode and data["state"] not in ("stopped", "cleanup_failed"):
-        capture_diagnostics(path, data, "worker")
-        data.update(state="stopped", detail="Deployment worker exited before completion; product holds may remain.")
-        if data.get("recovery", {}).get("state") == "running":
-            data["recovery"] = {"state": "uncertain"}
-        elif data.get("mutation_started") and data.get("recovery", {}).get("state") == "not_needed":
-            data["recovery"] = {"state": "not_attempted"}
-        durable_json(path / "run.json", data)
-    result = result_from_data(data)
-    result["exit_code"] = 1 if returncode else 0
-    retain_operation_result(path.parent, data, result)
-    return result
-
-
-def prepared_selection(path: Path | None, expected_snapshot: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    if path is None:
-        if expected_snapshot is not None:
-            raise DeploymentError("prepared build snapshot requires a prepared build")
-        return None
-    if not path.is_absolute() or path.is_symlink():
-        raise DeploymentError("prepared build must be an absolute non-symbolic result file")
-    workspace.require_path(path)
-    candidate.regular(path)
-    snapshot = read_json(path)
-    if expected_snapshot is not None and snapshot != expected_snapshot:
-        raise DeploymentError("prepared build differs from the caller's retained selection")
-    return {"path": str(path), "snapshot": snapshot}
+def clear_marker(storage: Path, record: dict[str, Any]) -> None:
+    active = marker(storage)
+    if active is not None:
+        if active.get("run_id") != record["run_id"]:
+            raise DeploymentError("another run owns the active executor marker")
+        shutil.rmtree(storage / "active")
+        sync_directory(storage)
 
 
 def canonical_request(root: Path, products: Sequence[str], selected_commit: str | None,
                       settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None,
                       prepared_build: Path | None = None,
                       prepared_build_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
-    if selected_commit is None:
-        raise DeploymentError("a caller-correlated deployment requires --source-commit")
-    revision = source_commit(root, selected_commit)
-    inventory = catalog(root, revision)
-    if set(settings or {}) - inventory.keys():
-        raise DeploymentError("settings name a product outside the selected inventory")
-    request = {"schema": SCHEMA, "repository": str(ci_client.common_git_directory(root)),
-            "source_commit": revision, "products": sorted(requested_products(inventory, products)),
-            "settings": settings or {}, "signing_policy": signing_policy}
-    supplied = prepared_selection(prepared_build, prepared_build_snapshot)
-    if supplied is not None:
-        request["prepared_build"] = supplied
+    chosen = plan(root, products, selected_commit)
+    request = {"source_commit": chosen["source_commit"], "products": chosen["products"],
+               "repository": str(ci_client.common_git_directory(root)), "settings": settings or {},
+               "signing_policy": signing_policy}
+    if prepared_build is not None:
+        snapshot = read_json(prepared_build)
+        if prepared_build_snapshot is not None and snapshot != prepared_build_snapshot:
+            raise DeploymentError("prepared build differs from the caller's recorded input")
+        request["prepared_build"] = {"path": str(prepared_build), "snapshot": snapshot}
+    elif prepared_build_snapshot is not None:
+        raise DeploymentError("prepared build snapshot requires its result path")
     return request
 
 
-def blocked_result(request_id: str, detail: str, *, blocker: str | None = None) -> dict[str, Any]:
-    result = {"schema": SCHEMA, "request_id": request_id, "state": "blocked",
-              "operation_state": "blocked", "detail": detail, "exit_code": 75}
-    if blocker is not None:
-        result["blocking_run_id"] = blocker
-    return result
+def matching_request(old: dict[str, Any], new: dict[str, Any], *, explicit_policy: bool) -> bool:
+    if explicit_policy:
+        return old == new
+    return {key: value for key, value in old.items() if key != "signing_policy"} == {
+        key: value for key, value in new.items() if key != "signing_policy"}
 
 
-def finish_correlated(storage: Path, request_id: str) -> dict[str, Any]:
-    """Finalize known effects under the host lock. Never start or recover work."""
-    record = read_operation(storage, request_id)
-    if record is None:
-        raise DeploymentError("the admitted deployment operation disappeared")
-    active = storage / "active"
-    if (active / "run.json").exists():
-        data = read_json(active / "run.json")
-        if data.get("run_id") != record["run_id"] or data.get("request_id") != request_id:
-            return blocked_result(request_id, "another operation owns the active deployment workspace",
-                                  blocker=data.get("run_id"))
-        result = result_from_data(data)
-        if unresolved(data):
-            result["cleanup"]["workspace"] = "retained_for_recovery"
-            retain_operation_result(storage, data, result)
-            return {**result, "operation_state": "needs_reconciliation"}
-        if data["state"] not in ("installed", "succeeded", "cleanup_failed", "recovered", "stopped"):
-            data.update(state="stopped", detail="Deployment interrupted before installation completed.")
-            durable_json(active / "run.json", data)
-        cleanup_active(storage)
-        return operation_status(storage, request_id, running=False)
-    if active.exists():
-        # No external process can start before create_run writes run.json.
-        if record["phase"] != "admitted":
-            raise DeploymentError("the active deployment lost its recovery evidence")
-        cleanup_active(storage)
-    if record.get("result") is None:
-        if record["phase"] != "admitted":
-            raise DeploymentError("deployment outcome and active recovery evidence are both unavailable")
-        record["result"] = {"schema": SCHEMA, "request_id": request_id, "run_id": record["run_id"],
-            "source_commit": record["request"]["source_commit"], "products": record["products"],
-            "state": "stopped", "detail": "Deployment interrupted before its worker started.",
-            "exit_code": 1, "recovery": {"state": "not_needed"},
-            "maintenance": {"state": "not_started"},
-            "cleanup": {"releases": "not_started", "workspace": "removed"}}
-    else:
-        if record["result"].get("maintenance", {}).get("state") == "attention_required":
-            raise DeploymentError("deployment recovery evidence is unavailable while maintenance remains unresolved")
-        record["result"]["cleanup"]["workspace"] = "removed"
-    record["phase"] = "terminal"
-    save_operation(storage, record)
-    return operation_status(storage, request_id, running=False)
+class Run:
+    def __init__(self, storage: Path, record: dict[str, Any], lock_fd: int):
+        self.storage, self.record, self.lock_fd = storage, record, lock_fd
+        self.path = Path(record["run_dir"])
+        self.source = self.path / "worktree"
+        self.environment = runtime_environment()
+        self.started = time.monotonic()
+
+    def save(self) -> None:
+        save_operation(self.storage, self.record)
+
+    def command(self, step: dict[str, Any], argv: Sequence[str], *, stdin: Any = None,
+                cwd: Path | None = None, environment: dict[str, str] | None = None,
+                timeout_seconds: float | None = None) -> None:
+        index = len(self.record["steps"])
+        output_path, error_path = self.path / f"{index:04d}.stdout", self.path / f"{index:04d}.stderr"
+        step.update(state="running", started_at=now(), stdout=str(output_path), stderr=str(error_path))
+        self.record["steps"].append(step)
+        input_path = self.path / f"{index:04d}.stdin"
+        if stdin is not None:
+            input_path.write_bytes(stdin.encode() if isinstance(stdin, str) else json_bytes(stdin))
+        read_fd, write_fd = os.pipe()
+        process = None
+        started = time.monotonic()
+        try:
+            with contextlib.ExitStack() as stack:
+                incoming = stack.enter_context(input_path.open("rb")) if stdin is not None else subprocess.DEVNULL
+                output = stack.enter_context(output_path.open("xb"))
+                errors = stack.enter_context(error_path.open("xb"))
+                gate = [sys.executable, str(Path(__file__).resolve()), "_exec", str(read_fd),
+                        str(self.lock_fd), *argv]
+                process = subprocess.Popen(gate, stdin=incoming, stdout=output, stderr=errors,
+                    cwd=cwd or self.source, env=environment or self.environment, pass_fds=(read_fd, self.lock_fd))
+                os.close(read_fd)
+                read_fd = -1
+                birth = process_token(process.pid)
+                if birth is None:
+                    raise DeploymentError("cannot establish child identity before execution")
+                step.update(pid=process.pid, birth=birth)
+                # One durable attempt record precedes effects; the blocked child
+                # exits without executing if this process dies before permission.
+                self.save()
+                os.write(write_fd, b"1")
+                os.close(write_fd)
+                write_fd = -1
+                deadline = time.monotonic() + timeout_seconds if timeout_seconds is not None else None
+                timed_out = False
+                while True:
+                    try:
+                        wait_seconds = HEARTBEAT_SECONDS if deadline is None else max(0, min(
+                            HEARTBEAT_SECONDS, deadline - time.monotonic()))
+                        process.wait(timeout=wait_seconds)
+                        break
+                    except subprocess.TimeoutExpired:
+                        if deadline is not None and time.monotonic() >= deadline:
+                            timed_out = True
+                            process.terminate()
+                            try:
+                                process.wait(timeout=1)
+                            except subprocess.TimeoutExpired:
+                                process.kill()
+                                process.wait()
+                            break
+                        print(f"cell-deploy: still running {step['id']}", file=sys.stderr, flush=True)
+                step.update(state="unknown" if timed_out else "succeeded" if process.returncode == 0 else "failed",
+                            returncode=process.returncode, finished_at=now(),
+                            elapsed_seconds=time.monotonic() - started)
+                self.save()
+                if timed_out:
+                    raise ExecutionInterrupted(f"{step['id']} exceeded its declared timeout; application effects are unknown")
+                if process.returncode:
+                    with error_path.open("rb") as errors:
+                        errors.seek(max(0, error_path.stat().st_size - MAX_DETAIL))
+                        detail = errors.read().decode("utf-8", "replace")
+                    raise DeploymentError(f"{step['id']} exited {process.returncode}: {bounded_text(detail)}")
+        finally:
+            if read_fd >= 0:
+                os.close(read_fd)
+            if write_fd >= 0:
+                os.close(write_fd)
+
+    def file_step(self, step: dict[str, Any], context: dict[str, str]) -> None:
+        result = {"id": context["product"] + ":" + step["id"], "kind": step["kind"],
+                  "product": context["product"], "state": "running", "started_at": now()}
+        self.record["steps"].append(result)
+        self.save()
+        started = time.monotonic()
+        temporary = None
+        try:
+            destination = manifest.absolute(step["destination"], context)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}")
+            if step["kind"] == "copy":
+                source = manifest.absolute(step["source"], context)
+                if source.is_dir():
+                    shutil.copytree(source, temporary, symlinks=True)
+                else:
+                    shutil.copy2(source, temporary)
+                if "mode" in step:
+                    temporary.chmod(step["mode"])
+            else:
+                temporary.symlink_to(manifest.expand(step["target"], context))
+            os.replace(temporary, destination)
+            result.update(state="succeeded", finished_at=now(), elapsed_seconds=time.monotonic() - started)
+            self.save()
+        except (OSError, ValueError, KeyError, TypeError):
+            result.update(state="failed", finished_at=now(), elapsed_seconds=time.monotonic() - started)
+            self.save()
+            raise
+        finally:
+            if temporary is not None:
+                if temporary.is_dir() and not temporary.is_symlink():
+                    shutil.rmtree(temporary)
+                else:
+                    temporary.unlink(missing_ok=True)
+
+    def execute(self) -> None:
+        source_root = Path(self.record["repository_root"])
+        previous_umask = os.umask(0o022)
+        try:
+            git(source_root, "worktree", "add", "--detach", str(self.source), self.record["source_commit"])
+        finally:
+            os.umask(previous_umask)
+        preparation = self.path / "preparation"
+        argv = [sys.executable, str(self.source / "deployment/build.py"), "--source-root", str(self.source),
+                "--output", str(preparation)]
+        if self.record["request"].get("signing_policy") is not None:
+            policy = self.path / "signing-policy.json"
+            policy.write_bytes(json_bytes(self.record["request"]["signing_policy"]))
+            argv += ["--signing-policy-file", str(policy)]
+        supplied = self.record["request"].get("prepared_build")
+        if supplied is not None:
+            snapshot = self.path / "prepared-build-snapshot.json"
+            snapshot.write_bytes(json_bytes(supplied["snapshot"]))
+            argv += ["--prepared-build", supplied["path"], "--prepared-build-snapshot-file", str(snapshot)]
+        for product in self.record["products"]:
+            argv += ["--product", product]
+        self.command({"id": "build", "kind": "run", "product": "cell"}, argv)
+        # This is builder-produced path metadata, not an integrity or domain check.
+        build = read_json(preparation / "result.json")
+        self.record["build"] = {key: build[key] for key in ("elapsed_seconds", "queue_seconds", "build_seconds",
+            "reused_products", "built_products") if key in build}
+        if not isinstance(build.get("candidates"), dict) or any(
+                not isinstance(build["candidates"].get(name), dict)
+                or not isinstance(build["candidates"][name].get("candidate_dir"), str)
+                for name in self.record["products"]):
+            raise DeploymentError("builder did not return the requested artifact paths")
+        candidates = {name: {"candidate_dir": value["candidate_dir"],
+            "candidate": candidate.read_manifest(Path(value["candidate_dir"]))}
+            for name, value in build["candidates"].items() if name in self.record["products"]}
+        for product in self.record["products"]:
+            directory = candidates[product]["candidate_dir"]
+            context = {"product": product, "candidate_dir": directory, "source_root": str(self.source),
+                       "run_dir": str(self.path), "home": self.environment["HOME"]}
+            request = {"schema": SCHEMA, "product": product, "run_id": self.record["run_id"],
+                "run_dir": str(self.path), "source_root": str(self.source), "candidate_dir": directory,
+                "candidate": candidates[product]["candidate"], "selected_products": self.record["products"],
+                "settings": self.record["request"]["settings"].get(product),
+                "dependency_settings": self.record["request"]["settings"],
+                "dependency_candidates": {name: value for name, value in candidates.items() if name != product}}
+            for step in self.record["manifest"][product]["steps"]:
+                if step["kind"] == "run":
+                    argv = [manifest.expand(value, context) for value in step["argv"]]
+                    env = {**self.environment, **{key: manifest.expand(value, context)
+                        for key, value in step.get("env", {}).items()}}
+                    cwd = manifest.absolute(step["cwd"], context) if "cwd" in step else self.source
+                    self.command({"id": product + ":" + step["id"], "kind": "run", "product": product}, argv,
+                        stdin=request if step.get("stdin") == "deployment_request" else step.get("stdin"),
+                        cwd=cwd, environment=env, timeout_seconds=step.get("timeout_seconds"))
+                else:
+                    self.file_step(step, context)
+
+    def finish(self) -> None:
+        self.record.update(finished_at=now(), elapsed_seconds=time.monotonic() - self.started)
+        self.save()
+        if self.record["state"] in ("succeeded", "failed"):
+            clear_marker(self.storage, self.record)
+            try:
+                if self.source.exists():
+                    git(Path(self.record["repository_root"]), "worktree", "remove", "--force", str(self.source))
+                if (self.path / "preparation").exists():
+                    candidate.remove_tree(self.path / "preparation")
+                self.record["workspace_cleanup"] = "removed"
+            except (OSError, RuntimeError) as error:
+                self.record["workspace_cleanup"] = bounded_text(error)
+            self.save()
 
 
-def start_correlated(root: Path, products: Sequence[str], storage: Path, *, request_id: str,
-                     selected_commit: str | None, verbose: bool,
-                     settings: dict[str, Any] | None, signing_policy: dict[str, Any] | None = None,
-                     prepared_build: Path | None = None,
-                     prepared_build_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
-    operation_path(storage, request_id)
-    if signing_policy is not None:
-        signing_policy = signing.validate_policy(signing_policy)
-    explicit_policy = signing_policy is not None
+def blocked_result(request_id: str, detail: str) -> dict[str, Any]:
+    return {"schema": SCHEMA, "manifest_executor": MANIFEST_EXECUTOR, "request_id": request_id,
+            "state": "blocked", "operation_state": "blocked", "exit_code": 75, "detail": detail}
+
+
+def start(root: Path, products: Sequence[str], storage: Path | None = None, *, verbose: bool = False,
+          settings: dict[str, Any] | None = None, selected_commit: str | None = None,
+          request_id: str | None = None, signing_policy: dict[str, Any] | None = None,
+          prepared_build: Path | None = None, prepared_build_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
+    storage = storage or state_root()
+    if request_id is not None and selected_commit is None:
+        raise DeploymentError("caller-correlated execution requires an exact source commit")
+    request_id = request_id or "manual:" + uuid.uuid4().hex
     request = canonical_request(root, products, selected_commit, settings, signing_policy,
                                 prepared_build, prepared_build_snapshot)
-    admitted = False
-    result = None
     try:
         with deployment_lock(storage) as lock_fd:
-            existing = read_operation(storage, request_id)
-            if existing is not None:
-                if not matching_request(existing["request"], request, explicit_policy=explicit_policy):
-                    raise DeploymentError("request ID already belongs to a different deployment request")
-                result = operation_status(storage, request_id, running=False)
-                result["replayed"] = True
-                if result["operation_state"] != "terminal":
-                    result["exit_code"] = 75
-                return result
-            active = storage / "active"
-            if active.exists() or active.is_symlink():
-                blocker = read_json(active / "run.json").get("run_id") if (active / "run.json").exists() else None
-                return blocked_result(request_id, "reconcile the previous deployment before admitting another", blocker=blocker)
-            policy = signing.load_policy() if signing_policy is None else signing_policy
-            signing.assert_current(policy)
-            signing.preflight(policy)
-            request.update(signing_policy=policy)
-            chosen = plan(root, request["products"], request["source_commit"])
-            record = {"schema": SCHEMA, "request_id": request_id, "request": request,
-                      "request_hash": hashlib.sha256(candidate.json_bytes(request)).hexdigest(),
-                      "run_id": uuid.uuid4().hex, "products": chosen["products"],
-                      "phase": "admitted", "admitted_at": now()}
+            old = read_operation(storage, request_id)
+            if old is not None:
+                if not matching_request(old["request"], request, explicit_policy=signing_policy is not None):
+                    raise DeploymentError("request ID already belongs to a different instruction request")
+                return {**operation_status(storage, request_id, running=False), "replayed": True}
+            if marker(storage) is not None:
+                return blocked_result(request_id, "acknowledge the interrupted execution before another admission")
+            chosen = plan(root, products, request["source_commit"])
+            inventory = catalog(root, request["source_commit"])
+            run_id = uuid.uuid4().hex
+            path = storage / "runs" / run_id
+            private_directory(path)
+            record = {"schema": SCHEMA, "manifest_executor": MANIFEST_EXECUTOR, "request_id": request_id,
+                "run_id": run_id, "source_commit": request["source_commit"], "products": chosen["products"],
+                "request": request, "manifest": {name: inventory[name]["manifest"] for name in chosen["products"]},
+                "repository_root": str(root), "run_dir": str(path), "steps": [], "state": "active",
+                "phase": "active", "started_at": now(), "worker_pid": os.getpid(),
+                "worker_birth": process_token(os.getpid())}
             save_operation(storage, record)
-            admitted = True
-            path = create_run(root, products, storage, verbose=verbose, settings=settings,
-                              chosen_plan=chosen, request_id=request_id, run_id=record["run_id"],
-                              signing_policy=policy, prepared_build=request.get("prepared_build"))
-            record["phase"] = "running"
-            save_operation(storage, record)
-            result = launch(path, lock_fd)
-    except DeploymentBusy:
-        existing = read_operation(storage, request_id)
-        if existing is not None:
-            if not matching_request(existing["request"], request, explicit_policy=explicit_policy):
-                raise DeploymentError("request ID already belongs to a different deployment request")
-            result = operation_status(storage, request_id)
-            result["replayed"] = True
-            if result["operation_state"] != "terminal":
-                result["exit_code"] = 75
-            return result
-        return blocked_result(request_id, "another deployment or its child is active")
-    finally:
-        if admitted:
+            private_directory(storage / "active")
+            durable_json(storage / "active/run.json", {"schema": SCHEMA, "request_id": request_id, "run_id": run_id})
+            run = Run(storage, record, lock_fd)
             try:
-                with deployment_lock(storage):
-                    result = finish_correlated(storage, request_id)
-            except DeploymentBusy:
-                result = operation_status(storage, request_id)
-                result["exit_code"] = 75
-    assert result is not None
-    return result
+                run.execute()
+                record.update(state="succeeded", phase="terminal", detail="Declared placements and commands completed.")
+            except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as error:
+                uncertain = isinstance(error, ExecutionInterrupted) or any(
+                    step["state"] == "running" for step in record["steps"])
+                record.update(state="interrupted" if uncertain else "failed",
+                              phase="interrupted" if uncertain else "terminal", detail=bounded_text(error))
+                for step in record["steps"]:
+                    if step["state"] == "running":
+                        step["state"] = "unknown"
+            run.finish()
+            return result_from_record(record)
+    except DeploymentBusy:
+        old = read_operation(storage, request_id)
+        if old is not None:
+            if not matching_request(old["request"], request, explicit_policy=signing_policy is not None):
+                raise DeploymentError("request ID belongs to a different instruction request")
+            return {**operation_status(storage, request_id, running=True), "replayed": True, "exit_code": 75}
+        return blocked_result(request_id, "another executor or its child is active")
 
 
-def matching_request(retained: dict[str, Any], requested: dict[str, Any], *, explicit_policy: bool) -> bool:
-    """A replay without signer input keeps the admitted operation's selection."""
-    signing_fields = {"signing_policy_digest"}
-    if not explicit_policy:
-        signing_fields.add("signing_policy")
-    old = {key: value for key, value in retained.items() if key not in signing_fields}
-    new = {key: value for key, value in requested.items() if key not in signing_fields}
-    # An old admission has only a path and an obsolete digest. Keep its
-    # selection; the builder still checks source, scope, policy, and signatures.
-    if isinstance(old.get("prepared_build"), dict) and "snapshot" not in old["prepared_build"]:
-        for request in (old, new):
-            if isinstance(request.get("prepared_build"), dict):
-                request["prepared_build"] = {"path": request["prepared_build"].get("path")}
-    return old == new
-
-
-def reconcile_request(storage: Path, request_id: str) -> dict[str, Any]:
-    """Recover only this admitted operation; never admit a replacement."""
-    observed = operation_status(storage, request_id)
-    if observed["operation_state"] in ("not_found", "terminal"):
-        return observed
+def reconcile_request(storage: Path, request_id: str, *, acknowledge: bool = False) -> dict[str, Any]:
     try:
-        with deployment_lock(storage) as lock_fd:
+        with deployment_lock(storage):
             record = read_operation(storage, request_id)
             if record is None:
                 return operation_status(storage, request_id, running=False)
-            active = storage / "active"
-            if (active / "run.json").exists():
-                data = read_json(active / "run.json")
-                if data.get("run_id") != record["run_id"] or data.get("request_id") != request_id:
-                    return blocked_result(request_id, "another operation owns the active deployment workspace",
-                                          blocker=data.get("run_id"))
-                try:
-                    reconcile_active(storage, lock_fd, before_start=False)
-                except DeploymentError:
-                    data = read_json(active / "run.json")
-                    result = result_from_data(data)
-                    retain_operation_result(storage, data, result)
-                    return {**result, "operation_state": "needs_reconciliation"}
-            return finish_correlated(storage, request_id)
+            if record["schema"] != SCHEMA:
+                if record.get("phase") == "terminal":
+                    return operation_status(storage, request_id, running=False)
+                raise DeploymentError("legacy execution is unsupported; inspect retained effects and use explicit product procedures")
+            if record.get("phase") == "terminal":
+                active = marker(storage)
+                if active is not None and active.get("run_id") == record["run_id"]:
+                    clear_marker(storage, record)
+                return result_from_record(record)
+            if record.get("phase") == "active":
+                record.update(state="interrupted", phase="interrupted", finished_at=now(),
+                              detail="Execution ended without a completed result; application effects are unknown.")
+                for step in record["steps"]:
+                    if step["state"] == "running":
+                        step.update(state="unknown", finished_at=now())
+                save_operation(storage, record)
+            if acknowledge:
+                record.update(acknowledged_at=now(), phase="terminal")
+                save_operation(storage, record)
+                clear_marker(storage, record)
+            return result_from_record(record)
     except DeploymentBusy:
-        result = operation_status(storage, request_id)
+        result = operation_status(storage, request_id, running=True)
         result["exit_code"] = 75
         return result
 
 
-def start(root: Path, products: Sequence[str], storage: Path | None = None,
-          *, verbose: bool = False, settings: dict[str, Any] | None = None,
-          selected_commit: str | None = None, request_id: str | None = None,
-          signing_policy: dict[str, Any] | None = None, prepared_build: Path | None = None,
-          prepared_build_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
-    storage = storage or state_root()
-    if request_id is not None:
-        return start_correlated(root, products, storage, request_id=request_id,
-                                selected_commit=selected_commit, verbose=verbose, settings=settings,
-                                signing_policy=signing_policy, prepared_build=prepared_build,
-                                prepared_build_snapshot=prepared_build_snapshot)
-    policy = signing.load_policy() if signing_policy is None else signing.validate_policy(signing_policy)
-    signing.assert_current(policy)
-    supplied = prepared_selection(prepared_build, prepared_build_snapshot)
-    admitted = False
-    result = None
-    try:
-        with deployment_lock(storage) as lock_fd:
-            admitted = True
-            reconcile_active(storage, lock_fd)
-            cleanup_active(storage)
-            path = create_run(root, products, storage, verbose=verbose, settings=settings,
-                              selected_commit=selected_commit, signing_policy=policy,
-                              prepared_build=supplied)
-            result = launch(path, lock_fd)
-    finally:
-        if admitted:
-            # Close our inherited lock reference first. A surviving descendant
-            # then prevents reacquisition and therefore prevents deletion.
-            try:
-                with deployment_lock(storage):
-                    active = storage / "active" / "run.json"
-                    retained = active.exists() and unresolved(read_json(active))
-                    if not retained:
-                        cleanup_active(storage)
-                if result is not None:
-                    result["cleanup"]["workspace"] = "retained_for_recovery" if retained else "removed"
-            except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
-                if result is None:
-                    raise
-                result["cleanup"]["workspace"] = "failed"
-                result["cleanup"]["detail"] = bounded_text(error, MAX_DETAIL)
-                result["exit_code"] = 1
-                if result["state"] == "succeeded":
-                    result["state"] = "cleanup_failed"
-    assert result is not None
-    return result
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     os.umask(0o077)
-    if sys.version_info < (3, 11):
-        print("cell-deploy: deployment requires Python 3.11 or newer", file=sys.stderr)
-        return 1
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments[:1] == ["_exec"]:
         read_fd, lock_fd = int(arguments[1]), int(arguments[2])
@@ -1555,74 +613,48 @@ def main(argv: Sequence[str] | None = None) -> int:
         os.environ["CELL_DEPLOYMENT_LOCK_FD"] = str(lock_fd)
         os.execvpe(arguments[3], arguments[3:], os.environ)
         return 127
-    if arguments[:1] == ["_worker"]:
-        try:
-            return run_worker(Path(arguments[1]), int(arguments[2]))
-        except (DeploymentError, OSError, ValueError) as error:
-            print(f"cell-deploy: {bounded_text(error, MAX_DETAIL)}", file=sys.stderr)
-            return 1
-    if arguments[:1] == ["_recover"]:
-        try:
-            return recover_worker(Path(arguments[1]), int(arguments[2]))
-        except (DeploymentError, OSError, ValueError) as error:
-            print(f"cell-deploy: {bounded_text(error, MAX_DETAIL)}", file=sys.stderr)
-            return 1
-    if arguments[:1] == ["--verbose"] and arguments[1:2] in (["start"], ["plan"]):
-        arguments[0], arguments[1] = arguments[1], arguments[0]
-    if arguments and arguments[0] not in ("start", "plan", "status", "reconcile", "-h", "--help"):
+    if arguments and arguments[0] not in ("start", "plan", "status", "reconcile", "acknowledge", "-h", "--help"):
         arguments.insert(0, "start")
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("start", "plan"):
         command = commands.add_parser(name)
         command.add_argument("products", nargs="+")
-        command.add_argument("--verbose", action="store_true", help="show deployment operation progress on stderr")
-        command.add_argument("--settings", type=Path, help="private JSON file of product setup choices; credential file references only")
-        command.add_argument("--source-commit", help="complete lowercase commit ID; defaults to local main")
+        command.add_argument("--verbose", action="store_true")
+        command.add_argument("--settings", type=Path)
+        command.add_argument("--source-commit")
         if name == "start":
-            command.add_argument("--request-id", help="durable caller identity; requires --source-commit")
-            command.add_argument("--signing-policy-file", type=Path, help=argparse.SUPPRESS)
-            command.add_argument("--prepared-build", type=Path, help="reuse verified candidates from this build result")
-            command.add_argument("--prepared-build-snapshot-file", type=Path, help=argparse.SUPPRESS)
-    for name in ("status", "reconcile"):
+            command.add_argument("--request-id")
+            command.add_argument("--signing-policy-file", type=Path)
+            command.add_argument("--prepared-build", type=Path)
+            command.add_argument("--prepared-build-snapshot-file", type=Path)
+    for name in ("status", "reconcile", "acknowledge"):
         command = commands.add_parser(name)
-        command.add_argument("--request-id", required=True, help="exact admitted caller identity")
+        command.add_argument("--request-id", required=True)
     parsed = parser.parse_args(arguments)
     try:
         if parsed.command == "status":
             result = operation_status(state_root(), parsed.request_id)
-        elif parsed.command == "reconcile":
-            if sys.platform != "darwin":
-                raise DeploymentError("live deployment recovery is supported only for the current macOS user")
-            result = reconcile_request(state_root(), parsed.request_id)
-        elif parsed.command == "plan":
-            root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
-            settings = setup_settings(parsed.settings)
-            result = plan(root, parsed.products, parsed.source_commit)
-            if set(settings) - result["catalog"].keys():
-                raise DeploymentError("settings name a product outside the committed inventory")
-            result["settings_products"] = sorted(settings)
-            result.pop("catalog")
+        elif parsed.command in ("reconcile", "acknowledge"):
+            result = reconcile_request(state_root(), parsed.request_id, acknowledge=parsed.command == "acknowledge")
         else:
-            if sys.platform != "darwin":
-                raise DeploymentError("live deployment is supported only for the current macOS user")
             root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
-            settings = setup_settings(parsed.settings)
-            policy = None
-            if parsed.signing_policy_file is not None:
-                policy = signing.validate_policy(read_json(parsed.signing_policy_file))
-            snapshot = None
-            if parsed.prepared_build_snapshot_file is not None:
-                candidate.regular(parsed.prepared_build_snapshot_file)
-                snapshot = read_json(parsed.prepared_build_snapshot_file)
-            result = start(root, parsed.products, verbose=parsed.verbose, settings=settings,
-                           selected_commit=parsed.source_commit, request_id=parsed.request_id,
-                           signing_policy=policy, prepared_build=parsed.prepared_build,
-                           prepared_build_snapshot=snapshot)
-        print_result(result)
-        return int(result.get("exit_code", 0))
-    except (DeploymentError, candidate.CandidateError, RuntimeError, OSError, ValueError) as error:
-        print_result({"schema": SCHEMA, "state": "stopped", "detail": bounded_text(error, MAX_DETAIL), "exit_code": 1})
+            if parsed.command == "plan":
+                result = plan(root, parsed.products, parsed.source_commit)
+            else:
+                if sys.platform != "darwin":
+                    raise DeploymentError("live Cell deployment supports the current macOS operator")
+                result = start(root, parsed.products, verbose=parsed.verbose, settings=setup_settings(parsed.settings),
+                    selected_commit=parsed.source_commit, request_id=parsed.request_id,
+                    signing_policy=read_json(parsed.signing_policy_file) if parsed.signing_policy_file else None,
+                    prepared_build=parsed.prepared_build,
+                    prepared_build_snapshot=read_json(parsed.prepared_build_snapshot_file)
+                        if parsed.prepared_build_snapshot_file else None)
+        print(json.dumps(result, sort_keys=True, separators=(",", ":")))
+        return result.get("exit_code", 0)
+    except (DeploymentError, OSError, ValueError, RuntimeError, KeyError, TypeError) as error:
+        print(json.dumps({"schema": SCHEMA, "manifest_executor": MANIFEST_EXECUTOR, "state": "stopped",
+                          "detail": bounded_text(error), "exit_code": 1}, separators=(",", ":")))
         return 1
 
 

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -16,30 +16,30 @@
     "A deployment should invent product schedules or migrate Clockwork runtime schema.",
     "Retained Clockwork state, immutable releases, product logs, or product artifacts should be deleted."
   ],
-  "outcome": "A version-matched immutable release selected for the stable command and provider; a local diagnosis with evidence; a verified program rollback; or detached public selectors with private runtime state retained.",
+  "outcome": "Supplied program and provider files are selected, a separately requested diagnosis returns evidence, an explicitly selected retained release is restored, or owned public selectors are detached with private runtime state retained.",
   "effects": [
-    "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery.",
+    "Installation copies supplied program and provider files and reads release metadata without version, artifact-integrity or provider-discovery validation. It retains owned-path boundaries, writer locks and atomic selector replacements. Failed instructions retain completed changes without automatic rollback or recovery.",
     "Direct installation may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `~/.local/bin/clockwork-install`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
     "Doctor initializes only an empty unversioned private schema-two Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
     "Uninstall detaches only owned command, installer, provider, current, and previous selectors after refusing remaining Clockwork plists; when needed it may create an empty private Clockwork state root solely to share the deployment lock path, but it creates no runtime database and retains releases, database, runtime locks, logs, history, and product artifacts.",
-    "Coordinated Cell deployment captures all Clockwork bindings, disables them under deployment maintenance, preserves product-owned selections and halts, then refreshes every previously enabled generated plist through the final selected broker only after all holds are released.",
+    "The Clockwork deployment command selects program files and, when its runtime database exists, refreshes each currently enabled binding through the selected broker using its existing definition digest. Disabled bindings remain disabled. It creates no hold and temporarily disables no binding; it preserves failure incidents.",
     "Direct installation copies release files and prepares resource directories without opening runtime state or running doctor. It performs no artifact-integrity, version-alignment, provider-discovery, or runtime-readiness validation."
   ],
   "authority": [
     "Clockwork's packaging owns its immutable releases, current and previous selectors, stable command and installer selectors, and only `providers/clockwork`.",
-    "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery.",
+    "Clockwork owns file placement and its explicit binding-refresh command. The Cell executor owns instruction order and process completion; it has no application-state or recovery authority.",
     "The operator owns the choice to deploy, diagnose, roll back, or detach selectors and separately owns any destructive retained-state operation.",
-    "Product Rust installers own their definition and binding changes through the schedule contract; the coordinated adapter refreshes existing broker plists without changing product definitions or approving incidents."
+    "Product installers own definition and binding changes through the schedule contract. The Clockwork product command refreshes existing enabled broker plists without changing selected definition digests or approving incidents."
   ],
   "success": [
-    "Direct installation publishes the supplied program and provider selectors. Coordinated deployment also restores captured broker activation intent after its maintenance operations. Runtime readiness is not an installation condition."
+    "Direct installation publishes supplied program and provider selectors. Manifest deployment also completes the product-owned refresh of existing enabled broker bindings. Completion establishes no application readiness."
   ],
   "failure_and_recovery": [
-    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
-    "If deployment fails before commit, inspect the evidence and preserved prior selectors; do not bypass ownership or content checks.",
+    "Installation copies supplied program and provider files and reads release metadata without version, artifact-integrity or provider-discovery validation. It retains owned-path boundaries, writer locks and atomic selector replacements. Failed instructions retain completed changes without automatic rollback or recovery.",
+    "Inspect current selectors and retained execution evidence after failure. Completed changes remain; no automatic restoration, detachment or application recovery follows.",
     "If an installed program regression requires rollback, preserve its evidence and use a trusted tested clockwork-install recover --release with the canonical owned previous-release directory and an explicit Chancery reader; program rollback does not roll back a product binding.",
     "Before detach, disable every binding and prove quiescence; the uninstaller's plist refusal does not prove that no manual child is already running.",
-    "Coordinated recovery reuses the captured binding inventory and restores suspension before any configuration repair. It preserves disabled intent and durable halts; unknown binding or projection changes stop recovery."
+    "An interrupted instruction has unknown effects. Inspect current Clockwork state and complete authorized product recovery separately from executor reconciliation and acknowledgement. Preserve binding intent and failure incidents."
   ],
   "privacy": [
     "Release and provider bytes contain no definitions, product output, secrets, or activation history.",
@@ -53,13 +53,13 @@
   "automation": "none",
   "steps": [
     "Build and validate a Clockwork candidate without changing installed state.",
-    "Run the product-owned Rust installer with absolute candidate binary, provider bundle, and candidate Chancery-reader paths, then inspect the reported version, content identity, selectors, and retained previous release.",
-    "Run installed version and help checks; run doctor only when its schema initialization and bounded lost-activation recovery are intended, then inspect the selected Chancery entry before any product registers or switches a definition.",
+    "Run the product-owned installer with absolute binary and provider paths, then inspect selected release metadata and public selectors.",
+    "Run doctor only when its schema initialization and bounded lost-activation recovery are intended. Product runtime diagnostics remain separate from installation.",
     "For rollback, use the trusted tested Rust installer to verify and select a canonical owned retained release; for detach, first disable all bindings and verify no Clockwork plist remains."
   ],
   "checkpoints": [
     "Installation copies program and provider files and reads release metadata. Chancery validation and discovery are separate operations and do not gate publication.",
-    "Stable command and provider selectors both resolve through the one current Clockwork release, and the supplied reader discovers every indexed Clockwork entry through that installed provider selector before commit.",
+    "Stable command and provider selectors resolve through the selected Clockwork release. Chancery validation and discovery are separate requested operations.",
     "Direct installation and uninstall never register, switch, disable, execute, migrate, or delete a product binding.",
     "Retained runtime database, activation/binding state, history, and releases remain outside uninstall and direct installation effects; an otherwise absent empty private state root may be created solely for installation-lock serialization."
   ],
@@ -68,8 +68,8 @@
     "Use the hidden isolated-state option only for tests or controlled diagnosis, never to create a second production authority accidentally."
   ],
   "stop_when": [
-    "Candidate identity, provider version, candidate Chancery-reader availability, staged provider validity, exact release tree, selector ownership, or rollback cannot be proved.",
-    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
+    "A file input cannot be copied, a selector is foreign, an installation lock is unavailable, or an explicitly requested recovery target is outside the owned installation.",
+    "A declared deployment instruction fails. Preserve its completed effects and inspect current product state before an authorized new attempt.",
     "Uninstall finds a Clockwork LaunchAgent plist, product-binding quiescence is unknown, or the requested action includes retained-state deletion without separate exact authority."
   ],
   "dependencies": [
@@ -85,8 +85,8 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 3,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "interfaces": [
@@ -152,7 +152,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Current and previous select validated immutable program releases; they are independent of stable product bindings and their selected immutable product definitions."
+        "statement": "Current and previous select owned program releases; they are independent of stable product bindings and their selected immutable product definitions."
       },
       {
         "status": "declared",
@@ -162,7 +162,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Installed release identity is a 64-hex SHA-256 content digest over the exact staged binary, Rust installer, public layout, and provider bytes; provider release equals binary semantic version."
+        "statement": "An opaque UUID identifies each prepared installed release. Program release, package version, provider contract, runtime schema and definition digest are separate identities. Runtime hashes remain part of the independent scheduling boundary."
       }
     ],
     "completeness_and_freshness": [
@@ -178,7 +178,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force."
+        "statement": "Installation copies supplied program and provider files and reads release metadata without version, artifact-integrity or provider-discovery validation. It retains owned-path boundaries, writer locks and atomic selector replacements. Failed instructions retain completed changes without automatic rollback or recovery."
       },
       {
         "status": "unsupported",
@@ -188,7 +188,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Installation copies the supplied program and provider files and reads release metadata without version, artifact-integrity, or provider-discovery validation. It retains owned selectors, writer locks, and publication recovery."
+        "statement": "Installation copies supplied program and provider files and reads release metadata without version, artifact-integrity or provider-discovery validation. It retains owned-path boundaries, writer locks and atomic selector replacements. Failed instructions retain completed changes without automatic rollback or recovery."
       },
       {
         "status": "declared",
@@ -204,7 +204,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Binary version and provider release must match exactly. Program release, definition manifest, database schema, product release, and binding identity have independent compatibility rules."
+        "statement": "Program release, package version, provider release, definition manifest, database schema and binding identity have independent meanings. File placement performs no version-compatibility inference."
       },
       {
         "status": "unspecified",
@@ -221,7 +221,7 @@
       },
       {
         "status": "not_applicable",
-        "statement": "Deployment, diagnosis, rollback, and selector detach invoke no model, network service, Nucleus job, or product runner."
+        "statement": "Direct installation, rollback and selector detach invoke no model or product runner. Manifest deployment can refresh an enabled run-at-load binding, which can start work under its existing product authority."
       }
     ]
   },

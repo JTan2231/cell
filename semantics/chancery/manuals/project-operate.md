@@ -70,7 +70,21 @@ separately when runtime diagnosis is wanted. Doctor retains its normal checks;
 its result is not an installation condition. Preserve retained transactions if
 resource setup, migration, publication, or recovery fails.
 
-## Hold and drain coordinated deployment
+## Cell manifest setup and explicit maintenance
+
+The Cell manifest invokes `semantics-install deploy` once with the candidate,
+source paths and optional boolean `enabled` setting. The command places files,
+initializes or migrates state, and selects the worker directly. Omission
+preserves the current enabled intent; a new schedule defaults enabled.
+`{"semantics":{"enabled":false}}` selects the new definition disabled.
+
+This command does not hold or drain work, suspend scheduling, check readiness,
+or recover automatically. It preserves project pauses, existing application
+maintenance and incident halts. Actual mutations use native state and publication
+locks. Inspect the retained command log after an interrupted command.
+
+Use explicit maintenance commands only when an authorized product operation
+requires them:
 
 ```text
 semantics --database DATABASE --json maintenance status
@@ -78,22 +92,9 @@ semantics --database DATABASE --json maintenance hold RUN_ID
 semantics --database DATABASE --json maintenance release RUN_ID
 ```
 
-1. Acquire the deployment run's own hold and inspect its ownership.
-2. Drain live commands and separately prove durable intake and Nucleus jobs settled.
-3. Let the product adapter configure with scheduling disabled.
-4. Release only this run's hold after group configuration.
-5. Activate only captured enabled intent after all affected holds are released.
-
-A hold fences reads and doctor before SQLite access. Only controlled installer
-commands may use `CELL_DEPLOYMENT_RUN_ID` under the same sole drained hold.
-Waiting does not cancel or retry work. An unavailable existing Nucleus runtime
-does not prove an empty job inventory. The candidate cannot fence unsupported
-old commands: use the documented compatibility release and quiescence procedure
-before coordinated deployment. Preserve other markers, pauses, and incident halts.
-
-Settings accept only boolean `enabled`; omission preserves captured intent and
-new schedules default to enabled. `{"semantics":{"enabled":false}}` keeps
-scheduling disabled. Recovery restores prior intent and ignores that override.
+A hold fences reads and doctor before SQLite access. Controlled commands may
+use `CELL_DEPLOYMENT_RUN_ID` under the same sole drained hold. Waiting does not
+cancel or retry work. Release removes only the selected owner's hold.
 
 ## Register and seed a folder
 

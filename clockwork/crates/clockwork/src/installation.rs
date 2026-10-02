@@ -40,75 +40,7 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: true,
-        maintained: false,
     }
-}
-
-/// Coordinate broker refresh while preserving product definitions and halt intent.
-/// Direct program installation remains a selector-only operation.
-///
-/// # Errors
-/// Refuses incomplete inventories, changed selections, unavailable Clockwork, or
-/// an unconfirmed disabled or active binding transition.
-pub fn deployment_lifecycle(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> cell_install::Result<serde_json::Value> {
-    deployment_operation(context, operation)
-        .map_err(|error| cell_install::Error::new(error.to_string()))
-}
-
-fn deployment_operation(
-    context: &cell_install::adapter::Context,
-    operation: cell_install::adapter::Operation,
-) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    use crate::api::Client;
-    use cell_install::adapter::Operation;
-    use serde_json::json;
-    let executable = context.home.join(".local/bin/clockwork");
-    let client = Client::new(&executable);
-    if operation == Operation::Inspect {
-        // A first installation has no runtime inventory to open or initialize.
-        let bindings = if context
-            .home
-            .join("Library/Application Support/Clockwork/clockwork.db")
-            .try_exists()?
-        {
-            complete_bindings(&client)?
-        } else {
-            let agents = context.home.join("Library/LaunchAgents");
-            if agents.try_exists()? {
-                for entry in std::fs::read_dir(agents)? {
-                    let name = entry?.file_name();
-                    let name = name.to_string_lossy();
-                    if name.starts_with("org.clockwork.") && name.ends_with(".plist") {
-                        return Err("Clockwork runtime inventory is missing while a generated plist remains".into());
-                    }
-                }
-            }
-            Vec::new()
-        };
-        return Ok(json!({"bindings":bindings}));
-    }
-    let bindings: Vec<crate::api::BindingRecord> =
-        serde_json::from_value(context.prior()?["lifecycle"]["bindings"].clone())?;
-    if operation == Operation::Hold {
-        for before in &bindings {
-            let observed = client.binding(&before.key)?;
-            if context.request.recovery.is_none()
-                && (observed.definition_digest != before.definition_digest
-                    || observed.halted_incident != before.halted_incident
-                    || !before.enabled && observed.enabled)
-            {
-                return Err("Clockwork binding changed since deployment inspection".into());
-            }
-            client.disable(&before.key, None)?;
-        }
-    }
-    if operation == Operation::Activate {
-        activate_bindings(&client, &bindings, &context.request.activation_bindings)?;
-    }
-    Ok(json!({"binding_count":bindings.len()}))
 }
 
 fn complete_bindings(
@@ -127,42 +59,26 @@ fn complete_bindings(
     }
 }
 
-fn preserve_halt(
-    before: &crate::api::BindingRecord,
-    observed: &crate::api::BindingRecord,
-) -> Result<(), Box<dyn std::error::Error>> {
-    if before.halted_incident.is_some() && observed.halted_incident != before.halted_incident {
-        return Err("deployment changed a Clockwork failure halt".into());
-    }
-    Ok(())
-}
-
-fn activate_bindings(
-    client: &crate::api::Client,
-    bindings: &[crate::api::BindingRecord],
-    managed: &[String],
-) -> Result<(), Box<dyn std::error::Error>> {
-    for before in bindings {
-        if managed.iter().any(|key| key == &before.key) {
-            // The owning adapter applies its requested activation intent.
-            continue;
-        }
-        let observed = client.binding(&before.key)?;
-        preserve_halt(before, &observed)?;
-        if before.enabled {
-            // Other product adapters may have selected their new immutable
-            // definition while disabled. Reuse that selection with this broker.
-            let digest = observed
-                .definition_digest
-                .as_deref()
-                .ok_or("enabled intent has no selected definition")?;
-            let selected = client.switch(&before.key, digest)?;
-            preserve_halt(before, &selected)?;
-            if !selected.enabled || selected.definition_digest.as_deref() != Some(digest) {
-                return Err("Clockwork did not confirm refreshed broker selection".into());
-            }
-        } else if observed.enabled {
-            return Err("deployment enabled a previously disabled Clockwork binding".into());
+/// Replace broker files and refresh enabled bindings with the installed broker.
+/// # Errors
+/// Returns installation or Clockwork selection failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    if context
+        .home
+        .join("Library/Application Support/Clockwork/clockwork.db")
+        .try_exists()?
+    {
+        let client = crate::api::Client::new(context.home.join(".local/bin/clockwork"));
+        let bindings = complete_bindings(&client)
+            .map_err(|error| cell_install::Error::new(error.to_string()))?;
+        for binding in bindings.into_iter().filter(|binding| binding.enabled) {
+            let digest = binding.definition_digest.as_deref().ok_or_else(|| {
+                cell_install::Error::new("enabled binding has no selected definition")
+            })?;
+            client
+                .switch(&binding.key, digest)
+                .map_err(|error| cell_install::Error::new(error.to_string()))?;
         }
     }
     Ok(())

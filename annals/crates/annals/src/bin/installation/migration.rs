@@ -925,21 +925,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
         file(path, state.invoking_uid, None)?;
     }
     let installer = args.deploy.clone().unwrap_or(std::env::current_exe()?);
-    for (key, binary) in [
-        ("annals", &args.binary),
-        ("annals-usage", &args.usage_binary),
-        ("annals-install", &installer),
-    ] {
-        cell_install::signing::verify_native_for_user(
-            "annals",
-            key,
-            binary,
-            &state.home,
-            state.uid,
-        )?;
-    }
-    state.user_checked(&args.binary, &words(&["--version"]))?;
-    state.user_checked(&args.usage_binary, &words(&["--version"]))?;
     state.user_checked(&state.frontend, &words(&["stats"]))?;
     fs::create_dir(&state.transaction)?;
     fs::set_permissions(&state.transaction, fs::Permissions::from_mode(0o700))?;
@@ -1052,13 +1037,6 @@ pub(super) fn run(args: &Args) -> Result<Value> {
         )?;
         // The child can complete before returning. A missing response never
         // authorizes deleting current state or retained transaction evidence.
-        cell_install::signing::verify_native_for_user(
-            "annals",
-            "annals-install",
-            &installer,
-            &state.home,
-            state.uid,
-        )?;
         state.write_phase("installing")?;
         let response = state.user_checked(&installer, &child)?;
         let response: Value = serde_json::from_slice(&response.stdout)?;

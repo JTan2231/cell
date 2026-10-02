@@ -168,15 +168,11 @@ def sign(path: Path, policy: dict[str, Any] | None, product: str, artifact_key: 
         if sys.platform == "darwin":
             raise SigningError("cannot sign macOS production code without its signing policy")
         return
-    assert_current(policy)
-    if not is_native(path):
-        raise SigningError("production executable is not native macOS code")
     settings = policy["macos"]
     _run(["/usr/bin/codesign", "--force", "--sign", settings["certificate_sha1"],
           "--keychain", settings["keychain"], "--identifier", identifier(policy, product, artifact_key),
           "--requirements", "=designated => " + requirement(policy, product, artifact_key),
           "--timestamp=none", str(path)])
-    verify(path, policy, product, artifact_key)
 
 
 def _directory(path: Path) -> None:

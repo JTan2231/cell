@@ -1,6 +1,6 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -48,23 +48,23 @@
     }
   ],
   "effects": [
-    "Matched executable/installer/provider bytes publish through owned selectors as one immutable release. Direct install/recover are refused in favor of coordinated Cell maintenance.",
+    "Product and provider files publish through owned selectors as one release. Direct install and recover are refused; use the declared product command through the Cell executor.",
     "Durable owner-keyed holds prevent new mutations while admitted work settles. Drain observes matching requester summaries and can cancel orphaned exact matching work. Migration preserves retained identities and commits its import before hashed legacy cleanup.",
     "Readiness checks do not collect sources, read Vita works, render PDF, submit models, or send. Explicit supplied setup can initialize a missing template or create activation intent; deployment itself prepares no packets and sends no email.",
-    "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+    "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, drains no requester and temporarily disables no binding. Runtime diagnostics and explicit maintenance remain separate."
   ],
   "authority": [
-    "Platter owns domain compatibility, hold/drain scope, state migration, readiness, and product definition. Cell owns coordinated selected release sequencing and installation transactions. Nucleus owns matching execution/cancellation and Clockwork owns binding activation/incident policy."
+    "Platter owns domain compatibility, hold and drain scope, state migration, readiness and its product definition. Cell owns explicit instruction order and command completion. Nucleus owns matching execution and cancellation; Clockwork owns binding activation and incident policy."
   ],
   "success": [
-    "Deployment holds and drains affected work, stages files, configures and publishes selected products, releases only its own holds, and restores captured activation intent. It preserves retained state, operator pauses, and incident halts."
+    "Deployment completes declared placement and product setup commands while preserving retained state, saved or explicit schedule intent and failure incidents. Completion establishes no application health or future delivery."
   ],
   "failure_and_recovery": [
-    "Installation copies the supplied program and provider files and reads release metadata. It does not compare candidate versions, audit artifact hashes or inventories, or validate provider discovery. Owned selectors, writer locks, and publication recovery remain in force.",
+    "A failed instruction retains completed file, migration, configuration and schedule changes. The executor stops and performs no automatic retry, rollback or product recovery. Interrupted commands have unknown effects. Inspect current product state and complete authorized recovery separately from executor reconciliation and acknowledgement. Preserve separately acquired holds.",
     "Old binaries cannot operate schema seven. Binary-only rollback cannot undo migration; select a compatible candidate. Interrupted cleanup requires agreeing source hashes. Completion receipts avoid repeating completed migration."
   ],
   "privacy": [
-    "Mode-0600 database and private state contain career, resume, packet, and send history. Public manifests retain only program/provider identity, modes/digests, and local paths. Nucleus history and credentials remain separately owned."
+    "Mode-0600 database and private state contain career, resume, packet and send history. Public installation manifests retain file modes, program/provider identity and local paths. Nucleus history and credentials remain separately owned."
   ],
   "does_not_authorize": [
     "Model work, sending, domain reset, foreign-hold release, unrelated Weaver cancellation, dependency upgrades, or automatic clearing of Clockwork halts."
@@ -106,19 +106,19 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Cutover requires an owned exact candidate, compatible maintenance interfaces across affected Nucleus requesters, the sole matching durable owner hold, and proved drain. State must use its canonical supported root. Unselected dependencies are not implicitly upgraded."
+        "statement": "State must use its canonical supported root. Product deployment uses ordinary admission and activity locks; an existing hold can refuse it. The caller selects required dependency updates explicitly. Separately requested owner-scoped migration requires the sole matching durable hold and proved drain."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Selected committed Cell source and sealed candidate identity, an exact owner, explicit missing-template/projects-template/activation setup when desired, and retained completion-receipt evidence for interrupted migration."
+        "statement": "Selected committed Cell source, referenced artifacts and explicit missing-template, projects-template or activation settings when desired. Explicit maintenance uses an exact owner and can request a private completion receipt for migration; manifest deployment neither creates nor consumes that product receipt."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Matched immutable release selectors and integrity manifests, bounded maintenance/readiness observations, and exact hashed legacy cleanup/completion evidence."
+        "statement": "Owned release selectors and file metadata, bounded explicit maintenance/readiness observations and retained transactional migration and hashed source-cleanup evidence."
       }
     ],
     "data_semantics": [
@@ -134,7 +134,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Installed identity is the immutable release manifest with exact executable/provider versions, modes, native code identifiers, and entry mappings. Migration retains packet/run IDs, requests, dates, send keys, subject/body, attachment name/order/bytes, and acceptance/uncertainty."
+        "statement": "An opaque UUID identifies a prepared installed release. Its file metadata and public entry mappings locate supplied resources without an integrity claim. Migration retains packet and run IDs, requests, dates, send keys, subject/body, attachment name/order/bytes and acceptance or uncertainty."
       }
     ],
     "completeness_and_freshness": [
@@ -150,13 +150,13 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Current-user owned selectors select matching CLI, recovery installer, and Chancery provider through current. Installer adapter version one is the sealed Cell boundary; direct install/recover are unavailable. Mutations hold a state-directory advisory activity lock and honor durable holds and predecessor gates/runner locks."
+        "statement": "Current-user owned selectors select CLI, retained installer and Chancery provider through current. The manifest invokes platter-install deploy with JSON artifact paths and product settings; the old adapter phase protocol is retired. Direct install and recover remain unavailable. Product mutations use activity locks and honor existing holds and predecessor gates or runner locks."
       }
     ],
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Installation performs resource setup, configuration, initialization or migration, and publication under the operation's maintenance hold. It does not invoke doctor or gate completion on persistent-state validation or runtime readiness. Ordinary runtime checks and diagnostics remain separate."
+        "statement": "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, drains no requester and temporarily disables no binding. Runtime diagnostics and explicit maintenance remain separate."
       },
       {
         "status": "declared",
@@ -164,7 +164,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment captures/disables an existing binding, retargets its exact definition disabled, preserves timers/environment/paths/incidents, and restores captured enabled intent after all holds release. No supplied activation intent leaves an absent binding absent."
+        "statement": "The product command captures an existing platter/daily definition and retargets it directly while preserving timers, arguments, environment, paths, failure incidents and saved enabled intent. Optional enabled overrides that intent; omission leaves an absent binding absent. No automatic incident approval or uncertain resend follows."
       }
     ],
     "operational_limits": [
@@ -180,7 +180,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema seven preserves historical inputs/requests/artifacts/delivery meanings and ordered selected packets independent of attachments. Older binaries cannot operate it. Installation file compensation does not undo state migration. Runtime/installer/provider selection rolls back coherently only within supported state compatibility."
+        "statement": "Schema seven preserves historical inputs, requests, artifacts, delivery meanings and ordered selected packets independent of attachments. Older binaries cannot operate it. Program selection does not reverse a migration. Failed instructions retain effects; recovery requires explicit product operations with a compatible program."
       }
     ],
     "reliances": [
@@ -206,7 +206,7 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment source and cell-install transactions supply exact committed candidate preparation, sequencing, release metadata, and compensation; their source operation manual remains authority without an independent installed Cell contract.",
+        "statement": "Cell prepares artifacts and executes explicitly selected ordered instructions, retaining source and request correlation and process outcomes. Platter owns setup, state, maintenance and application recovery. No independent installed Cell executor contract is declared.",
         "target": "cell-deployment",
         "kind": "control"
       },

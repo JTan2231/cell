@@ -393,11 +393,12 @@ provider-owned Rust client. The client method is `Client::validate(&Path)`.
 ## Release publication guarantees
 
 The owning product stages its unchanged bundle under
-`share/chancery/PROVIDER_ID` inside its immutable release. Bundle bytes
-participate in release naming and the recorded file manifest. Its single selector
+`share/chancery/PROVIDER_ID` inside its immutable release. Opaque release IDs name the retained files; recorded manifests keep file paths
+and modes. Its single selector
 under `~/Library/Application Support/Chancery/providers/PROVIDER_ID` follows
-that product's `current` release. A failed upgrade or rollback restores the
-program and documentation together. The owning installer must reject a
+that product's `current` release. A failed instruction leaves completed changes
+in place. Explicit retained-release recovery selects programs and documentation
+together. The owning installer must reject a
 pre-existing selector owned by someone else.
 
 A selector can precede installation of the Chancery CLI. Publication is a

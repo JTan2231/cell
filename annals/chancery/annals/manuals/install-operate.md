@@ -1,7 +1,8 @@
 # Install or recover Annals
 
-Installation places resources and performs setup under the documented maintenance
-boundary. It does not gate completion on persistent-state validation, artifact
+The Cell manifest command places resources and performs setup without application
+maintenance, work draining, schedule suspension, or readiness checks. Explicit
+manual install and recovery retain the maintenance procedure below. It does not gate completion on persistent-state validation, artifact
 integrity audits, or runtime readiness checks. The product's ordinary diagnostics
 and runtime checks remain available separately.
 
@@ -81,7 +82,7 @@ cd /Users/joey/rust/cell
    state unchanged and does not complete a scheduled installation.
 4. Select only the boolean `enabled` deployment setting when the coordinator
    needs an override. `{"annals":{"enabled":false}}` keeps both owned inbox
-   bindings disabled after activation. Omission preserves captured intent and
+   bindings disabled after product setup. Omission preserves captured intent and
    a new schedule defaults enabled; recovery preserves prior intent and ignores
    the override. Preserve incident halts and operator pauses.
 5. Release only the operation's maintenance and pause after setup completes. Do not clear Clockwork incident
@@ -122,35 +123,32 @@ cannot be proved, keep maintenance and use the retained transaction.
 
 ## Operate run-owned admission
 
-Use `annals-install adapter` for the Cell coordinator interface.
+The Cell manifest runs `annals-install deploy` once with a schema-2 request on
+stdin. Annals places the release, initializes or migrates the primary, decisions and
+registered libraries, writes configuration, and selects
+the two inbox schedules directly. It does not acquire or release application
+holds, wait for admitted work, or suspend schedules. The executor
+observes command completion and does not interpret Annals state or health.
 
-1. Choose one valid run ID: 1–128 ASCII letters, digits, hyphens, underscores,
-   or periods, with no leading period.
-2. Inspect and hold the exact library admission boundary:
+The request supplies candidate paths, source paths, a run identity, selected
+products and optional product settings. Annals accepts only the boolean
+`enabled` setting. Omission preserves each existing binding's enabled state;
+a new binding defaults enabled. Operator pauses and Clockwork incident halts
+remain in force.
+
+Use these explicit product commands to inspect or change Annals admission:
 
 ```text
 annals --library DATABASE --json maintenance status
 annals --library DATABASE --json maintenance hold RUN_ID
-annals --library DATABASE --json maintenance status
-```
-
-3. Wait for `drained` and also prove durable Annals and Nucleus work is settled.
-   This read alone describes command admission. An unavailable existing
-   Nucleus service is not an empty job inventory. Do not cancel or retry to
-   manufacture drain.
-4. Use a controlled `CELL_DEPLOYMENT_RUN_ID` only with that sole matching hold
-   and exclusive drained activity. Stop on an unknown owner or incomplete
-   recovery. Follow the coordinator's apply, configure, release, then
-   activate order. Configure keeps scheduling disabled; activation restores
-   captured enabled intent after all affected holds are released.
-5. Release only the hold owned by this run:
-
-```text
 annals --library DATABASE --json maintenance release RUN_ID
 ```
 
-Corpus/feed reads and inbox pause/interrupt remain available while held.
-Release preserves operator pauses and scheduling incident halts.
+A run ID contains 1–128 ASCII letters, digits, hyphens, underscores or periods,
+with no leading period. Release removes only that owner's hold. An interrupted manifest command can leave completed setup effects in place.
+Inspect its retained log and current selections before a further operation.
+Retained manual transaction recovery remains an explicit operation.
+The executor does not run it automatically.
 
 ## Recover an interrupted installation
 

@@ -48,7 +48,7 @@ job counts and source observation times do not establish complete or current
 coverage of all external postings.
 
 Program installation and discovery state have separate lifecycles. Program
-recovery selects a verified retained release; it does not restore state or
+recovery selects a retained release from its recorded metadata; it does not restore state or
 consumed allowance. Installation creates no collection schedule. Another
 collection requires another invocation.
 

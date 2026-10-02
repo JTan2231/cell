@@ -1,85 +1,43 @@
-"""Candidate inventory and native-signature admission without content hashes."""
+"""Packaging signs declared files without running or auditing the payload."""
 
-import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
 
 from deployment import candidate, signing
 
-
 POLICY = {"schema": 1, "macos": {"profile": "local", "certificate_sha1": "a" * 40,
           "keychain": "/Users/fixture/login.keychain-db", "identifier_namespace": "local.cell"}}
 
 
 class CandidateTests(unittest.TestCase):
-    def setUp(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
-        (self.root / "bin").mkdir()
-        self.binary = self.root / "bin/alpha"
-        self.binary.write_bytes(b"native executable fixture")
-        self.manifest = {"schema": 1, "product": "alpha", "candidate_id": "uuid:fixture",
-                         "signing_policy": POLICY,
-                         "binaries": {"alpha": {"path": "bin/alpha",
-                                      "code_identifier": "local.cell.alpha.alpha"}}}
-        self.current = mock.patch.object(signing, "assert_current").start()
-        self.addCleanup(mock.patch.stopall)
-        self.verify = mock.patch.object(signing, "verify").start()
-
-    def write_manifest(self):
-        (self.root / "candidate.json").write_text(json.dumps(self.manifest))
-
-    def test_declared_signed_candidate_is_accepted(self):
-        self.write_manifest()
-        self.assertEqual(candidate.verify(self.root, signing_policy=POLICY), self.manifest)
-        self.verify.assert_called_once_with(self.binary, POLICY, "alpha", "alpha")
-
-    def test_old_hash_fields_are_opaque_and_need_no_recomputation(self):
-        self.manifest.update(candidate_id="sha256:old-release", signing_policy_digest="obsolete")
-        self.manifest["binaries"]["alpha"]["sha256"] = "obsolete"
-        self.write_manifest()
-        candidate.verify(self.root, signing_policy=POLICY)
-        self.verify.assert_called_once()
-
-    def test_missing_or_extra_executable_stops_admission(self):
-        self.write_manifest()
-        self.binary.unlink()
-        with self.assertRaises(candidate.CandidateError):
-            candidate.verify(self.root, signing_policy=POLICY)
-        self.binary.write_bytes(b"fixture")
-        (self.root / "bin/undeclared").write_bytes(b"fixture")
-        with self.assertRaises(candidate.CandidateError):
-            candidate.verify(self.root, signing_policy=POLICY)
-        self.verify.assert_not_called()
-
-    def test_symbolic_executable_is_rejected(self):
-        self.write_manifest()
-        self.binary.unlink()
-        self.binary.symlink_to(self.root / "candidate.json")
-        with self.assertRaises(candidate.CandidateError):
-            candidate.verify(self.root, signing_policy=POLICY)
-        self.verify.assert_not_called()
-
-    def test_wrong_policy_or_identifier_stops_before_signature_check(self):
-        self.manifest["signing_policy"] = {}
-        self.write_manifest()
-        with self.assertRaises(candidate.CandidateError):
-            candidate.verify(self.root, signing_policy=POLICY)
-        self.manifest["signing_policy"] = POLICY
-        self.manifest["binaries"]["alpha"]["code_identifier"] = "other.cell.alpha.alpha"
-        self.write_manifest()
-        with self.assertRaises(candidate.CandidateError):
-            candidate.verify(self.root, signing_policy=POLICY)
-        self.verify.assert_not_called()
-
-    def test_native_signature_failure_remains_a_hard_stop(self):
-        self.write_manifest()
-        self.verify.side_effect = signing.SigningError("wrong certificate")
-        with self.assertRaisesRegex(signing.SigningError, "wrong certificate"):
-            candidate.verify(self.root, signing_policy=POLICY)
+    def test_staging_signs_once_and_uses_declared_versions_without_executing_payload(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            source = root / "source"
+            descriptors = source / "pipeline/products"
+            descriptors.mkdir(parents=True)
+            (descriptors / "alpha.sh").write_text("PRODUCT_ID=alpha\nPRODUCT_DIR=alpha\n")
+            target = root / "target"
+            (target / "release").mkdir(parents=True)
+            (target / "release/alpha").write_bytes(b"opaque executable")
+            output = root / "candidate"
+            with mock.patch.object(candidate, "git", return_value=b"a" * 40), \
+                    mock.patch.object(signing, "assert_current"), \
+                    mock.patch.object(signing, "sign") as sign, \
+                    mock.patch.object(signing, "verify") as verify, \
+                    mock.patch.object(subprocess, "run", side_effect=AssertionError("payload executed")):
+                manifest = candidate.stage_build(source, "alpha", output,
+                    "main|target/release/alpha|alpha", target=target, source_key="a" * 40,
+                    versions={"alpha": "alpha 1.2.3"}, signing_policy=POLICY)
+            sign.assert_called_once()
+            verify.assert_not_called()
+            self.assertEqual(manifest["binaries"]["alpha"]["version"], "alpha 1.2.3")
+            self.assertEqual((output / "bin/alpha").read_bytes(), b"opaque executable")
+            self.assertEqual(candidate.read_manifest(output), manifest)
+            candidate.remove_tree(output)
 
 
 if __name__ == "__main__":

@@ -27,7 +27,7 @@
   ],
   "failure_and_recovery": [
     "A selected executable or stable identity failure stops without fallback.",
-    "Foreign public selectors and stale selections are rejected. File-operation or basic execution failures restore prior selectors when possible."
+    "Foreign public selectors and stale selections are rejected. An instruction failure retains completed file and selector changes for explicit recovery."
   ],
   "privacy": [
     "Host references omit the raw platform UUID; caller-owned output and inherited diagnostics can be private.",

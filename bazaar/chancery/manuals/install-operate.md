@@ -29,10 +29,9 @@ Read-only checks change neither selection nor stored versions.
    installation, or an exact owned retained release for program recovery.
    Stop for foreign selectors, or stale expected selection.
 
-The current user owns Bazaar programs and state. The Cell coordinator owns
-coordinated deployment ordering; direct installation works independently. No
-dedicated installed contract covers the coordinator, so resolution exposes that
-conditional reliance gap. Installation and inspection grant no authority
+The current user owns Bazaar programs and state. The Cell manifest executor runs
+declared deployment instructions in order; Bazaar owns selection and setup.
+Direct installation works independently. Installation and inspection grant no authority
 to append content, migrate callers, delete history, send externally, or run an
 agent. Protect all content outside source and release files.
 
@@ -47,7 +46,7 @@ cell-ci submit COMMIT
 Verify the retained manager outcome. The manager integrates, validates, attempts
 bounded repairs, deploys, and emails the outcome. For a separately authorized
 manual deployment, select a validated candidate on local main, then preview and
-run the coordinator from the Cell root:
+run the declared deployment recipes from the Cell root:
 
 ```sh
 ./deploy.sh plan bazaar
@@ -55,7 +54,7 @@ run the coordinator from the Cell root:
 ```
 
 Inspect the plan before deployment. Bazaar accepts no deployment settings or
-runtime service dependencies. Coordinated configure initializes an empty default
+runtime service dependencies. The Bazaar deployment recipe initializes an empty default
 database or checks its existing schema. Installation runs no separate artifact-integrity, database-integrity, or
 readiness gate. Preserve unresolved installation evidence after an I/O failure.
 
@@ -147,3 +146,12 @@ An uncertain append may have committed. Inspect history and relevant content
 through `bazaar.string.read` before deciding whether another append is intended.
 `bazaar.string.update` owns that recovery behavior. Program recovery does not
 resolve an uncertain content receipt or authorize another append.
+
+## Deployment recipe
+
+`bazaar-install deploy` reads one schema-two Cell recipe request from stdin.
+The product command selects supplied programs and initializes compatible default state without adding string versions.
+The manifest executor runs this instruction and records its exit status. It does
+not inspect application output or create a maintenance hold, drain work, or
+recover prior effects. A failed instruction leaves completed changes in place.
+Use the product's explicit recovery operation when recovery is required.

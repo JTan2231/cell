@@ -18,12 +18,12 @@ they do not run Usher or its installer.
 | ID | Read this to understand |
 | --- | --- |
 | `usher.recognition.inspect` | Inventory, identity and evidence rules, membership findings, report/check output, the separate operational declaration projection, consistency, privacy, and limits. |
-| `usher.installation` | The separate Rust installer, exact release identity, owned selectors, integrity verification, atomic publication, and supported retained-release recovery. |
+| `usher.installation` | The separate Rust installer, exact release identity, owned selectors, recorded metadata, atomic selector updates, and supported retained-release recovery. |
 
 ## Operations
 
 Use `usher.install.operate` to build an exact candidate, inspect installation,
-install or recover owned selectors, and verify the selected release. Installation
+install or recover owned selectors, and inspect the selected release. Installation
 does not assess the membership of a checkout.
 
 Use `usher.develop.change` to change recognition, output, packaging, or contracts.

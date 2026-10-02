@@ -7,7 +7,6 @@ pub mod command;
 mod installation;
 pub mod legacy;
 pub mod migration;
-pub mod signing;
 pub mod simple;
 pub mod transaction;
 

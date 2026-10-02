@@ -28,6 +28,15 @@ class NotificationTests(unittest.TestCase):
         for value in (job["id"], job["input_commit"], "Artifacts", "Models", "budget"):
             self.assertNotIn(value, subject + body)
 
+    def test_manifest_success_describes_instruction_completion(self):
+        job = self.job(installation_completed=True, deployment_result={
+            "schema": 2, "manifest_executor": 1, "state": "succeeded", "products": ["annals"]})
+        subject, body = render(job)
+        self.assertEqual(subject, "Cell CI: deployed — Annals")
+        self.assertIn("deployment instructions completed", body)
+        for claim in ("healthy", "ready", "maintenance", "recovery"):
+            self.assertNotIn(claim, body)
+
     def test_skipped_tests_are_visible_after_success(self):
         for deployed in (False, True):
             with self.subTest(deployed=deployed):

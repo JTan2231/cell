@@ -3,7 +3,7 @@
   "provider": {
     "id": "ci-manager",
     "name": "Cell CI manager",
-    "release": "0.7.0"
+    "release": "0.8.0"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -15,7 +15,7 @@
       "Developers own development commits on main. Git owns commit objects, ancestry, merge results, patch acceptance and application, and atomic ref updates.",
       "The CI dispatcher owns coverage selection and candidate validation. The broker owns individual gate execution and compiler admission.",
       "Nucleus owns model execution, sandbox enforcement, account access, quota admission, and provider execution records. Bazaar owns versioned prompt strings.",
-      "The deployment coordinator and product installers own installed-state evidence, maintenance, and recovery. Email and Resend own submission acceptance; the recipient's mail provider owns inbox delivery."
+      "The deployment coordinator owns ordered instruction completion. Products own application state, maintenance, health and explicit recovery. Email and Resend own submission acceptance; the recipient's mail provider owns inbox delivery."
     ],
     "inventory": {
       "covers": [
@@ -36,19 +36,19 @@
       "The private journal retains input and candidate identities, deterministic fix patches and candidate commits, exact model requests and final patch responses, validation diagnostics, deployment references, and frozen notification payloads and receipts. No automatic pruning or deletion is provided.",
       "Nucleus may disclose source and diagnostics read by the sandboxed agent to the model provider. New outcome emails disclose product and check names, failed test names, and short outcome diagnostics to Email's fixed personal recipient and mail providers. They omit job and commit IDs, model names, repair budgets, and local artifact paths. Previously frozen messages remain unchanged.",
       "Manager state uses current-user private directories and files. Nucleus and Email retain ownership of their credentials; the manager does not copy them.",
-      "Signing configuration and job snapshots retain public certificate selection, namespace and Keychain path. The private key stays in Keychain. Initial setup retains an encrypted recovery export and its private password in a mode-0700 host backup directory, with mode-0600 files; there is no upload or automatic deletion."
+      "Signing configuration and job snapshots retain public certificate selection, namespace and Keychain path. The private key stays in Keychain. Initial setup uses private temporary generation files and removes them after setup; no filesystem key export is retained."
     ],
     "compatibility_and_retirement": [
-      "Manager release 0.7.0 uses journal schema 1, queue contract 9, signing contract 2, and signing policy schema 1. New jobs freeze test, refund, signing, and release-build policy; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. Jobs without release_builds_deferred keep their ordinary release gate and terminal production-preparation failure policy. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
+      "Manager release 0.8.0 uses journal schema 1, queue contract 10, signing contract 3, and signing policy schema 1. New jobs freeze test, refund, signing, release-build policy and policy.manifest_executor=1; deployment receipt schema 2 reports instruction completion. Settled schema-1 outcomes remain readable. The new manager does not execute unfinished legacy deployment protocols; retained jobs keep their existing frozen choices. Jobs without a signing snapshot retain their earlier acceptance path. Jobs without release_builds_deferred keep their ordinary release gate and terminal production-preparation failure policy. A mismatched journal fails closed; no migration or backward-compatibility window is promised.",
       "The manager enables deterministic fixes only when the committed candidate contains pipeline/autofix.py. Older candidates retain check-only validation. The optional validator mode and retained fix history are additive; existing frozen model, test and signing policies do not change.",
-      "New jobs freeze release_builds_deferred=true. Deferral requires a signing snapshot and the committed pipeline/release_build.py marker; the installed manager checks the validator's recorded mode and requires trusted production release-check evidence before acceptance. Older candidates retain their ordinary release gate and additional production preparation. A mismatched mode fails closed. Source compilation failures in deferred mode use ordinary bounded model repair; signing, verification and other preparation failures remain terminal.",
+      "New jobs freeze release_builds_deferred=true. Deferral requires a signing snapshot and the committed pipeline/release_build.py marker; the installed manager checks the validator's recorded mode and requires trusted production release-check evidence before acceptance. Older candidates retain their ordinary release gate and additional production preparation. A mismatched mode fails closed. Source compilation failures in deferred mode use ordinary bounded model repair; signing and other preparation failures remain terminal.",
       "The installed manager and matching provider are shared infrastructure. Updating a development checkout does not select a new running manager release."
     ],
     "operational_limits": [
       "Production requires a configured external APFS volume with ownership enabled and macOS filesystem write confinement for CI and compiler bodies. The fixed volume UUID and mount path have no internal fallback. Source Git metadata, installed programs, configuration and live provider state remain host-owned.",
       "Only one delivery job and one repair loop may be active. The manager invokes the internal validator through the shared broker; root and product ci.sh wrappers support only manager commands.",
       "The validator captures MachineApplicable suggestions from the existing strict Clippy invocation and runs the formatter once for the selected Cargo packages. It prepares a patch in a temporary tracked snapshot, without changing the committed candidate. The manager applies that patch to a private index, records a private candidate and revalidates against the same job base. This path invokes no model and consumes no model repair point; unresolved lint failures still use bounded model repair.",
-      "Release checks build selected product packages together, which unifies their dependency features. Deferred jobs use one trusted production Cargo build with locked dependencies, denied build warnings and required offline mode. Deployment verifies and copies those exact signed candidates and compiles only additional products in its dependency scope.",
+      "Release checks build selected product packages together, which unifies their dependency features. Deferred jobs use one trusted production Cargo build with locked dependencies, denied build warnings and required offline mode. Deployment copies the declared candidate references and runs instructions for the selected products. It performs no candidate-content audit or compatibility-based scope expansion.",
       "New jobs default to three unrefunded gpt-5.6-terra medium repair attempts, then one unrefunded gpt-5.6-sol high attempt, with a 600-second execution timeout per invocation. Git acceptance and a recorded private candidate refund the attempt before later validation. Failed attempts remain charged for the whole job. This limits unrefunded points, not total invocations, runtime, or cost; no separate total-invocation ceiling applies.",
       "The manager requests a raw Git patch in the final response and retains it exactly. It adds a missing final LF for application, then delegates acceptance to git apply --cached --recount --whitespace=nowarn against a private parent index, without additional patch restrictions.",
       "Unknown or lost model execution, unresolved child or deployment effects, and exhausted notification transport require recovery. Notification uses at most two Email invocations, at least five minutes apart and within 23 hours of its creation.",

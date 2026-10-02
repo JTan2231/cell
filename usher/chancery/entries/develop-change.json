@@ -43,7 +43,7 @@
   "checkpoints": [
     "Recognition remains a read-only deterministic declaration check.",
     "Global collisions and missing or unreadable inventory declarations remain visible in the report.",
-    "The separate Rust installer and version-one deployment adapter preserve product-owned installation and supported legacy recovery. Release preparation builds both executable candidates; trusted macOS production preparation signs native artifacts under the persistent host signing policy."
+    "The separate Rust installer owns installation and supported explicit retained-release recovery. The schema-two deploy command is an opaque product-owned recipe; the former multi-phase adapter is retired. Release preparation builds both executable candidates; trusted macOS production preparation signs native artifacts under the persistent host signing policy."
   ],
   "adaptation": [
     "Add a universal membership condition only through an explicit Cell policy change, not by discovering an implementation dependency."

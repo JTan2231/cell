@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 from pathlib import Path
 import subprocess
@@ -12,7 +11,7 @@ import unittest
 from unittest import mock
 import uuid
 
-from deployment import build, candidate, cli, signing
+from deployment import build, candidate, signing
 
 
 COMMIT = "a" * 40
@@ -102,7 +101,7 @@ class BuildTests(unittest.TestCase):
     def stage(self, source, product, output, *arguments, **options):
         return self.bundle(output, product)
 
-    def test_all_supplied_candidates_are_copied_and_verified_without_cargo(self):
+    def test_all_supplied_candidates_are_copied_without_cargo_or_audits(self):
         path, _ = self.supplied(("alpha", "beta"))
         result = build.prepare(self.source, ["alpha", "beta"], self.output, prepared_build=path)
         self.assertEqual(result["reused_products"], ["alpha", "beta"])
@@ -112,7 +111,7 @@ class BuildTests(unittest.TestCase):
         self.tools.assert_not_called()
         self.configuration.assert_not_called()
         self.sign.assert_not_called()
-        self.assertGreaterEqual(self.verify_signature.call_count, 4)
+        self.verify_signature.assert_not_called()
         copied = self.output / "candidates" / "alpha" / "bin" / "alpha"
         supplied = path.parent / "candidates" / "alpha" / "bin" / "alpha"
         self.assertEqual(copied.read_bytes(), supplied.read_bytes())
@@ -142,7 +141,7 @@ class BuildTests(unittest.TestCase):
                     build.prepare(self.source, ["alpha", "beta"], self.output, prepared_build=path)
         self.cargo.assert_not_called()
 
-    def test_candidate_source_identity_and_inventory_changes_stop_before_missing_build(self):
+    def test_candidate_source_identity_mismatch_stops_before_missing_build(self):
         path, receipt = self.supplied()
         directory = Path(receipt["candidates"]["alpha"]["candidate_dir"])
         manifest = candidate.read_manifest(directory)
@@ -152,21 +151,18 @@ class BuildTests(unittest.TestCase):
         path.write_bytes(candidate.json_bytes(receipt))
         with self.assertRaisesRegex(build.BuildError, "selected source"):
             build.prepare(self.source, ["alpha", "beta"], self.output, prepared_build=path)
-        manifest["source_commit"] = COMMIT
-        self.write_manifest(directory, manifest)
-        receipt["candidates"]["alpha"]["candidate_id"] = manifest["candidate_id"]
-        path.write_bytes(candidate.json_bytes(receipt))
-        directory.chmod(0o700)
-        (directory / "unexpected").write_text("unexpected payload")
-        with self.assertRaisesRegex(candidate.CandidateError, "inventory changed"):
-            build.prepare(self.source, ["alpha", "beta"], self.output, prepared_build=path)
         self.cargo.assert_not_called()
 
-    def test_invalid_native_signature_stops_before_missing_build(self):
-        path, _ = self.supplied()
+    def test_supplied_payload_is_opaque_and_native_signature_is_not_a_gate(self):
+        path, receipt = self.supplied()
+        directory = Path(receipt["candidates"]["alpha"]["candidate_dir"])
+        directory.chmod(0o700)
+        (directory / "unexpected").write_bytes(b"opaque payload")
         self.verify_signature.side_effect = signing.SigningError("signature mismatch")
-        with self.assertRaisesRegex(signing.SigningError, "signature mismatch"):
-            build.prepare(self.source, ["alpha", "beta"], self.output, prepared_build=path)
+        result = build.prepare(self.source, ["alpha"], self.output, prepared_build=path)
+        self.assertEqual(result["reused_products"], ["alpha"])
+        self.assertEqual((self.output / "candidates/alpha/unexpected").read_bytes(), b"opaque payload")
+        self.verify_signature.assert_not_called()
         self.cargo.assert_not_called()
 
     def test_admitted_receipt_snapshot_rejects_changed_values(self):
@@ -191,7 +187,7 @@ class BuildTests(unittest.TestCase):
         result = build.prepare(self.source, ["alpha"], self.output, prepared_build=path,
                                prepared_build_snapshot=receipt)
         self.assertEqual(result["reused_products"], ["alpha"])
-        self.verify_signature.assert_called()
+        self.verify_signature.assert_not_called()
         self.cargo.assert_not_called()
 
     def test_supplied_reuse_cannot_claim_a_release_check_that_was_not_performed(self):
@@ -239,100 +235,6 @@ class BuildTests(unittest.TestCase):
                 mock.patch.object(build, "tool_output", side_effect=["cargo 1.96.0", "rustc 1.97.1\nhost: fixture"]):
             with self.assertRaisesRegex(build.BuildError, "cargo and rustc 1.97.1"):
                 BUILD_CONFIGURATION(self.source, self.cache, release_check=True)
-
-
-class PreparedRequestTests(unittest.TestCase):
-    def setUp(self):
-        self.directory = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
-        self.receipt = self.directory / "result.json"
-        self.receipt.write_text('{}\n')
-        self.enterContext(mock.patch.object(cli.workspace, "require_path"))
-        self.enterContext(mock.patch.object(cli, "source_commit", return_value=COMMIT))
-        self.enterContext(mock.patch.object(cli, "catalog", return_value={"alpha": {}}))
-        self.enterContext(mock.patch.object(cli, "requested_products", return_value=["alpha"]))
-        self.enterContext(mock.patch.object(cli.ci_client, "common_git_directory", return_value=self.directory / ".git"))
-
-    def request(self, path=None):
-        return cli.canonical_request(self.directory, ["alpha"], COMMIT, None, POLICY, path)
-
-    def test_replay_requires_same_prepared_path_and_values_without_readmitting(self):
-        request = self.request(self.receipt)
-        with mock.patch.object(cli, "deployment_lock", return_value=contextlib.nullcontext(7)), \
-                mock.patch.object(cli, "read_operation", return_value={"request": request}), \
-                mock.patch.object(cli, "operation_status", return_value={"operation_state": "terminal"}), \
-                mock.patch.object(cli, "create_run") as create:
-            result = cli.start_correlated(self.directory, ["alpha"], self.directory,
-                request_id="same", selected_commit=COMMIT, verbose=False, settings=None,
-                signing_policy=POLICY, prepared_build=self.receipt)
-            self.assertTrue(result["replayed"])
-            self.receipt.write_text('{"changed":true}\n')
-            with self.assertRaisesRegex(cli.DeploymentError, "different deployment request"):
-                cli.start_correlated(self.directory, ["alpha"], self.directory,
-                    request_id="same", selected_commit=COMMIT, verbose=False, settings=None,
-                    signing_policy=POLICY, prepared_build=self.receipt)
-            create.assert_not_called()
-        self.assertNotEqual(request, self.request())
-
-    def test_legacy_requests_omit_new_input_and_keep_replay_semantics(self):
-        request = self.request()
-        self.assertNotIn("prepared_build", request)
-        self.assertTrue(cli.matching_request(request, request, explicit_policy=True))
-        self.assertFalse(cli.matching_request(request, self.request(self.receipt), explicit_policy=True))
-
-    def test_legacy_prepared_admission_keeps_its_path_and_ignores_obsolete_digest(self):
-        retained = self.request(self.receipt)
-        retained["prepared_build"] = {"path": str(self.receipt), "sha256": "obsolete"}
-        retained["signing_policy_digest"] = "obsolete"
-        self.assertTrue(cli.matching_request(retained, self.request(self.receipt), explicit_policy=True))
-        other = self.directory / "other-result.json"
-        other.write_text("{}")
-        self.assertFalse(cli.matching_request(retained, self.request(other), explicit_policy=True))
-
-    def test_caller_snapshot_mismatch_stops_before_admission(self):
-        with mock.patch.object(cli, "deployment_lock") as lock, \
-                mock.patch.object(cli, "save_operation") as save:
-            with self.assertRaisesRegex(cli.DeploymentError, "caller's retained selection"):
-                cli.start_correlated(self.directory, ["alpha"], self.directory,
-                    request_id="same", selected_commit=COMMIT, verbose=False, settings=None,
-                    signing_policy=POLICY, prepared_build=self.receipt, prepared_build_snapshot={"changed": True})
-            lock.assert_not_called()
-            save.assert_not_called()
-        with self.assertRaisesRegex(cli.DeploymentError, "snapshot requires a prepared build"):
-            cli.prepared_selection(None, {"changed": True})
-        self.assertEqual(cli.prepared_selection(self.receipt, {}),
-                         cli.prepared_selection(self.receipt))
-
-    def test_run_retains_exact_prepared_selection_for_worker_and_recovery(self):
-        selection = cli.prepared_selection(self.receipt)
-        chosen = {"schema": 1, "source_commit": COMMIT, "products": ["alpha"],
-                  "catalog": {"alpha": {"metadata": {"dependencies": []}}}}
-        with mock.patch.object(signing, "assert_current"), mock.patch.object(signing, "preflight"), \
-                mock.patch.object(cli, "archive_source"):
-            path = cli.create_run(self.directory, ["alpha"], self.directory / "storage", chosen_plan=chosen,
-                signing_policy=POLICY, prepared_build=selection)
-        self.assertEqual(cli.read_json(path / "run.json")["prepared_build"], selection)
-        run = cli.Run(path, 7)
-        run.worktree.mkdir()
-        result = {"state": "built", "source_key": COMMIT,
-                  "reused_products": ["alpha"], "built_products": [], "build_seconds": 0.0}
-
-        def prepared(product, operation, command, **options):
-            preparation = path / "preparation"
-            preparation.mkdir()
-            cli.durable_json(preparation / "result.json", result)
-            return 0, path / "output"
-
-        manifest = {"product": "alpha", "source_commit": COMMIT, "source_key": COMMIT,
-                    "candidate_id": "uuid:fixture"}
-        with mock.patch.object(run, "command", side_effect=prepared) as command, \
-                mock.patch.object(candidate, "verify_signatures", return_value=manifest):
-            run.prepare()
-        invocation = command.call_args.args[2]
-        self.assertEqual(invocation[invocation.index("--prepared-build") + 1], str(self.receipt))
-        snapshot_path = Path(invocation[invocation.index("--prepared-build-snapshot-file") + 1])
-        self.assertEqual(cli.read_json(snapshot_path), selection["snapshot"])
-        self.assertEqual(run.data["build"]["reused_products"], ["alpha"])
-        self.assertEqual(run.data["records"]["alpha"]["candidate_dir"], str(path / "preparation" / "candidates" / "alpha"))
 
 
 if __name__ == "__main__":

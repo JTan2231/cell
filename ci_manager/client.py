@@ -92,7 +92,8 @@ def submit(store: Store, args) -> dict:
         now = time.time()
         data = {"input_commit": revision, "deploy_products": products, "skip_tests": skip_tests,
                 "release_builds_deferred": True,
-                "policy": {**config["policy"], "refund_accepted_patches": True}, "submission_key": request_key,
+                "policy": {**config["policy"], "refund_accepted_patches": True,
+                           "manifest_executor": 1}, "submission_key": request_key,
                 "signing_policy": signing_policy}
         store.db.execute("INSERT INTO jobs(id,submission_key,phase,created,updated,data) VALUES (?,?,'queued',?,?,?)",
                          (identity, request_key, now, now, json.dumps(data)))

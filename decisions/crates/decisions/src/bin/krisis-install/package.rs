@@ -233,29 +233,5 @@ fn source_plan(binary: &Path, source_root: Option<&Path>) -> Result<ReleasePlan>
 }
 
 pub fn prepare(paths: &Paths, options: &Install) -> Result<PreparedRelease> {
-    cell_install::signing::verify_native("krisis", "krisis", &options.binary)?;
-    super::support::checked(
-        paths,
-        &options.binary,
-        &super::support::args(&["--version"]),
-        &BTreeMap::new(),
-        30,
-    )?;
     transaction::prepare_release(&layout(), &paths.home, &plan(options)?)
-}
-
-pub fn stage(paths: &Paths, binary: &Path, source_root: &Path) -> Result<PreparedRelease> {
-    cell_install::signing::verify_native("krisis", "krisis", binary)?;
-    super::support::checked(
-        paths,
-        binary,
-        &super::support::args(&["--version"]),
-        &BTreeMap::new(),
-        30,
-    )?;
-    transaction::prepare_release(
-        &layout(),
-        &paths.home,
-        &source_plan(binary, Some(source_root))?,
-    )
 }

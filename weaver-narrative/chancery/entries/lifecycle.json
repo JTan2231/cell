@@ -1,6 +1,6 @@
 {
   "id": "weaver.lifecycle",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -54,7 +54,7 @@
   "effects": [
     "Configuration initialization creates schema 1 only in absent or empty state and atomically stores the Annals reader selection. Existing documents remain unchanged.",
     "Run-owned maintenance holds block new authoring and preserve exact resume; release removes only the selected owner. Readiness and release inspection create no model job or narrative.",
-    "The maintained installer selects immutable local program and provider bytes through the Cell coordinator; uninstall detaches owned selectors and retains private state."
+    "The maintained product command selects local program and provider files and writes configuration and state under ordinary admission and the runner lock. Uninstall detaches owned selectors and retains private state."
   ],
   "authority": [
     "Weaver owns its reading configuration, private document and recovery state, runner exclusion, deployment admission, and program/provider release selection.",
@@ -65,7 +65,7 @@
   ],
   "failure_and_recovery": [
     "Unsupported state, unavailable job inventory, foreign selectors and unproved drain stop the operation. Do not edit SQLite or delete a hold.",
-    "The coordinator recovers its retained transaction. Before candidate publication the prior installation remains selected; after publication Weaver can finish forward with the recorded reading configuration and supported state. Unproved recovery retains the named hold."
+    "A failed deployment retains completed file, configuration and state changes. The executor performs no automatic retry, rollback or product recovery. An interrupted command has unknown effects; inspect current product state and complete authorized recovery separately from acknowledgement of executor admission. Preserve separately acquired holds."
   ],
   "privacy": [
     "Requests, documents, and pending tool replies are private. Nucleus may retain full source reads. Weaver clears acknowledged replies and keeps documents and invocation records without automatic pruning.",
@@ -84,8 +84,8 @@
     },
     {
       "id": "nucleus.service",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "does_not_authorize": [
@@ -175,7 +175,7 @@
       },
       {
         "status": "declared",
-        "statement": "Public program and Chancery selectors follow the selected immutable release. The shared Cell transaction owns publication and interrupted deployment recovery; unproved recovery keeps the named hold. Uninstall retains private state."
+        "statement": "Public program and Chancery selectors follow the selected release. Each selector replacement is atomic; failed deployment retains completed changes. The product command creates no hold and drains no authoring job. The executor performs no automatic application recovery. Uninstall retains private state."
       }
     ],
     "operational_limits": [
@@ -219,7 +219,7 @@
       },
       {
         "status": "declared",
-        "statement": "The Cell coordinator owns ordered maintenance, immutable publication and retained transaction recovery; no dedicated installed Chancery contract covers the coordinator.",
+        "statement": "Cell prepares artifacts and executes explicit ordered instructions. Weaver owns setup and application recovery. Executor reconciliation and acknowledgement change only execution evidence and admission; no dedicated installed Chancery contract covers the executor.",
         "target": "cell-deployment",
         "kind": "control"
       }

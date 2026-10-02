@@ -18,8 +18,9 @@ clockwork [--json] migrate
 ```
 
 The `clockwork` CLI prints plain text by default. Pass `--json` for its
-existing compact machine response. The separate installer protocol is
-unchanged.
+existing compact machine response. Direct installer commands retain their
+interfaces. Manifest deployment invokes `clockwork-install deploy` with JSON
+artifact paths and settings on stdin and uses its exit status as completion.
 
 The Rust installer accepts the binary, installer, and provider files at absolute
 paths. It places those files and publishes their selectors without comparing
@@ -64,11 +65,10 @@ selection as `previous` and atomically replaces `current`. Optional
 expectation. Foreign public paths and selectors outside the owned installation remain
 unsupported.
 
-A failed publication before commit restores prior current,
-previous, command, installer, and provider views. If coherent restoration
-cannot be completed, all owned public selectors are detached and the
-fail-closed state is reported while releases remain. Diagnostics and retained
-selectors supply recovery evidence; replacing a foreign path is unsupported.
+A failed publication retains completed selector changes and release files.
+There is no automatic selector restoration or detachment. Inspect current
+selectors and use an explicitly selected recovery operation when authorized.
+Replacing a foreign path is unsupported.
 
 After commit, recovery reads metadata and selects an owned retained release.
 Select the retained installer explicitly. Program rollback changes program/provider
@@ -78,17 +78,17 @@ any plist or running activation may refer to them.
 
 ## Coordinated broker refresh
 
-Coordinated `./deploy.sh clockwork` captures the complete binding inventory
-before maintenance. It disables those bindings while retaining selected
-definitions and failure halts. Product adapters prepare new definitions under
-their own holds. After holds are released, it restores captured enabled intent
-through the final selected broker, rewriting those plists with its exact path.
-Previously disabled bindings stay disabled. This phase precedes EMT activation.
+Manifest `./deploy.sh clockwork` selects program files, then refreshes existing
+enabled bindings through the selected broker when a runtime database exists.
+Each binding keeps its selected definition digest. The generated plist pins the
+selected broker path. Disabled bindings stay disabled. There is no temporary
+disable-all step, maintenance hold, product expansion, or activation phase order.
 
-An interrupted deployment retains its original inventory and re-establishes
-suspension before configuration repair. Temporary disablement does not replace
-original intent. Unknown binding or projection changes stop recovery. No
-installation phase approves incidents or retries failed work.
+Binding refresh preserves failure incidents and retries no product work. A
+run-at-load definition can start work when its enabled binding is refreshed.
+An interrupted instruction has unknown effects. Completed changes remain, and
+the executor performs no automatic retry, rollback, or Clockwork recovery.
+Inspect the product state before an explicit recovery or new attempt.
 
 ## Detach and retained-state scope
 

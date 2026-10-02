@@ -59,7 +59,7 @@ credentials, prompts, private paths, or tool payloads.
 
 The internal Semantics gate is offline and has its documented 60-second deadline.
 It uses shared shell and plist syntax checks, provider validation and version
-matching, rustfmt, clippy, selected Rust tests, rustdoc, and release build.
+matching, rustfmt, clippy, selected Rust tests, and release build.
 The shared catalog gate checks contract dependency compatibility. Select
 in-memory checks for the changed boundary. Focused development checks do not
 replace the manager outcome.

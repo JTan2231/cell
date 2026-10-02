@@ -1,11 +1,6 @@
 //! Clew program selection and guarded ledger migration. Ledger rows are preserved.
 use anyhow::{Context as _, Result, ensure};
-use cell_install::{
-    adapter::{Context, Operation},
-    legacy::LegacySpec,
-    simple::Spec,
-    transaction::LockKind,
-};
+use cell_install::{adapter::Context, legacy::LegacySpec, simple::Spec, transaction::LockKind};
 use clockwork::{
     api::{Client, Manifest},
     deployment::ScheduleState,
@@ -40,122 +35,13 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: false,
-        maintained: false,
     }
-}
-
-pub fn lifecycle(
-    context: &Context,
-    operation: Operation,
-) -> cell_install::Result<serde_json::Value> {
-    lifecycle_inner(context, operation)
-        .map_err(|error| cell_install::Error::new(format!("{error:#}")))
 }
 
 #[derive(Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     daily_email_enabled: Option<bool>,
-}
-
-#[allow(clippy::too_many_lines)] // Keep the coordinated lifecycle and its captured intent together.
-fn lifecycle_inner(context: &Context, operation: Operation) -> Result<Value> {
-    let settings: Settings = serde_json::from_value(
-        context
-            .request
-            .settings
-            .clone()
-            .unwrap_or_else(|| json!({})),
-    )?;
-    let root = crate::state_dir(&context.home);
-    let gate = crate::gate(&root);
-    if operation == Operation::Inspect {
-        ensure!(
-            gate.status()?.holds.is_empty(),
-            "another operation holds Clew maintenance"
-        );
-        return Ok(
-            json!({"state_dir":root,"email_schedule":ScheduleState::capture_installed(&context.home, KEY)?}),
-        );
-    }
-    let prior = context
-        .prior()?
-        .get("lifecycle")
-        .context("Clew lifecycle baseline missing")?;
-    ensure!(
-        prior["state_dir"] == json!(root),
-        "Clew state root changed after inspection"
-    );
-    let schedule: ScheduleState = serde_json::from_value(prior["email_schedule"].clone())?;
-    let clockwork = Client::new(context.dependency_binary("clockwork")?);
-    if operation == Operation::Hold {
-        gate.hold(&context.request.run_id)?;
-        if context.request.recovery.is_some() {
-            if ScheduleState::capture(&clockwork, KEY)?.binding.is_some() {
-                clockwork.disable(KEY, None)?;
-            }
-        } else {
-            schedule.suspend(&clockwork, KEY)?;
-        }
-    }
-    if operation == Operation::Drain {
-        let status = gate.status()?;
-        ensure!(
-            status.holds == [context.request.run_id.clone()],
-            "Clew drain requires sole run-owned maintenance"
-        );
-        return Ok(json!({"waiting":!status.drained,"drained":status.drained}));
-    }
-    let installed = context.home.join(".local/bin/clew");
-    let forward = context
-        .request
-        .recovery
-        .as_ref()
-        .and_then(|r| r.get("any_apply_started"))
-        == Some(&json!(true))
-        && installed.exists();
-    if operation == Operation::Configure && context.selected()
-        || operation == Operation::Recover && forward
-    {
-        let _exclusive = gate.enter_for(&context.request.run_id)?;
-        migrate_if_needed(&root, &context.home)?;
-        crate::store::Store::initialize(&root)?;
-        if schedule.binding.is_some() || settings.daily_email_enabled.is_some() {
-            let fallback = definition(&context.home, &root)?;
-            let executable = fs::canonicalize(context.home.join(".local/bin/clew"))?;
-            let release = executable
-                .parent()
-                .and_then(Path::parent)
-                .context("Clew release missing")?;
-            let manifest = schedule.retarget(
-                fallback,
-                release,
-                &executable,
-                cell_install::file_digest(&executable)?,
-            )?;
-            ScheduleState::prepare(
-                &clockwork,
-                &manifest,
-                &context.request.run_dir.join("clew-email-definition.toml"),
-            )?;
-        }
-    }
-    if operation == Operation::Release {
-        gate.release(&context.request.run_id)?;
-    }
-    if operation == Operation::Activate {
-        ensure!(
-            gate.status()?.holds.is_empty(),
-            "Clew activation requires released maintenance"
-        );
-        let enabled = if context.request.recovery.is_some() && !forward {
-            None
-        } else {
-            settings.daily_email_enabled
-        };
-        schedule.activate(&clockwork, KEY, enabled)?;
-    }
-    Ok(json!({"schema_version":3,"safe_to_release":true}))
 }
 
 fn migrate_if_needed(root: &Path, home: &Path) -> Result<()> {
@@ -290,6 +176,50 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     Ok(
         json!({"key":KEY,"release_id":manifest.release_id,"definition":args.output,"registered":false,"activated":false}),
     )
+}
+
+/// Install program files, migrate the ledger, and publish the owned schedule.
+/// # Errors
+/// Returns installation, migration, or setup failures.
+pub fn deploy(context: &Context) -> cell_install::Result<()> {
+    deploy_inner(context).map_err(|error| cell_install::Error::new(format!("{error:#}")))
+}
+
+fn deploy_inner(context: &Context) -> Result<()> {
+    let settings: Settings = serde_json::from_value(
+        context
+            .request
+            .settings
+            .clone()
+            .unwrap_or_else(|| json!({})),
+    )?;
+    let root = crate::state_dir(&context.home);
+    let schedule = ScheduleState::capture_installed(&context.home, KEY)?;
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    let _admission = crate::gate(&root).enter()?;
+    migrate_if_needed(&root, &context.home)?;
+    crate::store::Store::initialize(&root)?;
+    if schedule.binding.is_some() || settings.daily_email_enabled.is_some() {
+        let clockwork = Client::new(context.dependency_binary("clockwork")?);
+        let executable = fs::canonicalize(context.home.join(".local/bin/clew"))?;
+        let release = executable
+            .parent()
+            .and_then(Path::parent)
+            .context("Clew release missing")?;
+        let manifest = schedule.retarget(
+            definition(&context.home, &root)?,
+            release,
+            &executable,
+            cell_install::file_digest(&executable)?,
+        )?;
+        schedule.publish(
+            &clockwork,
+            &manifest,
+            &context.request.run_dir.join("clew-email-definition.toml"),
+            settings.daily_email_enabled,
+        )?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

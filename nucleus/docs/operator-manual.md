@@ -125,7 +125,7 @@ A healthy check or explicit inactive intent, including operator pause, clears
 a pending episode. Recovery after an established halt still requires approval.
 
 Products may explicitly configure `continue-next-activation`. Empty queues,
-deployment holds and declared readiness waits are expected product outcomes;
+explicit maintenance holds and declared readiness waits are expected product outcomes;
 they do not become failures solely because no work was performed.
 
 Inspect an incident and its product evidence before approving its exact ID with
@@ -142,7 +142,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
 | `paperboy/daily` | Explicit failed-brief retry and uncertain-send reconciliation. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
-| `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip deliberate deployment holds. |
+| `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip explicit maintenance holds. |
 | `clew/daily-email` | Preserve complete application snapshots and frozen messages; require explicit recovery of uncertain submission. |
 | `emt/worker` | Treat ordinary dependency unavailability as waiting; retain exchange identities and use the basic path for its own halt. |
 
@@ -206,11 +206,12 @@ new sidecar exists. Preserve that state during recovery; do not roll back to an
 older broker or discard it to bypass a pending episode. Read the Clockwork and
 EMT installed contracts before cutover or rollback.
 
-Hold and drain EMT before holding Nucleus during coordinated deployment.
+Use explicit EMT and Nucleus maintenance operations when the intended operation
+requires their admitted work to finish. Deployment does not discover this order.
 Already admitted exchanges retain their job and email identities; installers
-do not retry product work or clear halts. Disable emt/worker for program
-replacement. Coordinated deployment restores its intended enabled selection
-only after all holds are released and its broker uses the selected Clockwork.
+do not retry product work or clear halts. Disable emt/worker explicitly when admitted work must finish before replacement.
+Product scheduling instructions preserve the intended enabled selection and
+replace its executable pins; the executor infers no group maintenance policy.
 
 ## Inspect Cell operational status
 
@@ -297,8 +298,8 @@ requester terminal records or authorize a retry.
 Rebuild embedded consumers when their provider's behavior changes. Krisis and
 Paperboy embed Conversations, including its normalization and executable
 defaults. Weaver embeds Annals, Nucleus, Iatreion, and Chancery usage interfaces.
-Deployment companion declarations select these installed consumers for rebuild.
-Keep explicit executable pins and library identities aligned during deployment.
+Select affected consumers explicitly when their supported interfaces change.
+Keep executable pins and library identities aligned through product instructions.
 See [Conversations installation](/Users/joey/rust/cell/conversations/chancery/manuals/installation-operate.md)
 and each consumer's installation contract for the exact selection rules.
 
@@ -323,15 +324,15 @@ resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
 [validation selection](/Users/joey/rust/cell/pipeline/README.md), and
 [the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
 
-For supported candidates, new CI jobs build selected release packages together
-in trusted production preparation before acceptance. Deployment verifies and
-reuses those signed candidates, then builds only additional products required by its dependency
-scope. The combined build unifies selected packages' dependency features.
-Source compilation failures use the job's bounded repair path; signing,
-verification, and other preparation failures stop the job. Older candidates and
-retained jobs keep their original release-build policy. Read the
+New CI jobs build selected release packages together in trusted production
+preparation before acceptance. Packaging signs declared native executables with
+the selected host identity. Deployment reuses the referenced packages. Neither
+phase executes program version probes or audits package inventories and native
+signatures. The combined build unifies the selected packages' dependency features.
+Compilation failures use the bounded repair path. Signing and other preparation
+failures stop the job. Retained jobs keep their frozen policies. Read the
 [queue contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
-for support detection, receipt meaning, and recovery.
+for receipt meaning and interruption handling.
 
 Selected Rust tests run through one parallel nextest stage between the selected
 products' checks before and after tests. The broker retains one compiler writer;
@@ -350,97 +351,54 @@ or turn a build receipt into test evidence.
 
 ### Cell deployment
 
-Preview the selected systems, then use the coordinator when deployment is authorized:
+Preview the instructions, then execute an authorized deployment:
 
 ```sh
 ./deploy.sh plan SYSTEM...
 ./deploy.sh SYSTEM...
 ```
 
-The coordinator selects a local `main` commit and prepares immutable candidates.
-Product declarations order selected releases and identify affected installations
-to hold. The plan adds missing or incompatible runtime dependencies and declared
-installed companions, and reports each selection reason. Consumer-owned release
-bounds select compatible candidates. Product installers read retained installation
-metadata before maintenance.
-Annals includes Usage; `decisions` aliases `krisis`.
+The executor selects the exact supplied products and source commit. Annals
+includes Usage; `decisions` aliases `krisis`. Each product declares an ordered
+manifest of `run`, `copy`, and `link` operations. The executor does not add
+products from installed versions, runtime dependencies, or requester discovery.
+Select every product required by the intended change explicitly.
 
-Selected products use their supplied candidate for maintenance. Affected-only
-products use their installed command. Admission holds and drain still apply.
-Read each product's installation contract for its setup and recovery operations.
+The executor builds or reuses the requested packages, then carries out each
+manifest instruction in its declared order. A `run` instruction supplies an
+executable, arguments, environment, input and timeout. Its output is opaque.
+A zero exit code completes that instruction. File operations complete when the
+requested copy or atomic link replacement succeeds.
 
-The shared sequence is:
+Product installation commands own their declared program placement, state setup,
+configuration, runtime pins, schedules, and service operations. Supply missing
+choices through `--settings ABSOLUTE_JSON`. Settings contain credential file
+references rather than credential bytes. Product runtime guards and diagnostics
+retain their own contracts.
 
-1. Prepare all selected candidates before maintenance.
-2. Hold and drain each affected consumer before its providers, so admitted work
-   can finish using its dependencies.
-3. When replacing Nucleus, hold it after requester continuation work has finished.
-   A requester-only deployment leaves Nucleus admission open.
-4. Prepare selected releases, then configure affected products in dependency order.
-   Products retain their atomic state-and-file transactions. Nucleus starts its
-   replacement service under its hold before requesters configure against it.
-5. Release requester holds, then release Nucleus last when it is held.
-6. Activate product schedules according to captured intent. Preserve existing
-   pauses, disabled bindings and incident halts.
+Deployment success means every instruction completed. It does not establish
+application health, integrity, compatibility, trust, or requester admission.
+A failed instruction retains earlier effects. An interrupted instruction has
+unknown effects. The executor does not retry instructions or infer a product
+rollback, maintenance release, or recovery action.
 
-A hold belongs to one run, survives process exit, and does not expire. Releasing
-it preserves other holds, operator pauses, and disabled schedules. Drain must
-include durable unfinished work and associated Nucleus jobs.
+One host lock serializes execution and remains inherited by an executing child.
+The private receipt retains the supplied manifest, source and caller identities,
+step start and completion, child identity, timing, and log references. After an
+interruption, inspect those records and use the product's explicit procedures as
+needed. Acknowledge the interrupted executor only after its process has stopped;
+acknowledgement releases executor admission and makes no application recovery
+claim. Old unfinished lifecycle runs cannot resume under this executor.
 
-Installation performs resource setup, program selection, and required state
-initialization or migration. It does not run persistent-state integrity, artifact
-integrity, or operational-readiness checks. CI does not assert those removed
-installation checks. Ordinary product diagnostics and runtime guards remain.
-Recovery restores the recorded prior or candidate setup before releasing
-admission. An uncertain apply is not repeated blindly.
-
-Setup settings supply missing choices once through `--settings ABSOLUTE_JSON`.
-Product adapters reuse existing configuration, initialize missing state, update
-pins and prepare disabled schedules. Email owns local credential installation
-and receiving-account discovery; settings contain credential file references.
-Clockwork refreshes enabled generated brokers during final activation while
-preserving product intent, custom bindings and failure halts.
-
-Unproved recovery retains the product hold and identifies its owner. A successful
-recovery still reports the original deployment failure. Cleanup failure does not
-erase installation success. The coordinator's final result distinguishes these
-outcomes.
-
-Annals recovery preserves current library state and verifies program/schema
-compatibility before releasing its deployment hold.
-
-The coordinator retains no public deployment history or resume interface.
-It retains an unresolved active transaction and uses it for recovery at the next
-ordinary deployment command. It removes the workspace only after resolution.
-Product holds and migration receipts remain until resolved. Release cleanup
-preserves current releases and exact pins held by configuration, schedules, or
-processes. Unknown or incomplete pin inventories stop deletion.
-Cleanup reads configured pins through commands supported by retained products;
-it uses Conatus `status` and excludes status history and diagnostics.
-After an attempted release or activation, recovery holds and drains work again
-before repairing product configuration. It uses the original captured intent.
-
-See [Cell deployment](/Users/joey/rust/cell/deployment/README.md) for candidate,
-locking, cleanup, and interrupted-operation details. Each product's installation
-contract owns its state, migration, scheduler, and recovery procedure.
-
-### Migration to coordinated deployment
-
-An older executable may ignore a candidate's admission hold. Install a compatible
-maintenance-capable release through the product's existing procedure first.
-Capture enabled schedules and operator pauses before stopping admission.
-Settle domain work and Nucleus jobs, install the compatible release, and restore
-only the captured enabled state after setup completes.
-
-Adapters invoke product-owned initialization and local credential setup from
-supplied settings. External authentication still requires a valid supplied
-account session. Domain imports use their explicit product operations. A
-temporary maintenance pause does not replace the operator's original intent.
+Cleanup removes executor scratch. It does not inventory installed configuration,
+schedule pins, or running applications and does not delete installed releases.
+See [Cell deployment](/Users/joey/rust/cell/deployment/README.md) for the manifest
+schema, command interfaces, locking, and retained results.
 
 ## Quiesce before work that cannot tolerate a lost attempt
 
-For coordinated deployment, use the owned holds above. For an attended service,
-storage, or authentication operation:
+For an attended service, storage, or authentication operation that must preserve
+admitted work:
 
 1. Identify every affected requester and its admission controls.
 2. Record current pauses and each schedule's selected digest and enabled state.
@@ -543,10 +501,10 @@ New submissions skip tests by default and retain other checks. Use
 retain their frozen test policy. Validation receipts and outcome emails state
 when tests were skipped.
 
-New macOS jobs freeze the persistent host signing policy and require verified
-native production candidates before source acceptance, including when tests are
-skipped. Builds, repair, installation and cache reuse preserve the selected
-certificate and stable product identifiers. Configure or rotate signing only
+New macOS jobs freeze the persistent host signing policy. Packaging signs native
+production executables before source acceptance, including when tests are skipped.
+Builds and repair preserve the selected certificate and stable product identifiers.
+Installation and cache reuse do not audit native signatures. Configure or rotate signing only
 with paused, settled CI and settled deployment and release operations. Read
 `chancery show ci-manager.signing.operate` for setup, exact certificate selection,
 key recovery and coverage; Python and standalone scripts retain their existing
@@ -555,7 +513,8 @@ runtime identities. Jobs without a signing snapshot keep their earlier path.
 Production candidates and installed releases use opaque UUID identities. Cell
 compares normalized signing-policy objects directly and lets Cargo manage build
 reuse. Build preparation, installation, and program rollback compute no custom
-artifact hashes. macOS verifies native code signatures and certificate identity.
+artifact hashes. Packaging invokes native signing with the configured certificate
+and permanent identifiers; deployment does not audit the signatures.
 Existing hash-named releases remain readable; their recorded hashes are ignored.
 Clockwork runtime launch pins and product data-migration checks retain their
 separate protocols. New release formats require a current trusted installer for
@@ -605,12 +564,11 @@ invocations. Quota deferral preserves the same request identity without another
 charge. Infrastructure failures do not select a stronger model. Bazaar supplies
 the `cell.prompts.ci-manager` selection; import its components before activation.
 
-Deployment holds the installed manager's Nucleus admission before replacing
-Nucleus. CI reports drained when no admitted or unresolved model invocation
-remains and the admission hold prevents another. Its delivery job can continue
-to supervise deployment while that hold is present. Waiting for the delivery
-job to finish at this boundary would cause a circular wait. The coordinator
-releases only its own manager hold after coherent activation or recovery.
+Deployment does not hold the installed manager's Nucleus admission. The manager
+supervises the instruction process independently of application maintenance.
+Known command or file failures fail the job and pause the queue. An interrupted
+command retains unknown effects and requires an explicit decision before another
+submission. The manager does not infer application recovery or repeat deployment.
 
 Email receives a retained program-authored outcome and idempotency key. The
 manager permits two transport invocations, at least five minutes apart and
@@ -773,11 +731,12 @@ private prompts, sources, and tool values.
 | `lost` attempt | Inspect domain state before the requester creates another attempt. |
 | Runtime failure after a domain commit | Preserve the committed result and report the runtime diagnostic. |
 | Runtime completion without the required record | Follow the product's failure policy. |
-| Unresolved deployment hold | Use that product's retained recovery procedure. |
+| Unresolved explicit maintenance hold | Use that product's retained recovery procedure. |
 
 After a shared change, read the retained installation outcome. Use product
 diagnostics separately when operational evidence is needed. Release only holds
-and pauses owned by the operation. Preserve pre-existing disabled schedules.
+and pauses only when the operation explicitly acquired them. Preserve pre-existing
+disabled schedules.
 
 ## Where facts and changes belong
 

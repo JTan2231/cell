@@ -25,9 +25,10 @@ New submissions skip tests by default. Use `--run-tests` to run the selected
 tests, or `--skip-tests` to select the default explicitly. Other checks still run.
 
 For supported candidates, new jobs compile the selected release packages once
-in trusted production preparation, then sign and verify native candidates
-before acceptance. Deployment reuses those candidates and builds only additional
-products in its dependency scope. Older candidates and retained jobs keep their
+in trusted production preparation, then run native signing instructions
+before acceptance. Deployment reuses those candidates and executes only the
+selected products' declared instructions. Successful deployment reports
+instruction completion, without application health or artifact audits. Older candidates and retained jobs keep their
 ordinary release gate.
 
 Read [queue operation](chancery/manuals/queue-operate.md) before initialization,

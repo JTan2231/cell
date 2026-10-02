@@ -1,11 +1,6 @@
 //! Bazaar program selection and empty-state initialization.
 
-use cell_install::{
-    adapter::{Context, Operation},
-    legacy::LegacySpec,
-    simple::Spec,
-    transaction::LockKind,
-};
+use cell_install::{adapter::Context, legacy::LegacySpec, simple::Spec, transaction::LockKind};
 
 #[must_use]
 pub fn specification() -> Spec {
@@ -26,7 +21,6 @@ pub fn specification() -> Spec {
         wrapper: None,
         lock_kind: LockKind::Shlock,
         lock_at_state: false,
-        maintained: false,
     }
 }
 
@@ -34,10 +28,7 @@ pub fn specification() -> Spec {
 ///
 /// # Errors
 /// Returns an error for unsupported settings or unavailable or incompatible state.
-pub fn lifecycle(
-    context: &Context,
-    operation: Operation,
-) -> cell_install::Result<serde_json::Value> {
+fn configure(context: &Context) -> cell_install::Result<()> {
     if context
         .request
         .settings
@@ -50,8 +41,15 @@ pub fn lifecycle(
     }
     let database = crate::database_path(&context.home);
     let map_error = |error: crate::api::Error| cell_install::Error::new(error.to_string());
-    if operation == Operation::Configure {
-        crate::api::Writer::initialize(&database).map_err(map_error)?;
-    }
-    Ok(serde_json::json!({"schema_version":1}))
+    crate::api::Writer::initialize(&database).map_err(map_error)?;
+    Ok(())
+}
+
+/// Install declared files and apply this product's requested setup.
+/// # Errors
+/// Returns installation or setup failures.
+pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
+    cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
+    configure(context)?;
+    Ok(())
 }

@@ -327,7 +327,8 @@ fn schedule_definition_for(
         .and_then(Path::parent)
         .context("installed release missing")?;
     let spec = crate::installation::specification();
-    let info = cell_install::verify_release_at(&spec.layout(), release, &|path| spec.legacy(path))?;
+    let info =
+        cell_install::read_release_at(&spec.layout(), release, &|path| spec.read_legacy(path))?;
     let selected = fs::canonicalize(
         crate::home()?.join("Library/Application Support/Paperboy/install/current"),
     )?;

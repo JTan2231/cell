@@ -491,8 +491,52 @@ pub fn no_unfinished_transaction(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
-// Admission, maintenance ownership, and cutover share one ordered lock scope.
+/// Place the release and carry out the declared observer setup.
 #[allow(clippy::too_many_lines)]
+pub fn deploy(options: &Install, enabled: Option<bool>) -> Result<()> {
+    let paths = Paths::new(super::home(options.home.clone())?)?;
+    paths.setup()?;
+    let prior = package::inspect(&paths)?;
+    let prepared = package::prepare(&paths, options)?;
+    let pins = Pins {
+        annals_binary: options.annals.clone(),
+        annals_config: options.annals_config.clone(),
+        annals_library_id: options.annals_library_id.clone(),
+        codex: options.codex.clone(),
+    };
+    let captured = binding(&paths, &options.clockwork, ACTIVE)?;
+    let hook = installed_hook(&paths, &prior)?;
+    let receipt = SavedFile::capture(&paths.binding, paths.uid, 0o600)?;
+    let layout = package::layout();
+    let legacy = |root: &Path| package::legacy_info(root, paths.uid);
+    let mut transaction = transaction::lock_installation(&layout, &paths.home, &legacy)?;
+    checked(
+        &paths,
+        &prepared.root.join("libexec/krisis"),
+        &args(&["--database", text(&paths.database)?, "observe", "activate"]),
+        &pins.environment(),
+        180,
+    )?;
+    let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
+    transaction.publish(&prepared, &prior, |_| Ok(()))?;
+    hook.unchanged()?;
+    receipt.unchanged()?;
+    atomic_write(
+        &paths.hooks,
+        &fs::read(prepared.root.join("package/hooks.json"))?,
+        0o600,
+    )?;
+    atomic_write(&paths.binding, format!("format=1\nrelease_id={}\ndefinition_digest={digest}\nannals_binary={}\nannals_config={}\nannals_library_id={}\n",prepared.info.release_id,text(&pins.annals_binary)?,text(&pins.annals_config)?,pins.annals_library_id).as_bytes(), 0o600)?;
+    switch(
+        &paths,
+        &options.clockwork,
+        ACTIVE,
+        &digest,
+        enabled.unwrap_or(!captured.exists || captured.enabled),
+    )?;
+    Ok(())
+}
+
 pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Value> {
     let mut paths = Paths::new(home(options.home.clone())?)?;
     if let Some(owner) = deployment_run_id {
@@ -831,182 +875,6 @@ fn cutover(
     Ok(())
 }
 
-/// Restore an interrupted coordinated cutover from its exact private evidence.
-/// This never starts observation, repeats classification, or clears an incident.
-#[allow(
-    clippy::too_many_lines,
-    reason = "Keep the ordered recovery proof and rollback steps together"
-)]
-pub fn recover_owned(options: &Install, owner: &str) -> Result<Option<bool>> {
-    let mut paths = Paths::new(home(options.home.clone())?)?;
-    paths.deployment_run_id = Some(owner.into());
-    if !exists(&paths.install)? {
-        return Ok(None);
-    }
-    let mut candidate = None;
-    let entries = fs::read_dir(&paths.install)?.collect::<std::io::Result<Vec<_>>>()?;
-    for entry in entries {
-        if !entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with(".transaction-")
-        {
-            continue;
-        }
-        let evidence = entry.path();
-        directory(&evidence, paths.uid, 0o700)?;
-        let journal = evidence.join("prior.json");
-        owned_file(&journal, paths.uid, Some(0o600))?;
-        let saved: Value = serde_json::from_slice(&fs::read(journal)?)?;
-        require(
-            saved["owner"] == owner && saved["home"] == json!(paths.home),
-            "Krisis recovery belongs to another deployment",
-        )?;
-        let prior: InstallSnapshot = serde_json::from_value(saved["selection"].clone())?;
-        let candidate_info: transaction::ReleaseInfo =
-            serde_json::from_value(saved["candidate"].clone())?;
-        let prepared = transaction::PreparedRelease {
-            root: package::root(&paths, &candidate_info),
-            info: candidate_info,
-        };
-        let controls: BTreeMap<String, Binding> =
-            serde_json::from_value(saved["controls"].clone())?;
-        let hook: SavedFile = serde_json::from_value(saved["hook"].clone())?;
-        let receipt: SavedFile = serde_json::from_value(saved["binding_receipt"].clone())?;
-        require(
-            hook.path == paths.hooks
-                && receipt.path == paths.binding
-                && hook.uid == paths.uid
-                && receipt.uid == paths.uid,
-            "Krisis recovery has foreign paths",
-        )?;
-        let pins = Pins {
-            annals_binary: options.annals.clone(),
-            annals_config: options.annals_config.clone(),
-            annals_library_id: options.annals_library_id.clone(),
-            codex: options.codex.clone(),
-        };
-        let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
-        engage(&paths, &prepared.info.release_id, &digest, &pins)?;
-        let layout = package::layout();
-        let verifier = |root: &Path| package::legacy_info(root, paths.uid);
-        let mut tx = transaction::lock_installation(&layout, &paths.home, &verifier)?;
-        let actual = transaction::inspect_detached_installation(&layout, &paths.home, &verifier)?;
-        require(
-            actual.current == prior.current || actual.current.as_ref() == Some(&prepared.info),
-            "Krisis recovery found a foreign program generation",
-        )?;
-        for key in [ACTIVE, LEGACY_OBSERVER, LEGACY_DAILY] {
-            let actual = binding(&paths, &options.clockwork, key)?;
-            let before = controls
-                .get(key)
-                .ok_or_else(|| Error::new("missing prior Krisis control"))?;
-            require(
-                actual.definition_digest == before.definition_digest
-                    || (key == ACTIVE && actual.definition_digest.as_deref() == Some(&digest)),
-                "Krisis recovery found a foreign schedule",
-            )?;
-            if actual.enabled {
-                disable(&paths, &options.clockwork, key, &actual)?;
-            }
-        }
-        assert_closed(&paths)?;
-        let schema_receipt = evidence.join("database-schema.json");
-        let legacy_data = exists(&evidence.join("database.json"))?;
-        let changed_schema = if exists(&schema_receipt)? {
-            owned_file(&schema_receipt, paths.uid, Some(0o600))?;
-            let schema: Option<i64> = serde_json::from_slice(&fs::read(&schema_receipt)?)?;
-            database_schema(&paths)? != schema
-        } else {
-            legacy_data
-        };
-        if changed_schema
-            || (prior.current.is_none()
-                && binding(&paths, &options.clockwork, ACTIVE)?
-                    .definition_digest
-                    .as_deref()
-                    == Some(&digest))
-        {
-            tx.suspend(
-                &actual,
-                &layout
-                    .public
-                    .iter()
-                    .map(|entry| entry.path.clone())
-                    .collect::<Vec<_>>(),
-            )?;
-            hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
-            let payload = prepared.root.join("libexec/krisis");
-            cell_install::signing::verify_native("krisis", "krisis", &payload)?;
-            let status: Value = serde_json::from_slice(&checked(
-                &paths,
-                &payload,
-                &args(&[
-                    "--database",
-                    text(&paths.database)?,
-                    "--json",
-                    "observe",
-                    "status",
-                ]),
-                &pins.environment(),
-                180,
-            )?)?;
-            require(
-                status["observer_baseline_at"].as_i64().is_some(),
-                "retained Krisis state has no valid observer baseline; keep maintenance, explicitly activate the observer through the exact retained candidate, then retry recovery",
-            )?;
-            tx.recover(&prior, &prepared, true, |_| Ok(()))?;
-            atomic_write(
-                &paths.hooks,
-                &fs::read(prepared.root.join("package/hooks.json"))?,
-                0o600,
-            )?;
-            atomic_write(&paths.binding,format!("format=1\nrelease_id={}\ndefinition_digest={digest}\nannals_binary={}\nannals_config={}\nannals_library_id={}\n",prepared.info.release_id,text(&pins.annals_binary)?,text(&pins.annals_config)?,pins.annals_library_id).as_bytes(),0o600)?;
-            switch(&paths, &options.clockwork, ACTIVE, &digest, false)?;
-            release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
-            finish_evidence(&paths, &evidence, legacy_data)?;
-            candidate = Some(candidate.unwrap_or(true));
-            continue;
-        }
-        tx.suspend(
-            &actual,
-            &layout
-                .public
-                .iter()
-                .map(|entry| entry.path.clone())
-                .collect::<Vec<_>>(),
-        )?;
-        hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
-        assert_closed(&paths)?;
-        receipt.restore()?;
-        tx.recover(&prior, &prepared, false, |_| Ok(()))?;
-        hook.restore()?;
-        for (key, before) in controls {
-            if let Some(digest) = before.definition_digest {
-                switch(&paths, &options.clockwork, &key, &digest, false)?;
-            }
-        }
-        release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
-        finish_evidence(&paths, &evidence, legacy_data)?;
-        candidate = Some(false);
-    }
-    Ok(candidate)
-}
-
-fn finish_evidence(paths: &Paths, evidence: &Path, legacy_data: bool) -> Result<()> {
-    if legacy_data {
-        fs::rename(
-            evidence,
-            paths
-                .install
-                .join(format!("recovered-{}", uuid::Uuid::now_v7())),
-        )?;
-    } else {
-        fs::remove_dir_all(evidence)?;
-    }
-    Ok(())
-}
-
 pub fn uninstall(options: &Control) -> Result<Value> {
     let paths = Paths::new(home(options.home.clone())?)?;
     let clockwork = options.clockwork.clone().map_or_else(
@@ -1079,11 +947,4 @@ pub fn uninstall(options: &Control) -> Result<Value> {
     Ok(
         json!({"ok":true,"data":{"uninstalled":true,"retained_release":current.release_id,"maintenance":true}}),
     )
-}
-
-pub fn recover_lock(paths: &Paths) -> Result<()> {
-    let layout = package::layout();
-    let verifier = |root: &Path| package::legacy_info(root, paths.uid);
-    let _lock = transaction::lock_installation(&layout, &paths.home, &verifier)?;
-    Ok(())
 }
