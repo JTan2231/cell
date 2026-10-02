@@ -1,6 +1,6 @@
 {
   "id": "platter.editions",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -73,8 +73,8 @@
     },
     {
       "id": "platter.preparation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "email.message.send",

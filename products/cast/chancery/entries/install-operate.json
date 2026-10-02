@@ -1,14 +1,14 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
-  "title": "Install or configure Cast discovery",
-  "summary": "Install Cast and its matching provider bundle. Initialize private state, inspect readiness and budgets, change collection configuration, or reconcile stored employer ownership.",
+  "title": "Install or configure retained Cast state",
+  "summary": "Install Cast and its matching provider bundle. Initialize retained private state, inspect local diagnostics and accounting, change retained configuration or source metadata, or reconcile employer ownership without collecting or migrating data.",
   "use_when": [
     "Cast should be installed, initialized, diagnosed or explicitly reconfigured.",
-    "The caller needs to inspect local budgets or determine why configured sources are unavailable.",
+    "The caller needs to inspect retained local accounting, configuration or source diagnostics.",
     "Existing ATS or older JSON-LD records need the supported employer-ownership correction without resetting paid usage."
   ],
   "do_not_use_when": [
@@ -42,7 +42,7 @@
       "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
     },
     {
-      "label": "Disable collection from a source",
+      "label": "Clear a retained source enabled setting",
       "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
     },
     {
@@ -60,9 +60,9 @@
   ],
   "effects": [
     "Direct installation stages an immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. The deploy recipe also initializes state and applies supplied configuration. It creates no schedule.",
-    "Init creates private local state. Explicit configuration changes affect subsequent collection; diagnostic reads do not start paid searches.",
+    "Init creates private legacy state. Explicit configuration changes update retained settings; diagnostic reads do not start searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
-    "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable preserves evidence but removes that source from ordinary collection.",
+    "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable clears its retained enabled setting and preserves evidence. No remote source is fetched.",
     "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints.",
     "The Cast deployment recipe initializes missing state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
   ],
@@ -78,7 +78,7 @@
   "failure_and_recovery": [
     "Deployment refuses foreign selectors and stale expected selections. A failed instruction retains completed changes for explicit recovery.",
     "Program rollback preserves current domain state. Do not hand-edit database rows.",
-    "Resolve missing keys or provider restrictions separately; configuration changes do not purchase credits or reset accumulated usage."
+    "Configuration changes do not purchase credits or reset accumulated usage. Diagnostic key presence does not establish provider authentication or current availability."
   ],
   "privacy": [
     "Keys remain in the caller environment and user-owned shell configuration, outside the Cast database and installed provider bundle.",
@@ -150,7 +150,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "This procedure starts no collection unless separately requested and creates no schedule, model job or downstream application result. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
+        "statement": "This procedure starts no collection and creates no schedule, model job or downstream application result. The unused current model is not activated and no data is migrated. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
       },
       {
         "status": "declared",
@@ -164,7 +164,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The operation retains its ID; this contract removes automatic executable checks and selector rollback. Required feature contracts provide complete explanations; program recovery does not restore state and older programs can reject automatic_excluded_ats."
+        "statement": "The operation retains its ID and retires all collection. Required feature contracts provide complete explanations. Legacy state and read schemas remain; program recovery does not restore state and older programs can reject automatic_excluded_ats."
       }
     ],
     "reliances": [
@@ -188,13 +188,6 @@
         "target": "cast",
         "kind": "data",
         "contract": "cast.discovery.explore"
-      },
-      {
-        "status": "declared",
-        "statement": "Any separately requested collection follows ordinary and exact-job admission policy.",
-        "target": "cast",
-        "kind": "control",
-        "contract": "cast.discovery.collect"
       }
     ]
   },
@@ -209,11 +202,6 @@
       "id": "cast.state",
       "min_contract": 2,
       "max_contract_exclusive": 3
-    },
-    {
-      "id": "cast.discovery.collect",
-      "min_contract": 6,
-      "max_contract_exclusive": 7
     },
     {
       "id": "cast.discovery.explore",
@@ -232,7 +220,7 @@
     "Install a supplied binary and bundle through a trusted tested candidate, then verify command identity and register usage.",
     "Initialize missing state, inspect readiness and complete configuration, and explicitly apply only the intended complete replacement.",
     "Add or disable an exact source and verify ownership and enabled state without treating enrollment as collection success.",
-    "Stop collection before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
+    "Stop writers before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
     "Recover a canonical retained release. Program recovery leaves discovery state unchanged."
   ],
   "checkpoints": [

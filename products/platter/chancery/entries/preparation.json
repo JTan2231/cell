@@ -1,6 +1,6 @@
 {
   "id": "platter.preparation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -70,11 +70,6 @@
       "max_contract_exclusive": 4
     },
     {
-      "id": "cast.discovery.collect",
-      "min_contract": 5,
-      "max_contract_exclusive": 7
-    },
-    {
       "id": "annals.corpus.explore",
       "min_contract": 2,
       "max_contract_exclusive": 3
@@ -105,7 +100,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Canonical supported state, compatible Cast export/exact URL collection, nonempty complete Annals vita work list, full supported posting text, complete Bazaar prompt selection, and authenticated compatible Nucleus are required. Tailored work also requires supported template, compatible Weaver, Tectonic, and Python/pypdf."
+        "statement": "Canonical supported state, compatible Cast retained export, nonempty complete Annals vita work list, full supported posting text, complete Bazaar prompt selection, and authenticated compatible Nucleus are required. URL-selected runs require one matching retained Cast job. Tailored work also requires supported template, compatible Weaver, Tectonic, and Python/pypdf."
       },
       {
         "status": "declared",
@@ -115,7 +110,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Cast job identity or an exact public URL resolved through Cast; complete captured posting and career text; applicable immutable template; pinned prompt components; captured Weaver directions; optional deadline and regeneration identity. Vita work label is career entry ID, first heading is title or label fallback, and complete text is body."
+        "statement": "Cast job identity or a public URL matching one retained Cast job by canonical supported ATS identity or normalized URL; complete captured posting and career text; applicable immutable template; pinned prompt components; captured Weaver directions; optional deadline and regeneration identity. Vita work label is career entry ID, first heading is title or label fallback, and complete text is body."
       }
     ],
     "outputs": [
@@ -197,10 +192,10 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Cast supplies retained discovery records and exact URL collection without changing disabled-source enrollment or board-scan policy.",
+        "statement": "Cast supplies retained discovery records through its supported export. URL selection reads that export and performs no collection.",
         "target": "cast",
         "kind": "data",
-        "contract": "cast.discovery.collect"
+        "contract": "cast.discovery.explore"
       },
       {
         "status": "declared",

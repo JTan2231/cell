@@ -3,8 +3,7 @@
 use crate::{
     Result,
     models::{
-        Budgets, Company, CompanyDraft, Config, Coverage, DiscoveryQuery, Evidence, Job, JobDraft,
-        Snapshot, Source, VerificationResult,
+        Company, CompanyDraft, Config, Coverage, DiscoveryQuery, Evidence, Job, Snapshot, Source,
     },
     normalize_url, now, stable_id, timestamp,
 };
@@ -241,42 +240,12 @@ impl Store {
         })
     }
 
-    pub fn coverage(&self, query: &DiscoveryQuery) -> Result<Coverage> {
-        let fingerprint = query_fingerprint(query);
-        self.read(|c| {
-            let existing = get::<Coverage>(c, "coverage", &query.id)?;
-            if let Some(existing) = existing.filter(|v| v.query_fingerprint == fingerprint) {
-                return Ok(existing);
-            }
-            Ok(Coverage {
-                query_id: query.id.clone(),
-                provider: query.provider.clone(),
-                status: "never_run".into(),
-                last_attempt_at: None,
-                last_complete_at: None,
-                next_due_at: 0,
-                cursor: query.cursor.clone(),
-                note: None,
-                high_watermark: None,
-                query_fingerprint: fingerprint,
-            })
-        })
-    }
-
-    pub fn save_coverage(&self, coverage: &Coverage) -> Result<()> {
-        self.write(|tx| put(tx, "coverage", &coverage.query_id, coverage))
-    }
-
     pub fn sources(&self) -> Result<Vec<Source>> {
         self.read(|c| all(c, "sources"))
     }
 
     pub fn source(&self, id: &str) -> Result<Source> {
         self.read(|c| get(c, "sources", id)?.ok_or_else(|| "source not found".into()))
-    }
-
-    pub fn save_source(&self, source: &Source) -> Result<()> {
-        self.write(|tx| put(tx, "sources", &source.id, source))
     }
 
     pub fn add_source(&self, company_id: &str, url: &str) -> Result<Source> {
@@ -289,11 +258,6 @@ impl Store {
 
     pub fn add_manual_source(&self, input: &str, company_id: Option<&str>) -> Result<Source> {
         self.manual_source(input, company_id, true)
-    }
-
-    /// Retains the posting's source without enrolling a new source in ordinary collection.
-    pub fn add_target_source(&self, input: &str) -> Result<Source> {
-        self.manual_source(input, None, false)
     }
 
     fn manual_source(
@@ -334,97 +298,12 @@ impl Store {
         })
     }
 
-    /// Records one observed posting without changing board scan or scheduling state.
-    pub fn record_job_observation(&self, source: &Source, draft: &JobDraft) -> Result<Job> {
-        self.write(|tx| job_inner(tx, &source.company_id, &source.id, draft))
-    }
-
     pub fn disable_source(&self, id: &str) -> Result<Source> {
         self.write(|tx| {
             let mut source: Source = get(tx, "sources", id)?.ok_or("source not found")?;
             source.enabled = false;
             put(tx, "sources", id, &source)?;
             Ok(source)
-        })
-    }
-
-    pub fn ingest_company(&self, draft: &CompanyDraft, discovery_source: &str) -> Result<Company> {
-        self.write(|tx| ingest_inner(tx, draft, discovery_source))
-    }
-
-    pub fn record_discovery(
-        &self,
-        companies: &[CompanyDraft],
-        discovery_source: &str,
-        coverage: &Coverage,
-    ) -> Result<()> {
-        self.write(|tx| {
-            for draft in companies {
-                ingest_inner(tx, draft, discovery_source)?;
-            }
-            put(tx, "coverage", &coverage.query_id, coverage)
-        })
-    }
-
-    pub fn record_verification(
-        &self,
-        source: &Source,
-        result: &VerificationResult,
-        interval: u64,
-    ) -> Result<()> {
-        self.write(|tx| {
-            let mut source=source.clone();
-            let config=read_config(tx)?;
-            if !config.allows_automatic_url(&source.url) { return Ok(()); }
-            if crate::adapters::board_identity(&source.url).is_some() {
-                source.company_id=ats_company_inner(tx,&source.url,None)?.id;
-            }
-            if source.cursor.is_none() { tx.execute("DELETE FROM source_scan_seen WHERE source_id=?1",[&source.id])?; }
-            for draft in &result.jobs {
-                if !config.allows_automatic_posting(&draft.url, draft.apply_url.as_deref()) { continue; }
-                let job=job_inner(tx,&source.company_id,&source.id,draft)?;
-                tx.execute("INSERT OR IGNORE INTO source_scan_seen VALUES(?1,?2)",params![source.id,job.id])?;
-            }
-            for url in &result.careers_urls {
-                if let Ok(url)=normalize_url(url) {
-                    let board=crate::adapters::canonical_board_url(&url);
-                    let existing=all::<Source>(tx,"sources")?;
-                    let html_count=existing.iter().filter(|item| item.company_id==source.company_id && crate::adapters::canonical_board_url(&item.url).is_none()).count();
-                    if board.is_some() || (source.discovery_depth<2 && html_count<6) {
-                        if board.is_some() { ats_company_inner(tx,&url,Some(&source.url))?; }
-                        let mut discovered=source_inner(tx,&source.company_id,board.as_deref().unwrap_or(&url))?;
-                        if discovered.id!=source.id && discovered.status=="never_checked" {
-                            discovered.discovery_depth=source.discovery_depth.saturating_add(1);
-                            put(tx,"sources",&discovered.id,&discovered)?;
-                        }
-                    }
-                }
-            }
-            if let Some(mut company)=get::<Company>(tx,"companies",&source.company_id)? {
-                let mut changed=false;
-                if let Some(name)=&result.company_name && !name.is_empty() && (company.name==company.domain.clone().unwrap_or_default() || company.name=="Unknown employer" || company.name.starts_with("ats:")) { company.name.clone_from(name); merge_evidence(&mut company.evidence,&[Evidence {source_url:source.url.clone(),kind:"employer_name".into(),note:"Employer name supplied by the matching careers adapter".into(),..Default::default()}]); changed=true; }
-                if changed { company.revision+=1; put_revision(tx,"company",&company.id,company.revision,&company)?; put(tx,"companies",&company.id,&company)?; }
-            }
-            if result.complete && result.outcome=="complete" {
-                for mut job in all::<Job>(tx,"jobs")? {
-                    if job.source_id!=source.id { continue; }
-                    if !config.allows_automatic_posting(&job.url, job.apply_url.as_deref()) { continue; }
-                    let seen:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM source_scan_seen WHERE source_id=?1 AND job_id=?2)",params![source.id,job.id],|r|r.get(0))?;
-                    if !seen {
-                        job.missing_complete_snapshots+=1;
-                        let first_missing=*job.first_missing_at.get_or_insert_with(timestamp);
-                        let availability=if job.missing_complete_snapshots>=2 && timestamp()-first_missing>=86400 {"presumed_closed"}else{"missing"};
-                        if job.availability!=availability {job.availability=availability.into();job.revision+=1;put_revision(tx,"job",&job.id,job.revision,&job)?;}
-                        put(tx,"jobs",&job.id,&job)?;
-                    }
-                }
-                tx.execute("DELETE FROM source_scan_seen WHERE source_id=?1",[&source.id])?;
-            }
-            let mut updated=source.clone();
-            updated.last_attempt_at=Some(now()); updated.status.clone_from(&result.outcome); updated.cursor.clone_from(&result.next_cursor);
-            updated.note=(!result.warnings.is_empty()).then(||result.warnings.join("; "));
-            if result.complete && result.outcome=="complete" { updated.last_success_at=Some(now()); updated.next_due_at=timestamp()+i64::try_from(interval)?; } else { updated.next_due_at=0; }
-            put(tx,"sources",&updated.id,&updated)
         })
     }
 
@@ -497,89 +376,6 @@ impl Store {
                 }
             }
             Ok(json!({"moved_sources":moved_sources,"moved_jobs":moved_jobs,"quarantined_jobs":quarantined_jobs,"renamed_candidates":renamed_candidates,"cleared_shared_identities":cleared_shared_identities,"retained":"source/job IDs, request ledger, run history, query coverage and cursors"}))
-        })
-    }
-
-    pub fn start_run(&self) -> Result<String> {
-        self.write(|tx| {
-            interrupt_pending(tx)?;
-            tx.execute(
-                "UPDATE runs SET status='interrupted',finished_at=?1 WHERE status='running'",
-                [now()],
-            )?;
-            let id = format!("run_{}", uuid::Uuid::now_v7());
-            tx.execute(
-                "INSERT INTO runs(id,started_at,started_epoch,status) VALUES(?1,?2,?3,'running')",
-                params![id, now(), timestamp()],
-            )?;
-            Ok(id)
-        })
-    }
-
-    pub fn finish_run(&self, id: &str, status: &str, note: &str) -> Result<()> {
-        self.write(|tx| {
-            interrupt_pending(tx)?;
-            tx.execute(
-                "UPDATE runs SET finished_at=?2,status=?3,note=?4 WHERE id=?1",
-                params![id, now(), status, note],
-            )?;
-            Ok(())
-        })
-    }
-
-    pub fn reserve_request(
-        &self,
-        run_id: &str,
-        provider: &str,
-        max_units: u64,
-        budgets: &Budgets,
-    ) -> Result<String> {
-        self.write(|tx| {
-            let now_epoch=timestamp(); let day_start=now_epoch.div_euclid(86400)*86400;
-            let month=time::OffsetDateTime::now_utc().date().replace_day(1)?.midnight().assume_utc().unix_timestamp();
-            let run_count:u64=tx.query_row("SELECT COUNT(*) FROM requests WHERE run_id=?1",[run_id],row_u64)?;
-            let day_count:u64=tx.query_row("SELECT COUNT(*) FROM requests WHERE epoch>=?1",[day_start],row_u64)?;
-            let started:i64=tx.query_row("SELECT started_epoch FROM runs WHERE id=?1",[run_id],|r|r.get(0))?;
-            if run_count>=budgets.http_per_run || day_count>=budgets.http_daily {return Err("budget_exhausted: HTTP request limit".into());}
-            if now_epoch.saturating_sub(started)>=i64::try_from(budgets.runtime_seconds)? {return Err("budget_exhausted: runtime limit".into());}
-            let used=|since:i64|->Result<u64>{Ok(tx.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1 AND epoch>=?2",params![provider,since],row_u64)?)};
-            let exceeds=|used:u64,limit:u64| used.checked_add(max_units).is_none_or(|sum|sum>limit);
-            match provider {
-                "theirstack" if exceeds(used(0)?,budgets.theirstack_total_credits)||exceeds(used(day_start)?,budgets.theirstack_daily_credits)=>return Err("budget_exhausted: TheirStack credit limit".into()),
-                "brave" if exceeds(used(month)?,budgets.brave_monthly_requests)||exceeds(used(day_start)?,budgets.brave_daily_requests)=>return Err("budget_exhausted: Brave request limit".into()),
-                "http"|"hn"|"theirstack"|"brave"=>{},
-                _=>return Err("unknown request provider".into()),
-            }
-            let id=format!("request_{}",uuid::Uuid::now_v7());
-            tx.execute("INSERT INTO requests VALUES(?1,?2,?3,?4,?5,?6,NULL,'reserved')",params![id,run_id,provider,now(),now_epoch,i64::try_from(max_units)?])?;Ok(id)
-        })
-    }
-
-    pub fn settle_request(&self, id: &str, actual: Option<u64>) -> Result<()> {
-        self.write(|tx| {
-            if let Some(actual) = actual {
-                let reserved: u64 = tx.query_row(
-                    "SELECT reserved_units FROM requests WHERE id=?1",
-                    [id],
-                    row_u64,
-                )?;
-                if actual > reserved {
-                    return Err("provider consumption exceeded reservation".into());
-                }
-            }
-            tx.execute(
-                "UPDATE requests SET charged_units=?2,status=?3 WHERE id=?1 AND status='reserved'",
-                params![
-                    id,
-                    actual.map(i64::try_from).transpose()?,
-                    if actual.is_some() {
-                        "settled"
-                    } else {
-                        "uncertain"
-                    }
-                ],
-            )?;
-            Ok(())
         })
     }
 
@@ -739,33 +535,6 @@ fn all<T: DeserializeOwned>(c: &Connection, table: &str) -> Result<Vec<T>> {
     let rows = statement.query_map([], |r| r.get::<_, String>(0))?;
     rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
 }
-fn interrupt_pending(tx: &Transaction<'_>) -> Result<()> {
-    tx.execute(
-        "UPDATE requests SET status='uncertain' WHERE status='reserved'",
-        [],
-    )?;
-    for mut source in all::<Source>(tx, "sources")? {
-        if source.status == "running" {
-            source.status = "partial_interrupted".into();
-            source.note = Some(
-                "run ended before the response checkpoint; resume preserves the cursor".into(),
-            );
-            source.next_due_at = 0;
-            put(tx, "sources", &source.id, &source)?;
-        }
-    }
-    for mut coverage in all::<Coverage>(tx, "coverage")? {
-        if coverage.status == "running" {
-            coverage.status = "partial_interrupted".into();
-            coverage.note = Some(
-                "run ended before the response checkpoint; resume preserves the cursor".into(),
-            );
-            coverage.next_due_at = 0;
-            put(tx, "coverage", &coverage.query_id, &coverage)?;
-        }
-    }
-    Ok(())
-}
 fn query_fingerprint(query: &DiscoveryQuery) -> String {
     stable_id(
         "query",
@@ -919,40 +688,6 @@ fn read_config(c: &Connection) -> Result<Config> {
     Ok(serde_json::from_str(&body)?)
 }
 
-fn ingest_inner(
-    tx: &Transaction<'_>,
-    draft: &CompanyDraft,
-    discovery_source: &str,
-) -> Result<Company> {
-    let config = read_config(tx)?;
-    let company = company_inner(tx, draft)?;
-    for url in &draft.careers_urls {
-        if let Ok(url) = normalize_url(url) {
-            if crate::adapters::board_identity(&url).is_some() {
-                ats_company_inner(
-                    tx,
-                    &url,
-                    draft.evidence.first().map(|e| e.source_url.as_str()),
-                )?;
-            }
-            source_inner(tx, &company.id, &url)?;
-        }
-    }
-    if draft.careers_urls.is_empty()
-        && let Some(url) = &company.website_url
-    {
-        source_inner(tx, &company.id, url)?;
-    }
-    for job in &draft.jobs {
-        if !job.url.is_empty()
-            && config.allows_automatic_posting(&job.url, job.apply_url.as_deref())
-        {
-            job_inner(tx, &company.id, discovery_source, job)?;
-        }
-    }
-    Ok(company)
-}
-
 fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> Result<Company> {
     let board = crate::adapters::board_identity(url).ok_or("unsupported ATS board")?;
     let canonical = crate::adapters::canonical_board_url(url).ok_or("unsupported ATS board")?;
@@ -1030,124 +765,6 @@ fn source_inner_with_enabled(
     };
     put(tx, "sources", &id, &source)?;
     Ok(source)
-}
-
-#[allow(clippy::too_many_lines)]
-fn job_inner(
-    tx: &Transaction<'_>,
-    company_id: &str,
-    source_id: &str,
-    draft: &JobDraft,
-) -> Result<Job> {
-    let url = normalize_url(&draft.url)?;
-    let url_alias = format!("url:{url}");
-    let key_alias = format!("key:{}", draft.source_key);
-    let existing = if draft.source_key.is_empty() {
-        None
-    } else {
-        alias(tx, "job_aliases", "job_id", &key_alias)?
-    }
-    .or(alias(tx, "job_aliases", "job_id", &url_alias)?);
-    let id = existing.unwrap_or_else(|| {
-        stable_id(
-            "job",
-            if draft.source_key.is_empty() {
-                &url_alias
-            } else {
-                &key_alias
-            },
-        )
-    });
-    let previous = get::<Job>(tx, "jobs", &id)?;
-    let mut evidence = previous
-        .as_ref()
-        .map_or_else(Vec::new, |j| j.evidence.clone());
-    merge_evidence(&mut evidence, &draft.evidence);
-    let job = if let Some(previous) = previous
-        .as_ref()
-        .filter(|p| !p.source_id.starts_with("discovery:") && source_id.starts_with("discovery:"))
-    {
-        let mut job = previous.clone();
-        job.last_seen_at = now();
-        job.evidence = evidence;
-        job
-    } else {
-        Job {
-            id: id.clone(),
-            revision: previous.as_ref().map_or(1, |p| p.revision),
-            company_id: company_id.into(),
-            source_id: source_id.into(),
-            source_key: draft.source_key.clone(),
-            title: draft.title.clone(),
-            url,
-            apply_url: draft.apply_url.clone(),
-            location: draft.location.clone(),
-            remote: draft.remote,
-            employment_type: draft.employment_type.clone(),
-            source_published_at: draft.source_published_at.clone(),
-            source_updated_at: draft.source_updated_at.clone(),
-            source_internal_id: draft.source_internal_id.clone(),
-            first_seen_at: previous
-                .as_ref()
-                .map_or_else(now, |p| p.first_seen_at.clone()),
-            last_seen_at: now(),
-            availability: if source_id.starts_with("discovery:") {
-                "unknown"
-            } else if draft.is_listed {
-                "listed"
-            } else {
-                "unlisted"
-            }
-            .into(),
-            missing_complete_snapshots: 0,
-            first_missing_at: None,
-            description: draft.description.as_ref().map(|s| {
-                s.split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .chars()
-                    .take(1200)
-                    .collect()
-            }),
-            evidence,
-            compensation: draft.compensation.clone(),
-            geographic_eligibility: draft.geographic_eligibility.clone(),
-            published_at_semantics: draft.published_at_semantics.clone(),
-            content_fingerprint: draft.description.as_ref().map(|s| stable_id("content", s)),
-            parser_version: env!("CARGO_PKG_VERSION").into(),
-        }
-    };
-    let material = |j: &Job| {
-        let mut value = serde_json::to_value(j).unwrap_or_default();
-        if let Some(o) = value.as_object_mut() {
-            for key in [
-                "revision",
-                "first_seen_at",
-                "last_seen_at",
-                "missing_complete_snapshots",
-                "first_missing_at",
-            ] {
-                o.remove(key);
-            }
-        }
-        value
-    };
-    let mut job = job;
-    if previous
-        .as_ref()
-        .is_none_or(|p| material(p) != material(&job))
-    {
-        if previous.is_some() {
-            job.revision += 1;
-        }
-        put_revision(tx, "job", &id, job.revision, &job)?;
-    }
-    put(tx, "jobs", &id, &job)?;
-    if !draft.source_key.is_empty() {
-        add_alias(tx, "job_aliases", "job_id", &key_alias, &id)?;
-    }
-    add_alias(tx, "job_aliases", "job_id", &url_alias, &id)?;
-    Ok(job)
 }
 
 fn merge_evidence(existing: &mut Vec<Evidence>, incoming: &[Evidence]) {

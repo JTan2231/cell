@@ -5,13 +5,13 @@
   "mode": "use",
   "support": "supported",
   "title": "Inspect and export discovered companies and jobs",
-  "summary": "Read stored companies, jobs, collection outcomes and coverage. Export a consistent JSON snapshot for downstream selection. These reads do not start collection.",
+  "summary": "Read retained companies, jobs, historical collection outcomes and coverage. Export a consistent JSON snapshot for downstream selection. Cast performs no collection.",
   "use_when": [
-    "A caller needs stored companies and jobs or the timestamps, limits and outcomes of collection work.",
+    "A caller needs stored companies and jobs or the timestamps, limits and outcomes of historical collection work.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
   ],
   "do_not_use_when": [
-    "Current remote sources must be fetched or a discovery run started.",
+    "Current remote sources must be fetched; Cast no longer provides collection.",
     "The caller needs a personal recommendation or application workflow."
   ],
   "outcome": "Retained discovery records or one consistent JSON snapshot carrying stable identities, revisions, evidence and collection coverage.",
@@ -74,7 +74,7 @@
   ],
   "failure_and_recovery": [
     "An empty result contains no stored records matching the selected query and limits.",
-    "Use supported configuration/collection commands to refresh information and state reconcile-ownership for the documented ownership correction; do not inspect or repair SQLite directly."
+    "Reads do not refresh information. Cast has no collection interface. Use state reconcile-ownership for the documented local ownership correction; do not inspect or repair SQLite directly."
   ],
   "privacy": [
     "CLI output and exported snapshots are private caller-owned data. Reads send no information to remote systems."
@@ -111,7 +111,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Reads and exports include all retained jobs. Collection applies no title substring requirement. Job counts describe retained records rather than all postings available from external sources. Consumers choose jobs by title, seniority, location or other preferences."
+        "statement": "Reads and exports include all retained jobs without a title substring requirement. Job counts describe retained records rather than all postings available from external sources. Consumers choose jobs by title, seniority, location or other preferences."
       },
       {
         "status": "declared",
@@ -119,7 +119,7 @@
       },
       {
         "status": "declared",
-        "statement": "Description excerpts are capped at 1,200 characters. Third-party discovery records unknown. Employer/ATS observations record listed or an explicit unlisted flag. A posting absent from a completed employer-source scan records missing; presumed_closed requires at least two complete missing scans and 24 hours since the first absence."
+        "statement": "Description excerpts are capped at 1,200 characters. Retained unknown, listed, unlisted, missing and presumed_closed values describe historical collection evidence. Historical presumed_closed required at least two complete missing scans and 24 hours since the first absence. Cast no longer scans or updates availability from external sources."
       }
     ],
     "identity_and_units": [
@@ -135,11 +135,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of all retained companies, jobs and collection records. captured_at describes snapshot capture; record dates describe retained observations. Source timestamps describe ordinary board collection. Targeted job observation updates the selected job and run record while preserving board-scan state; consult the run note for scope and outcome."
+        "statement": "Export is one consistent view of all retained companies, jobs and historical collection records. captured_at describes snapshot capture; record dates describe retained observations. Source timestamps describe historical ordinary board collection. Historical targeted job observations changed the selected job and run record while preserving board-scan state; retained run notes describe their scope and outcome."
       },
       {
         "status": "declared",
-        "statement": "Read operations return stored records without fetching source URLs."
+        "statement": "Read operations return stored records without fetching source URLs. Cast has no collection commands. The unused current model does not replace these reads or establish current source availability."
       }
     ],
     "access": [

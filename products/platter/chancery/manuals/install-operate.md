@@ -54,8 +54,8 @@ The committed declarations order selected instructions; the executor adds no
 dependencies or affected requesters. Unselected products retain their installed
 interfaces. Deployment creates no maintenance hold and drains no requester.
 
-Require Cast collection contract 5, Email's byte-payload interface, fixed Annals
-Vita reads, compatible Weaver caller identity, authenticated Nucleus, renderer
+Require Cast's supported retained export, Email's byte-payload interface, fixed
+Annals Vita reads, compatible Weaver caller identity, authenticated Nucleus, renderer
 tools, and a complete Bazaar prompt selection. Read `platter.maintenance` and
 `platter.preparation` for exact readiness limits. A successful build or catalog
 entry does not prove live readiness or authorize dependency upgrades.

@@ -1,9 +1,43 @@
-# Cast state and collection policy
+# Cast state and current model definitions
 
-Cast owns the selected discovery database, complete collection configuration,
-source enrollment, local budget counters, and the supported employer-ownership
+Cast owns the selected discovery database, retained collection configuration,
+source metadata, local budget counters, and the supported employer-ownership
 repair. These are local current-user interfaces. Use `cast.install.operate`
 for the setup, configuration, diagnosis, and recovery procedure.
+
+Cast performs no collection. Configuration, source controls, budget reads,
+and ownership reconciliation remain available for existing state. These
+interfaces do not populate the unused current model or refresh retained jobs.
+
+## Unused current model
+
+`cast::current` defines `Company`, `Job`, `Source`, `Location`, `JobLocation`,
+and `JobSource`. `cast::current::SCHEMA` contains the corresponding SQLite
+definitions:
+
+```text
+company      id, name
+job          id, employer_id -> company, title, description, work_mode, status
+source       id, name, url, operator_id -> company [optional]
+location     id, name
+job_location job_id -> job, location_id -> location
+job_source   job_id -> job, source_id -> source, url
+```
+
+Both join tables use their two foreign keys as the composite primary key.
+`employer_id` identifies who hires. `operator_id` identifies who operates a
+source. Locations identify workplaces; `work_mode` is a separate job field.
+A job can appear in several sources. Each job/source pair has one URL.
+
+The model represents one accepted current record per job. It contains no
+collection runs, observations, timestamps, evidence, affiliation history, or
+assessments. Duplicate matching and conflicting values require a decision
+before that record changes; the model does not preserve that decision history.
+
+These are unused library definitions. Cast does not execute this SQL, select
+this model, or migrate data into it. The CLI, installer setup, `Store`, and
+downstream reads retain the existing discovery state and output. Data
+migration and activation are separate work.
 
 ## State selection and access
 
@@ -48,22 +82,22 @@ and exit 2 in both modes.
 
 `config show --json` returns the complete selected machine configuration. `config set --file`
 validates and replaces that complete configuration. Inspect the current values
-before editing them so that the replacement preserves intended queries,
-intervals, adapter parameters, and caps. Changes affect later collection; they
-do not reset consumed allowance, purchase credits, or change provider billing.
+before editing them so that the replacement preserves retained queries,
+intervals, adapter parameters, and caps. Changes update stored configuration;
+they do not start collection, reset consumed allowance, purchase credits, or
+change provider billing.
 
 The default configuration includes TheirStack, Brave, and Hacker News queries.
 Configuration schema 1 contains query families, budget settings, careers
-intervals, adapter-page limits, and `automatic_excluded_ats`. Query terms and
-parameters determine what discovery requests. A complete stored configuration
-is the supported input; credentials do not belong in it.
+intervals, adapter-page limits, and `automatic_excluded_ats`. These values
+remain accepted configuration fields. A complete stored configuration is the
+supported input; credentials do not belong in it.
 
 `automatic_excluded_ats` is an array of distinct supported ATS names: `ashby`,
 `greenhouse`, or `lever`. It defaults to `["ashby"]`, including when existing
 configuration omits the field. An explicit empty array removes these ATS
-exclusions. Each source still has its own enabled setting. Read
-`cast.discovery.collect` for how ordinary and exact-job collection apply this
-policy.
+exclusions in the retained configuration. Each source still has its own enabled
+setting. No collection command applies these settings in this release.
 
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
 with an existing company. Without the company option, an ordinary website URL
@@ -71,9 +105,9 @@ creates or reuses a company candidate from its hostname. For a supported ATS
 URL, omit `--company-id`: Cast assigns its canonical provider/tenant company
 identity and rejects an explicit company override.
 
-`source disable SOURCE_ID` removes the source from ordinary collection while
-retaining the source, jobs, and collected data. It does not block explicit
-`job collect` requests. Source enrollment and collection are separate actions.
+`source disable SOURCE_ID` clears the retained enabled setting while preserving
+the source, jobs, and collected data. Source add and disable make no remote
+request.
 
 ## Local budget defaults and units
 
@@ -89,16 +123,16 @@ retaining the source, jobs, and collected data. It does not block explicit
 | Careers collections | 50 | Source collections for one run. |
 | `max_verifications_per_run` | 50 | Adapter pages for targeted collection. |
 
-These are conservative local admission controls. They do not measure a
+These are retained configuration defaults and historical local accounting
+units. No collector consumes allowance in this release. They do not measure a
 provider's available balance or establish its billing statement. The TheirStack
 total cap is not a monthly provider allowance. Raising a cap does not obtain
-additional provider credits. Read `cast.discovery.collect` for request
-reservation, ambiguous-failure accounting, and run limits.
+additional provider credits.
 
 Configuration and diagnostic reads describe selected local state. `doctor`
-can check configuration and credential presence. Provider authentication,
-available balance, and actual collection require provider interactions. Local
-readiness or an installed Chancery entry is not proof of those conditions.
+can check configuration and credential presence. It does not check provider
+authentication or balance. Local readiness or an installed Chancery entry
+does not establish those conditions or current job availability.
 
 ## Employer-ownership reconciliation
 
@@ -109,7 +143,7 @@ cast state reconcile-ownership
 This explicit local repair applies the current ownership rules to older stored
 records. It holds the mutation lock and commits one transaction. It assigns
 ATS sources and their jobs to the provider/tenant company, sets older JSON-LD
-jobs to `unknown`, marks their sources for the next collection, and restores
+jobs to `unknown`, resets their retained source collection status, and restores
 affected search-candidate names to their domains. It applies current adapter
 rules to shared recruiting hosts and clears their company domains, website
 URLs, and identity aliases.
@@ -118,8 +152,8 @@ The result reports `moved_sources`, `moved_jobs`, `quarantined_jobs`,
 `renamed_candidates`, and `cleared_shared_identities`. These counts describe
 the selected repair, not external coverage. Source and job IDs, paid request
 accounting, run history, query coverage, and cursors remain intact. Changed jobs
-and companies gain revisions. A later collection uses the corrected
-associations.
+and companies gain revisions. These associations change in retained reads;
+reconciliation does not retrieve source facts.
 
 The repair uses stored records and makes no provider requests. Repeating it
 leaves material records unchanged, while each invocation advances the snapshot
@@ -134,8 +168,7 @@ an older program alone cannot restore newer domain state or configuration.
 This release provides no automatic database migration, pruning, destructive
 reset, or state uninstaller. Use the supported state and configuration
 commands. Do not erase state to clear a budget or repair individual rows by
-hand. Preserve successful observations and conservative request usage after
-an interrupted or partial collection.
+hand. Preserve retained observations and conservative request usage.
 
 State, exports, and diagnostic captures can contain private search interests,
 source locators, posting excerpts, and collection history. Keep credentials in

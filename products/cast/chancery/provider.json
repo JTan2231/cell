@@ -3,41 +3,41 @@
   "provider": {
     "id": "cast",
     "name": "Cast",
-    "release": "0.4.4"
+    "release": "0.5.0"
   },
   "promise_scope": {
     "authoritative_for": [
-      "Cast owns company and job identities, extracted fields, source metadata, URL-to-job resolution, and collection outcomes and timestamps. It also owns query configuration, local budgets, source retry state, consistent JSON exports and program packaging."
+      "Cast owns retained company and job identities, extracted fields, source metadata, historical collection outcomes and timestamps, retained configuration and local accounting, consistent JSON exports, unused current-model definitions and program packaging."
     ],
     "not_authoritative_for": [
       "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
     ],
     "inventory": {
       "covers": [
-        "All supported public Cast CLI outcomes for company and job discovery, exact job-URL collection, retained-record inspection and export, configuration and diagnosis, and program installation in this release."
+        "All supported public Cast CLI outcomes for retained-record inspection and export, state and source controls, configuration and diagnosis, and program installation in this release. cast.state also describes the unused current-model library definitions."
       ],
       "completeness": "complete",
       "excludes": [
-        "Help/version display, direct SQLite access, implementation helpers, current remote-provider readiness, scheduled activation, agents, computer use and downstream application work."
+        "Help/version display, direct SQLite access, implementation helpers, collection and exact job-URL retrieval, current remote-provider readiness, scheduled activation, agents, computer use and downstream application work."
       ]
     },
     "shared_access_and_trust": [
-      "Cast is a local current-user CLI with private selected state. The Rust payload reads provider credentials from environment. The installed frontend executes user-owned ~/.zshrc and preserves only documented state, usage and provider-key environment values; cast.installation defines that trust boundary."
+      "Cast is a local current-user CLI with private selected state. Retained diagnostics check provider-key presence. The installed frontend executes user-owned ~/.zshrc and preserves only documented state, usage and provider-key environment values; cast.installation defines that trust boundary."
     ],
     "shared_privacy_and_retention": [
-      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and collection history. Ordinary response bodies are transient. API keys do not belong in config, database, command arguments or logs.",
+      "Retained state and exports include private search interests, company/job evidence, extracted posting text, source locators and historical collection records. API keys do not belong in config, database, command arguments or logs.",
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
       "Cast release, feature contract versions, installation format and database/config/export schemas are distinct. Ordinary CLI output is readable text by default; explicit --json retains the existing success schemas. JSON snapshot artifacts and the status-snapshot --json protocol retain their formats. Installed documentation changes only with the matching product release.",
-      "Configuration schema 1 includes automatic_excluded_ats. Older programs that reject unknown fields can reject configuration written with it. Program recovery does not restore discovery state or configuration."
+      "Configuration schema 1 includes automatic_excluded_ats. Older programs that reject unknown fields can reject configuration written with it. Program recovery does not restore discovery state or configuration.",
+      "Collection commands run, job refresh and job collect and the cast.discovery.collect contract are removed. Existing read interfaces, legacy state initialization and output schemas remain. The six-table current model is defined but unused; no data migration or activation occurs."
     ],
     "operational_limits": [
-      "Cast uses ordinary Rust and HTTP with explicit local budgets. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
+      "Cast performs no collection or runtime HTTP requests. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
     ]
   },
   "entries": [
-    "entries/discovery-collect.json",
     "entries/discovery-explore.json",
     "entries/state.json",
     "entries/installation.json",

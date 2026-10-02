@@ -41,10 +41,9 @@ product and dependency updates explicitly. Committed declarations order that
 selection. The executor adds no products or requester maintenance. The supported
 CI, build, deployment, and recovery procedures belong to `platter.install.operate`.
 
-Cast must support collection contract 5 for `job collect`: exact-job retention
-with disabled-source access and preserved ordinary collection policy. Email must
-support `--payload-stdin` before Platter can send database artifacts. Tectonic,
-Python 3 with pypdf, supported source data and compatible
+Cast must supply its supported retained export. URL-selected runs require one
+matching retained job. Email must support `--payload-stdin` before Platter can
+send database artifacts. Tectonic, Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.
 
 Immutable installation files and prior releases remain beneath
@@ -161,9 +160,9 @@ receipt. Omit `--completion-receipt` for ordinary migration.
 
 Installation does not invoke doctor. As a separate runtime diagnostic,
 `doctor` validates a configured resume override and checks retained state,
-Cast/Annals/Email/Weaver executable identities, Cast's exact
-job-URL command, Email's byte-payload interface, renderer availability and
-strict authenticated Nucleus readiness. Renderer overrides are absolute `PLATTER_TECTONIC` and
+Cast/Annals/Email/Weaver executable identities, Email's byte-payload interface,
+renderer availability and strict authenticated Nucleus readiness. Renderer
+overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
 `/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read Vita
 works, render a PDF, submit a model job or send mail. Cast/Annals executable

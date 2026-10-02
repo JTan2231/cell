@@ -8,8 +8,7 @@ application work.
 
 Read `chancery resolve cast.install.operate` for this procedure and its required
 contracts: `cast.installation` owns program lifecycle and wrapper credentials;
-`cast.state` owns state, configuration, source controls, and repair;
-`cast.discovery.collect` owns collection behavior; and
+`cast.state` owns state, retained configuration, source controls, and repair; and
 `cast.discovery.explore` owns the evidence used for verification. This manual
 keeps the prerequisites, effects, stop conditions, and steps needed to operate.
 
@@ -18,7 +17,7 @@ keeps the prerequisites, effects, stop conditions, and steps needed to operate.
 1. Identify the intended outcome and selected operator home or state directory.
 2. Inspect existing state and configuration before changing policy. Keep the
    current complete configuration and consumed budgets.
-3. Select a installer and supplied binary/bundle for
+3. Select an installer and supplied binary/bundle for
    program work. Use user-owned paths and the supported macOS shell tools.
 4. Stop callers before ownership reconciliation.
 5. Keep keys outside arguments, configuration, database rows, and logs.
@@ -81,29 +80,30 @@ authentication or current provider allowance.
    ```
 
 Initialization preserves existing records and consumed budgets and collects
-nothing. Configuration replacement affects later collection and does not reset
-usage, purchase credits, or change provider billing. The ATS exclusion defaults
-to Ashby when omitted; an explicit empty array permits all supported ATS
-providers subject to source enrollment. Older programs can reject configuration
-written with this field.
+nothing. Configuration replacement updates retained settings and does not reset
+usage, purchase credits, or change provider billing. The retained ATS exclusion
+defaults to Ashby when omitted; an explicit empty array clears these exclusions.
+No collector applies them in this release. Older programs can reject
+configuration written with this field.
 
 The installed frontend executes user-owned `.zshrc` with trace/output
 suppressed and passes the provider keys through its restricted environment.
 Its shell commands and side effects remain user-owned. `doctor` can check
-local configuration and credential presence. Actual provider authentication,
-balances, and collection require provider interactions.
+local configuration and credential presence. It does not establish provider
+authentication, balances, or current posting availability.
 
-If collection failed or was partial, inspect the last run, source health,
-coverage, and budget diagnostics. Preserve successful observations and local
-charges. Do not erase state to clear allowance or treat an absent error as
-complete coverage. Running collection is a separate invocation under
-`cast.discovery.collect`.
+Inspect the retained last run, source health, coverage, and budget diagnostics
+when interpreting historical work. Preserve observations and local charges.
+Do not erase state to clear allowance or treat an absent error as complete
+coverage. `run`, `job refresh`, and `job collect` are removed.
 
 The Cast deployment recipe uses native state APIs and the product lock after
 program selection. Its optional `state_dir` and `config_file` settings are
 absolute paths. A supplied file replaces complete configuration; omitted
 settings preserve current values. Setup does not invoke the selected CLI or
-source shell configuration, so it does not depend on the CLI output protocol. This setup creates no collection schedule.
+source shell configuration, so it does not depend on the CLI output protocol.
+This setup creates no collection schedule and does not activate or migrate data
+into the unused current model definitions.
 
 Ordinary Cast commands print readable text by default. Add the global `--json`
 flag when a caller parses their output. The JSON success schemas and snapshot
@@ -123,7 +123,7 @@ artifact format remain unchanged. Read `cast.state` and
    cast sources list
    ```
 
-3. Disable ordinary collection for an exact source when intended:
+3. Clear the retained enabled setting for an exact source when intended:
 
    ```sh
    cast source disable SOURCE_ID
@@ -132,13 +132,12 @@ artifact format remain unchanged. Read `cast.state` and
 
 An ordinary website without `--company-id` creates or reuses a hostname
 candidate. Supported ATS URLs use canonical provider/tenant owners and reject
-a company override. Disabling retains the source and its jobs. It does not
-block explicit `job collect` requests. Inspect the resulting source ownership
+a company override. Disabling retains the source and its jobs. Inspect the resulting source ownership
 and enabled setting; adding a source does not prove successful retrieval.
 
 ## Reconcile older employer ownership
 
-1. Stop collection for the selected state directory.
+1. Stop writers for the selected state directory.
 2. Run the supported local repair and inspect its result:
 
    ```sh
@@ -155,7 +154,7 @@ and enabled setting; adding a source does not prove successful retrieval.
 
 The repair holds one mutation lock and commits one transaction. It corrects
 ATS ownership, sets older or affected shared-host JSON-LD jobs to `unknown`,
-marks sources for collection, and corrects affected candidate identities.
+resets retained source collection status, and corrects affected candidate identities.
 Changed jobs and companies gain revisions. Repetition leaves material records
 unchanged but advances the snapshot revision. The repair sends no provider
 request and does not establish current posting availability.
@@ -171,7 +170,7 @@ request and does not establish current posting availability.
 
 3. Read selected release metadata and matching documentation. Register usage
    after the selection.
-4. Keep collection and any requested diagnosis separate from program recovery.
+4. Keep any requested diagnosis separate from program recovery.
 
 The installer reads retained legacy or `cell-install-v3` metadata before
 selection. Use a trusted installer. Keep retained release files unchanged. A failed switch retains completed selector changes.
@@ -179,7 +178,7 @@ selection. Use a trusted installer. Keep retained release files unchanged. A fai
 An abruptly killed deployer can leave `.update-lock`. Confirm that no Cast
 deployer is running before removing a stale installation lock and rerunning
 the tested candidate. Never remove another active writer's lock. Runtime
-collection uses a separate kernel-backed lock.
+mutation uses a separate kernel-backed lock.
 
 Program recovery leaves discovery state unchanged. This release provides no automatic
 database migration, pruning, destructive reset, or state uninstaller. Stop

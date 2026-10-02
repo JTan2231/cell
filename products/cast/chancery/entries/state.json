@@ -4,14 +4,14 @@
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Manage Cast state and collection policy",
-  "summary": "Select and initialize private state, inspect or replace complete collection configuration, control source enrollment, interpret local budgets, and reconcile older employer ownership.",
+  "title": "Manage Cast state and current model definitions",
+  "summary": "Select and initialize retained private state, inspect or replace legacy configuration, control source metadata, interpret historical local accounting, reconcile employer ownership, and read the unused current model definitions.",
   "use_when": [
-    "The selected Cast state, configuration, source enrollment or conservative local budget must be understood or changed.",
+    "The selected Cast state, retained configuration, source metadata, historical local accounting or unused current-model definitions must be understood or changed within the supported interface.",
     "Older retained employer ownership needs the supported local reconciliation or state recovery limits must be understood."
   ],
   "do_not_use_when": [
-    "A collection run or exact public job-URL retrieval is required.",
+    "Collection, exact public job-URL retrieval, data migration or activation of the new model is required.",
     "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream job selection."
   ],
   "outcome": "Selected initialized private state, a locally verified complete configuration or source enrollment, or one transactionally reconciled retained ownership state.",
@@ -37,7 +37,7 @@
       "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
     },
     {
-      "label": "Disable collection from a source",
+      "label": "Clear a retained source enabled setting",
       "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
     },
     {
@@ -47,8 +47,8 @@
   ],
   "effects": [
     "Initialization creates missing private discovery state and preserves existing records and consumed budgets without collecting.",
-    "Configuration replacement affects later collection without resetting usage or purchasing provider credits.",
-    "Source controls retain explicit source enrollment and evidence; disabling ordinary collection does not block explicit job collect.",
+    "Configuration replacement updates retained settings without starting collection, resetting usage or purchasing provider credits.",
+    "Source controls retain source metadata and evidence; disabling clears its retained enabled setting without fetching remote sources.",
     "Ownership reconciliation uses stored records under one mutation lock and one transaction, corrects older associations, and preserves retained IDs, paid usage, run history, query coverage and cursors."
   ],
   "authority": [
@@ -114,15 +114,19 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Configuration retains query families, terms, intervals, adapter settings and request caps. Changes affect future collection and do not reset consumed allowance, buy credits or configure provider billing."
+        "statement": "Configuration retains query families, terms, intervals, adapter settings and request caps. No collector applies them in this release. Changes do not reset consumed allowance, buy credits or configure provider billing."
       },
       {
         "status": "declared",
-        "statement": "Local budgets are conservative admission counters. TheirStack total covers this state's retained lifetime rather than a provider monthly balance."
+        "statement": "Retained local budgets describe historical conservative accounting. TheirStack total covers this state's retained lifetime rather than a provider monthly balance. Cast no longer collects or consumes request allowance."
       },
       {
         "status": "declared",
-        "statement": "Reconciliation moves ATS associations to canonical provider/tenant companies, sets older or affected shared-host JSON-LD jobs to unknown, marks their sources for collection, restores affected candidate names and clears shared-host domains, website URLs and identity aliases."
+        "statement": "Reconciliation moves ATS associations to canonical provider/tenant companies, sets older or affected shared-host JSON-LD jobs to unknown, resets retained source collection status, restores affected candidate names and clears shared-host domains, website URLs and identity aliases."
+      },
+      {
+        "status": "declared",
+        "statement": "cast::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both join tables have composite primary keys. The model holds one accepted current record per job and one URL per job/source pair, with no history or collection mechanics."
       }
     ],
     "identity_and_units": [
@@ -138,7 +142,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Configuration and doctor reads describe selected local state at invocation. Doctor can check configuration and credential presence; current provider balance, authentication and successful retrieval require actual provider interactions."
+        "statement": "Configuration and doctor reads describe selected local state at invocation. Doctor checks configuration and credential presence; it does not establish provider authentication, balance or current posting availability."
       },
       {
         "status": "unsupported",
@@ -162,17 +166,21 @@
       },
       {
         "status": "declared",
-        "statement": "Repeating reconciliation leaves material records unchanged but advances snapshot_revision. Later collection uses corrected associations."
+        "statement": "Repeating reconciliation leaves material records unchanged but advances snapshot_revision. Corrected associations remain visible through retained reads."
       },
       {
         "status": "declared",
-        "statement": "Source disable retains records and removes ordinary enrollment while exact job collect remains available. Ordinary website source add without a company ID creates or reuses a hostname candidate."
+        "statement": "Source disable retains records and clears the enabled setting. Ordinary website source add without a company ID creates or reuses a hostname candidate. Neither command retrieves remote records."
+      },
+      {
+        "status": "declared",
+        "statement": "The current model is unused library definitions. Cast executes no current-model SQL and provides no migration or activation. CLI initialization, deployment setup, Store and consumers retain the existing discovery model and read schemas."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Defaults permit 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run, 50 careers-source collections per run and 50 targeted adapter pages via max_verifications_per_run."
+        "statement": "Retained configuration defaults are 200 total and 60 daily TheirStack credits, 1,000 monthly and 30 daily Brave requests, 500 HTTP requests per run, 3,000 daily HTTP requests, 600 seconds per run, 50 careers-source collections per run and 50 targeted adapter pages via max_verifications_per_run. No collector applies these limits in this release."
       },
       {
         "status": "unsupported",

@@ -67,14 +67,11 @@ unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
 
-For `run-ad-hoc`, Platter first asks Cast to resolve or collect the exact public
-job URL. Cast collection contract 5 permits this explicit selection from a
-disabled source or an ATS excluded from ordinary collection. Cast retains only
-the requested posting and preserves source enrollment and board-scan state.
-Platter then uses that normal job through the same export and preparation path
-as scheduled work. A URL
-that names only an ATS board, an unsupported page or no unique owned
-`JobPosting` fails before packet preparation.
+For `run-ad-hoc`, Platter selects one retained job from Cast's export by its
+canonical supported ATS identity or normalized public URL. It then uses that
+job through the same preparation path as scheduled work. An unknown URL, an
+ambiguous match, or a supported ATS board URL without a posting identity fails
+before packet preparation. This selection performs no Cast collection.
 
 Ashby boards are cached as private `ashby-cache/BOARD.json` files under the
 canonical runtime root. Each file contains the complete board response and its

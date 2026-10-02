@@ -45,36 +45,11 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
             }
         }
         Command::Status => status(&mut out, value),
-        Command::Run { .. }
-        | Command::Job {
-            command: JobCommand::Refresh { .. },
-        } => {
-            let _ = writeln!(
-                out,
-                "Collection run {}: {}",
-                text(&value["run_id"]),
-                text(&value["status"])
-            );
-            details(&mut out, "Summary", &value["summary"], 0);
-            status(&mut out, &value["state"]);
-        }
         Command::Export { output, .. } => export(&mut out, value, output.is_some()),
         Command::Company { .. } => company(&mut out, value),
         Command::Job {
             command: JobCommand::Show { .. },
         } => job(&mut out, value),
-        Command::Job {
-            command: JobCommand::Collect { .. },
-        } => {
-            let job = &value["job"];
-            let _ = writeln!(
-                out,
-                "Collected job: {} ({})",
-                text(&job["title"]),
-                text(&job["id"])
-            );
-            field(&mut out, "URL", &job["url"]);
-        }
         Command::Source {
             command: SourceCommand::Add { .. },
         } => {

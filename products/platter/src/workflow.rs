@@ -765,7 +765,7 @@ pub async fn run_ad_hoc(
 
     let day = local_day(root, now)?;
     let settings = config(root)?;
-    let job = source::collect_job(&settings.cast_executable, url)?;
+    let job = source::retained_job(&settings.cast_executable, url)?;
     let opportunity = source::identity(&job)?;
     let store = Store::open(root)?;
     if store

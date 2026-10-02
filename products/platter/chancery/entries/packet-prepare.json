@@ -1,6 +1,6 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 14,
+  "contract_version": 15,
   "kind": "operation",
   "mode": "use",
   "support": "supported",
@@ -143,23 +143,18 @@
     },
     {
       "id": "platter.preparation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "platter.editions",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
-    },
-    {
-      "id": "cast.discovery.collect",
-      "min_contract": 5,
-      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",
@@ -200,7 +195,7 @@
   "does_not_authorize": [
     "Installing or enabling any scheduled activation.",
     "Sending when the user requested only preparation or preview.",
-    "Changing fixed resume content, modifying Vita or Cast outside run-ad-hoc's exact URL collection, applying to a job or contacting an employer."
+    "Changing fixed resume content, modifying Vita or Cast, applying to a job or contacting an employer."
   ],
   "promise": {
     "consumers": [
@@ -274,7 +269,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Keep the existing operation ID/version, supported commands, and exact historical input/output/delivery meaning. Required features define current and historical generation, template, state, and prompt compatibility."
+        "statement": "Operation contract 15 preserves supported commands and exact historical input/output/delivery meaning while limiting URL-selected runs to retained Cast jobs. Required features define current and historical generation, template, state, and prompt compatibility."
       },
       {
         "status": "unspecified",
@@ -291,10 +286,10 @@
       },
       {
         "status": "declared",
-        "statement": "URL-selected runs rely on Cast to resolve or collect one supplied public posting into its normal job records.",
+        "statement": "URL-selected runs match one retained Cast job by canonical supported ATS identity or normalized public URL; unknown or ambiguous matches fail before preparation.",
         "target": "cast",
-        "kind": "control",
-        "contract": "cast.discovery.collect"
+        "kind": "data",
+        "contract": "cast.discovery.explore"
       },
       {
         "status": "declared",

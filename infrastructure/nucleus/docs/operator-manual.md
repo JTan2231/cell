@@ -38,7 +38,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
-| Cast | Discovered companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/products/cast/chancery/overview.md) |
+| Cast | Retained companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/products/cast/chancery/overview.md) |
 | Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/infrastructure/bazaar/chancery/overview.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/products/platter/README.md) |
 | Clew | Append-only notes, named threads, optional external links, and explicit application reports with daily snapshots | [Clew](/Users/joey/rust/cell/products/clew/chancery/overview.md) |
@@ -93,13 +93,14 @@ Interpretation belongs to each
 consumer. See [the document exchange](/Users/joey/rust/cell/products/annals/chancery/annals/manuals/decision-account-exchange.md)
 and [Krisis source documents](/Users/joey/rust/cell/products/decisions/docs/source-documents.md).
 
-Cast owns discovery and stored job records. Platter owns job selection, packet
+Cast owns stored job records and the retained read handoff. Cast performs no
+collection. Platter owns job selection, packet
 preparation, and delivery. It reads career material from the Annals `vita`
 library and obtains project prose from Weaver. Platter and Weaver retain their
 own Nucleus requests. Platter cancellation and drain include its recorded Weaver
 jobs, but exclude unrelated Weaver work. See
 [Platter preparation](/Users/joey/rust/cell/products/platter/chancery/manuals/packet-prepare.md)
-for collection, authoring, and acceptance rules.
+for source capture, authoring, and acceptance rules.
 
 Email owns transport and credential loading. Its receipt means provider
 acceptance, not final inbox delivery. Conatus submits its deterministic daily
@@ -485,8 +486,7 @@ retain their documented formats.
 
 Install the CI manager consumer that requests Bazaar `--json` before selecting
 a Bazaar release with readable default output. Follow the paused, drained
-manager replacement procedure. Update Cast collection callers with the matching
-producer flag support during coordinated deployment. Cast installation uses the
+manager replacement procedure. Cast installation uses the
 native store interface so recovery can retain an older CLI.
 
 ## Serial CI delivery

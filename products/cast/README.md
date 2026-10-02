@@ -1,20 +1,19 @@
 # Cast
 
-Cast discovers employers, collects public job postings, and exports a consistent
-snapshot for job selection.
+Cast reads retained employers and public job postings and exports a consistent
+snapshot for job selection. Collection has been removed.
 
 ## Example
 
-With an initialized, configured installation:
+With an initialized installation:
 
 ```sh
-cast run
-cast job collect 'https://jobs.ashbyhq.com/company/job-id'
+cast jobs list
 cast export --json
 ```
 
-Collection uses the configured providers and request budgets. The export
-contains stored companies, jobs, collection outcomes, and coverage.
+The export contains stored companies, jobs, and historical collection outcomes
+and coverage. The new current model is defined but unused; migration is separate.
 
 ## CI
 
@@ -30,9 +29,8 @@ repairs, deploys, and emails the outcome.
 ## Further documentation
 
 - [Product overview and feature inventory](chancery/overview.md)
-- [Collection contract](chancery/manuals/discovery-collect.md)
 - [Records and read handoff](chancery/manuals/discovery-explore.md)
-- [State and collection policy](chancery/manuals/state.md)
+- [State and current model definitions](chancery/manuals/state.md)
 - [Installation contract](chancery/manuals/installation.md)
 - [Installation, configuration, and recovery procedure](chancery/manuals/install-operate.md)
 

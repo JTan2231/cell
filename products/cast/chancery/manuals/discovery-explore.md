@@ -6,6 +6,11 @@ products can inspect that evidence or export one consistent snapshot. Reads
 require supported initialized state and start no collection, agent, remote
 request, or downstream workflow.
 
+Cast performs no collection. `run`, `job refresh`, and `job collect` are
+removed. Existing records, read interfaces, and output schemas remain in use.
+The current model definitions in `cast.state` are unused; these reads continue
+to use the retained discovery model.
+
 ## Read interfaces
 
 ```sh
@@ -47,11 +52,11 @@ alone does not merge them.
 A job is one observed posting with a source identity, extracted fields,
 evidence, observation timestamps, and recorded availability. It is not a
 recommendation, application, or hiring outcome. Relevance reasons describe
-discovery matches. Cast retains incoming jobs without a title substring
+discovery matches. Reads include all retained jobs without a title substring
 requirement; consumers choose jobs by title, seniority, location, or other
 preferences.
 
-A source is a careers collection endpoint associated with a company record.
+A source is a retained careers collection endpoint associated with a company record.
 An observation is source-attributed information retained at a known time.
 Coverage describes the pages or items processed by a query or source,
 including limits and partial, failed, unsupported, or deferred work. Freshness
@@ -66,15 +71,17 @@ Records include domain fields, careers URLs, source locators, and extracted
 job fields. Posting descriptions are excerpts of at most 1,200 characters,
 with a fingerprint for comparing descriptions. A source locator supports a
 separate fetch when a consumer needs posting text; reading the locator causes
-no fetch. Whole provider responses and HTML documents are transient.
+no fetch. Cast retained extracted fields instead of whole provider responses
+and HTML documents.
 
 ## Availability and freshness
 
-`first_seen_at` and `last_seen_at` are Cast observation times. Source-supplied
+`first_seen_at` and `last_seen_at` are retained Cast observation times. Source-supplied
 publication and update dates use separate fields. Each job includes its
-recorded availability and source collection timestamps. Collection records
-separate the latest ordinary source attempt from its last successful
-observation.
+recorded availability and source collection timestamps. Historical collection
+records separate the latest ordinary source attempt from its last successful
+observation. No command refreshes those observations or establishes current
+external availability.
 
 | Availability | Meaning |
 | --- | --- |
@@ -84,19 +91,19 @@ observation.
 | `missing` | The posting was absent from a completed employer-source scan. |
 | `presumed_closed` | At least two complete scans found it missing, and at least 24 hours passed since the first missing observation. |
 
-Failed or partial scans do not add missing observations. Rapid repeated scans
-keep the same 24-hour requirement. A later employer-source observation
-restores `listed`.
+These meanings describe the retained collection evidence. Failed or partial
+scans did not add missing observations. Cast no longer performs scans or
+updates availability from external sources.
 
-Attribution identifies the observation source. The adapter assigns
-`employer_ats` or `employer_jsonld_owned` under the source ownership rules in
-`cast.discovery.collect`. Ownership reconciliation sets older
+Attribution identifies the observation source. `employer_ats` and
+`employer_jsonld_owned` identify retained employer-source observations.
+Ownership reconciliation sets older
 `employer_jsonld` and affected shared-host rows to `unknown`.
 
-Exact-job collection updates only the selected job and its run record while
-preserving board-scan state. Its run note identifies scope `job`, selected
-source and URL, and outcome. Source health continues to describe ordinary
-board collection. Use the selected job and run note for targeted retrieval.
+Historical exact-job collection updated only the selected job and its run
+record while preserving board-scan state. Its retained run note identifies
+scope `job`, selected source and URL, and outcome. Source health describes
+historical ordinary board collection.
 
 ## Output selection
 
@@ -146,9 +153,9 @@ With `--json`, stderr contains one schema-one object with `ok:false` and
 and exit 2 in both modes. The `status-snapshot --json` operational protocol
 remains separate from ordinary command output.
 
-Reads return stored evidence without refreshing it. Use the collection
-interfaces when source retrieval is required and the supported ownership
-repair when older associations need correction. Do not infer complete source
+Reads return stored evidence without refreshing it. Cast has no source
+retrieval interface. Use the supported ownership repair when older
+associations need correction. Do not infer complete source
 coverage from an absent error or repair database rows by hand.
 
 CLI output, exports, and diagnostic captures remain private caller-owned

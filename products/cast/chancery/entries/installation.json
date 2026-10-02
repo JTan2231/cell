@@ -62,7 +62,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user may install or recover Cast programs through a trusted tested candidate, inspect selectors and understand wrapper credential loading."
+        "statement": "The current user may install or recover Cast programs through a trusted tested candidate, inspect selectors and understand retained wrapper credential loading."
       }
     ],
     "preconditions": [
@@ -125,6 +125,10 @@
       {
         "status": "declared",
         "statement": "Deploy accepts one bounded schema-two recipe request on stdin. The product command owns its setup; the shared executor uses process exit status only. Deployment runs no application execution probe, native-signature audit, maintenance hold, drain, or automatic rollback."
+      },
+      {
+        "status": "declared",
+        "statement": "Cast performs no collection. Deployment setup retains the existing discovery schema and does not activate or migrate data into the unused current model definitions."
       }
     ],
     "compatibility_and_evolution": [
