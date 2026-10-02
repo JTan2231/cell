@@ -19,6 +19,7 @@ import uuid
 
 from ci_manager.storage import ManagerError, Store, home, lock, private_directory, state_root
 from ci_manager.process import validation_exited
+from ci_manager.integrations import IntegrationError, NucleusClient
 
 
 LABEL = "dev.cell.ci-manager"
@@ -243,11 +244,46 @@ def _cancelled_validation_exited(store: Store, job: dict) -> bool:
     return validation_exited(store.root / "jobs" / job["id"], job)
 
 
-def _require_idle(store: Store, *, allow_cancelled_validation: bool = False) -> None:
+def _prepared_repair_not_admitted(store: Store, job: dict) -> bool:
+    if (job["phase"] != "blocked" or job.get("stopped_phase") != "repair_wait"
+            or job.get("model_unresolved") is not False or job.get("accepted")
+            or job.get("acceptance_intent") or job.get("deployment_request")
+            or job.get("deployment_result") or store.get("recovery_request")):
+        return False
+    directory = store.root / "jobs" / job["id"]
+    attempts = job.get("attempts")
+    if not isinstance(attempts, list) or not attempts or not validation_exited(directory, job):
+        return False
+    attempt = attempts[-1]
+    number = len(attempts)
+    identity = f"ci-{job['id']}-repair-{number}"
+    request_path = directory / f"repair-{number}.request.json"
+    try:
+        if (not isinstance(attempt, dict) or type(attempt.get("number")) is not int
+                or attempt["number"] != number or attempt.get("nucleus_job_id") != identity
+                or attempt.get("parent") != job["candidate_commit"]
+                or attempt.get("request") != str(request_path)
+                or attempt.get("state") not in {None, "not_admitted"}
+                or attempt.get("terminal") or attempt.get("patch") or request_path.is_symlink()):
+            return False
+        request = json.loads(request_path.read_bytes())
+        if (not isinstance(request, dict) or request.get("version") != 1
+                or request.get("id") != identity
+                or request.get("requester") != {"program": "ci-manager", "id": job["id"]}
+                or request["invocation"]["cwd"] != str(directory / "worktree")
+                or request["invocation"]["workspaceAccess"] != "read-only"):
+            return False
+        return NucleusClient().get(identity) is None
+    except (OSError, ValueError, KeyError, TypeError, IntegrationError):
+        return False
+
+
+def _require_idle(store: Store, *, allow_install: bool = False) -> None:
     active = store.active()
     if (store.get("paused") is not True
-            or (active is not None and not (allow_cancelled_validation
-                                           and _cancelled_validation_exited(store, active)))):
+            or (active is not None and not (allow_install
+                                           and (_cancelled_validation_exited(store, active)
+                                                or _prepared_repair_not_admitted(store, active))))):
         raise ManagerError("pause CI admission and let the active job finish before service changes")
 
 
@@ -336,7 +372,7 @@ def _plist(release: Path) -> bytes:
 
 
 def install() -> dict:
-    """Replace paused, settled code; retain a proven drained validation for cancellation."""
+    """Replace paused code when active validation or model admission is proved absent."""
     if sys.platform != "darwin":
         raise ManagerError("CI manager service installation requires macOS launchd")
     paths = _paths()
@@ -348,7 +384,7 @@ def install() -> dict:
     with lock(root / "admission.lock"):
         store = Store(root)
         try:
-            _require_idle(store, allow_cancelled_validation=True)
+            _require_idle(store, allow_install=True)
             previous = _selected_release(paths)
             wrapper_target = paths["current"] / "bin/cell-ci"
             provider_target = paths["current"] / "ci_manager/chancery"
@@ -361,7 +397,7 @@ def install() -> dict:
             switched = False
             try:
                 with _worker_lock_after_stop(root):
-                    _require_idle(store, allow_cancelled_validation=True)
+                    _require_idle(store, allow_install=True)
                     release = _prepare_release(source, python)
                     _link(paths["current"], f"releases/{release.name}")
                     switched = True

@@ -115,6 +115,7 @@
     "Merge conflicts stop automatic processing. Failed jobs and active cancellation pause new jobs; queued cancellation prevents admission without outcome email. Resume does not clear a blocked or unresolved active operation.",
     "Failed or Git-rejected attempts remain charged to the frozen job budget. Under refund_accepted_patches=true, Git acceptance and a recorded private candidate refund one point before later validation. Quota or maintenance deferral preserves the prepared request identity without another charge; unknown or lost execution still requires recovery.",
     "Unknown or lost model execution, missing child completion evidence, or unresolved deployment process ownership remains blocked. Recovery consults owning providers and never invents a success or silently starts a replacement model attempt.",
+    "For a blocked repair_wait attempt, recovery observes the exact retained Nucleus identity even when model_unresolved is false. Authoritative not_found permits submission of the same frozen request and identity; an admitted invocation remains the same attempt. Authoritative observation resets the transport retry count without another budget point. Unavailable observation and lost execution remain blocked.",
     "A completed stopped deployment start fails the job before admission only after the coordinator reports not_found for that exact request. The manager retains the stopped diagnostic and pauses the queue without creating an admitted deployment receipt. Admitted, uncertain or uncorrelated results require process reconciliation and explicit operator acknowledgement; product inspection or recovery is a separate authorized operation.",
     "After an installation that qualifies for the cancelled validation exception, recover JOB reconciles the retained supervisor result and recognizes cancellation before reading the aggregate validation receipt. A completed validation already recorded in job history can also prove cancellation when no newer validation artifacts exist and its candidate and receipt path match. Missing or mismatched terminal evidence remains blocked. Recovery does not rerun a completed stale validation; installation itself does not complete or validate the job.",
     "Outcome email uses one frozen key and payload for at most two Email invocations, at least five minutes apart and within 23 hours. Unproved acceptance after that boundary blocks continuation without a replacement message.",
@@ -302,7 +303,11 @@
       },
       {
         "status": "declared",
-        "statement": "Installation alone permits one explicitly cancelled active job blocked in checking when admission is paused, the job has no pending recovery request, accepted source, model attempts, unresolved model execution or deployment, and its exact retained validation supervisor request and matching result prove that the process exited. The installer verifies these conditions before stopping its owned service and again under the worker lock. It preserves the job and evidence without marking success. Missing process completion evidence and other blocked jobs do not qualify. Supported recover under the new worker handles cancellation through the ordinary outcome path."
+        "statement": "Installation alone permits one explicitly cancelled active job blocked in checking when admission is paused, the job has no pending recovery request, accepted source, model attempts, unresolved model execution or deployment, and its exact retained validation supervisor request and matching result prove that the process exited. The installer verifies these conditions before stopping its owned service and again under the worker lock. It preserves the job and evidence without marking success. Missing process completion evidence does not qualify. Supported recover under the new worker handles cancellation through the ordinary outcome path."
+      },
+      {
+        "status": "declared",
+        "statement": "Installation alone also permits a paused active job blocked in repair_wait before model admission, with no pending recovery request, unresolved model execution, accepted source or deployment. The latest frozen repair request must correlate to its recorded attempt and current candidate, matching validation supervisor evidence must prove validation exited, and Nucleus must report not_found for the exact repair identity. The installer repeats these checks under the worker lock after stopping its owned service. It preserves the job, candidate, frozen request, budget and queued jobs; recover reconciles the same attempt afterward. Unavailable, admitted, lost or mismatched evidence refuses this exception. Service stop remains strict."
       },
       {
         "status": "declared",
@@ -315,6 +320,10 @@
       {
         "status": "declared",
         "statement": "After a successful, failed, cancelled or already-included outcome is saved, the singleton worker removes the complete job worktree and its Git registration when no unresolved model, validation, production or deployment operation needs it. Removal precedes notification and does not wait for Email acceptance. The worker also cleans settled historical jobs and retries failed or interrupted cleanup. Journal records, private refs, candidate commits and operation evidence remain retained."
+      },
+      {
+        "status": "declared",
+        "statement": "For a blocked repair_wait attempt, recovery observes the exact retained Nucleus identity even when model_unresolved is false. Authoritative not_found permits submission of the same frozen request and identity; an admitted invocation remains the same attempt. Authoritative observation resets the transport retry count without another budget point. Unavailable observation and lost execution remain blocked."
       }
     ],
     "operational_limits": [
@@ -342,7 +351,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.8.1 uses journal schema 1, queue contract 11, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
+        "statement": "Manager release 0.8.2 uses journal schema 1, queue contract 11, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
       },
       {
         "status": "declared",

@@ -578,7 +578,11 @@ the refund flag keep their original limit on all invocations.
 Attempt identities and history remain unique and complete after refunds. Job
 status reports the budget mode, total, used, remaining, refunded, and total
 invocations. Quota deferral preserves the same request identity without another
-charge. Infrastructure failures do not select a stronger model. Bazaar supplies
+charge. Explicit recovery observes a blocked repair's retained identity even
+when the failure occurred before admission. Authoritative `not_found` permits
+the same frozen request to continue without another budget point. Unavailable
+observation or lost execution remains blocked. Infrastructure failures do not
+select a stronger model. Bazaar supplies
 the `cell.prompts.ci-manager` selection; import its components before activation.
 
 Deployment does not hold the installed manager's Nucleus admission. The manager
@@ -598,6 +602,13 @@ Pause admission and finish or recover the active job before replacement. The
 installer selects a fixed release and compatible journal schema under exclusive
 ownership. It preserves queued jobs and starts the replacement paused. It does
 not load worker code from mutable development source or clear existing holds.
+Installation also permits the CI contract's two proved inactive exceptions:
+an explicitly cancelled validation with matching terminal supervisor evidence,
+or a blocked pre-admission repair with matching validation completion evidence
+and an exact Nucleus `not_found` observation. The installer checks the proof
+before stopping its owned service and again under the worker lock. It preserves
+the active job and requires supported recovery afterward. Service stop still
+requires no active job.
 The CI manager is shared infrastructure; the product deployment inventory does
 not deploy the manager itself.
 
