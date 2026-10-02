@@ -560,8 +560,7 @@ fn release_maintenance(
     )?;
     let receipt = binding_receipt(paths)?;
     require(
-        receipt["release_id"] == prepared.info.release_id
-            && receipt["definition_digest"] == digest,
+        receipt["release_id"] == prepared.info.release_id && receipt["definition_digest"] == digest,
         "installed binding receipt differs from held candidate",
     )?;
     let active = binding(paths, &options.clockwork, ACTIVE)?;
