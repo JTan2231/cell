@@ -537,6 +537,58 @@ pub fn deploy(options: &Install, enabled: Option<bool>) -> Result<()> {
     Ok(())
 }
 
+fn release_maintenance(
+    paths: &Paths,
+    options: &Install,
+    pins: &Pins,
+    prepared: &transaction::PreparedRelease,
+    digest: &str,
+    prior: &InstallSnapshot,
+) -> Result<Value> {
+    let current = prior
+        .current
+        .as_ref()
+        .ok_or_else(|| Error::new("maintenance release requires an installed candidate"))?;
+    require(
+        package::inspect(paths)? == *prior,
+        "held candidate public selectors are incomplete",
+    )?;
+    owned_file(&paths.hooks, paths.uid, Some(0o600))?;
+    require(
+        fs::read(&paths.hooks)? == fs::read(prepared.root.join("package/hooks.json"))?,
+        "installed hooks differ from held candidate",
+    )?;
+    let receipt = binding_receipt(paths)?;
+    require(
+        receipt["release_id"] == prepared.info.release_id
+            && receipt["definition_digest"] == digest,
+        "installed binding receipt differs from held candidate",
+    )?;
+    let active = binding(paths, &options.clockwork, ACTIVE)?;
+    require(
+        active.enabled && active.definition_digest.as_deref() == Some(digest),
+        "observer selection differs from held candidate",
+    )?;
+    require(
+        pins_from_receipt(paths, &options.clockwork, current)? == *pins,
+        "held candidate dependency pins differ",
+    )?;
+    for key in [LEGACY_OBSERVER, LEGACY_DAILY] {
+        require(
+            !binding(paths, &options.clockwork, key)?.enabled,
+            "legacy schedule remains enabled",
+        )?;
+    }
+    for service in services(paths, &options.launchctl, prior)? {
+        require(
+            !service.loaded && service.file.bytes.is_none(),
+            "legacy service remains installed",
+        )?;
+    }
+    release_hold(paths, &prepared.info.release_id, digest, pins)?;
+    Ok(json!({"ok":true,"data":{"release_id":prepared.info.release_id,"maintenance":false}}))
+}
+
 pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Value> {
     let mut paths = Paths::new(home(options.home.clone())?)?;
     if let Some(owner) = deployment_run_id {
@@ -576,50 +628,7 @@ pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Val
     let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
     let prior_hold = SavedFile::capture(&paths.hold, paths.uid, 0o600)?;
     if options.release_maintenance {
-        let current = prior
-            .current
-            .as_ref()
-            .ok_or_else(|| Error::new("maintenance release requires an installed candidate"))?;
-        require(
-            package::inspect(&paths)? == prior,
-            "held candidate public selectors are incomplete",
-        )?;
-        owned_file(&paths.hooks, paths.uid, Some(0o600))?;
-        require(
-            fs::read(&paths.hooks)? == fs::read(prepared.root.join("package/hooks.json"))?,
-            "installed hooks differ from held candidate",
-        )?;
-        let receipt = binding_receipt(&paths)?;
-        require(
-            receipt["release_id"] == prepared.info.release_id
-                && receipt["definition_digest"] == digest,
-            "installed binding receipt differs from held candidate",
-        )?;
-        let active = binding(&paths, &options.clockwork, ACTIVE)?;
-        require(
-            active.enabled && active.definition_digest.as_deref() == Some(&digest),
-            "observer selection differs from held candidate",
-        )?;
-        require(
-            pins_from_receipt(&paths, &options.clockwork, current)? == pins,
-            "held candidate dependency pins differ",
-        )?;
-        for key in [LEGACY_OBSERVER, LEGACY_DAILY] {
-            require(
-                !binding(&paths, &options.clockwork, key)?.enabled,
-                "legacy schedule remains enabled",
-            )?;
-        }
-        for service in services(&paths, &options.launchctl, &prior)? {
-            require(
-                !service.loaded && service.file.bytes.is_none(),
-                "legacy service remains installed",
-            )?;
-        }
-        release_hold(&paths, &prepared.info.release_id, &digest, &pins)?;
-        return Ok(
-            json!({"ok":true,"data":{"release_id":prepared.info.release_id,"maintenance":false}}),
-        );
+        return release_maintenance(&paths, options, &pins, &prepared, &digest, &prior);
     }
     if options.keep_maintenance {
         authenticate_hold(&paths, &prepared.info.release_id, &digest, &pins, false)?;

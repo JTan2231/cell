@@ -3,7 +3,7 @@ use crate::{FileEntry, Manifest, Result};
 use std::collections::BTreeMap;
 
 #[test]
-fn recorded_digest_and_signer_fields_do_not_gate_inventory_compatibility() {
+fn recorded_digest_and_signer_fields_do_not_gate_inventory_compatibility() -> Result<()> {
     let actual = BTreeMap::from([(
         "bin/usher".into(),
         FileEntry {
@@ -21,10 +21,14 @@ fn recorded_digest_and_signer_fields_do_not_gate_inventory_compatibility() {
         },
     )]);
     assert!(inventory_matches(&actual, &retained));
-    retained.get_mut("bin/usher").unwrap().mode = 0o444;
+    retained
+        .get_mut("bin/usher")
+        .ok_or(crate::Error::new("retained file entry is absent"))?
+        .mode = 0o444;
     assert!(!inventory_matches(&actual, &retained));
     retained.clear();
     assert!(!inventory_matches(&actual, &retained));
+    Ok(())
 }
 
 #[test]
