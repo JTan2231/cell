@@ -36,7 +36,7 @@ cross-system integration, read:
 1. Read `chancery product annals` and select the owning feature contract.
    Read `chancery show ID` for that feature and `chancery resolve ID` for its
    required contracts. Annals Usage owns reporting; Semantics owns contributor
-   terminology; experiment walkthroughs remain historical.
+   terminology.
 2. Make the smallest change without collapsing work, delivery, examination,
    reconciliation, commit, and revision lifecycles.
 3. Update the owning feature and normalized claims when supported meaning
@@ -59,10 +59,6 @@ cross-system integration, read:
 5. Verify the retained manager outcome. Live migration remains a separate
    authorized operation.
 
-Keep current Semantics terminology out of the preserved experiment archive, whose older
-tree, path, placement, proposal, and uncertainty terms are deliberately
-historical. Conversely, do not revive historical terms in current contracts.
-
 ## Compatibility and recovery
 
 Track compatibility separately for the Annals release, library schema,
@@ -81,7 +77,7 @@ hoc migration.
 command, not a test command. Development completion does not authorize it or
 installation.
 
-Source fixtures, experiment archives, libraries, spools, and Nucleus output
+Source fixtures, libraries, spools, and Nucleus output
 can contain private source and model context. Protect each according
 to the most sensitive content it can retain.
 

@@ -19,7 +19,7 @@
       ],
       "completeness": "complete",
       "excludes": [
-        "Help and version display, implementation primitives, direct SQLite or spool editing, Nucleus and Annals Usage interfaces, current runtime readiness, and preserved historical experiments are outside this inventory claim."
+        "Help and version display, implementation primitives, direct SQLite or spool editing, Nucleus and Annals Usage interfaces, and current runtime readiness are outside this inventory claim."
       ]
     },
     "shared_access_and_trust": [

@@ -76,5 +76,4 @@ Required contract dependencies assemble reading and check compatibility; they
 are not runtime calls. Explicit unsupported behavior and unspecified guarantees
 remain visible in feature pages and resolver output.
 
-README and older topic pages are navigation. Preserved experiment walkthroughs
-remain historical evidence; they are not current feature contracts.
+README and older topic pages are navigation.

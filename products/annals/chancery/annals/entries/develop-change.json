@@ -36,7 +36,7 @@
     "Preserve Annals domain results when later Nucleus runtime failure occurs."
   ],
   "privacy": [
-    "Tests, experiments, source fixtures, libraries, spools, and Nucleus output may contain retained source and model context.",
+    "Tests, source fixtures, libraries, spools, and Nucleus output may contain retained source and model context.",
     "Do not add contributor instructions or Semantics repository output to the constrained liaison runtime prompt."
   ],
   "dependencies": [
@@ -151,7 +151,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "Historical experiment vocabulary, Semantics repository output as liaison runtime input, and requester-side invention of Nucleus policy are not valid change inputs."
+        "statement": "Semantics repository output as liaison runtime input and requester-side invention of Nucleus policy are not valid change inputs."
       }
     ],
     "outputs": [
