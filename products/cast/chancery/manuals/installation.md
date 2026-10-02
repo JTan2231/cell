@@ -66,9 +66,9 @@ current values. State selection uses `state_dir`, then a nonempty inherited
 
 Setup does not invoke the selected CLI or source shell configuration. Explicit
 retained-release recovery selects programs and leaves state configuration unchanged.
-Deployment creates no collection schedule. Setup retains the existing
-discovery schema; it neither activates the unused current model definitions nor
-migrates existing data into them.
+Deployment creates no collection schedule. Setup initializes missing state with database schema 2 and preserves existing
+schema-one discovery state without migration. Both formats retain the existing
+read and export protocols.
 
 Read `cast.state` for private state selection, configuration, and state
 recovery. Program installation and discovery state have separate lifecycles.

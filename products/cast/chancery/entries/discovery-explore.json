@@ -5,16 +5,16 @@
   "mode": "use",
   "support": "supported",
   "title": "Inspect and export discovered companies and jobs",
-  "summary": "Read retained companies, jobs, historical collection outcomes and coverage. Export a consistent JSON snapshot for downstream selection. Cast performs no collection.",
+  "summary": "Read accepted current or retained legacy companies, jobs, and source metadata. Export the existing consistent JSON snapshot for downstream selection. Cast performs no collection.",
   "use_when": [
-    "A caller needs stored companies and jobs or the timestamps, limits and outcomes of historical collection work.",
+    "A caller needs accepted current companies and jobs, compatibility fields, or retained legacy collection evidence and outcomes.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
   ],
   "do_not_use_when": [
     "Current remote sources must be fetched; Cast no longer provides collection.",
     "The caller needs a personal recommendation or application workflow."
   ],
-  "outcome": "Retained discovery records or one consistent JSON snapshot carrying stable identities, revisions, evidence and collection coverage.",
+  "outcome": "Stored company/job records or one consistent schema-one snapshot carrying stable identities, current revisions, compatibility fields, and retained legacy evidence and coverage when present.",
   "interfaces": [
     {
       "label": "Export discovery snapshot",
@@ -62,7 +62,7 @@
     }
   ],
   "effects": [
-    "Reads retained Cast state without fetching external sources or running a model. Output may disclose private query interests, posting text and source locators.",
+    "Read supported Cast state without fetching external sources or running a model. Output may disclose private query interests, posting text, evidence and source locators.",
     "An explicit export --output writes and atomically replaces a private caller-selected file; stdout reads do not write an export."
   ],
   "authority": [
@@ -87,7 +87,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "Local callers and downstream products can inspect retained discovery evidence and consume consistent exports."
+        "statement": "Local callers and downstream products can inspect accepted current records or retained legacy discovery evidence and consume the same consistent exports."
       }
     ],
     "preconditions": [
@@ -115,17 +115,21 @@
       },
       {
         "status": "declared",
-        "statement": "Revisions track retained record changes; observation dates, source-provided dates, job availability and collection health remain separate. Stored relevance reasons describe discovery signals rather than personal recommendations."
+        "statement": "Current state exports each job employer as company_id, independent of the optional source operator. Current compatibility metadata retains supplied timestamps, evidence, compensation and other exported fields without observation or revision history. Company/job first_seen_at and last_seen_at normalize to UTC with nine fractional-second digits for chronological string comparison. Current entity revisions are computed from exported material fields, excluding last_seen_at. Secondary appearance changes and hybrid/on-site changes can preserve the export revision while advancing snapshot_revision. Source dates, job status and source health remain separate; relevance reasons describe stored discovery signals rather than personal recommendations."
       },
       {
         "status": "declared",
-        "statement": "Description excerpts are capped at 1,200 characters. Retained unknown, listed, unlisted, missing and presumed_closed values describe historical collection evidence. Historical presumed_closed required at least two complete missing scans and 24 hours since the first absence. Cast no longer scans or updates availability from external sources."
+        "statement": "Legacy description excerpts are capped at 1,200 characters; current accepted descriptions are stored as supplied. Current status accepts and projects unknown, listed, unlisted, missing or presumed_closed. Legacy availability describes historical collection evidence: presumed_closed required at least two complete missing scans and 24 hours since first absence. Cast does not scan or establish fresh availability when accepting or reading records."
+      },
+      {
+        "status": "declared",
+        "statement": "Current state stores multiple job/source appearances but exports one caller-selected primary through source_id, source_key and url. Its source identity, source key and URL remain fixed after creation; adding secondary appearances preserves it. Existing consumers continue to use the primary URL and optional apply_url; secondary appearance URLs are not exposed through that interface. Workplaces export as comma-separated location names in location-ID order, or null when empty. Remote work_mode exports remote:true, hybrid and on-site export remote:false, and absent work_mode exports null. Other work_mode values are rejected."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Company, job and source IDs are opaque Cast identities. A snapshot revision identifies stored state at export. ATS sources use canonical provider/tenant owners independently of linking website candidates. Ownership correction can change a job's company_id and revision while preserving job and source IDs. Matching company names alone do not cause a merge."
+        "statement": "Company, job and source IDs are opaque Cast identities. Current jobs use accepted employer identities independently of source operators. Legacy ATS sources use canonical provider/tenant associations independently of linking website candidates; ownership correction can change a legacy job company_id and revision while preserving IDs. Matching company names alone do not cause a merge. A snapshot revision identifies stored state at export."
       },
       {
         "status": "not_applicable",
@@ -135,11 +139,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of all retained companies, jobs and historical collection records. captured_at describes snapshot capture; record dates describe retained observations. Source timestamps describe historical ordinary board collection. Historical targeted job observations changed the selected job and run record while preserving board-scan state; retained run notes describe their scope and outcome."
+        "statement": "Export is one consistent view of all stored companies and jobs and projected source metadata. Schema-two state has empty query coverage, zero request usage and null last run because no ledger or run history exists; these values do not establish successful collection. Legacy state retains historical coverage, source timestamps and run outcomes. captured_at describes snapshot capture; record dates retain supplied compatibility timestamps or legacy observations."
       },
       {
         "status": "declared",
-        "statement": "Read operations return stored records without fetching source URLs. Cast has no collection commands. The unused current model does not replace these reads or establish current source availability."
+        "statement": "Read operations return stored records without fetching source URLs. Cast has no collection commands. Store supports database schemas 1 and 2 without migrating existing state, and projects both into the existing read types and schema-one snapshot."
       }
     ],
     "access": [

@@ -12,8 +12,9 @@ cast jobs list
 cast export --json
 ```
 
-The export contains stored companies, jobs, and historical collection outcomes
-and coverage. The new current model is defined but unused; migration is separate.
+New state uses accepted companies, jobs, workplaces, and source appearances.
+The existing snapshot format remains available. Existing discovery state
+remains readable without migration.
 
 ## CI
 
@@ -30,7 +31,7 @@ repairs, deploys, and emails the outcome.
 
 - [Product overview and feature inventory](chancery/overview.md)
 - [Records and read handoff](chancery/manuals/discovery-explore.md)
-- [State and current model definitions](chancery/manuals/state.md)
+- [State and current records](chancery/manuals/state.md)
 - [Installation contract](chancery/manuals/installation.md)
 - [Installation, configuration, and recovery procedure](chancery/manuals/install-operate.md)
 

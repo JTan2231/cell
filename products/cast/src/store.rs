@@ -27,6 +27,7 @@ pub struct Store {
     connection: Arc<Mutex<Connection>>,
     pub directory: PathBuf,
     locked: Arc<AtomicBool>,
+    current: bool,
 }
 
 pub struct ProductLock {
@@ -61,7 +62,7 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?;
-        if schema.as_deref() != Some("1") {
+        if !matches!(schema.as_deref(), Some("1" | "2")) {
             return Err("unsupported Cast state schema".into());
         }
         connection.execute_batch("PRAGMA foreign_keys=ON")?;
@@ -69,6 +70,7 @@ impl Store {
             connection: Arc::new(Mutex::new(connection)),
             directory: directory.to_owned(),
             locked: Arc::new(AtomicBool::new(false)),
+            current: schema.as_deref() == Some("2"),
         })
     }
 
@@ -97,26 +99,22 @@ impl Store {
             .write(true)
             .mode(0o600)
             .open(&path)?;
-        let connection = Connection::open(&path)?;
+        let mut connection = Connection::open(&path)?;
         connection.busy_timeout(std::time::Duration::from_secs(5))?;
-        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
-          CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-          INSERT OR IGNORE INTO meta VALUES('schema_version','1');
-          INSERT OR IGNORE INTO meta VALUES('snapshot_revision','0');
-          CREATE TABLE IF NOT EXISTS companies(id TEXT PRIMARY KEY,body TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS company_aliases(alias TEXT PRIMARY KEY,company_id TEXT NOT NULL REFERENCES companies(id));
-          CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,body TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS job_aliases(alias TEXT PRIMARY KEY,job_id TEXT NOT NULL REFERENCES jobs(id));
-          CREATE TABLE IF NOT EXISTS sources(id TEXT PRIMARY KEY,body TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS coverage(id TEXT PRIMARY KEY,body TEXT NOT NULL);
-          CREATE TABLE IF NOT EXISTS revisions(kind TEXT NOT NULL,id TEXT NOT NULL,revision INTEGER NOT NULL,body TEXT NOT NULL,PRIMARY KEY(kind,id,revision));
-          CREATE TABLE IF NOT EXISTS source_scan_seen(source_id TEXT NOT NULL,job_id TEXT NOT NULL,PRIMARY KEY(source_id,job_id));
-          CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY,started_at TEXT NOT NULL,started_epoch INTEGER NOT NULL,finished_at TEXT,status TEXT NOT NULL,note TEXT);
-          CREATE TABLE IF NOT EXISTS requests(id TEXT PRIMARY KEY,run_id TEXT NOT NULL REFERENCES runs(id),provider TEXT NOT NULL,created_at TEXT NOT NULL,epoch INTEGER NOT NULL,reserved_units INTEGER NOT NULL,charged_units INTEGER,status TEXT NOT NULL);")?;
-        connection.execute(
+        connection.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")?;
+        let tx = connection.transaction()?;
+        tx.execute_batch(
+            "
+          CREATE TABLE meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+          INSERT INTO meta VALUES('schema_version','2');
+          INSERT INTO meta VALUES('snapshot_revision','0');",
+        )?;
+        crate::current_store::initialize(&tx)?;
+        tx.execute(
             "INSERT INTO meta(key,value) VALUES('config',?1)",
             [serde_json::to_string(&Config::default())?],
         )?;
+        tx.commit()?;
         drop(connection);
         drop(initialization_lock);
         Self::open(directory)
@@ -244,6 +242,32 @@ impl Store {
         self.read(|c| all(c, "sources"))
     }
 
+    /// Stores an accepted company in current-model state.
+    pub fn accept_company(&self, company: &Company) -> Result<()> {
+        self.require_current()?;
+        self.write(|tx| crate::current_store::put_company(tx, company))
+    }
+
+    /// Stores a source with an explicit operator and retained export metadata.
+    pub fn accept_source(&self, source: &crate::current::Source, metadata: &Source) -> Result<()> {
+        self.require_current()?;
+        self.write(|tx| crate::current_store::put_current_source(tx, source, metadata))
+    }
+
+    /// Replaces one accepted job and its workplace/source associations atomically.
+    /// The caller resolves duplicates and conflicting source values before this call.
+    pub fn accept_job(&self, record: &crate::current::AcceptedJob) -> Result<()> {
+        self.require_current()?;
+        self.write(|tx| crate::current_store::replace_job(tx, record))
+    }
+
+    fn require_current(&self) -> Result<()> {
+        if !self.current {
+            return Err("accepted-record writes require new Cast state; legacy migration is not implemented".into());
+        }
+        Ok(())
+    }
+
     pub fn source(&self, id: &str) -> Result<Source> {
         self.read(|c| get(c, "sources", id)?.ok_or_else(|| "source not found".into()))
     }
@@ -309,6 +333,11 @@ impl Store {
 
     /// Applies current ATS tenant and HTML adapter rules to stored associations.
     pub fn reconcile_ownership(&self) -> Result<Value> {
+        if self.current {
+            return Ok(
+                json!({"moved_sources":0,"moved_jobs":0,"quarantined_jobs":0,"renamed_candidates":0,"cleared_shared_identities":0,"retained":"accepted employer and operator associations"}),
+            );
+        }
         self.write(|tx| {
             let mut moved_sources=0_u64;
             let mut moved_jobs=0_u64;
@@ -384,9 +413,9 @@ impl Store {
         let budgets = self.config()?.budgets;
         self.read(|c| { let today=timestamp().div_euclid(86400)*86400;
             let mut usage=serde_json::Map::new();
-            for provider in ["theirstack","brave","http","hn"] {let total:u64=c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1",[provider],row_u64)?;let daily:u64=c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1 AND epoch>=?2",params![provider,today],row_u64)?;usage.insert(provider.into(),json!({"total_units":total,"daily_units":daily}));}
-            let requests:u64=c.query_row("SELECT COUNT(*) FROM requests WHERE epoch>=?1",[today],row_u64)?;
-            let last:Option<Value>=c.query_row("SELECT id,started_at,finished_at,status,note FROM runs ORDER BY started_epoch DESC,rowid DESC LIMIT 1",[],|r|Ok(json!({"id":r.get::<_,String>(0)?,"started_at":r.get::<_,String>(1)?,"finished_at":r.get::<_,Option<String>>(2)?,"status":r.get::<_,String>(3)?,"note":r.get::<_,Option<String>>(4)?}))).optional()?;
+            for provider in ["theirstack","brave","http","hn"] {let (total,daily)=if self.current {(0,0)} else {(c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1",[provider],row_u64)?,c.query_row("SELECT COALESCE(SUM(COALESCE(charged_units,reserved_units)),0) FROM requests WHERE provider=?1 AND epoch>=?2",params![provider,today],row_u64)?)};usage.insert(provider.into(),json!({"total_units":total,"daily_units":daily}));}
+            let requests:u64=if self.current {0} else {c.query_row("SELECT COUNT(*) FROM requests WHERE epoch>=?1",[today],row_u64)?};
+            let last:Option<Value>=if self.current {None} else {c.query_row("SELECT id,started_at,finished_at,status,note FROM runs ORDER BY started_epoch DESC,rowid DESC LIMIT 1",[],|r|Ok(json!({"id":r.get::<_,String>(0)?,"started_at":r.get::<_,String>(1)?,"finished_at":r.get::<_,Option<String>>(2)?,"status":r.get::<_,String>(3)?,"note":r.get::<_,Option<String>>(4)?}))).optional()?};
             Ok(json!({"schema_version":2,"snapshot_revision":snapshot.snapshot_revision,"companies":snapshot.companies.len(),"jobs":snapshot.jobs.len(),"sources":snapshot.source_health.len(),"http_requests_today":requests,"usage":usage,"last_run":last,"budgets":budgets,
                 "source_health":snapshot.source_health.into_iter().filter(|source| !matches!(source.status.as_str(), "complete" | "resolved" | "observed")).map(|source| json!({"id":source.id,"status":source.status,"enabled":source.enabled,"last_attempt_at":source.last_attempt_at,"last_success_at":source.last_success_at,"note":source.note})).collect::<Vec<_>>(),
                 "coverage":snapshot.coverage.into_iter().filter(|coverage| coverage.status != "complete").map(|coverage| json!({"query_id":coverage.query_id,"provider":coverage.provider,"status":coverage.status,"last_attempt_at":coverage.last_attempt_at,"last_complete_at":coverage.last_complete_at,"note":coverage.note})).collect::<Vec<_>>()}))
@@ -530,7 +559,22 @@ fn clear_shared_identity(tx: &Transaction<'_>, company: &mut Company) -> Result<
     Ok(true)
 }
 
+fn is_current(c: &Connection) -> Result<bool> {
+    Ok(c.query_row(
+        "SELECT value='2' FROM meta WHERE key='schema_version'",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
 fn all<T: DeserializeOwned>(c: &Connection, table: &str) -> Result<Vec<T>> {
+    if is_current(c)? {
+        return if table == "coverage" {
+            Ok(Vec::new())
+        } else {
+            crate::current_store::all(c, table)
+        };
+    }
     let mut statement = c.prepare(&format!("SELECT body FROM {table} ORDER BY id"))?;
     let rows = statement.query_map([], |r| r.get::<_, String>(0))?;
     rows.map(|row| Ok(serde_json::from_str(&row?)?)).collect()
@@ -546,6 +590,9 @@ fn row_u64(row: &rusqlite::Row<'_>) -> rusqlite::Result<u64> {
     u64::try_from(value).map_err(|_| rusqlite::Error::IntegralValueOutOfRange(0, value))
 }
 fn get<T: DeserializeOwned>(c: &Connection, table: &str, id: &str) -> Result<Option<T>> {
+    if is_current(c)? {
+        return crate::current_store::get(c, table, id);
+    }
     let body: Option<String> = c
         .query_row(
             &format!("SELECT body FROM {table} WHERE id=?1"),
@@ -557,6 +604,14 @@ fn get<T: DeserializeOwned>(c: &Connection, table: &str, id: &str) -> Result<Opt
         .transpose()
 }
 fn put(c: &Connection, table: &str, id: &str, body: &impl serde::Serialize) -> Result<()> {
+    if is_current(c)? {
+        let body = serde_json::to_value(body)?;
+        return match table {
+            "companies" => crate::current_store::put_company(c, &serde_json::from_value(body)?),
+            "sources" => crate::current_store::put_source(c, &serde_json::from_value(body)?),
+            _ => Err("unsupported current-model write".into()),
+        };
+    }
     c.execute(&format!("INSERT INTO {table}(id,body) VALUES(?1,?2) ON CONFLICT(id) DO UPDATE SET body=excluded.body"),params![id,serde_json::to_string(body)?])?;
     Ok(())
 }
@@ -567,6 +622,9 @@ fn put_revision(
     revision: u64,
     body: &impl serde::Serialize,
 ) -> Result<()> {
+    if is_current(c)? {
+        return Ok(());
+    }
     c.execute(
         "INSERT INTO revisions VALUES(?1,?2,?3,?4)",
         params![
@@ -579,6 +637,15 @@ fn put_revision(
     Ok(())
 }
 fn alias(c: &Connection, table: &str, column: &str, key: &str) -> Result<Option<String>> {
+    if is_current(c)? {
+        return Ok(c
+            .query_row(
+                "SELECT value FROM meta WHERE key=?1",
+                [format!("company_alias:{key}")],
+                |r| r.get(0),
+            )
+            .optional()?);
+    }
     Ok(c.query_row(
         &format!("SELECT {column} FROM {table} WHERE alias=?1"),
         [key],
@@ -587,6 +654,13 @@ fn alias(c: &Connection, table: &str, column: &str, key: &str) -> Result<Option<
     .optional()?)
 }
 fn add_alias(c: &Connection, table: &str, column: &str, key: &str, id: &str) -> Result<()> {
+    if is_current(c)? {
+        c.execute(
+            "INSERT OR IGNORE INTO meta(key,value) VALUES(?1,?2)",
+            params![format!("company_alias:{key}"), id],
+        )?;
+        return Ok(());
+    }
     c.execute(
         &format!("INSERT OR IGNORE INTO {table}(alias,{column}) VALUES(?1,?2)"),
         params![key, id],
@@ -719,7 +793,11 @@ fn ats_company_inner(tx: &Transaction<'_>, url: &str, origin: Option<&str>) -> R
         put_revision(tx, "company", &id, company.revision, &company)?;
         put(tx, "companies", &id, &company)?;
     }
-    tx.execute("INSERT INTO company_aliases(alias,company_id) VALUES(?1,?2) ON CONFLICT(alias) DO UPDATE SET company_id=excluded.company_id",params![key,id])?;
+    if is_current(tx)? {
+        tx.execute("INSERT INTO meta(key,value) VALUES(?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", params![format!("company_alias:{key}"), id])?;
+    } else {
+        tx.execute("INSERT INTO company_aliases(alias,company_id) VALUES(?1,?2) ON CONFLICT(alias) DO UPDATE SET company_id=excluded.company_id",params![key,id])?;
+    }
     Ok(company)
 }
 

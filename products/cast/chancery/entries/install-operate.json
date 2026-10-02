@@ -60,10 +60,10 @@
   ],
   "effects": [
     "Direct installation stages an immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. The deploy recipe also initializes state and applies supplied configuration. It creates no schedule.",
-    "Init creates private legacy state. Explicit configuration changes update retained settings; diagnostic reads do not start searches.",
+    "Init creates private schema-two current state when missing and preserves existing schema-one discovery state without migration. Explicit configuration changes update retained settings; diagnostic reads do not start searches.",
     "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
     "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable clears its retained enabled setting and preserves evidence. No remote source is fetched.",
-    "Ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host company domains, website URLs and aliases. It preserves source/job IDs, source metadata, paid request accounting, run history and query checkpoints.",
+    "In schema-one state, ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host domains, website URLs and aliases. It preserves IDs, metadata, usage, runs and query checkpoints. In schema-two state it reports zero changes and preserves accepted employers, operators and snapshot revision.",
     "The Cast deployment recipe initializes missing state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
   ],
   "authority": [
@@ -150,7 +150,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "This procedure starts no collection and creates no schedule, model job or downstream application result. The unused current model is not activated and no data is migrated. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
+        "statement": "This procedure starts no collection and creates no schedule, model job or downstream application result. Missing state uses the accepted current model; existing data is not migrated. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
       },
       {
         "status": "declared",
@@ -164,7 +164,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The operation retains its ID and retires all collection. Required feature contracts provide complete explanations. Legacy state and read schemas remain; program recovery does not restore state and older programs can reject automatic_excluded_ats."
+        "statement": "The operation retains its ID and retires all collection. Required feature contracts provide complete explanations. Store supports legacy and current state with the existing read schemas. Program recovery restores no state; schema-one-only programs cannot open schema-two state, and older programs can reject automatic_excluded_ats."
       }
     ],
     "reliances": [
