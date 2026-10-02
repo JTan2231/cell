@@ -1,7 +1,6 @@
 pub mod adapters;
 pub mod current;
 mod current_store;
-pub mod http;
 pub mod models;
 pub mod store;
 
@@ -12,11 +11,6 @@ pub fn now() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
         .unwrap_or_default()
-}
-
-#[must_use]
-pub fn timestamp() -> i64 {
-    time::OffsetDateTime::now_utc().unix_timestamp()
 }
 
 #[must_use]

@@ -1,5 +1,5 @@
 //! Readable views of Cast's command results. JSON remains the machine interface.
-use crate::{Command, ConfigCommand, JobCommand, SourceCommand};
+use crate::{Command, JobCommand, SourceCommand};
 use serde_json::Value;
 use std::fmt::Write;
 
@@ -12,37 +12,7 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
         Command::Doctor => {
             out.push_str("Cast database: ready\n");
             field(&mut out, "State directory", &value["state_dir"]);
-            field(
-                &mut out,
-                "TheirStack credential present",
-                &value["credentials"]["theirstack"],
-            );
-            field(
-                &mut out,
-                "Brave credential present",
-                &value["credentials"]["brave"],
-            );
-            config(&mut out, &value["config"]);
-        }
-        Command::Config {
-            command: ConfigCommand::Show,
-        } => config(&mut out, value),
-        Command::Config {
-            command: ConfigCommand::Set { .. },
-        } => {
-            out.push_str("Saved collection configuration.\n");
-        }
-        Command::State { .. } => {
-            out.push_str("Reconciled employer ownership.\n");
-            for (label, key) in [
-                ("Moved sources", "moved_sources"),
-                ("Moved jobs", "moved_jobs"),
-                ("Quarantined jobs", "quarantined_jobs"),
-                ("Renamed candidates", "renamed_candidates"),
-                ("Cleared shared identities", "cleared_shared_identities"),
-            ] {
-                field(&mut out, label, &value[key]);
-            }
+            field(&mut out, "Database schema", &value["database_schema"]);
         }
         Command::Status => status(&mut out, value),
         Command::Export { output, .. } => export(&mut out, value, output.is_some()),
@@ -58,15 +28,9 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
             field(&mut out, "URL", &value["url"]);
             field(&mut out, "Enabled", &value["enabled"]);
         }
-        Command::Source {
-            command: SourceCommand::Disable { .. },
-        } => {
-            let _ = writeln!(out, "Disabled source: {}", text(&value["id"]));
-        }
         Command::Companies { .. } => page(&mut out, "Companies", value),
         Command::Jobs { .. } => page(&mut out, "Jobs", value),
         Command::Sources { .. } => page(&mut out, "Sources", value),
-        Command::Unresolved { .. } => page(&mut out, "Unresolved records", value),
         Command::Search { query, .. } => {
             page(&mut out, &format!("Search results for {query}"), value);
         }
@@ -79,7 +43,7 @@ fn export(out: &mut String, value: &Value, saved: bool) {
         let _ = writeln!(out, "Exported JSON snapshot: {}", text(&value["exported"]));
         return;
     }
-    out.push_str("Cast discovery snapshot\n");
+    out.push_str("Cast records snapshot\n");
     field(out, "Snapshot revision", &value["snapshot_revision"]);
     field(out, "Captured at", &value["captured_at"]);
     let _ = writeln!(
@@ -98,7 +62,6 @@ fn export(out: &mut String, value: &Value, saved: bool) {
     for item in items(&value["source_health"]) {
         source(out, item);
     }
-    details(out, "Query coverage", &value["coverage"], 0);
 }
 
 fn text(value: &Value) -> String {
@@ -313,108 +276,14 @@ fn source(out: &mut String, value: &Value) {
     );
 }
 
-fn budgets(out: &mut String, value: &Value) {
-    for (label, key) in [
-        (
-            "TheirStack lifetime cap (credits)",
-            "theirstack_total_credits",
-        ),
-        ("TheirStack daily cap (credits)", "theirstack_daily_credits"),
-        ("Brave monthly cap (requests)", "brave_monthly_requests"),
-        ("Brave daily cap (requests)", "brave_daily_requests"),
-        ("HTTP cap per run (requests)", "http_per_run"),
-        ("HTTP daily cap (requests)", "http_daily"),
-        ("Runtime cap per run (seconds)", "runtime_seconds"),
-    ] {
-        field(out, label, &value[key]);
-    }
-}
-
-fn config(out: &mut String, value: &Value) {
-    out.push_str("Collection configuration\n");
-    budgets(out, &value["budgets"]);
-    field(
-        out,
-        "Excluded ATS providers for ordinary collection",
-        &value["automatic_excluded_ats"],
-    );
-    field(
-        out,
-        "Careers interval (seconds)",
-        &value["careers_interval_seconds"],
-    );
-    field(
-        out,
-        "Targeted adapter-page cap per run",
-        &value["max_verifications_per_run"],
-    );
-    for query in items(&value["queries"]) {
-        record(
-            out,
-            "Discovery query",
-            query,
-            &[
-                ("ID", "id"),
-                ("Provider", "provider"),
-                ("Terms", "terms"),
-                ("Enabled", "enabled"),
-                ("Interval (seconds)", "interval_seconds"),
-                ("Parameters", "params"),
-                ("Cursor", "cursor"),
-            ],
-        );
-    }
-}
-
 fn status(out: &mut String, value: &Value) {
-    out.push_str("Cast collection status\n");
+    out.push_str("Cast records status\n");
     for (label, key) in [
         ("Snapshot revision", "snapshot_revision"),
         ("Retained companies", "companies"),
         ("Retained jobs", "jobs"),
         ("Sources", "sources"),
-        ("HTTP requests today (UTC)", "http_requests_today"),
     ] {
         field(out, label, &value[key]);
     }
-    budgets(out, &value["budgets"]);
-    for (provider, unit) in [
-        ("theirstack", "credits"),
-        ("brave", "requests"),
-        ("http", "requests"),
-        ("hn", "requests"),
-    ] {
-        let usage = &value["usage"][provider];
-        let _ = writeln!(
-            out,
-            "{provider} usage: {} {unit} today (UTC); {} {unit} retained total",
-            text(&usage["daily_units"]),
-            text(&usage["total_units"])
-        );
-    }
-    let last = &value["last_run"];
-    if last.is_null() {
-        out.push_str("Last collection run: none\n");
-    } else {
-        record(
-            out,
-            "Last collection run",
-            last,
-            &[
-                ("ID", "id"),
-                ("Status", "status"),
-                ("Started", "started_at"),
-                ("Finished", "finished_at"),
-            ],
-        );
-        if let Some(note) = last["note"].as_str() {
-            if let Ok(summary) = serde_json::from_str::<Value>(note) {
-                details(out, "Summary", &summary, 0);
-            } else {
-                field(out, "Note", &last["note"]);
-            }
-        }
-    }
-    details(out, "Sources needing attention", &value["source_health"], 0);
-    details(out, "Queries needing attention", &value["coverage"], 0);
 }

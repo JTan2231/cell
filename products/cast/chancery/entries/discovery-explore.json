@@ -4,17 +4,17 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Inspect and export discovered companies and jobs",
-  "summary": "Read accepted current or retained legacy companies, jobs, and source metadata. Export the existing consistent JSON snapshot for downstream selection. Cast performs no collection.",
+  "title": "Inspect and export companies and jobs",
+  "summary": "Read accepted current companies, jobs, and source metadata. Export the existing consistent JSON snapshot for downstream selection. Cast performs no collection.",
   "use_when": [
-    "A caller needs accepted current companies and jobs, compatibility fields, or retained legacy collection evidence and outcomes.",
+    "A caller needs accepted current company/job records, supplied evidence, or source metadata.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
   ],
   "do_not_use_when": [
     "Current remote sources must be fetched; Cast no longer provides collection.",
     "The caller needs a personal recommendation or application workflow."
   ],
-  "outcome": "Stored company/job records or one consistent schema-one snapshot carrying stable identities, current revisions, compatibility fields, and retained legacy evidence and coverage when present.",
+  "outcome": "Stored company/job records or one consistent schema-one snapshot carrying stable identities, current revisions, compatibility fields, supplied evidence, and source metadata.",
   "interfaces": [
     {
       "label": "Export discovery snapshot",
@@ -29,7 +29,7 @@
       "invocation": "/Users/joey/.local/bin/cast jobs list"
     },
     {
-      "label": "Inspect source health",
+      "label": "Inspect source metadata",
       "invocation": "/Users/joey/.local/bin/cast sources list"
     },
     {
@@ -41,16 +41,8 @@
       "invocation": "/Users/joey/.local/bin/cast job show JOB_ID"
     },
     {
-      "label": "Inspect unresolved sources",
-      "invocation": "/Users/joey/.local/bin/cast unresolved list"
-    },
-    {
       "label": "Search retained records",
       "invocation": "/Users/joey/.local/bin/cast search QUERY"
-    },
-    {
-      "label": "Inspect collection status and usage",
-      "invocation": "/Users/joey/.local/bin/cast status --json"
     },
     {
       "label": "Write an atomic private export",
@@ -62,7 +54,7 @@
     }
   ],
   "effects": [
-    "Read supported Cast state without fetching external sources or running a model. Output may disclose private query interests, posting text, evidence and source locators.",
+    "Read supported Cast state without fetching external sources or running a model. Output may disclose private posting text, evidence, dates, and source locators.",
     "An explicit export --output writes and atomically replaces a private caller-selected file; stdout reads do not write an export."
   ],
   "authority": [
@@ -70,11 +62,11 @@
     "Consumers own filtering, consumed revisions, packet state and notification history."
   ],
   "success": [
-    "The requested read completes against supported initialized state. Export returns a consistent snapshot with its schema version, revision, capture time, companies, jobs, source health and query coverage."
+    "The requested read completes against supported initialized state. Export returns a consistent snapshot with schema version, revision, capture time, companies, jobs, source metadata and an empty query coverage array."
   ],
   "failure_and_recovery": [
     "An empty result contains no stored records matching the selected query and limits.",
-    "Reads do not refresh information. Cast has no collection interface. Use state reconcile-ownership for the documented local ownership correction; do not inspect or repair SQLite directly."
+    "Reads do not refresh information. Cast has no collection interface. Read cast.state for supported storage, local readiness, and recovery. Do not inspect or repair SQLite directly."
   ],
   "privacy": [
     "CLI output and exported snapshots are private caller-owned data. Reads send no information to remote systems."
@@ -87,7 +79,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "Local callers and downstream products can inspect accepted current records or retained legacy discovery evidence and consume the same consistent exports."
+        "statement": "Local callers and downstream products can inspect accepted current records and consume the existing consistent export and provider-owned Rust read types."
       }
     ],
     "preconditions": [
@@ -105,31 +97,35 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "CLI reads use readable text by default: compact list/search rows with a more-results notice, complete show fields, and labeled status or snapshot results. Global --json selects the existing JSON schemas. JSON list and search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20 items; --limit accepts a positive integer. Job rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Status returns counts, budgets, usage, the last run and collection summaries for sources and queries. Show and export return full records, source metadata and collection outcomes. The export snapshot still uses schema 1. Export --output always writes a JSON snapshot artifact; --json selects only its stdout receipt format. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. The status-snapshot --json protocol and native Rust APIs remain unchanged."
+        "statement": "CLI record reads use readable text by default. Global --json selects existing machine schemas. JSON list/search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20; --limit accepts a positive integer. Job rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Show and export return full records and source metadata. The export snapshot uses schema 1. Export --output always writes JSON; --json selects only its stdout receipt format. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. Local status and doctor belong to cast.state. The native Rust Snapshot handoff remains unchanged."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Reads and exports include all retained jobs without a title substring requirement. Job counts describe retained records rather than all postings available from external sources. Consumers choose jobs by title, seniority, location or other preferences."
+        "statement": "Reads and exports include all retained jobs without a title substring requirement. Job counts describe retained records rather than all external postings. Consumers choose jobs by title, seniority, location or other preferences."
       },
       {
         "status": "declared",
-        "statement": "Current state exports each job employer as company_id, independent of the optional source operator. Current compatibility metadata retains supplied timestamps, evidence, compensation and other exported fields without observation or revision history. Company/job first_seen_at and last_seen_at normalize to UTC with nine fractional-second digits for chronological string comparison. Current entity revisions are computed from exported material fields, excluding last_seen_at. Secondary appearance changes and hybrid/on-site changes can preserve the export revision while advancing snapshot_revision. Source dates, job status and source health remain separate; relevance reasons describe stored discovery signals rather than personal recommendations."
+        "statement": "A job employer exports as company_id, independently of an optional source operator. Compatibility metadata preserves supplied dates, evidence, compensation and other exported fields without observation or revision history. Company/job first_seen_at and last_seen_at normalize to UTC with nine fractional-second digits. Entity revisions use exported material fields excluding last_seen_at. Secondary appearances and hybrid/on-site changes can preserve the export revision while advancing snapshot_revision."
       },
       {
         "status": "declared",
-        "statement": "Legacy description excerpts are capped at 1,200 characters; current accepted descriptions are stored as supplied. Current status accepts and projects unknown, listed, unlisted, missing or presumed_closed. Legacy availability describes historical collection evidence: presumed_closed required at least two complete missing scans and 24 hours since first absence. Cast does not scan or establish fresh availability when accepting or reading records."
+        "statement": "Accepted descriptions are stored as supplied. Status accepts unknown, listed, unlisted, missing or presumed_closed and projects to availability. These values are accepted assertions; they establish no fresh observation. Supplied attribution, missing-scan counts, first absence times, parser versions, fingerprints and source dates remain compatibility evidence. Cast does not scan or calculate availability."
       },
       {
         "status": "declared",
-        "statement": "Current state stores multiple job/source appearances but exports one caller-selected primary through source_id, source_key and url. Its source identity, source key and URL remain fixed after creation; adding secondary appearances preserves it. Existing consumers continue to use the primary URL and optional apply_url; secondary appearance URLs are not exposed through that interface. Workplaces export as comma-separated location names in location-ID order, or null when empty. Remote work_mode exports remote:true, hybrid and on-site export remote:false, and absent work_mode exports null. Other work_mode values are rejected."
+        "statement": "Jobs store multiple source appearances but export one caller-selected primary through source_id, source_key and url. That tuple remains fixed after creation; adding secondary appearances preserves it. Consumers retain the primary URL and optional apply_url. Secondary appearance URLs are not added to this interface. Workplaces export comma-separated names in location-ID order, or null. Remote work_mode exports remote:true; hybrid and on-site export remote:false; absent work_mode exports null. Other values are rejected."
+      },
+      {
+        "status": "declared",
+        "statement": "The exported source company_id is a compatibility association distinct from source operator and job employer. Source enabled, status, timestamps, cursor and note remain supplied metadata; no collector acts on them."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Company, job and source IDs are opaque Cast identities. Current jobs use accepted employer identities independently of source operators. Legacy ATS sources use canonical provider/tenant associations independently of linking website candidates; ownership correction can change a legacy job company_id and revision while preserving IDs. Matching company names alone do not cause a merge. A snapshot revision identifies stored state at export."
+        "statement": "Company, job and source IDs are opaque stable Cast identities. Source-native IDs are scoped to their source namespace. Company identity aliases remain retained. A snapshot revision identifies stored state at export. Matching names alone do not merge companies."
       },
       {
         "status": "not_applicable",
@@ -139,11 +135,11 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of all stored companies and jobs and projected source metadata. Schema-two state has empty query coverage, zero request usage and null last run because no ledger or run history exists; these values do not establish successful collection. Legacy state retains historical coverage, source timestamps and run outcomes. captured_at describes snapshot capture; record dates retain supplied compatibility timestamps or legacy observations."
+        "statement": "Export is one consistent view of all stored companies and jobs and projected source metadata. The coverage array is empty because current state has no query coverage or collection history. source_health retains its existing field name and carries source metadata. captured_at describes capture time; record dates describe supplied compatibility evidence."
       },
       {
         "status": "declared",
-        "statement": "Read operations return stored records without fetching source URLs. Cast has no collection commands. Store supports database schemas 1 and 2 without migrating existing state, and projects both into the existing read types and schema-one snapshot."
+        "statement": "Read operations return stored records without fetching source URLs. Cast has no collection commands. Supported storage is defined by cast.state; the public Snapshot and schema-one export remain the consumer handoff."
       }
     ],
     "access": [
@@ -171,7 +167,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Read contract version 3 and export schema 1 are independent of the Cast package version. Reads include all retained jobs without a title constraint."
+        "statement": "Read contract 3 preserves the export/native Snapshot and record-read consumer boundary. Export schema 1 and list/search schema 2 are independent of the Cast package and database versions. Cast 0.6.0 local CLI and storage retirements are declared by state contract 3."
       },
       {
         "status": "unspecified",

@@ -38,31 +38,8 @@ pub fn validate_job_url(input: &str) -> Result<(), String> {
     JobSelector::from_url(input).map(|_| ())
 }
 
-/// Recognizes known third-party discovery surfaces, whose host is not job ownership.
-#[must_use]
-pub fn is_discovery_directory(input: &str) -> bool {
-    Url::parse(input)
-        .ok()
-        .and_then(|url| url.host_str().map(directory_host))
-        .unwrap_or(false)
-}
-
-/// Filters freeform hiring-thread headers into candidate display names.
-#[must_use]
-pub fn plausible_company_name(name: &str) -> bool {
-    let name = name.trim();
-    let lower = name.to_lowercase();
-    !name.is_empty()
-        && name.chars().count() <= 80
-        && name.split_whitespace().count() <= 12
-        && ![
-            "we ", "we're ", "we’ve ", "we've ", "i ", "i've ", "i’m ", "i'm ", "hi ", "hello ",
-        ]
-        .iter()
-        .any(|prefix| lower.starts_with(prefix))
-}
-
-use crate::{http::public_url, models::Job};
+use crate::models::Job;
+use std::net::IpAddr;
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -226,86 +203,66 @@ impl Board {
     }
 }
 
-fn directory_host(host: &str) -> bool {
-    [
-        "ycombinator.com",
-        "news.ycombinator.com",
-        "linkedin.com",
-        "github.com",
-        "wellfound.com",
-        "indeed.com",
-        "glassdoor.com",
-        "ziprecruiter.com",
-        "simplyhired.com",
-        "monster.com",
-        "naukri.com",
-        "totaljobs.com",
-        "ambitionbox.com",
-        "velvetjobs.com",
-        "web3.career",
-        "remoterocketship.com",
-        "trueup.io",
-        "jobright.ai",
-        "fastaijobs.com",
-        "6figr.com",
-        "careerexplorer.com",
-        "join.com",
-        "curriculo.me",
-        "builtin.com",
-        "builtinnyc.com",
-        "builtinchicago.org",
-        "builtincolorado.com",
-        "builtinaustin.com",
-        "builtinsf.com",
-        "builtinla.com",
-        "builtinboston.com",
-        "builtinseattle.com",
-        "a16z.com",
-        "jobs.a16z.com",
-        "google.com",
-        "forms.gle",
-        "youtube.com",
-        "twitter.com",
-        "x.com",
-        "reddit.com",
-        "medium.com",
-        "substack.com",
-        "notion.site",
-        "notion.so",
-        "docs.google.com",
-        "bit.ly",
-        "t.co",
-    ]
-    .iter()
-    .any(|item| host == *item || host.ends_with(&format!(".{item}")))
+/// # Errors
+/// Rejects non-HTTP schemes, userinfo, unusual ports, and non-public names or addresses.
+#[allow(clippy::case_sensitive_file_extension_comparisons)] // These are DNS suffixes, not file extensions.
+fn public_url(input: &str) -> Result<Url, String> {
+    let url = Url::parse(input).map_err(|_| "invalid URL")?;
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some_and(|port| port != 80 && port != 443)
+    {
+        return Err(
+            "only public HTTP(S) URLs without credentials and with standard ports are supported"
+                .into(),
+        );
+    }
+    let host = url.host_str().ok_or("URL has no host")?;
+    if host.eq_ignore_ascii_case("localhost")
+        || host.ends_with(".localhost")
+        || host.ends_with(".local")
+        || !host.contains('.') && !host.contains(':')
+    {
+        return Err("non-public hostname is unsupported".into());
+    }
+    if let Ok(ip) = host.trim_matches(['[', ']']).parse::<IpAddr>()
+        && !public_ip(ip)
+    {
+        return Err("non-public IP address is unsupported".into());
+    }
+    Ok(url)
 }
 
-#[cfg(test)]
-fn employer_domain(url: &Url) -> Option<String> {
-    let host = url
-        .host_str()?
-        .strip_prefix("www.")
-        .unwrap_or(url.host_str()?);
-    if Board::from_url(url).is_some()
-        || directory_host(host)
-        || [
-            "greenhouse.io",
-            "ashbyhq.com",
-            "lever.co",
-            "workable.com",
-            "smartrecruiters.com",
-            "myworkdayjobs.com",
-            "bamboohr.com",
-            "personio.com",
-            "recruitee.com",
-            "teamtailor.com",
-        ]
-        .iter()
-        .any(|domain| host == *domain || host.ends_with(&format!(".{domain}")))
-    {
-        return None;
+fn public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => {
+            let [a, b, c, _] = ip.octets();
+            !(ip.is_private()
+                || ip.is_loopback()
+                || ip.is_link_local()
+                || ip.is_broadcast()
+                || ip.is_documentation()
+                || ip.is_unspecified()
+                || ip.is_multicast()
+                || a == 0
+                || a >= 240
+                || a == 100 && (64..=127).contains(&b)
+                || a == 198 && matches!(b, 18 | 19)
+                || a == 192 && b == 0 && c == 0)
+        }
+        IpAddr::V6(ip) => {
+            if let Some(ip) = ip.to_ipv4_mapped() {
+                return public_ip(IpAddr::V4(ip));
+            }
+            let segments = ip.segments();
+            // Only ordinary global unicast. Excludes local, multicast, link-local,
+            // documentation and transition ranges that can embed private IPv4.
+            (segments[0] & 0xe000) == 0x2000
+                && !(segments[0] == 0x2001 && (segments[1] == 0xdb8 || segments[1] < 0x0200))
+                && segments[0] != 0x2002
+        }
     }
-    Some(host.into())
 }
 
 #[cfg(test)]
@@ -313,13 +270,32 @@ fn employer_domain(url: &Url) -> Option<String> {
 mod tests {
     use super::*;
     #[test]
+    fn public_network_only() {
+        for url in [
+            "http://127.0.0.1",
+            "http://[::1]",
+            "http://[::ffff:127.0.0.1]",
+            "http://169.254.169.254",
+            "http://10.1.1.1",
+            "http://100.64.0.1",
+            "http://localhost",
+            "file:///tmp/jobs",
+            "https://user:secret@example.com",
+            "https://example.com:8000",
+        ] {
+            assert!(public_url(url).is_err(), "{url}");
+        }
+        assert!(public_url("https://boards.greenhouse.io/acme").is_ok());
+        assert!(public_ip("8.8.8.8".parse().unwrap()));
+    }
+
+    #[test]
     fn board_identity_keeps_hosted_tenants_separate() {
         let a =
             Board::from_url(&Url::parse("https://jobs.ashbyhq.com/acme/a-job").unwrap()).unwrap();
         let b =
             Board::from_url(&Url::parse("https://jobs.ashbyhq.com/other/a-job").unwrap()).unwrap();
         assert_ne!(a.identity(), b.identity());
-        assert!(employer_domain(&Url::parse(&a.url()).unwrap()).is_none());
         assert_ne!(
             Board::from_url(&Url::parse("https://jobs.eu.lever.co/acme/123").unwrap())
                 .unwrap()

@@ -1,9 +1,9 @@
-//! Product-owned installation layout and predecessor release proof.
+//! Product-owned program installation and state setup.
 use cell_install::legacy::{LegacyProof, LegacyProvider, LegacySpec};
 use cell_install::simple::Spec;
 use cell_install::transaction::LockKind;
 
-/// Initialize missing discovery state without collecting from any provider.
+/// Initialize missing accepted-record state.
 /// # Errors
 /// Rejects unknown setup fields and failed initialization.
 fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<()> {
@@ -11,7 +11,6 @@ fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<(
     #[serde(deny_unknown_fields)]
     struct Settings {
         state_dir: Option<std::path::PathBuf>,
-        config_file: Option<std::path::PathBuf>,
     }
     let settings: Settings = serde_json::from_value(
         context
@@ -24,13 +23,9 @@ fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<(
         .state_dir
         .as_ref()
         .is_some_and(|path| !path.is_absolute())
-        || settings
-            .config_file
-            .as_ref()
-            .is_some_and(|path| !path.is_absolute() || !path.is_file())
     {
         return Err(cell_install::Error::new(
-            "Cast setup paths must be absolute existing inputs",
+            "Cast state directory must be absolute",
         ));
     }
     let directory = settings
@@ -46,12 +41,6 @@ fn configure(context: &cell_install::adapter::Context) -> cell_install::Result<(
     let _lock = store
         .lock()
         .map_err(|_| cell_install::Error::new("Cast setup could not acquire the product lock"))?;
-    if let Some(path) = settings.config_file {
-        let config = serde_json::from_slice(&std::fs::read(path)?)?;
-        store
-            .set_config(&config)
-            .map_err(|_| cell_install::Error::new("Cast configuration replacement failed"))?;
-    }
     Ok(())
 }
 

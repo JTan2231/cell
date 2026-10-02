@@ -35,16 +35,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     Init,
-    State {
-        #[command(subcommand)]
-        command: StateCommand,
-    },
     Status,
     Doctor,
-    Config {
-        #[command(subcommand)]
-        command: ConfigCommand,
-    },
     #[command(alias = "snapshot")]
     Export {
         #[arg(long)]
@@ -74,27 +66,11 @@ enum Command {
         #[command(subcommand)]
         command: SourceCommand,
     },
-    Unresolved {
-        #[command(subcommand)]
-        command: ListCommand,
-    },
     Search {
         query: String,
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
-}
-#[derive(Subcommand)]
-enum ConfigCommand {
-    Show,
-    Set {
-        #[arg(long)]
-        file: PathBuf,
-    },
-}
-#[derive(Subcommand)]
-enum StateCommand {
-    ReconcileOwnership,
 }
 #[derive(Subcommand)]
 enum ListCommand {
@@ -117,9 +93,6 @@ enum SourceCommand {
         url: String,
         #[arg(long)]
         company_id: Option<String>,
-    },
-    Disable {
-        id: String,
     },
 }
 
@@ -158,23 +131,9 @@ fn execute(cli: Cli) -> Result<()> {
             let _lock = store.lock()?;
             json!({"schema_version":1,"state_dir":directory,"initialized":true})
         }
-        Command::State {
-            command: StateCommand::ReconcileOwnership,
-        } => store.reconcile_ownership()?,
         Command::Status => store.status()?,
         Command::Doctor => {
-            json!({"schema_version":1,"database":"ready","state_dir":directory,"credentials":{"theirstack":std::env::var("THEIRSTACK_API_KEY").is_ok_and(|v|!v.is_empty()),"brave":std::env::var("BRAVE_SEARCH_API_KEY").is_ok_and(|v|!v.is_empty())},"agent_runtime":false,"config":store.config()?})
-        }
-        Command::Config {
-            command: ConfigCommand::Show,
-        } => serde_json::to_value(store.config()?)?,
-        Command::Config {
-            command: ConfigCommand::Set { file },
-        } => {
-            let _lock = store.lock()?;
-            let config = serde_json::from_slice(&std::fs::read(file)?)?;
-            store.set_config(&config)?;
-            json!({"configured":true})
+            json!({"schema_version":2,"database":"ready","database_schema":2,"state_dir":directory})
         }
         Command::Export { output, .. } => {
             if let Some(path) = output {
@@ -241,31 +200,6 @@ fn execute(cli: Cli) -> Result<()> {
         Command::Source {
             command: SourceCommand::Add { url, company_id },
         } => serde_json::to_value(store.add_manual_source(url, company_id.as_deref())?)?,
-        Command::Source {
-            command: SourceCommand::Disable { id },
-        } => {
-            let _lock = store.lock()?;
-            serde_json::to_value(store.disable_source(id)?)?
-        }
-        Command::Unresolved {
-            command: ListCommand::List { limit },
-        } => {
-            let snapshot = store.snapshot()?;
-            let mut items: Vec<_> = snapshot
-                .companies
-                .iter()
-                .filter(|c| c.domain.is_none())
-                .map(company_summary)
-                .collect();
-            items.extend(
-                snapshot
-                    .source_health
-                    .iter()
-                    .filter(|s| !matches!(s.status.as_str(), "complete" | "resolved" | "observed"))
-                    .map(source_summary),
-            );
-            page(snapshot.snapshot_revision, items, *limit)?
-        }
         Command::Search { query, limit } => {
             if query.trim().is_empty() {
                 return Err("search query must not be empty".into());

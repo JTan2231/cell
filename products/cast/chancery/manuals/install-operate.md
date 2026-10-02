@@ -1,30 +1,27 @@
-# Install, configure, and recover Cast
+# Install, initialize, and recover Cast
 
-Use this operation for an intended program installation, local configuration,
-readiness diagnosis, source-control change, or employer-ownership repair.
-Cast owns those results. It does not authorize provider purchases, a new
-schedule, credential replacement, destructive state reset, or downstream
+Use this operation for program installation, state initialization, local
+readiness diagnosis, or source enrollment. Cast owns those results. It does
+not authorize a new schedule, destructive state reset, or downstream
 application work.
 
 Read `chancery resolve cast.install.operate` for this procedure and its required
-contracts: `cast.installation` owns program lifecycle and wrapper credentials;
-`cast.state` owns state, retained configuration, source controls, and repair; and
-`cast.discovery.explore` owns the evidence used for verification. This manual
-keeps the prerequisites, effects, stop conditions, and steps needed to operate.
+contracts. `cast.installation` owns program lifecycle and frontend environment.
+`cast.state` owns state, local status, readiness, and source enrollment.
+`cast.discovery.explore` owns the record and export meanings used for
+verification.
 
 ## Select the operation and prerequisites
 
 1. Identify the intended outcome and selected operator home or state directory.
-2. Inspect existing state and configuration before changing policy. Keep the
-   current complete configuration and consumed budgets.
-3. Select an installer and supplied binary/bundle for
-   program work. Use user-owned paths and the supported macOS shell tools.
-4. Stop callers before ownership reconciliation.
-5. Keep keys outside arguments, configuration, database rows, and logs.
+2. Inspect existing state before changes. Preserve its accepted records.
+3. Select a trusted tested installer and supplied binary/bundle for program
+   work. Use user-owned paths and the supported macOS shell tools.
+4. Stop callers before state maintenance or recovery.
 
-Stop if the intended selector belongs to another owner, an active writer would
-be displaced. Stop before unsupported destructive or incompatible state work. Program recovery does not
-restore discovery state or configuration.
+Stop if the intended selector belongs to another owner or an active writer
+would be displaced. Stop before unsupported destructive or incompatible state
+work. Program recovery does not restore Cast data.
 
 ## Install the candidate
 
@@ -39,23 +36,22 @@ explicitly authorized manual installation or recovery:
      --bundle /absolute/path/to/cast/chancery
    ```
 
-2. Supply `--home PATH` if selecting another operator home. Supply
+2. Supply `--home PATH` to select another operator home. Supply
    `--expected-current absent|releases/ID` when the exact prior selection is
    required.
-3. Read `cast-install inspect` for the selected release metadata. Run ordinary
-   diagnostic commands separately when diagnosis is requested.
-
+3. Read `cast-install inspect` for selected release metadata. Run ordinary
+   diagnostic commands separately when requested.
 4. Inspect the matching publication with `chancery product cast` and
    `chancery show cast.installation` when Chancery is available.
-5. Run `cast --register-usage` after installation or update. This registers
-   command inventory without product work.
+5. Run `cast --register-usage` after installation or update.
 
-Installation selects a retained payload, frontend, installer, and
-exact provider bundle through one atomic `current` release. It creates no
-database or schedule and sends no provider request. A failed switch retains completed selector changes for explicit recovery. Catalog presence and version checks do not prove remote
-authentication or current provider allowance.
+Installation selects a retained payload, frontend, installer, and exact
+provider bundle through one atomic `current` release. Direct installation
+creates no database or schedule and sends no provider request. A failed
+switch retains completed selector changes for explicit recovery. Catalog
+presence and release metadata do not prove usable local state.
 
-## Initialize, diagnose, or replace configuration
+## Initialize and diagnose state
 
 1. Select state with `--state-dir PATH` or `CAST_STATE_DIR` when the default
    `~/.local/share/cast` is not intended.
@@ -64,56 +60,35 @@ authentication or current provider allowance.
    ```sh
    cast init
    cast doctor
-   cast config show
    cast status --json
    ```
 
-3. Inspect the complete configuration before changing queries, intervals,
-   adapter settings, budgets, or `automatic_excluded_ats`.
-4. Write the intended complete JSON to a private file, then apply and verify it:
-
-   ```sh
-   cast config set --file /absolute/path/to/config.json
-   cast config show
-   cast doctor
-   cast status --json
-   ```
+3. Verify supported database schema 2 and the intended record counts.
+4. Inspect retained records with `cast jobs list` or `cast export --json` when
+   the requested result requires record verification.
 
 Initialization creates schema-two current state when the database is missing.
-It preserves existing schema-one records and consumed budgets without
-migration, and collects nothing. Configuration replacement updates retained settings and does not reset
-usage, purchase credits, or change provider billing. The retained ATS exclusion
-defaults to Ashby when omitted; an explicit empty array clears these exclusions.
-No collector applies them in this release. Older programs can reject
-configuration written with this field.
+It preserves supported existing state and collects nothing. Schema-one state
+is rejected without migration. Stop if the selected directory requires an
+unsupported migration or manual row repair.
 
-The installed frontend executes user-owned `.zshrc` with trace/output
-suppressed and passes the provider keys through its restricted environment.
-Its shell commands and side effects remain user-owned. `doctor` can check
-local configuration and credential presence. It does not establish provider
-authentication, balances, or current posting availability.
-
-Inspect the retained last run, source health, coverage, and budget diagnostics
-when interpreting historical schema-one work. Schema-two state has no request
-ledger or runs; zero usage, null last run, and empty query coverage do not
-establish collection success. Preserve observations and local charges.
-Do not erase state to clear allowance or treat an absent error as complete
-coverage. `run`, `job refresh`, and `job collect` are removed.
+Doctor checks usable local state. It reads no provider keys or collector
+configuration. The installed frontend does not source shell configuration.
+Local readiness does not establish current source availability.
 
 The Cast deployment recipe uses native state APIs and the product lock after
-program selection. Its optional `state_dir` and `config_file` settings are
-absolute paths. A supplied file replaces complete configuration; omitted
-settings preserve current values. Setup does not invoke the selected CLI or
-source shell configuration, so it does not depend on the CLI output protocol.
-This setup creates no collection schedule. It initializes missing state with
-the current model and does not migrate existing data.
+program selection. Its optional `state_dir` setting is an absolute path.
+Setup initializes missing schema-two state and rejects unsupported schemas.
+It does not invoke the selected CLI and creates no schedule. There is no
+`config_file` setting.
 
-Ordinary Cast commands print readable text by default. Add the global `--json`
-flag when a caller parses their output. The JSON success schemas and snapshot
-artifact format remain unchanged. Read `cast.state` and
-`cast.discovery.explore` for output and error rules.
+Ordinary commands print readable text by default. Add global `--json` when a
+caller parses output. Ordinary status uses schema 3. List/search pages remain
+schema 2; export artifacts remain schema 1. The separate operational
+`status-snapshot --json` protocol remains schema 1. Read `cast.state` and
+`cast.discovery.explore` for full output and error rules.
 
-## Add or disable a source
+## Add a source
 
 1. Choose an ordinary website or supported ATS source and inspect the intended
    company identity.
@@ -126,46 +101,13 @@ artifact format remain unchanged. Read `cast.state` and
    cast sources list
    ```
 
-3. Clear the retained enabled setting for an exact source when intended:
-
-   ```sh
-   cast source disable SOURCE_ID
-   cast sources list
-   ```
+3. Verify the resulting source identity, URL, and company association.
 
 An ordinary website without `--company-id` creates or reuses a hostname
-candidate. Supported ATS URLs use canonical provider/tenant owners and reject
-a company override. Disabling retains the source and its jobs. Inspect the resulting source ownership
-and enabled setting; adding a source does not prove successful retrieval.
-
-## Reconcile older employer ownership
-
-1. Stop writers for the selected state directory.
-2. Run the supported local repair and inspect its result:
-
-   ```sh
-   cast state reconcile-ownership
-   cast export --json
-   cast status --json
-   ```
-
-3. Verify the reported `moved_sources`, `moved_jobs`, `quarantined_jobs`,
-   `renamed_candidates`, and `cleared_shared_identities` counts and the affected
-   source/job associations.
-4. Confirm that source/job IDs, paid request usage, run history, query coverage,
-   and cursors remain retained. Resume only the callers stopped for this work.
-
-In schema-one state, the repair holds one mutation lock and commits one
-transaction. It corrects
-ATS ownership, sets older or affected shared-host JSON-LD jobs to `unknown`,
-resets retained source collection status, and corrects affected candidate identities.
-Changed jobs and companies gain revisions. Repetition leaves material records
-unchanged but advances the snapshot revision. The repair sends no provider
-request and does not establish current posting availability.
-
-In schema-two state, reconciliation returns zero changes and preserves
-accepted employer/operator associations and the snapshot revision. It does not
-infer an employer from the source operator.
+candidate. Supported ATS URLs use canonical provider/tenant associations and
+reject a company override. This compatibility association does not establish
+the optional source operator or any job employer. Enrollment performs no
+retrieval and does not establish collection success.
 
 ## Recover programs or prepare state recovery
 
@@ -177,32 +119,37 @@ infer an employer from the source operator.
    ```
 
 3. Read selected release metadata and matching documentation. Register usage
-   after the selection.
-4. Keep any requested diagnosis separate from program recovery.
+   after selection.
+4. Confirm that the selected program accepts database schema 2 and does not
+   require removed collector configuration. Keep requested diagnosis separate
+   from program recovery.
 
-The installer reads retained legacy or `cell-install-v3` metadata before
-selection. Use a trusted installer. Keep retained release files unchanged. A failed switch retains completed selector changes.
+The installer reads supported retained installation metadata before selection.
+Use a trusted installer. Keep retained release files unchanged. A failed
+switch retains completed selector changes.
 
 An abruptly killed deployer can leave `.update-lock`. Confirm that no Cast
 deployer is running before removing a stale installation lock and rerunning
 the tested candidate. Never remove another active writer's lock. Runtime
 mutation uses a separate kernel-backed lock.
 
-Program recovery leaves Cast state unchanged. Programs that support only
-database schema 1 cannot read schema-two state. This release provides no automatic
-database migration, pruning, destructive reset, or state uninstaller. Stop
-when a proposed recovery requires unsupported row edits or an incompatible
+Program recovery leaves Cast data unchanged. Schema-one-only programs cannot
+read schema-two state; this release cannot read schema-one state. There is no
+automatic database migration, pruning, destructive reset, or state uninstaller.
+Older releases can read schema-two exports but fail status or diagnosis when
+they require collector configuration absent from new state. Recovery does not
+recreate configuration. Stop when recovery requires unsupported row edits or an incompatible
 program/state pair.
 
 Keep state, exports, and diagnostics private. Cast starts no Nucleus, CRM,
-Email, or computer-use work. Chancery reads documentation only; neither its
-catalog nor successful local checks grants authority for new external work.
+Email, or computer-use work. Chancery reads documentation only; its catalog
+and local checks grant no authority for new external work.
 
 ## Deployment recipe
 
 `cast-install deploy` reads one schema-two Cell recipe request from stdin.
-The product command selects supplied programs, initializes missing state, and applies supplied configuration through the product lock.
-The manifest executor runs this instruction and records its exit status. It does
-not inspect application output or create a maintenance hold, drain work, or
-recover prior effects. A failed instruction leaves completed changes in place.
-Use the product's explicit recovery operation when recovery is required.
+The product command selects supplied programs and initializes missing state
+through the product lock. The manifest executor runs the instruction and
+records its exit status. It does not inspect application output or create a
+maintenance hold, drain work, or recover prior effects. A failed instruction
+leaves completed changes in place. Use explicit product recovery when required.

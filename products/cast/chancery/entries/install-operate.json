@@ -1,21 +1,20 @@
 {
   "id": "cast.install.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
-  "title": "Install or configure retained Cast state",
-  "summary": "Install Cast and its matching provider bundle. Initialize retained private state, inspect local diagnostics and accounting, change retained configuration or source metadata, or reconcile employer ownership without collecting or migrating data.",
+  "title": "Install, initialize, or recover Cast",
+  "summary": "Install Cast and its matching provider bundle, initialize private schema-two state, diagnose local readiness, add source metadata, or recover retained programs without collection.",
   "use_when": [
-    "Cast should be installed, initialized, diagnosed or explicitly reconfigured.",
-    "The caller needs to inspect retained local accounting, configuration or source diagnostics.",
-    "Existing ATS or older JSON-LD records need the supported employer-ownership correction without resetting paid usage."
+    "Cast should be installed, initialized, diagnosed or recovered.",
+    "The caller needs to add a retained careers source or verify local state."
   ],
   "do_not_use_when": [
     "A current discovery run or a read-only employer/job export is the requested outcome.",
     "A schedule, provider subscription purchase, credential change, database deletion or downstream action is intended."
   ],
-  "outcome": "An installed matching program/documentation release, initialized Cast state, supported diagnostic result, explicitly replaced configuration or transactionally reconciled employer ownership.",
+  "outcome": "An installed matching program/documentation release, initialized schema-two state, supported local diagnostic result, source enrollment, or selected retained program release.",
   "interfaces": [
     {
       "label": "Install the tested candidate",
@@ -30,24 +29,8 @@
       "invocation": "/Users/joey/.local/bin/cast doctor"
     },
     {
-      "label": "Show configuration",
-      "invocation": "/Users/joey/.local/bin/cast config show"
-    },
-    {
-      "label": "Replace configuration",
-      "invocation": "/Users/joey/.local/bin/cast config set --file PATH"
-    },
-    {
       "label": "Add a careers source",
       "invocation": "/Users/joey/.local/bin/cast source add URL [--company-id COMPANY_ID]"
-    },
-    {
-      "label": "Clear a retained source enabled setting",
-      "invocation": "/Users/joey/.local/bin/cast source disable SOURCE_ID"
-    },
-    {
-      "label": "Reconcile retained employer ownership",
-      "invocation": "/Users/joey/.local/bin/cast state reconcile-ownership"
     },
     {
       "label": "Recover a retained program",
@@ -59,30 +42,28 @@
     }
   ],
   "effects": [
-    "Direct installation stages an immutable wrapper, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. The deploy recipe also initializes state and applies supplied configuration. It creates no schedule.",
-    "Init creates private schema-two current state when missing and preserves existing schema-one discovery state without migration. Explicit configuration changes update retained settings; diagnostic reads do not start searches.",
-    "The installed wrapper sources ~/.zshrc with output suppressed and starts the Rust payload with only the documented environment and two provider keys.",
-    "Source add retains an explicit source. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use their canonical provider/tenant owner and reject --company-id. Source disable clears its retained enabled setting and preserves evidence. No remote source is fetched.",
-    "In schema-one state, ownership reconciliation applies current adapter rules to stored ATS source/job associations, sets older or shared-host JSON-LD jobs to unknown, restores affected search-candidate names and clears shared-host domains, website URLs and aliases. It preserves IDs, metadata, usage, runs and query checkpoints. In schema-two state it reports zero changes and preserves accepted employers, operators and snapshot revision.",
-    "The Cast deployment recipe initializes missing state without collection and applies an explicitly supplied complete config file. Existing records and consumed budgets remain. No collection schedule is created."
+    "Direct installation stages an immutable frontend, Rust payload, Rust installer and exact provider bundle and advances only Cast-owned command/provider selectors. Deployment also initializes state. It creates no schedule.",
+    "Init creates missing private schema-two state and preserves supported existing records. Schema-one state is rejected without migration. Diagnostics start no searches.",
+    "The installed frontend passes only its documented environment without sourcing ~/.zshrc or extracting provider keys.",
+    "Source add retains an explicit source without fetching it. Ordinary websites may use an existing company ID or a hostname candidate; supported ATS URLs use canonical provider/tenant associations and reject --company-id."
   ],
   "authority": [
-    "Cast owns its installation, state schema, configuration validation and local allowance accounting.",
-    "The caller chooses collection policy and provider accounts; provider balances are managed by each provider."
+    "Cast owns its installation, supported state schema, source enrollment, and local diagnostics.",
+    "The operator selects artifacts and state. Consumers own personal selection and downstream actions."
   ],
   "success": [
-    "Installation selects the supplied commands and documentation without executable probes.",
-    "Initialization, configuration or diagnosis returns its documented local outcome.",
-    "Ownership repair returns moved_sources, moved_jobs, quarantined_jobs, renamed_candidates and cleared_shared_identities counts after one committed transaction; changed jobs/companies retain identity and gain material revisions."
+    "Installation selects supplied commands and documentation without executable probes.",
+    "Initialization, source enrollment or diagnosis returns its documented local outcome and supported reads confirm the intended result."
   ],
   "failure_and_recovery": [
     "Deployment refuses foreign selectors and stale expected selections. A failed instruction retains completed changes for explicit recovery.",
-    "Program rollback preserves current domain state. Do not hand-edit database rows.",
-    "Configuration changes do not purchase credits or reset accumulated usage. Diagnostic key presence does not establish provider authentication or current availability."
+    "Program recovery preserves current Cast data and does not check schema compatibility. Select a compatible program; do not hand-edit SQLite rows.",
+    "Unsupported state schemas fail explicitly without migration. Local readiness does not establish current source availability.",
+    "Older releases requiring stored collector configuration can fail status or diagnosis on newly initialized Cast 0.6.0 state even if they read schema-two exports. Recovery does not recreate configuration."
   ],
   "privacy": [
-    "Keys remain in the caller environment and user-owned shell configuration, outside the Cast database and installed provider bundle.",
-    "State and exports may reveal personal search interests and should remain private."
+    "State and exports can contain posting text, source locators, evidence and dates. Keep them private.",
+    "Cast reads no provider credentials or executable user shell configuration."
   ],
   "does_not_authorize": [
     "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
@@ -92,47 +73,47 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user may follow this procedure for Cast program installation or recovery, state initialization, configuration, diagnosis, source controls and supported ownership repair."
+        "statement": "The current user may follow this procedure for program installation or recovery, schema-two state initialization, local diagnosis and source enrollment."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select the intended home/state, use a supplied candidate and trusted tested installer for program work, preserve complete configuration and budgets, and stop callers before repair."
+        "statement": "Select intended home/state, use supplied artifacts and a trusted tested installer for program work, preserve accepted records, and stop callers before state maintenance or recovery."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Inputs are exact candidate/bundle or canonical retained-release paths, selected home/state, a complete intended schema-one config file, source URL/ID and optional ordinary-website company identity."
+        "statement": "Inputs are exact candidate/bundle or canonical retained-release paths, selected home/state, a source URL and an optional ordinary-website company identity. Deploy accepts optional absolute state_dir but no config_file."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Supported reads verify command identity, configuration, local diagnosis, source ownership/enrollment and ownership-repair counts after the intended operation."
+        "statement": "Supported reads verify selected program metadata, local state and diagnosis, and source identity, URL and company association after the operation. Ordinary status schema 3 supplies local record counts."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Artifact selection, local readiness and current external provider success are separate outcomes. State and install feature contracts own their full meanings."
+        "statement": "Artifact selection, usable local state and current external posting availability are separate outcomes. State and installation feature contracts own their full meanings."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Verify exact release selection, selected state directory, source/job identity and repair counts. cast.state owns budget units and cast.discovery.explore owns retained revisions."
+        "statement": "Verify exact release selection, selected state directory, and enrolled source identity. cast.discovery.explore owns stable record identities and current revisions."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Checks describe selected local artifacts and state at invocation. Repair counts describe the committed selected transaction, not external collection coverage."
+        "statement": "Checks describe selected local artifacts and state at invocation. Source enrollment retains metadata without establishing retrieval or coverage."
       },
       {
         "status": "unsupported",
-        "statement": "Installation and local diagnosis do not establish current provider balance, authentication or successful collection."
+        "statement": "Installation and local diagnosis do not establish current external source availability or successful collection."
       }
     ],
     "access": [
@@ -144,13 +125,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Follow the owning feature's locked installation, state and reconciliation boundaries. Verify matching selectors after installation or recovery and preserve consumed budgets and prior state."
+        "statement": "Follow owning feature installation and state lock boundaries. Verify matching selectors after installation or recovery and preserve prior Cast data."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "This procedure starts no collection and creates no schedule, model job or downstream application result. Missing state uses the accepted current model; existing data is not migrated. It authorizes no provider purchase, credential replacement, destructive reset or hand repair."
+        "statement": "This procedure starts no collection and creates no schedule, model job or downstream application result. Missing state uses schema 2; schema-one state is rejected without migration. It authorizes no provider purchase, credential replacement, destructive reset or manual row repair."
       },
       {
         "status": "declared",
@@ -164,7 +145,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The operation retains its ID and retires all collection. Required feature contracts provide complete explanations. Store supports legacy and current state with the existing read schemas. Program recovery restores no state; schema-one-only programs cannot open schema-two state, and older programs can reject automatic_excluded_ats."
+        "statement": "Operation contract 8 retires collector configuration, ownership reconciliation and source disabling. Required features explain schema-two-only state, local status schema 3, doctor schema 2, frontend environment and unchanged export/native Snapshot compatibility. Program recovery restores no state."
+      },
+      {
+        "status": "declared",
+        "statement": "New state has no collector configuration. Existing metadata can retain old configuration values inertly; Cast does not read or replace them. Older releases requiring those values can fail status or diagnosis on new state even if they support schema-two exports. Program recovery recreates no configuration."
       }
     ],
     "reliances": [
@@ -177,7 +162,7 @@
       },
       {
         "status": "declared",
-        "statement": "State setup and changes follow Cast-owned configuration, source-control, budget and repair rules.",
+        "statement": "State setup and source enrollment follow Cast-owned schema, accepted-record and local readiness rules.",
         "target": "cast",
         "kind": "authority",
         "contract": "cast.state"
@@ -195,13 +180,13 @@
   "dependencies": [
     {
       "id": "cast.installation",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "cast.state",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "cast.discovery.explore",
@@ -216,22 +201,21 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Select the intended operator home and state directory, inspect current configuration and choose the authorized local operation.",
-    "Install a supplied binary and bundle through a trusted tested candidate, then verify command identity and register usage.",
-    "Initialize missing state, inspect readiness and complete configuration, and explicitly apply only the intended complete replacement.",
-    "Add or disable an exact source and verify ownership and enabled state without treating enrollment as collection success.",
-    "Stop writers before supported ownership reconciliation and verify counts, associations and retained accounting through reads.",
-    "Recover a canonical retained release. Program recovery leaves discovery state unchanged."
+    "Select intended operator home and state directory, inspect current records and choose the authorized local operation.",
+    "Install supplied binary and bundle through a trusted tested candidate, then inspect release metadata and register usage.",
+    "Initialize missing schema-two state and inspect local readiness and record counts.",
+    "Add an exact source and verify identity and company association without treating enrollment as collection success.",
+    "Recover a canonical retained release. Preserve Cast data and select programs compatible with its schema."
   ],
   "checkpoints": [
     "The tested candidate and provider release match and all selectors belong to Cast.",
-    "Configuration and source effects are explicit and consumed budgets remain retained.",
-    "Local readiness is separate from provider authentication, allowance and collection success.",
-    "Ownership repair preserves stable IDs, usage, run history, coverage and cursors.",
-    "Program recovery leaves state unchanged and the selected program accepts its configuration."
+    "Selected state uses supported database schema 2 and accepted records remain.",
+    "Local readiness is separate from current external posting availability.",
+    "Source enrollment has the intended source identity, URL and company association.",
+    "Program recovery leaves state unchanged and the selected program accepts its schema."
   ],
   "adaptation": [
-    "Use the selected installed release and state configuration; do not infer live readiness from catalog presence.",
+    "Use the selected installed release and state; do not infer readiness from catalog presence.",
     "Read product/show/resolve after installation when Chancery is available; Cast remains useful without a reader."
   ],
   "stop_when": [
