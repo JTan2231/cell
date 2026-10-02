@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=clew
 PRODUCT_NAME=Clew
-PRODUCT_DIR=clew
+PRODUCT_DIR=products/clew
 STATUS_SCHEMA=1
 STATUS_COMMAND=clew
 STATUS_UNITS='clew/ledger|on_demand||clew.ledger.use
@@ -14,9 +14,9 @@ chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=clew
 CARGO_OFFLINE=1
-CI_SHELL_CHECKS='sh|clew/release.sh'
+CI_SHELL_CHECKS='sh|products/clew/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='clew|Clew|package|clew/Cargo.toml|clew-|1'
+RELEASE_UNITS='clew|Clew|package|products/clew/Cargo.toml|clew-|1'
 RELEASE_BINARY_CHECKS='clew|target/release/clew|clew
 clew|target/release/clew-install|clew-install'
-PROVIDERS='clew|clew|clew/chancery|5'
+PROVIDERS='clew|clew|products/clew/chancery|5'

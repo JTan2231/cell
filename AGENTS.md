@@ -10,7 +10,7 @@ Semantics-Project: cell
 - Before changing the public contract, harness compatibility, persistent state,
   authentication or service lifecycle, deployment, or a requester integration,
   run `/Users/joey/.local/bin/nucleus manual`. If it is unavailable, read
-  [the operator manual](nucleus/docs/operator-manual.md). Follow its change
+  [the operator manual](infrastructure/nucleus/docs/operator-manual.md). Follow its change
   playbooks and documentation update rules.
 - Preserve the product instructions in nested `AGENTS.md` files.
 - Commit each code change and submit it with `./ci.sh submit COMMIT` from the
@@ -27,7 +27,7 @@ Semantics-Project: cell
 
 ## Documentation
 
-- Follow the shared [documentation rules](nucleus/docs/operator-manual.md#where-facts-and-changes-belong).
+- Follow the shared [documentation rules](infrastructure/nucleus/docs/operator-manual.md#where-facts-and-changes-belong).
   Keep text that helps readers understand the current system, make a decision,
   perform a task, or interpret a result. Retain supported limits and recovery rules.
 - Use the ASD-STE100 Issue 9 house style. Preserve meaning over strict rules,

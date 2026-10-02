@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=clockwork
 PRODUCT_NAME=Clockwork
-PRODUCT_DIR=clockwork
+PRODUCT_DIR=infrastructure/clockwork
 STATUS_SCHEMA=1
 STATUS_COMMAND=clockwork
 STATUS_UNITS='clockwork/schedules|active||clockwork.schedule.operate'
@@ -14,10 +14,10 @@ CARGO_PACKAGES=clockwork
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|clockwork/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/clockwork/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='clockwork|Clockwork|package|clockwork/crates/clockwork/Cargo.toml|clockwork-|1'
+RELEASE_UNITS='clockwork|Clockwork|package|infrastructure/clockwork/crates/clockwork/Cargo.toml|clockwork-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='clockwork|target/release/clockwork|clockwork
 clockwork|target/release/clockwork-install|clockwork-install'
-PROVIDERS='clockwork|clockwork|clockwork/chancery|9'
+PROVIDERS='clockwork|clockwork|infrastructure/clockwork/chancery|9'

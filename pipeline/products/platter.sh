@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=platter
 PRODUCT_NAME='Platter'
-PRODUCT_DIR=platter
+PRODUCT_DIR=products/platter
 STATUS_SCHEMA=1
 STATUS_COMMAND=platter
 STATUS_UNITS='platter/daily|active|platter/daily|platter.install.operate'
@@ -15,10 +15,10 @@ CARGO_PACKAGES=platter
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|platter/release.sh'
+CI_SHELL_CHECKS='sh|products/platter/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='platter|Platter|package|platter/Cargo.toml|platter-|1'
+RELEASE_UNITS='platter|Platter|package|products/platter/Cargo.toml|platter-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='platter|target/release/platter|platter
 platter|target/release/platter-install|platter-install'
-PROVIDERS='platter|platter|platter/chancery|7'
+PROVIDERS='platter|platter|products/platter/chancery|7'

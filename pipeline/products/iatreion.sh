@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=iatreion
 PRODUCT_NAME=Iatreion
-PRODUCT_DIR=iatreion
+PRODUCT_DIR=infrastructure/iatreion
 STATUS_SCHEMA=1
 STATUS_COMMAND=iatreion
 STATUS_UNITS='iatreion/report|on_demand||iatreion.status.inspect'
@@ -16,11 +16,11 @@ iatreion-api'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|iatreion/release.sh'
+CI_SHELL_CHECKS='sh|infrastructure/iatreion/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='iatreion|Iatreion|package|iatreion/crates/iatreion/Cargo.toml|iatreion-|1'
-RELEASE_COMPANION_MANIFESTS='iatreion|iatreion/crates/iatreion-api/Cargo.toml'
+RELEASE_UNITS='iatreion|Iatreion|package|infrastructure/iatreion/crates/iatreion/Cargo.toml|iatreion-|1'
+RELEASE_COMPANION_MANIFESTS='iatreion|infrastructure/iatreion/crates/iatreion-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='iatreion|target/release/iatreion|iatreion
 iatreion|target/release/iatreion-install|iatreion-install'
-PROVIDERS='iatreion|iatreion|iatreion/chancery|3'
+PROVIDERS='iatreion|iatreion|infrastructure/iatreion/chancery|3'

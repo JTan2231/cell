@@ -23,6 +23,11 @@ deployment conflict keys. The shared format has no product-specific script
 hooks. CI keeps common verification stages and the standard Rust test suites;
 it does not add bespoke shell, Python, or catalog assertions for one product.
 
+Descriptors cover systems in both `infrastructure/` and `products/`.
+`PRODUCT_ID` keeps the delivery identity. `PRODUCT_DIR` selects the canonical
+checkout-relative source root. Directory groups do not expand deployment
+selection or determine instruction order.
+
 `RELEASE_COMPANION_MANIFESTS` optionally lists `release-unit|package-manifest`
 rows for provider-owned libraries released at their owner's version. Annals'
 `annals-api` and Krisis' `krisis-api` follow this rule; Annals Usage remains an

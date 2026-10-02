@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=annals
 PRODUCT_NAME=Annals
-PRODUCT_DIR=annals
+PRODUCT_DIR=products/annals
 STATUS_SCHEMA=1
 STATUS_COMMAND=annals
 STATUS_UNITS='annals/inbox|active|annals/inbox|annals.inbox.operate
@@ -17,19 +17,19 @@ annals-usage'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|annals/release.sh'
-CI_PLIST_CHECKS='darwin-if-tool:plutil|lint|annals/packaging/launchd/org.annals.inbox.plist
-darwin-if-tool:plutil|lint|annals/packaging/launchd/org.annals.inbox.agent.plist'
+CI_SHELL_CHECKS='sh|products/annals/release.sh'
+CI_PLIST_CHECKS='darwin-if-tool:plutil|lint|products/annals/packaging/launchd/org.annals.inbox.plist
+darwin-if-tool:plutil|lint|products/annals/packaging/launchd/org.annals.inbox.agent.plist'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='annals|Annals|package|annals/crates/annals/Cargo.toml|annals-|1
-annals-usage|Annals Usage|package|annals/crates/annals-usage/Cargo.toml|annals-usage-|0'
+RELEASE_UNITS='annals|Annals|package|products/annals/crates/annals/Cargo.toml|annals-|1
+annals-usage|Annals Usage|package|products/annals/crates/annals-usage/Cargo.toml|annals-usage-|0'
 RELEASE_ALLOW_EXPLICIT_UNIT=1
-RELEASE_COMPANION_MANIFESTS='annals|annals/crates/annals-api/Cargo.toml'
+RELEASE_COMPANION_MANIFESTS='annals|products/annals/crates/annals-api/Cargo.toml'
 RELEASE_USAGE='Usage: ./release.sh --patch|--minor|--major
        ./release.sh annals|annals-usage --patch|--minor|--major'
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='annals|target/release/annals|annals
 annals-usage|target/release/annals-usage|annals-usage
 annals|target/release/annals-install|annals-install'
-PROVIDERS='annals|annals|annals/chancery/annals|12
-annals-usage|annals-usage|annals/chancery/annals-usage|3'
+PROVIDERS='annals|annals|products/annals/chancery/annals|12
+annals-usage|annals-usage|products/annals/chancery/annals-usage|3'

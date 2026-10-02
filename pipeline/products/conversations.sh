@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=conversations
 PRODUCT_NAME=Conversations
-PRODUCT_DIR=conversations
+PRODUCT_DIR=products/conversations
 STATUS_SCHEMA=1
 STATUS_COMMAND=conversations
 STATUS_UNITS='conversations/history|on_demand||conversations.history.explore'
@@ -15,10 +15,10 @@ CARGO_PACKAGES=conversations
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
 TEST_NO_FAIL_FAST=1
-CI_SHELL_CHECKS='sh|conversations/release.sh'
+CI_SHELL_CHECKS='sh|products/conversations/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='conversations|Conversations|package|conversations/crates/conversations/Cargo.toml|conversations-|1'
+RELEASE_UNITS='conversations|Conversations|package|products/conversations/crates/conversations/Cargo.toml|conversations-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='conversations|target/release/conversations|conversations
 conversations|target/release/conversations-install|conversations-install'
-PROVIDERS='conversations|conversations|conversations/chancery|4'
+PROVIDERS='conversations|conversations|products/conversations/chancery|4'

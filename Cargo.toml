@@ -3,34 +3,34 @@ members = [
     "prompting",
     "deployment/crates/cell-install",
     "deployment/crates/cell-maintenance",
-    "nucleus/crates/nucleus-cli",
-    "nucleus/crates/nucleus-client",
-    "nucleus/crates/nucleus-core",
-    "nucleus/crates/nucleus-codex",
-    "nucleus/crates/nucleus-daemon",
-    "nucleus/crates/nucleus-store",
-    "annals/crates/annals",
-    "annals/crates/annals-api",
-    "annals/crates/annals-usage",
-    "chancery/crates/chancery",
-    "chancery/crates/chancery-usage",
-    "email/crates/email",
-    "conversations/crates/conversations",
-    "decisions/crates/decisions",
-    "decisions/crates/krisis-api",
-    "semantics",
-    "clockwork/crates/clockwork",
-    "usher/crates/usher",
-    "iatreion/crates/iatreion-api",
-    "iatreion/crates/iatreion",
-    "cast",
-    "platter",
-    "clew",
-    "bazaar",
-    "paperboy",
-    "conatus",
-    "emt",
-    "weaver-narrative",
+    "infrastructure/nucleus/crates/nucleus-cli",
+    "infrastructure/nucleus/crates/nucleus-client",
+    "infrastructure/nucleus/crates/nucleus-core",
+    "infrastructure/nucleus/crates/nucleus-codex",
+    "infrastructure/nucleus/crates/nucleus-daemon",
+    "infrastructure/nucleus/crates/nucleus-store",
+    "products/annals/crates/annals",
+    "products/annals/crates/annals-api",
+    "products/annals/crates/annals-usage",
+    "infrastructure/chancery/crates/chancery",
+    "infrastructure/chancery/crates/chancery-usage",
+    "infrastructure/email/crates/email",
+    "products/conversations/crates/conversations",
+    "products/decisions/crates/decisions",
+    "products/decisions/crates/krisis-api",
+    "infrastructure/semantics",
+    "infrastructure/clockwork/crates/clockwork",
+    "infrastructure/usher/crates/usher",
+    "infrastructure/iatreion/crates/iatreion-api",
+    "infrastructure/iatreion/crates/iatreion",
+    "products/cast",
+    "products/platter",
+    "products/clew",
+    "infrastructure/bazaar",
+    "products/paperboy",
+    "products/conatus",
+    "infrastructure/emt",
+    "products/weaver-narrative",
 ]
 resolver = "3"
 
@@ -52,12 +52,12 @@ license = "MIT"
 
 [workspace.dependencies]
 cell-prompts = { path = "prompting" }
-chancery-usage = { path = "chancery/crates/chancery-usage" }
+chancery-usage = { path = "infrastructure/chancery/crates/chancery-usage" }
 cell-install = { path = "deployment/crates/cell-install" }
 cell-maintenance = { path = "deployment/crates/cell-maintenance" }
-iatreion-api = { path = "iatreion/crates/iatreion-api" }
-annals-api = { path = "annals/crates/annals-api" }
-krisis-api = { path = "decisions/crates/krisis-api" }
+iatreion-api = { path = "infrastructure/iatreion/crates/iatreion-api" }
+annals-api = { path = "products/annals/crates/annals-api" }
+krisis-api = { path = "products/decisions/crates/krisis-api" }
 axum = { version = "0.8.9", features = ["json", "tokio"] }
 base64 = "0.22"
 bytes = "1.10"
@@ -67,9 +67,9 @@ futures-util = "0.3"
 hex = "0.4"
 http = "1.3"
 libc = "0.2"
-nucleus-client = { path = "nucleus/crates/nucleus-client" }
-nucleus-core = { path = "nucleus/crates/nucleus-core" }
-nucleus-daemon = { path = "nucleus/crates/nucleus-daemon" }
+nucleus-client = { path = "infrastructure/nucleus/crates/nucleus-client" }
+nucleus-core = { path = "infrastructure/nucleus/crates/nucleus-core" }
+nucleus-daemon = { path = "infrastructure/nucleus/crates/nucleus-daemon" }
 # Select one HTTPS backend for every workspace consumer.
 reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls", "stream"] }
 regex = "1.11"

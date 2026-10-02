@@ -1,0 +1,112 @@
+{
+  "id": "krisis.develop.change",
+  "contract_version": 2,
+  "kind": "operation",
+  "mode": "develop",
+  "support": "supported",
+  "title": "Change Krisis safely",
+  "summary": "Develop Krisis while preserving user authority, classification limits, atomic commit before acknowledgement, idempotent Annals delivery, legacy Decisions decoding, and product CI.",
+  "use_when": ["Krisis code, schemas, prompts, classifier tools, persistence, Annals exchange, packaging, lifecycle, or documentation should change."],
+  "do_not_use_when": ["The installed Krisis capability should only be used or operated."],
+  "outcome": "A reviewed product change with a verified retained CI manager outcome and aligned contracts and recovery paths.",
+  "effects": ["May change source, tests, docs, migrations, hook and observer packaging, classifier registrations, account rendering, Annals delivery, or publish a new immutable interface identity. CI submission authorizes manager integration, validation, bounded repair, deployment, and the outcome email."],
+  "authority": ["Krisis source and docs own product behavior.", "The registered decisions Semantics repository owns maintained project terminology.", "Nucleus, Conversations, Annals, and Clockwork each own their documented cross-product boundary."],
+  "success": ["Submit the committed change with ./ci.sh submit COMMIT from the Cell root and verify the retained manager job outcome.", "Changed registered meanings use new immutable identities or versions, affected Chancery contracts are synchronized, and required historical decoders remain valid."],
+  "failure_and_recovery": ["Do not deploy or release a failing candidate.", "Persistent changes require explicit forward migration and recovery evidence without mutating live state during source edits or internal product tests."],
+  "privacy": ["Use synthetic fixtures; never include real transcripts, credentials, account bodies, personal paths, prompts, or tool traces."],
+  "dependencies": [
+    {"id": "nucleus.requester.integrate", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "semantics.repository.explore", "min_contract": 3, "max_contract_exclusive": 4},
+    {"id": "annals.decision-account.exchange", "min_contract": 2, "max_contract_exclusive": 3},
+    {"id": "clockwork.schedule.operate", "min_contract": 5, "max_contract_exclusive": 6}
+  ],
+  "session_surfaces": ["local_filesystem", "local_shell"],
+  "runtime": "interactive_agent",
+  "automation": "none",
+  "steps": [
+    "Read the nested instructions, query the decisions Semantics repository, and resolve every affected installed contract.",
+    "Identify authority, source, classifier, persistence, account, delivery, legacy, packaging, and privacy boundaries affected by the change.",
+    "Implement the smallest synchronized change with synthetic in-memory tests and review affected persistence and integration boundaries.",
+    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job outcome. Release publication and destructive live migration require separate authority."
+  ],
+  "checkpoints": [
+    "Decision identity remains host plus canonical authority item plus exact UTF-8 authority span and is derived outside the model.",
+    "Every admitted nonblank user authority receives one binary verdict; assistant text supplies only bounded context and no file-change gate or evidence exists.",
+    "The classifier sees opaque aliases and at most 64 messages and 262144 bytes, with one context expansion and no shell, filesystem, web, direct Codex, or effect tool.",
+    "A valid result commits Nucleus correlation and receipt, complete coverage, stable IDs, deterministic account bytes and digest, and outbox state before acknowledgement.",
+    "Annals acceptance uses explicit config, producer krisis, decision ID key, exact digest matching, and idempotent created/replayed receipts; a failed delivery requires explicit retry of the same document without classification.",
+    "After acceptance generated prose and body may be retired, while legacy Decisions receipts and history remain decodable and legacy lifecycle reads remain read-only.",
+    "Retained product tests use in-memory data. File, process, socket, thread, and packaging fixtures are removed. The manager owns validation, bounded repair, deployment, and the outcome email."
+  ],
+  "adaptation": [
+    "Publish new immutable schema or toolset identities for meaning changes.",
+    "Scale tests to the changed boundary and retain explicit sequential migrations and historical decoding.",
+    "For packaging changes, prove scrubbed release-pinned execution, maintenance gating, retired schedule shutdown, exact public identity, and rollback."
+  ],
+  "stop_when": [
+    "Exact eligible-turn scope or user authority cannot be established through Conversations.",
+    "A persistent migration lacks recovery semantics or an interface mismatch remains unsettled.",
+    "A change would make model output, assistant text, Nucleus completion, or Annals acceptance the wrong domain authority."
+  ],
+  "interfaces": [
+    {"label": "CI", "invocation": "./ci.sh submit COMMIT"},
+    {"label": "Release", "invocation": "products/decisions/release.sh --patch|--minor|--major"}
+  ],
+  "does_not_authorize": [
+    "Release publication, deployment or schedule changes outside the submitted manager job, authentication changes, unrelated sends, live Annals acceptance, or retained-state deletion.",
+    "Direct database edits, a direct Codex fallback, wider classifier access, or restoration of retired digest and review behavior."
+  ],
+  "promise": {
+    "consumers": [
+      {"status": "declared", "statement": "Krisis maintainers may use this operation for an authorized product, contract, persistence, packaging, or documentation change."}
+    ],
+    "preconditions": [
+      {"status": "declared", "statement": "The maintainer has read product instructions and resolved current Semantics, Nucleus, Conversations, Annals, and Clockwork contracts affected by the work."},
+      {"status": "declared", "statement": "CI submission supplies authority for the manager deployment and outcome email. Separate authority exists before release publication, deployment outside that job, destructive live migration, external acceptance, retry of existing work, or retained-state deletion."}
+    ],
+    "inputs": [
+      {"status": "declared", "statement": "Inputs are one authorized change plus current source, tests, product contracts, registered meanings, packaging rules, and recovery evidence."},
+      {"status": "unsupported", "statement": "Model output, implementation convenience, file activity, or a schema shortcut cannot supply user authority or override an owning product contract."}
+    ],
+    "outputs": [
+      {"status": "declared", "statement": "The operation produces the smallest synchronized source, test, migration, packaging, and contract change with a verified retained CI manager job outcome."},
+      {"status": "unsupported", "statement": "Passing product tests alone does not prove deployment or live domain success. The retained manager job identifies deployment and notification outcomes; publication, domain actions, and history deletion remain separate operations."}
+    ],
+    "data_semantics": [
+      {"status": "declared", "statement": "A decision is an attributable user settlement constraining intended future behavior or state; context, action, and result are capture-time observations and do not affect eligibility."},
+      {"status": "declared", "statement": "Classifier execution, binary coverage, decision identity, account bytes, outbox state, Annals acceptance, and retained legacy history are distinct states with distinct owners."}
+    ],
+    "identity_and_units": [
+      {"status": "declared", "statement": "Decision, observation, Nucleus job and tool call, account digest, Annals job and library, schema, toolset, provider release, and entry contract identities remain distinct."},
+      {"status": "declared", "statement": "Message, quote, and account bounds are UTF-8 bytes; times are Unix seconds with explicit precision."},
+      {"status": "not_applicable", "statement": "This operation defines no usage or billing unit."}
+    ],
+    "completeness_and_freshness": [
+      {"status": "declared", "statement": "Complete the change with focused checks and a verified retained CI manager outcome. The affected authority, source, classification, transaction, delivery, compatibility, privacy, packaging, and recovery contracts must agree."},
+      {"status": "unspecified", "statement": "No development duration, review turnaround, release cadence, or consumer upgrade window is promised."}
+    ],
+    "access": [
+      {"status": "declared", "statement": "The operation uses the authorized local Krisis source tree and shell with synthetic fixtures. CI submission uses the installed manager for bounded Nucleus repair, deployment, and the outcome email. Repair may read candidate source and diagnostics; the outcome email contains job metadata."},
+      {"status": "unsupported", "statement": "It grants no implicit access to live transcripts, credentials, Annals libraries, Nucleus jobs outside manager repair, destructive state, or another product's authority."}
+    ],
+    "lifecycle_and_consistency": [
+      {"status": "declared", "statement": "Inspect exact contracts, implement synchronized versioned changes, and retain migrations and legacy decoding. Run focused checks, submit the committed change through the CI manager, and verify its retained validation, deployment, and notification outcomes. Release publication remains separately authorized."},
+      {"status": "declared", "statement": "Changes preserve serial processing, exact replay, first-writer conflict checks, write-once activation, deterministic rendering, durable outbox, and idempotent Annals acceptance."}
+    ],
+    "operational_limits": [
+      {"status": "declared", "statement": "Stop on unresolved source authority, unsettled cross-product terms, incompatible immutable meaning, unsafe migration, or wrong domain ownership."},
+      {"status": "unsupported", "statement": "This operation cannot add direct Codex access, classifier filesystem/web/effect authority, parallel classification, broad queue clearing, or retired digest/review operations."}
+    ],
+    "compatibility_and_evolution": [
+      {"status": "declared", "statement": "Changed registered meaning receives a new immutable identity or contract version; explicit migrations preserve required Decisions history and decoders."},
+      {"status": "unspecified", "statement": "No general backward-compatibility lifetime, deprecation period, or release frequency is promised."}
+    ],
+    "reliances": [
+      {"status": "declared", "statement": "Requester development relies on Nucleus's integration contract for shared execution, tool transport, recovery, and operator-manual obligations.", "target": "nucleus", "kind": "authority", "contract": "nucleus.requester.integrate"},
+      {"status": "declared", "statement": "Project terminology relies on the registered decisions Semantics repository while code and product docs remain behavioral authority.", "target": "semantics", "kind": "authority", "contract": "semantics.repository.explore"},
+      {"status": "declared", "statement": "Account exchange development relies on the exact Annals acceptance and dedicated-library contract.", "target": "annals", "kind": "authority", "contract": "annals.decision-account.exchange"},
+      {"status": "declared", "statement": "Scheduled activation development relies on Clockwork's immutable-definition and stable-binding contract.", "target": "clockwork", "kind": "authority", "contract": "clockwork.schedule.operate"}
+    ]
+  },
+  "manual": "manuals/develop-change.md"
+}

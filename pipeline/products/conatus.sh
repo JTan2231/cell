@@ -1,7 +1,7 @@
 PIPELINE_SCHEMA=1
 PRODUCT_ID=conatus
 PRODUCT_NAME=Conatus
-PRODUCT_DIR=conatus
+PRODUCT_DIR=products/conatus
 STATUS_SCHEMA=1
 STATUS_COMMAND=conatus
 STATUS_UNITS='conatus/update|active|conatus/update|conatus.update.operate
@@ -14,10 +14,10 @@ chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=conatus
 CARGO_OFFLINE=0
-CI_SHELL_CHECKS='sh|conatus/release.sh'
+CI_SHELL_CHECKS='sh|products/conatus/release.sh'
 CI_PROVIDER_VALIDATION_PHASE=before-rust
-RELEASE_UNITS='conatus|Conatus|package|conatus/Cargo.toml|conatus-|1'
+RELEASE_UNITS='conatus|Conatus|package|products/conatus/Cargo.toml|conatus-|1'
 RELEASE_METADATA_NO_DEPS=1
 RELEASE_BINARY_CHECKS='conatus|target/release/conatus|conatus
 conatus|target/release/conatus-install|conatus-install'
-PROVIDERS='conatus|conatus|conatus/chancery|7'
+PROVIDERS='conatus|conatus|products/conatus/chancery|7'
