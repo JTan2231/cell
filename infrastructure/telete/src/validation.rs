@@ -245,7 +245,19 @@ fn binary_kind(target: &CargoTarget) -> Option<&str> {
         .find(|kind| target.kind.iter().any(|value| value == kind))
 }
 
-#[allow(clippy::too_many_lines)] // Keep the ownership and consumer expansion rules together.
+fn uses_local_package(product: &Product, metadata: &CargoMetadata, package: &str) -> bool {
+    product.packages.iter().any(|name| {
+        metadata.packages.iter().any(|consumer| {
+            consumer.name == name.to_string()
+                && consumer
+                    .dependencies
+                    .iter()
+                    .any(|dependency| dependency.name == package && dependency.path.is_some())
+        })
+    })
+}
+
+#[allow(clippy::too_many_lines)] // Keep product ownership and shared platform rules together.
 fn select(
     repo: &Path,
     inventory: &Inventory,
@@ -296,7 +308,7 @@ fn select(
             }
         }
     }
-    // Metadata identifies actual local package links; no product dependency list is invented.
+    // Only shared installation and maintenance inputs expand to their consumers.
     let mut affected = BTreeSet::new();
     for path in operational {
         let absolute = repo.join(path);
@@ -313,33 +325,6 @@ fn select(
         if let Some(package) = deepest {
             affected.insert(package.name.clone());
         }
-        if matches!(path.as_str(), "Cargo.toml" | "Cargo.lock") {
-            affected.extend(metadata.packages.iter().map(|package| package.name.clone()));
-        }
-    }
-    loop {
-        let before = affected.len();
-        for package in &metadata.packages {
-            if package
-                .dependencies
-                .iter()
-                .any(|dependency| dependency.path.is_some() && affected.contains(&dependency.name))
-            {
-                affected.insert(package.name.clone());
-            }
-        }
-        if before == affected.len() {
-            break;
-        }
-    }
-    for product in &inventory.products {
-        if product
-            .packages
-            .iter()
-            .any(|package| affected.contains(&package.to_string()))
-        {
-            selection.products.insert(product.id.to_string());
-        }
     }
     for (suite, package) in [
         ("install", "cell-install"),
@@ -348,14 +333,7 @@ fn select(
         if affected.contains(package) {
             selection.shared.insert(suite.into());
             for product in &inventory.products {
-                if product.packages.iter().any(|name| {
-                    metadata.packages.iter().any(|consumer| {
-                        consumer.name == name.to_string()
-                            && consumer.dependencies.iter().any(|dependency| {
-                                dependency.name == package && dependency.path.is_some()
-                            })
-                    })
-                }) {
+                if uses_local_package(product, metadata, package) {
                     selection.platform.insert(product.id.to_string());
                 }
             }
@@ -403,6 +381,16 @@ fn select(
     selection
         .products
         .extend(selection.platform.iter().cloned());
+    // Backfill shared tests after product selection so one installer edit does
+    // not select every other consumer for validation and default deployment.
+    for product in &inventory.products {
+        if selection.platform.contains(&product.id.to_string()) {
+            selection.shared.insert("install".into());
+            if uses_local_package(product, metadata, "cell-maintenance") {
+                selection.shared.insert("maintenance".into());
+            }
+        }
+    }
     selection
 }
 
@@ -1882,14 +1870,147 @@ mod tests {
 
     fn metadata() -> CargoMetadata {
         serde_json::from_value(json!({"packages":[
+            {"name":"telete","manifest_path":"/repo/infrastructure/telete/Cargo.toml","targets":[{"name":"telete","kind":["bin"]}]},
             {"name":"shared-api","manifest_path":"/repo/infrastructure/api/Cargo.toml","targets":[{"name":"shared_api","kind":["lib"]}]},
-            {"name":"owner","manifest_path":"/repo/products/owner/Cargo.toml","dependencies":[{"name":"shared-api","path":"/repo/infrastructure/api"}],"targets":[{"name":"owner","kind":["lib"]},{"name":"owner-install","kind":["bin"]}]},
-            {"name":"consumer","manifest_path":"/repo/products/consumer/Cargo.toml","dependencies":[{"name":"owner","path":"/repo/products/owner"}],"targets":[{"name":"consumer","kind":["bin"]}]}
+            {"name":"cell-install","manifest_path":"/repo/deployment/crates/cell-install/Cargo.toml","targets":[{"name":"cell_install","kind":["lib"]}]},
+            {"name":"cell-maintenance","manifest_path":"/repo/deployment/crates/cell-maintenance/Cargo.toml","targets":[{"name":"cell_maintenance","kind":["lib"]}]},
+            {"name":"owner","manifest_path":"/repo/products/owner/Cargo.toml","dependencies":[{"name":"shared-api","path":"/repo/infrastructure/api"},{"name":"cell-install","path":"/repo/deployment/crates/cell-install"},{"name":"cell-maintenance","path":"/repo/deployment/crates/cell-maintenance"}],"targets":[{"name":"owner","kind":["lib"]},{"name":"owner-install","kind":["bin"]}]},
+            {"name":"consumer","manifest_path":"/repo/products/consumer/Cargo.toml","dependencies":[{"name":"owner","path":"/repo/products/owner"},{"name":"cell-install","path":"/repo/deployment/crates/cell-install"}],"targets":[{"name":"consumer","kind":["bin"]},{"name":"consumer-install","kind":["bin"]}]}
         ]})).unwrap_or_else(|error| panic!("{error}"))
     }
 
+    fn inventory() -> Inventory {
+        Inventory {
+            products: vec![
+                product("owner", "products/owner", &["owner"]),
+                product("consumer", "products/consumer", &["consumer"]),
+            ],
+        }
+    }
+
     #[test]
-    fn metadata_expands_transitive_local_consumers() {
+    fn ordinary_dependencies_and_root_cargo_files_do_not_expand_product_scope() {
+        let mut inventory = inventory();
+        inventory
+            .products
+            .push(product("api", "infrastructure/api", &["shared-api"]));
+        for (path, expected) in [
+            ("Cargo.toml", None),
+            ("Cargo.lock", None),
+            ("infrastructure/api/src/lib.rs", Some("api")),
+            ("products/owner/src/lib.rs", Some("owner")),
+            ("products/consumer/src/lib.rs", Some("consumer")),
+        ] {
+            let changes = BTreeSet::from([path.into()]);
+            let selected = select(
+                Path::new("/repo"),
+                &inventory,
+                &metadata(),
+                &changes,
+                &changes,
+                &BTreeSet::new(),
+            );
+            assert_eq!(
+                selected.products,
+                expected.into_iter().map(str::to_owned).collect(),
+                "{path}"
+            );
+            assert!(selected.platform.is_empty(), "{path}");
+            assert!(selected.shared.is_empty(), "{path}");
+        }
+    }
+
+    #[test]
+    fn shared_lifecycle_changes_select_only_their_declared_consumers() {
+        for (path, products, suites) in [
+            (
+                "deployment/crates/cell-install/src/lib.rs",
+                vec!["consumer", "owner"],
+                vec!["install", "maintenance"],
+            ),
+            (
+                "deployment/crates/cell-maintenance/src/lib.rs",
+                vec!["owner"],
+                vec!["install", "maintenance"],
+            ),
+        ] {
+            let changes = BTreeSet::from([path.into()]);
+            let selected = select(
+                Path::new("/repo"),
+                &inventory(),
+                &metadata(),
+                &changes,
+                &changes,
+                &BTreeSet::new(),
+            );
+            let expected = products.into_iter().map(str::to_owned).collect();
+            assert_eq!(selected.products, expected, "{path}");
+            assert_eq!(selected.platform, expected, "{path}");
+            assert_eq!(
+                selected.shared,
+                suites.into_iter().map(str::to_owned).collect(),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn product_platform_changes_include_shared_tests_without_selecting_other_products() {
+        for (name, maintenance) in [("owner", true), ("consumer", false)] {
+            for path in [
+                format!("products/{name}/src/bin/{name}-install.rs"),
+                format!("products/{name}/schema.sql"),
+                format!("products/{name}/Cargo.toml"),
+                format!("pipeline/products/{name}.sh"),
+            ] {
+                let changes = BTreeSet::from([path.clone()]);
+                let selected = select(
+                    Path::new("/repo"),
+                    &inventory(),
+                    &metadata(),
+                    &changes,
+                    &changes,
+                    &BTreeSet::new(),
+                );
+                assert_eq!(selected.products, BTreeSet::from([name.into()]), "{path}");
+                assert_eq!(selected.platform, BTreeSet::from([name.into()]), "{path}");
+                assert!(selected.shared.contains("install"), "{path}");
+                assert_eq!(
+                    selected.shared.contains("maintenance"),
+                    maintenance,
+                    "{path}"
+                );
+                let plan = test_plan(&inventory(), &metadata(), &selected)
+                    .unwrap_or_else(|error| panic!("{error}"));
+                assert!(
+                    plan.targets
+                        .contains(&(name.into(), "bin".into(), format!("{name}-install"),)),
+                    "{path}"
+                );
+                assert!(
+                    plan.targets.contains(&(
+                        "cell-install".into(),
+                        "lib".into(),
+                        "cell_install".into(),
+                    )),
+                    "{path}"
+                );
+                assert_eq!(
+                    plan.targets.contains(&(
+                        "cell-maintenance".into(),
+                        "lib".into(),
+                        "cell_maintenance".into(),
+                    )),
+                    maintenance,
+                    "{path}"
+                );
+                assert!(packages(&inventory(), &selected).contains(&"cell-install".into()));
+            }
+        }
+    }
+
+    #[test]
+    fn unowned_shared_dependency_does_not_select_its_consumers() {
         let inventory = Inventory {
             products: vec![
                 product("owner", "products/owner", &["owner"]),
@@ -1905,10 +2026,7 @@ mod tests {
             &changes,
             &BTreeSet::new(),
         );
-        assert_eq!(
-            selected.products,
-            BTreeSet::from(["consumer".into(), "owner".into()])
-        );
+        assert!(selected.products.is_empty());
         assert!(selected.platform.is_empty());
     }
 
@@ -1983,6 +2101,22 @@ mod tests {
             &BTreeSet::from(["owner".into()]),
         );
         assert!(selection.products.contains("owner") && selection.platform.contains("owner"));
+        assert_eq!(
+            selection.shared,
+            BTreeSet::from(["install".into(), "maintenance".into()])
+        );
+        let plan = test_plan(&inventory, &metadata(), &selection)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(plan.targets.contains(&(
+            "cell-install".into(),
+            "lib".into(),
+            "cell_install".into()
+        )));
+        assert!(plan.targets.contains(&(
+            "cell-maintenance".into(),
+            "lib".into(),
+            "cell_maintenance".into()
+        )));
     }
 
     #[test]
@@ -2008,18 +2142,7 @@ mod tests {
         fs::write(repo.join("infrastructure/telete/product.sh"), "PIPELINE_SCHEMA=1\nPRODUCT_ID=telete\nPRODUCT_NAME=Telete\nPRODUCT_DIR=infrastructure/telete\nCARGO_PACKAGES=telete\nPROVIDERS='telete|telete|infrastructure/telete/chancery|1'\n")
             .unwrap_or_else(|error| panic!("{error}"));
         let inventory = Inventory::load(repo).unwrap_or_else(|error| panic!("{error}"));
-        let metadata = CargoMetadata {
-            packages: vec![CargoPackage {
-                name: "telete".into(),
-                manifest_path: repo.join("infrastructure/telete/Cargo.toml"),
-                dependencies: Vec::new(),
-                targets: vec![CargoTarget {
-                    name: "telete".into(),
-                    kind: vec!["bin".into()],
-                    test: true,
-                }],
-            }],
-        };
+        let metadata = metadata();
         let changes = BTreeSet::from(["infrastructure/telete/src/main.rs".into()]);
         let selected = select(
             repo,

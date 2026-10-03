@@ -125,8 +125,27 @@ base, including deletions and both rename paths.
 The validator loads literal product descriptors and Cargo metadata. Telete's
 own descriptor is `infrastructure/telete/product.sh`; it does not register Telete
 with the existing CI inventory. Product, provider, package, and executable
-identities remain separate. Selection includes linked Rust consumers and
-explicit shared platform inputs. Selection does not expand deployment authority.
+identities remain separate.
+
+Product changes select their owner. Explicit prompt and shared platform inputs
+also select their consumers. Changes to `cell-install` or `cell-maintenance`
+select their direct local Cargo consumers. Common Telete validation inputs
+select the full product and platform inventory. Root `Cargo.toml` and
+`Cargo.lock` changes do not select all products. Other local Cargo dependencies
+do not expand product selection.
+
+With tests enabled, each selected platform product adds the shared
+`cell-install` tests. A platform product with a direct local `cell-maintenance`
+dependency also adds that suite. Adding these tests does not select more
+products. New product introductions follow the same rules.
+
+Default deployment uses the selected products, except Telete. An explicit
+`--deploy PRODUCT` list selects deployment products, and `--no-deploy` prevents
+deployment. Test selection does not add products to an explicit deployment list.
+
+Contract 2 narrows product selection and adds the shared platform tests above.
+Validation receipts remain schema 1. Retained receipts keep their recorded
+scope; this change does not migrate or reinterpret them.
 
 The host compiles the exact candidate's Telete validator in an isolated target
 directory. Candidate code owns validation. Host Telete code owns promotion,

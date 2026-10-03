@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -129,6 +129,14 @@
       {
         "status": "declared",
         "statement": "Validation, source acceptance, instruction completion, and Email acceptance have distinct meanings."
+      },
+      {
+        "status": "declared",
+        "statement": "Product selection follows changed owners, explicit prompt and shared platform inputs, and common Telete validation inputs. Shared cell-install and cell-maintenance changes select direct local Cargo consumers. Root Cargo.toml and Cargo.lock changes and other local Cargo dependencies do not expand product selection. Default deployment uses selected products except Telete; an explicit deployment list keeps its exact scope."
+      },
+      {
+        "status": "declared",
+        "statement": "With tests enabled, selected platform products and new product introductions include shared cell-install tests and, for direct local cell-maintenance consumers, shared maintenance tests. Adding these suites does not select more products."
       }
     ],
     "identity_and_units": [
@@ -181,6 +189,10 @@
       {
         "status": "declared",
         "statement": "Telete state and receipts use explicitly checked schema versions independent of existing CI."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 2 narrows product selection and adds shared platform tests. Validation receipts remain schema 1; retained receipts keep their recorded scope without migration or reinterpretation."
       },
       {
         "status": "unspecified",
