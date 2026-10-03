@@ -863,29 +863,7 @@ fn migrate_ledger(
         rename_job_column(&tx, "legacy_references")?;
     }
     let mappings = migration_mappings(&tx, version, supplied_mappings)?;
-    let old_entries = {
-        let select = if version == 1 {
-            "SELECT sequence,id,recorded_at,kind,NULL,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
-        } else {
-            "SELECT sequence,id,recorded_at,kind,milieu_job_id,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
-        };
-        let mut statement = tx.prepare(select)?;
-        statement
-            .query_map([], |row| {
-                Ok(OldEntry {
-                    sequence: row.get(0)?,
-                    id: row.get(1)?,
-                    recorded_at: row.get(2)?,
-                    kind: row.get(3)?,
-                    milieu_job_id: row.get(4)?,
-                    platter_job_ref: row.get(5)?,
-                    status: row.get(6)?,
-                    notes: row.get(7)?,
-                    replaces: row.get(8)?,
-                })
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?
-    };
+    let old_entries = legacy_entries(&tx, version)?;
     let guards = {
         let mut statement = tx.prepare(
             "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'entries_require_%'",
@@ -956,6 +934,30 @@ fn migrate_ledger(
     tx.commit()?;
     std::fs::File::open(root)?.sync_all()?;
     Ok(())
+}
+
+fn legacy_entries(connection: &Connection, version: i64) -> Result<Vec<OldEntry>> {
+    let select = if version == 1 {
+        "SELECT sequence,id,recorded_at,kind,NULL,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
+    } else {
+        "SELECT sequence,id,recorded_at,kind,milieu_job_id,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
+    };
+    let mut statement = connection.prepare(select)?;
+    Ok(statement
+        .query_map([], |row| {
+            Ok(OldEntry {
+                sequence: row.get(0)?,
+                id: row.get(1)?,
+                recorded_at: row.get(2)?,
+                kind: row.get(3)?,
+                milieu_job_id: row.get(4)?,
+                platter_job_ref: row.get(5)?,
+                status: row.get(6)?,
+                notes: row.get(7)?,
+                replaces: row.get(8)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?)
 }
 
 fn rename_job_column(connection: &Connection, table: &str) -> Result<Option<String>> {
