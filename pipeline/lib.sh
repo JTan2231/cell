@@ -4,7 +4,7 @@
 # sourced by the CI, release, generator, and self-test entry points.
 
 PIPELINE_EXPECTED_PRODUCT_COUNT=19
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=112
+PIPELINE_EXPECTED_PROVIDER_ENTRIES=114
 # Shared infrastructure providers participate in source catalog validation but
 # are not deployable product release units.
 PIPELINE_SHARED_PROVIDERS='ci-manager|ci_manager/chancery|2'
