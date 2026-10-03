@@ -138,7 +138,9 @@ Library initialization needs initialized private Bazaar state and a complete
 selects another database. Reads fail without creating state or using fallback
 text. Deployment does not import missing prompt contents.
 
-The selection content is
+Bazaar owns the shared selection format, loading, template rendering and trusted
+reference expansion through `bazaar.prompts.prepare`. Conatus owns the initial
+library document's authored meaning and selected components. The selection content is
 `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`.
 Every component is pinned to a positive integer version. Publish component text
 before the complete selection. A text append alone does not change selection.

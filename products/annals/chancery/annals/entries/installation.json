@@ -125,6 +125,11 @@
       "id": "annals.work.integrate",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -176,7 +181,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected library path and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
+        "statement": "Maintenance accepts the selected library path and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
       },
       {
         "status": "declared",
@@ -380,10 +385,10 @@
       },
       {
         "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "statement": "Bazaar owns shared selection format, exact component loading, rendering, and trusted description expansion. Annals chooses its component set and owns authored meaning, runtime inputs, typed request and toolset assembly, permissions, execution, domain effects, and recovery. Prepared text grants no additional authority.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       },
       {
         "status": "declared",

@@ -191,10 +191,13 @@ published immutable versions. A text append alone does not change the selected
 set. Selection version 1 and its referenced text versions preserve the migration
 baseline. Runtime reads never import seeds; deployment supplies no missing text.
 
-EMT resolves exact component versions and freezes the resulting instructions in
-its saved request. Retrying that request retains its selection. Later edits do
-not rewrite saved work or add execution authority. EMT owns rendering and agent
-policy; Bazaar owns immutable text versions. See `emt.installation.operate` for
+Bazaar loads the exact component versions and owns shared selection format,
+prompt template rendering and trusted reference expansion through
+`bazaar.prompts.prepare`. EMT owns authored meaning, selected components,
+runtime inputs, request assembly and agent policy. EMT freezes the resulting
+instructions in its saved request. Retrying that request retains its selection.
+Later edits do not rewrite saved work or add execution authority.
+See `emt.installation.operate` for
 prompt prerequisites and `emt.development.change` for an authorized prompt-edit
 procedure.
 

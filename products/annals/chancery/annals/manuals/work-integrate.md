@@ -179,11 +179,10 @@ override is supported. Reads fail without creating state or using embedded
 fallback text. Missing or invalid selections stop new request preparation
 before model admission. Deployment supplies no missing prompt contents.
 
-Read `cell.prompts.annals` through Bazaar's supported `get` interface. Its
-content is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every
-component pinned to a positive version. Publish component text first, then the
-complete selection. Appending component text alone does not change the
-selected set.
+Read `bazaar.prompts.prepare` for the shared selection format, exact component
+loading, rendering, and trusted description expansion. Annals chooses its
+component set and supplies runtime values. Bazaar prepares the selected text;
+Annals assembles its typed request and toolset.
 
 Import the reviewed migration seed before deployment. Preserve selection
 version 1 and every referenced text version for historical compatibility.
@@ -193,18 +192,14 @@ context digest, freezing resolved content with its request or domain snapshot. R
 requests keep that selection; new examinations follow their documented current
 instruction admission. Later text edits do not rewrite saved work.
 
-Models, permissions, schemas, tool execution, commits, and recovery remain
-Annals-owned. Library instructions are immutable domain captures selected
-through library operations. Bazaar supplies text and version identity; stored
-text grants no additional authority.
+Authored meaning, runtime inputs, models, permissions, schemas, tool execution,
+request assembly, commits, and recovery remain Annals-owned. Library instructions
+are immutable domain captures selected through library operations. Stored text
+grants no additional authority.
 
-For an authorized edit, append component text with
-`bazaar update PROMPT_ID --file /absolute/prompt.txt`, read the returned version,
-and append the complete selection with
-`bazaar update cell.prompts.annals --file /absolute/selection.json`. Use
-`bazaar --database /absolute/private/bazaar.sqlite3` when the caller uses
-`CELL_BAZAAR_DATABASE`. Roll back by appending the prior selection content.
-Keep private text out of logs and retain historical versions.
+Use `annals.library.operate` for an authorized component or selection edit.
+Read `bazaar.prompts.import` before an explicit reviewed import. Keep private
+text out of logs and retain historical versions.
 
 ## Limits and private state
 

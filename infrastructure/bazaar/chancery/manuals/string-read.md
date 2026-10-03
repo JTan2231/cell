@@ -79,8 +79,9 @@ checks.
 
 ## Meaning, limits, and privacy
 
-Content is opaque UTF-8. Empty strings, whitespace, Unicode, and NUL characters
-remain unchanged. Callers own template rendering, model settings, and execution.
+Raw string content is opaque UTF-8. Empty strings, whitespace, Unicode, and NUL
+characters remain unchanged. Use `bazaar.prompts.prepare` for selected prompt
+text and rendering. Products own model settings and execution.
 A returned string grants no execution or disclosure authority.
 
 Missing, foreign, or unsupported databases remain errors. Check the selected

@@ -171,10 +171,10 @@
       },
       {
         "status": "declared",
-        "statement": "Bazaar supplies pinned immutable text; Semantics owns selection, rendering, permissions, and execution.",
+        "statement": "Bazaar owns shared selection format, exact component loading, rendering, and trusted description expansion. Semantics chooses its component set and owns authored meaning, runtime inputs, typed request and toolset assembly, permissions, execution, domain effects, and recovery. Prepared text grants no additional authority.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       },
       {
         "status": "declared",
@@ -211,6 +211,11 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ]
 }

@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-cell-prompts.workspace = true
+bazaar.workspace = true
 chancery-usage.workspace = true
 anyhow = "1"
 weaver = { path = "../weaver-narrative" }

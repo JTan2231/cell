@@ -208,13 +208,13 @@ map in the same change.
 
 Shared platform inputs can add their affected consumers. There is no general
 dependency expansion. The shared suite names are `pipeline`, `install`,
-`maintenance`, `prompts`, and `catalog`. A validation with no selected products
+`maintenance`, and `catalog`. A validation with no selected products
 still checks structure and
 recognition. Its success does not establish full repository validation.
 
 Changes to the shared Clippy runner, parallel test runner, release build runner,
 validator selector, or pinned test tool selector select all current products and
-all three shared Rust suites. When tests are enabled, this includes product and
+both shared Rust suites. When tests are enabled, this includes product and
 platform tests. This validates the common
 executors across their complete target inventory. Test-only and documentation
 edits do not select this expansion.
@@ -329,6 +329,8 @@ hosts, confirm that no release is active before removing a stale
 
 ## Prompt tests
 
-The shared `prompts` gate checks `cell-prompts`. Changes below `prompting/`
-also select all current prompt consumers in the manager's validation plan.
-The retained tests do not open a Bazaar database or import prompt state.
+Bazaar's product checks cover its prompt library and import command. Changes to
+`infrastructure/bazaar/src/prompts.rs`, `src/prompt_import.rs`, or `seed.json`
+select Bazaar and all current prompt consumers in the manager's validation
+plan: Annals, Krisis, Semantics, Platter, Weaver, EMT, and Conatus.
+The prompt tests do not import state into the installed Bazaar database.

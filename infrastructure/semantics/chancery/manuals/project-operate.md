@@ -175,6 +175,10 @@ through deployment, project resume, or a definition switch.
 
 ## Update selected instruction text
 
+Read `bazaar.prompts.prepare` for the shared selection format and
+`bazaar.prompts.import` before an explicit reviewed import. Semantics chooses
+the components and their meaning; Bazaar owns shared text preparation.
+
 1. Import the reviewed migration seed before deploying callers; runtime reads
    do not initialize prompt state.
 2. Append the component with `bazaar update PROMPT_ID --file /absolute/prompt.txt`.

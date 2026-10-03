@@ -867,7 +867,7 @@ async fn register_contract(
                 TOOL_NAME
             }
             .to_owned(),
-            description: cell_prompts::Prompts::at("krisis", 1)?
+            description: bazaar::prompts::Prompts::at("krisis", 1)?
                 .text("krisis.legacy.tools.submit_classification.description")?,
             input_schema_id: SchemaId::new(input_schema_id),
             input_schema: to_raw_value(&input_schema).map_err(|error| {
@@ -1141,7 +1141,11 @@ fn build_request_with_cwd(
         }
         .to_owned(),
     );
-    cell_prompts::Prompts::at("krisis", 1)?.instructions(&mut request)?;
+    let prompts = bazaar::prompts::Prompts::at("krisis", 1)?;
+    request.instructions = prompts.expand(&request.instructions)?;
+    if let Some(text) = &mut request.developer_instructions {
+        *text = prompts.expand(text)?;
+    }
     Ok(request)
 }
 

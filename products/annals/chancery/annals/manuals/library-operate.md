@@ -133,8 +133,9 @@ Keep libraries, source text, instruction history, and model context private.
 
 ## Prompt selection maintenance
 
-Initialization relies on the complete Bazaar selection described by
-`annals.libraries`. Use this procedure only for an authorized Annals prompt edit:
+Initialization uses Annals' chosen component set. Read `bazaar.prompts.prepare`
+for the shared selection format and `annals.libraries` for instruction capture.
+Use this procedure only for an authorized Annals prompt edit:
 
 1. Publish component text with `bazaar update PROMPT_ID --file /absolute/prompt.txt`.
 2. Read each returned positive version and prepare the complete selection JSON.

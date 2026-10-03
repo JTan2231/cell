@@ -15,7 +15,7 @@ import sys
 
 from platform_inputs import (
     MAINTENANCE_CONSUMERS, PRODUCT_INPUTS,
-    PRODUCT_RUNTIME_INPUTS, SHARED_INPUTS,
+    PRODUCT_RUNTIME_INPUTS, PROMPT_CONSUMERS, PROMPT_INPUTS, SHARED_INPUTS,
 )
 
 
@@ -296,10 +296,9 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
         owners = [product for product, (directory, _) in products.items()
                   if path == directory or path.startswith(directory + "/")
                   or path == f"pipeline/products/{product}.sh"]
-        if path == "prompting" or path.startswith("prompting/"):
-            owners = [product for product in products if product in {
-                "annals", "decisions", "semantics", "platter", "weaver", "emt", "conatus"
-            }]
+        if any(fnmatchcase(path, pattern) for pattern in PROMPT_INPUTS):
+            owners.extend(product for product in products
+                          if product in PROMPT_CONSUMERS and product not in owners)
         if owners:
             for owner in owners:
                 reasons[owner].append(path)
@@ -352,7 +351,7 @@ def make_plan(root: Path, arguments: list[str], direct: str | None = None,
         for product in products:
             reasons[product].extend(executor_changes)
             platform[product].append(reason)
-        for suite in ("install", "maintenance", "prompts"):
+        for suite in ("install", "maintenance"):
             suites[suite].append(reason)
 
     for suite in ("install", "maintenance"):
@@ -480,7 +479,7 @@ def gate_exit_code(receipt: dict) -> int:
     return {"passed": 0, "stale": 75, "lost": 70, "cancelled": 130}[state]
 
 
-RUST_SHARED_SUITES = ("install", "maintenance", "prompts")
+RUST_SHARED_SUITES = ("install", "maintenance")
 
 
 def clippy_gate(root: Path, products: list[str],

@@ -372,7 +372,7 @@ fn build_request_with_cwd(
     snapshot: &Snapshot,
     working_directory: impl FnOnce(&str) -> AppResult<PathBuf>,
 ) -> AppResult<JobRequestV1> {
-    let prompts = cell_prompts::Prompts::load("krisis")?;
+    let prompts = bazaar::prompts::Prompts::load("krisis")?;
     let prompt = snapshot.prompt().context(
         "document_prompt_invalid",
         "cannot prepare full conversation",
@@ -390,7 +390,9 @@ fn build_request_with_cwd(
         TimeoutSeconds::new(1_200),
     );
     invocation.reasoning_effort = Some(ReasoningEffort::Medium);
-    invocation.toolset = Some(prompts.toolset(toolset(), 1)?);
+    let mut reference = toolset();
+    reference.version = prompts.toolset_version(1)?;
+    invocation.toolset = Some(reference);
     let mut request = JobRequestV1::new(
         JobId::new(&id),
         "Classify one exchange for a Krisis document",
@@ -402,12 +404,15 @@ fn build_request_with_cwd(
         prompt,
         invocation,
     );
-    prompts.instructions(&mut request)?;
+    request.instructions = prompts.expand(&request.instructions)?;
+    if let Some(text) = &mut request.developer_instructions {
+        *text = prompts.expand(text)?;
+    }
     Ok(request)
 }
 
 async fn register(client: &NucleusClient, reference: &ToolsetRef) -> AppResult<()> {
-    let prompts = cell_prompts::Prompts::for_toolset("krisis", reference, 1)?;
+    let prompts = bazaar::prompts::Prompts::for_toolset_version("krisis", reference.version, 1)?;
     let input = classification_schema();
     let output = json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -466,8 +471,10 @@ pub(crate) fn doctor() -> AppResult<()> {
         let client = NucleusClient::for_current_user()
             .context("nucleus_unavailable", "cannot connect to Nucleus")?;
         require_health(&client, deployment_run_id.as_deref()).await?;
-        let prompts = cell_prompts::Prompts::load("krisis")?;
-        register(&client, &prompts.toolset(toolset(), 1)?).await
+        let prompts = bazaar::prompts::Prompts::load("krisis")?;
+        let mut reference = toolset();
+        reference.version = prompts.toolset_version(1)?;
+        register(&client, &reference).await
     })
 }
 

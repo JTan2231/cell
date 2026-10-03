@@ -128,6 +128,16 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "bazaar.prompts.import",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -383,10 +393,10 @@
       },
       {
         "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "statement": "Bazaar supplies exact selected text and owns shared selection loading and rendering. Annals owns authored meaning, runtime inputs, request assembly, permissions, and execution; a string supplies no additional authority.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       },
       {
         "status": "declared",

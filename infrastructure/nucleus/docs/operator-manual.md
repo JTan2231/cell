@@ -39,7 +39,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
 | Milieu | Retained companies, jobs, source metadata, and exports | [Milieu](/Users/joey/rust/cell/products/milieu/chancery/overview.md) |
-| Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/infrastructure/bazaar/chancery/overview.md) |
+| Bazaar | Versioned strings, shared prompt selection, rendering, and explicit imports | [Bazaar](/Users/joey/rust/cell/infrastructure/bazaar/chancery/overview.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/products/platter/README.md) |
 | Clew | Append-only notes, named threads, optional external links, and explicit application reports with daily snapshots | [Clew](/Users/joey/rust/cell/products/clew/chancery/overview.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/products/annals/README.md) |
@@ -709,19 +709,22 @@ decoders. The requester owns prompt, model, reasoning, timeout, workspace, tools
 and launch-context policy. Use new job IDs for new attempts and check the
 required Nucleus capabilities and domain behavior.
 
-Cell requesters retrieve authored text through Bazaar. Each `cell.prompts.OWNER`
-string pins exact component versions. Publish components before the complete
-selection; resolve that set before admission. Keep exact requests or selection
-versions for recovery. Nucleus receives the resolved request and does not read
-Bazaar. Library instruction revisions and assignment captures remain domain
-snapshots under their existing retention rules.
+Bazaar owns shared prompt selection, rendering, trusted reference expansion,
+description preparation, and explicit imports. Each `cell.prompts.OWNER` string
+pins exact component versions. Publish components before the complete selection;
+resolve that set before admission. Products assemble typed Nucleus requests and
+toolsets, choose models and permissions, and retain exact requests or selection
+versions for recovery. Bazaar has no Nucleus dependency. Nucleus receives the
+resolved request and does not read Bazaar. Library instruction revisions and
+assignment captures remain domain snapshots under their existing retention rules.
 
 Import the reviewed prompt seed before deploying these callers. Runtime reads
 use `~/.local/share/bazaar/bazaar.sqlite3`, or an absolute `CELL_BAZAAR_DATABASE`
 override. They fail when required state is missing and never initialize it.
 An interactive override does not change a scheduled process environment. Keep
-the migration selection and historical component versions. See the
-[prompt migration procedure](/Users/joey/rust/cell/prompting/README.md).
+the migration selection and historical component versions. Read
+`chancery show bazaar.prompts.prepare` and `chancery show bazaar.prompts.import`
+for the owning feature contracts.
 
 ### Authentication or service-ownership change
 

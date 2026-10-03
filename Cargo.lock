@@ -26,9 +26,9 @@ version = "0.20.6"
 dependencies = [
  "annals-api",
  "base64",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -327,17 +327,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cell-prompts"
-version = "0.1.0"
-dependencies = [
- "bazaar",
- "nucleus-core",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,9 +515,9 @@ dependencies = [
  "annals",
  "annals-api",
  "anyhow",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "chrono",
  "clap",
@@ -631,9 +620,9 @@ name = "decisions"
 version = "0.9.7"
 dependencies = [
  "annals-api",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -753,9 +742,9 @@ dependencies = [
 name = "emt"
 version = "0.1.6"
 dependencies = [
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -1797,10 +1786,9 @@ dependencies = [
  "annals",
  "anyhow",
  "base64",
- "milieu",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "chrono",
  "chrono-tz",
@@ -1808,6 +1796,7 @@ dependencies = [
  "clockwork",
  "fs2",
  "iatreion-api",
+ "milieu",
  "nucleus-client",
  "nucleus-core",
  "pulldown-cmark",
@@ -2295,9 +2284,9 @@ name = "semantics"
 version = "0.6.5"
 dependencies = [
  "annals-api",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "clap",
  "clockwork",
@@ -3113,9 +3102,9 @@ version = "0.5.2"
 dependencies = [
  "annals-api",
  "anyhow",
+ "bazaar",
  "cell-install",
  "cell-maintenance",
- "cell-prompts",
  "chancery-usage",
  "clap",
  "fs2",

@@ -35,7 +35,7 @@ $CARGO_PACKAGES"
             ;;
         --shared-suite)
             case "$2" in
-                install|maintenance|prompts)
+                install|maintenance)
                     clippy_packages="$clippy_packages
 cell-$2"
                     ;;

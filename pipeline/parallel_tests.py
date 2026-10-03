@@ -19,7 +19,6 @@ from platform_inputs import platform_target
 SHARED_SUITES = {
     "install": "cell-install",
     "maintenance": "cell-maintenance",
-    "prompts": "cell-prompts",
 }
 SHARED_PACKAGES = frozenset(SHARED_SUITES.values())
 LIBRARY_KINDS = frozenset(("lib", "rlib", "dylib", "cdylib", "staticlib", "proc-macro"))

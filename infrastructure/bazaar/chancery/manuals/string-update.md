@@ -25,8 +25,9 @@ valid. Prefer a file or standard input for private or multiline content.
 
 The database must already be initialized. The default is
 `~/.local/share/bazaar/bazaar.sqlite3`; `--database` selects another absolute
-private path. IDs are nonempty exact, case-sensitive strings. Bazaar validates
-no prompt, configuration, or template syntax.
+private path. IDs are nonempty exact, case-sensitive strings. Raw updates validate
+no prompt, configuration, or template syntax. Use `bazaar.prompts.import` for
+explicit prompt imports and selection publication.
 
 The first update under an ID creates version 1. Each later update creates the
 next version, including identical content. The default text receipt reports

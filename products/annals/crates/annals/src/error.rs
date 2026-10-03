@@ -100,8 +100,8 @@ impl AppError {
     }
 }
 
-impl From<cell_prompts::Error> for AppError {
-    fn from(error: cell_prompts::Error) -> Self {
+impl From<bazaar::prompts::Error> for AppError {
+    fn from(error: bazaar::prompts::Error) -> Self {
         Self::unexpected("bazaar_prompt_unavailable", error.to_string())
     }
 }

@@ -1,10 +1,10 @@
-//! Explicit prompt import. Runtime readers never invoke this program.
+//! Explicit prompt imports. Runtime readers never invoke this operation.
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::Path;
 
-use bazaar::api::{Reader, Writer};
-use cell_prompts::Selection;
-use serde::Deserialize;
+use crate::api::{Reader, Writer};
+use crate::prompts::{Error, Result, Selection};
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -20,22 +20,24 @@ struct Entry {
     content: String,
 }
 
-fn main() {
-    if let Err(error) = run() {
-        eprintln!("prompt import failed: {error}");
-        std::process::exit(1);
-    }
+/// Counts for a completed explicit import.
+#[derive(Debug, Serialize)]
+pub struct ImportReport {
+    pub imported_ids: usize,
+    pub appended_text_versions: usize,
+    pub owner_selections: usize,
 }
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let arguments: Vec<_> = std::env::args_os().skip(1).collect();
-    if arguments.len() != 2 {
-        return Err("usage: cell-prompts ABSOLUTE_DATABASE IMPORT_JSON".into());
-    }
-    let database = PathBuf::from(&arguments[0]);
-    let input: Import = serde_json::from_slice(&std::fs::read(&arguments[1])?)?;
+/// Import reviewed components and publish each owner's exact version selection.
+///
+/// # Errors
+/// Invalid input fails before initialization. Database or storage failures can
+/// leave committed components or owner selections; repeat the same reviewed
+/// import to finish, preserving all prior versions.
+pub fn import(database: &Path, input: &Path) -> Result<ImportReport> {
+    let input: Import = serde_json::from_slice(&std::fs::read(input)?)?;
     if input.schema_version != 1 || input.entries.is_empty() {
-        return Err("unsupported or empty import".into());
+        return Err(Error::Invalid("unsupported or empty import".into()));
     }
     let mut seen = BTreeSet::new();
     for entry in &input.entries {
@@ -52,35 +54,32 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 | "ci-manager"
         ) || !seen.insert(entry.id.clone())
         {
-            return Err("unknown prompt owner or duplicate ID".into());
+            return Err(Error::Invalid(
+                "unknown prompt owner or duplicate ID".into(),
+            ));
         }
     }
-    let mut writer = Writer::initialize(&database)?;
-    let reader = Reader::open(&database)?;
+    let mut writer = Writer::initialize(database)?;
+    let reader = Reader::open(database)?;
     let mut owners: BTreeMap<String, BTreeMap<String, i64>> = BTreeMap::new();
     let mut appended = 0;
     for entry in input.entries {
         let record = match reader.get(&entry.id, None) {
             Ok(record) if record.content == entry.content => record,
-            Ok(_) | Err(bazaar::api::Error::NotFound) => {
+            Ok(_) | Err(crate::api::Error::NotFound) => {
                 appended += 1;
                 writer.update(&entry.id, &entry.content)?
             }
             Err(error) => return Err(error.into()),
         };
-        let owner = entry
-            .id
-            .split('.')
-            .next()
-            .ok_or("missing owner")?
-            .to_owned();
+        let owner = entry.id.split('.').next().unwrap_or("").to_owned();
         owners
             .entry(owner)
             .or_default()
             .insert(entry.id, record.version);
     }
-    // Publish only after every component exists. Partial imports leave the old
-    // selection usable; repeating an import reuses already identical records.
+    // Components exist before any selection is published. Repeating the same
+    // import reuses identical latest records after an interrupted publication.
     for (owner, entries) in &owners {
         let id = format!("cell.prompts.{owner}");
         let content = serde_json::to_string(&Selection {
@@ -89,16 +88,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         })?;
         match reader.get(&id, None) {
             Ok(record) if record.content == content => {}
-            Ok(_) | Err(bazaar::api::Error::NotFound) => {
+            Ok(_) | Err(crate::api::Error::NotFound) => {
                 writer.update(&id, &content)?;
             }
             Err(error) => return Err(error.into()),
         }
     }
-    println!(
-        "Imported {} prompt IDs; appended {appended} text versions; published {} selections.",
-        seen.len(),
-        owners.len()
-    );
-    Ok(())
+    Ok(ImportReport {
+        imported_ids: seen.len(),
+        appended_text_versions: appended,
+        owner_selections: owners.len(),
+    })
 }

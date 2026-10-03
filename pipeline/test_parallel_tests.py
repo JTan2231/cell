@@ -29,12 +29,14 @@ class SelectionTests(unittest.TestCase):
                              target("ordinary"), target("install")]),
             package("cell-install", [target("cell_install", "lib", doctest=True)]),
             package("cell-maintenance", [target("cell_maintenance", "lib", doctest=True)]),
-            package("cell-prompts", [target("cell_prompts", "lib", doctest=True),
-                                    target("cell-prompts", "bin")]),
+            package("bazaar", [target("bazaar", "lib", doctest=True),
+                               target("bazaar", "bin"), target("bazaar-install", "bin"),
+                               target("prompt_resolution")]),
         ]}
         self.configs = {
-            "alpha": {"packages": ["alpha", "cell-install", "cell-prompts"], "offline": True},
+            "alpha": {"packages": ["alpha", "cell-install"], "offline": True},
             "beta": {"packages": ["beta"], "offline": False},
+            "bazaar": {"packages": ["bazaar"], "offline": True},
         }
 
     def test_product_coverage_excludes_lifecycle_disabled_and_incidental_shared(self):
@@ -99,11 +101,18 @@ class SelectionTests(unittest.TestCase):
 
     def test_shared_suite_is_explicit_and_deduplicated(self):
         plan = make_plan(self.workspace, self.configs, ["alpha", "alpha"], ["alpha"],
-                         ["install", "install", "prompts"])
+                         ["install", "install"])
         self.assertIn(("cell-install", "lib", "cell_install"), plan.targets)
-        self.assertIn(("cell-prompts", "bin", "cell-prompts"), plan.targets)
         self.assertNotIn("cell-maintenance", {key[0] for key in plan.targets})
         self.assertEqual(plan.targets[("cell-install", "lib", "cell_install")], {"shared:install"})
+
+    def test_bazaar_product_includes_prompt_library_command_and_integration_tests(self):
+        plan = make_plan(self.workspace, self.configs, ["bazaar"], [], [])
+        self.assertEqual(set(plan.targets), {
+            ("bazaar", "lib", "bazaar"), ("bazaar", "bin", "bazaar"),
+            ("bazaar", "test", "prompt_resolution"),
+        })
+        self.assertTrue(all(owners == {"product:bazaar"} for owners in plan.targets.values()))
 
     def test_filter_disambiguates_same_target_name_in_different_packages(self):
         plan = make_plan(self.workspace, self.configs, ["alpha", "beta"], ["alpha"], [])

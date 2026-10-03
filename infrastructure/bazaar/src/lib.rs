@@ -1,10 +1,13 @@
 //! Versioned opaque strings, with an in-process `SQLite` API and a local CLI.
 //!
 //! [`api::Reader`] opens existing state read-only. [`api::Writer`] initializes
-//! state and appends versions. Callers own all interpretation of the content.
+//! state and appends versions. [`prompts`] selects and renders prompt components;
+//! callers own their meaning and execution policy.
 
 pub mod api;
 pub mod installation;
+mod prompt_import;
+pub mod prompts;
 
 use std::path::{Path, PathBuf};
 

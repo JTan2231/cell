@@ -84,6 +84,16 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
+    },
+    {
+      "id": "bazaar.prompts.import",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -203,10 +213,10 @@
       },
       {
         "status": "declared",
-        "statement": "Prompt readiness depends on exact published Bazaar text versions; EMT owns the complete selection content.",
+        "statement": "Prompt readiness depends on Bazaar shared selection format and preparation over exact immutable text versions; EMT owns authored meaning, selected components and execution policy.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       }
     ]
   },

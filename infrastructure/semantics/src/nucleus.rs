@@ -945,7 +945,7 @@ fn build_request(
     toolset: ToolsetRef,
     neutral_cwd: &Path,
 ) -> Result<JobRequestV1> {
-    let prompts = cell_prompts::Prompts::for_toolset("semantics", &toolset, 1)?;
+    let prompts = bazaar::prompts::Prompts::for_toolset_version("semantics", toolset.version, 1)?;
     let prompt = reconciliation_prompt(intake, repository, next_concept_number)?;
     let mut invocation = AgentInvocationV1::new(
         "codex",
@@ -972,7 +972,10 @@ fn build_request(
         invocation,
     );
     request.developer_instructions = Some(DEVELOPER_INSTRUCTIONS.to_owned());
-    prompts.instructions(&mut request)?;
+    request.instructions = prompts.expand(&request.instructions)?;
+    if let Some(text) = &mut request.developer_instructions {
+        *text = prompts.expand(text)?;
+    }
     Ok(request)
 }
 
@@ -985,7 +988,7 @@ fn build_account_request(
     toolset: ToolsetRef,
     neutral_cwd: &Path,
 ) -> Result<JobRequestV1> {
-    let prompts = cell_prompts::Prompts::for_toolset("semantics", &toolset, 1)?;
+    let prompts = bazaar::prompts::Prompts::for_toolset_version("semantics", toolset.version, 1)?;
     let prompt = account_reconciliation_prompt(intake, repository, next_concept_number)?;
     let mut invocation = AgentInvocationV1::new(
         "codex",
@@ -1023,7 +1026,10 @@ fn build_account_request(
         }
         .to_owned(),
     );
-    prompts.instructions(&mut request)?;
+    request.instructions = prompts.expand(&request.instructions)?;
+    if let Some(text) = &mut request.developer_instructions {
+        *text = prompts.expand(text)?;
+    }
     Ok(request)
 }
 
@@ -1113,9 +1119,9 @@ async fn register_contract(
 ) -> Result<ToolsetRegistrationV1> {
     let prompts = match version {
         Some(version) => {
-            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+            bazaar::prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
         }
-        None => cell_prompts::Prompts::load("semantics")?,
+        None => bazaar::prompts::Prompts::load("semantics")?,
     };
     let selected_version = version.unwrap_or(
         u32::try_from(prompts.selection.version)
@@ -1181,9 +1187,9 @@ async fn register_account_contract(
 ) -> Result<ToolsetRegistrationV1> {
     let prompts = match version {
         Some(version) => {
-            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+            bazaar::prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
         }
-        None => cell_prompts::Prompts::load("semantics")?,
+        None => bazaar::prompts::Prompts::load("semantics")?,
     };
     let selected_version = version.unwrap_or(
         u32::try_from(prompts.selection.version)
@@ -1253,9 +1259,9 @@ async fn register_document_contract(
 ) -> Result<ToolsetRegistrationV1> {
     let prompts = match version {
         Some(version) => {
-            cell_prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
+            bazaar::prompts::Prompts::at("semantics", i64::from(version.saturating_sub(1).max(1)))?
         }
-        None => cell_prompts::Prompts::load("semantics")?,
+        None => bazaar::prompts::Prompts::load("semantics")?,
     };
     let selected_version = version.unwrap_or(
         u32::try_from(prompts.selection.version)

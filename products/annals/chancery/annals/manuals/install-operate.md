@@ -28,22 +28,21 @@ library configuration and schema; and `annals.inbox` for dispatch and recovery.
 4. Prepare the complete private Bazaar `cell.prompts.annals` selection. Import
    the reviewed migration seed before deploying these callers. Runtime reads
    do not initialize state or supply missing text. Read `annals.work.integrate`
-   for the format and exact-version policy. For the original seed, review
-   `prompting/seed.json`, then run this explicit import from the Cell checkout:
+   for Annals' exact-version policy. Read `bazaar.prompts.prepare` for shared
+   text preparation and `bazaar.prompts.import` for import effects and recovery.
+   Review `infrastructure/bazaar/seed.json`, then run this explicit import from
+   the Cell checkout:
 
    ```sh
-   cargo run --locked --offline --package cell-prompts -- \
-     /absolute/private/bazaar.sqlite3 prompting/seed.json
+   bazaar --database /absolute/private/bazaar.sqlite3 import-prompts infrastructure/bazaar/seed.json
    ```
 
-   The importer initializes only that selected private path, preserves unrelated
-   IDs, reuses identical latest text, and publishes each selection after its
-   components exist. An interrupted import can leave unused versions; repeat
-   the same import and inspect history after uncertain writes. Publication is
-   per owner, without an atomic all-requester cutover. Verify exact referenced
-   versions through Bazaar before deployment. Use the same database for all
-   callers of the product; an interactive override does not configure a
-   scheduled environment. Preserve selection version 1 and its components.
+   Import initializes only that selected private path and can retain partial
+   appends after failure. Repeat the same reviewed import after interruption;
+   inspect history after an uncertain write. Verify exact referenced versions
+   before deployment. Use the same database for all callers of the product;
+   an interactive override does not configure a scheduled environment.
+   Preserve selection version 1 and its components.
 5. Check capacity for release, migration, and control writes. A closed
    inbox storage gate alone does not reject deployment. A probe error or failed
    write does. Do not clear user data or lower or disable the reserve without

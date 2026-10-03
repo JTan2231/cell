@@ -192,6 +192,10 @@ pinned to a positive integer version. Publish component text first, then publish
 the complete selection. A text append alone does not change the selected set.
 Missing or invalid selections stop new request preparation before model admission.
 
+Bazaar owns the shared selection format, loading, template rendering and trusted
+reference expansion through `bazaar.prompts.prepare`. Krisis owns authored meaning,
+selected components, runtime inputs and request assembly.
+
 Import the migration seed before deploying these callers. Preserve selection
 version 1 and all referenced text versions for compatibility. Runtime reads never
 perform this import. Deployment does not supply missing prompt contents.
