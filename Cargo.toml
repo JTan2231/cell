@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "infrastructure/telete",
     "deployment/crates/cell-install",
     "deployment/crates/cell-maintenance",
     "infrastructure/nucleus/crates/nucleus-cli",

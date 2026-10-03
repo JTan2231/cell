@@ -1,0 +1,19 @@
+{
+  "schema_version": 4,
+  "provider": { "id": "telete", "name": "Telete", "release": "0.1.0" },
+  "promise_scope": {
+    "authoritative_for": ["Telete queue records, private candidates, and guarded advancement of refs/telete/accepted."],
+    "not_authoritative_for": ["Existing Cell CI state, provider runtime outcomes, product domain state, and final inbox delivery."],
+    "inventory": {
+      "covers": ["Telete queue, validation, preparation, instruction execution, signing selection, and installation commands."],
+      "completeness": "complete",
+      "excludes": ["A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and existing CI replacement."]
+    },
+    "shared_access_and_trust": ["Local current-user commands; explicit external APFS workspace selection is required."],
+    "shared_privacy_and_retention": ["Retained source, prompts, diagnostics, requests, and receipts are private operational records."],
+    "compatibility_and_retirement": ["Telete journal and receipt schemas are independent from the existing CI manager."],
+    "operational_limits": ["One delivery lifecycle, one heavy gate, two light gates; no completion-time guarantee."]
+  },
+  "overview": "overview.md",
+  "entries": ["entries/queue-operate.json"]
+}

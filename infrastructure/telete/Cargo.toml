@@ -1,0 +1,31 @@
+[package]
+name = "telete"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Independent Rust CI orchestration for Cell"
+
+[dependencies]
+anyhow = "1.0"
+cell-install.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+fs2.workspace = true
+tempfile.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+tokio.workspace = true
+toml.workspace = true
+libc.workspace = true
+rustix = { version = "1.1", features = ["fs"] }
+nucleus-core.workspace = true
+nucleus-client.workspace = true
+bazaar.workspace = true
+email = { path = "../email/crates/email" }
+chancery = { path = "../chancery/crates/chancery" }
+usher = { path = "../usher/crates/usher" }
+
+[lints.rust]
+unsafe_code = "deny"

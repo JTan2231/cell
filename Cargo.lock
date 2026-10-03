@@ -2577,6 +2577,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "telete"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bazaar",
+ "cell-install",
+ "chancery",
+ "clap",
+ "email",
+ "fs2",
+ "libc",
+ "nucleus-client",
+ "nucleus-core",
+ "rusqlite",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "usher",
+ "uuid",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
