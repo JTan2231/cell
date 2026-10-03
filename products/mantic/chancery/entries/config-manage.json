@@ -90,7 +90,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "config holds only ID and name; config_item holds ID, exclusive config reference, label, amount_cents, first_due, nullable paired recurrence unit/interval, and nullable end_date. Definitions are current editable state without revisions."
+        "statement": "A config is a reusable expense bundle. config holds only ID and name; config_item holds ID, exclusive config reference, label, amount_cents, first_due, nullable paired recurrence unit/interval, and nullable end_date. Definitions are current editable state without revisions. Forecast exclusions and inclusions do not edit this bundle."
       }
     ],
     "identity_and_units": [
@@ -130,7 +130,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Initial state and CLI output schemas are independently one. Unsupported or foreign state fails; ordinary commands do not initialize, migrate, or repair it."
+        "statement": "Persistent state and config/item CLI output schemas are independently one. Forecast output uses schema two under its own contract. Unsupported or foreign state fails; ordinary commands do not initialize, migrate, or repair it."
       }
     ],
     "reliances": [

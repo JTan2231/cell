@@ -1,33 +1,33 @@
 {
   "id": "mantic.forecast.calculate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Forecast Mantic remaining funds",
-  "summary": "Subtract expected configured expense occurrences from a supplied starting amount over inclusive dates. Print totals, shortfall date, and optional details without retaining the run.",
+  "summary": "Use one saved expense bundle with temporary exclusions and additions to forecast remaining funds over inclusive dates. Print composition, totals, shortfall date, and optional details without retaining the run.",
   "use_when": [
-    "The caller wants a remaining-funds projection from one saved config, a supplied amount, and a calendar period."
+    "The caller wants a remaining-funds projection from one saved expense bundle, optional temporary exclusions and additions, a supplied amount, and a calendar period."
   ],
   "do_not_use_when": [
     "The caller needs observed bank balances, payment status, income modeling, retained runs, or automatic result delivery."
   ],
   "outcome": "One independent forecast is printed from a consistent configuration snapshot and transient inputs.",
   "effects": [
-    "Reads selected configuration read-only, generates occurrences and calculates checked cent totals in memory, then prints the result. No Mantic state is changed.",
+    "Reads selected configuration read-only, excludes selected saved rules, appends temporary inclusions, generates effective occurrences and calculates checked cent totals in memory, then prints the result. No Mantic state is changed.",
     "Agent CLI dispatch can separately append metadata-only Chancery usage."
   ],
   "authority": [
-    "Mantic owns calculation and recurrence rules. The caller owns supplied amount and dates; stored expected expenses do not prove actual payments."
+    "Mantic owns expense composition, calculation, and recurrence rules. The caller supplies exact excluded IDs, included definitions, amount, and dates; expected expenses do not prove actual payments."
   ],
   "success": [
     "The command prints the complete forecast within supported bounds. Negative remainders are successful results and identify the first shortfall date."
   ],
   "failure_and_recovery": [
-    "Invalid input, missing or unsupported state, unknown config, overflow, or more than 100,000 selected occurrences fails without a normal partial forecast or config change. Correct inputs or select a compatible program before retrying."
+    "Invalid input, missing or unsupported state, unknown config, excluded ID outside the selected config snapshot, overflow, or more than 100,000 effective selected occurrences fails without a normal partial forecast or config change. Correct inputs or select a compatible program before retrying. Scheduling modifiers before an inclusion or repeated within one inclusion are CLI syntax errors."
   ],
   "privacy": [
-    "The command retains no starting amount, period, run identity, occurrence, result, balance, or payment record. Printed output can contain private config and amount data."
+    "The command retains no temporary definition, exclusion, starting amount, period, run identity, occurrence, result, balance, or payment record. Printed output can contain private saved and temporary definitions and amount data."
   ],
   "does_not_authorize": [
     "Retaining or sharing output outside the caller's chosen destination, changing definitions, accessing banks, or treating a projection as an actual account balance."
@@ -35,7 +35,7 @@
   "interfaces": [
     {
       "label": "Calculate a forecast",
-      "invocation": "/Users/joey/.local/bin/mantic [--database ABSOLUTE_PATH] [--json] forecast CONFIG AMOUNT [--from DATE] --until DATE [--details]"
+      "invocation": "/Users/joey/.local/bin/mantic [--database ABSOLUTE_PATH] [--json] forecast CONFIG AMOUNT [--from DATE] --until DATE [--details] [--exclude ITEM_ID]... [--include NAME AMOUNT [--first DATE] [--every UNIT] [--interval N] [--end DATE]]..."
     }
   ],
   "dependencies": [
@@ -60,37 +60,41 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "One selected named config exists in initialized supported state. Dates are valid, until is on or after from, and amounts use one currency with two decimal places."
+        "statement": "One selected named config exists in initialized supported state. Each excluded ID belongs to its loaded snapshot. Included names, positive amounts, dates, recurrence, and cutoffs satisfy expense rules. Dates are valid, until is on or after from, and amounts use one currency with two decimal places."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "CONFIG selects one saved definition. AMOUNT is signed starting funds before from-day expenses. --from defaults to local today; --until is required. Both boundary dates are inclusive."
+        "statement": "CONFIG selects one saved expense bundle. AMOUNT is signed starting funds before from-day expenses. --from defaults to local today; --until is required. Both boundary dates are inclusive. Repeatable --exclude ITEM_ID removes a saved rule; repeatable --include NAME AMOUNT accepts ordinary CLI values and appends a separate temporary rule. JSON input is not used."
+      },
+      {
+        "status": "declared",
+        "statement": "--first, --every, --interval, and --end apply to the most recent preceding inclusion even across forecast flags or --exclude. Each modifier is allowed once per inclusion and requires a preceding inclusion. Missing first uses final resolved from; missing every is one-off. Every accepts day/week/month/year, with interval one by default. Interval requires every in the same inclusion; end is inclusive and cannot precede first."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "JSON schema one returns config_id, config_name, starting_amount_cents, from, until, total_expenses_cents, remainder_cents, nullable first_shortfall, and all occurrences with date, item_id, item_name, amount_cents, and remainder_cents. Readable text adds occurrences with --details."
+        "statement": "Forecast JSON schema two returns config_id, config_name, starting_amount_cents, from, until, total_expenses_cents, remainder_cents, nullable first_shortfall, expenses, excluded_items, and occurrences. Expenses contain complete normalized source, name, amount_cents, first_due, repeat_unit, repeat_every, and end_date. Excluded items contain complete saved id, config_id, name, amount_cents, first_due, repeat_unit, repeat_every, and end_date. Occurrences contain date, source, item_name, amount_cents, and remainder_cents. Readable text always explains exclusions and inclusions with resolved schedules; --details adds occurrences."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Occurrences derive from original first_due anchors. Month/year recurrence clamps unavailable days while preserving the original anchor. Item end_date is inclusive. Occurrences sort by date then item ID. Earlier expenses do not reduce supplied starting funds."
+        "statement": "Effective expenses are saved rules in ascending item-ID order after exclusion, followed by inclusions in CLI order. Repeated exclusions are idempotent. Inclusions remain distinct even when definitions match; exclusions cannot target them. Occurrences derive from fixed first_due anchors, with original saved anchors preserved. Month/year recurrence clamps unavailable days while preserving the original anchor. End_date is inclusive. Occurrences sort by date, saved item ID, then inclusion ordinal, with saved expenses first on each date. Earlier expenses do not reduce supplied starting funds."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Money is signed 64-bit cents. Dates are calendar dates. Config/item IDs belong to the selected database. No run ID or persisted balance identity exists."
+        "statement": "Money is signed 64-bit cents. Dates are calendar dates. Config/item IDs belong to the selected database. Source is tagged {kind:saved,item_id:ID} or {kind:included,ordinal:N}; included ordinals are one-based in CLI inclusion order and local to the invocation. Names are nonunique labels. No run ID or persisted balance identity exists."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "A forecast covers every expense occurrence selected by the inclusive period and cutoffs from one committed config snapshot. Output reports resolved dates; no run timestamp or history is retained."
+        "statement": "A forecast covers every effective expense occurrence selected by the inclusive period and cutoffs from one committed config snapshot and supplied inclusions. Output includes complete effective and excluded definitions even when they have no occurrences. Excluded definitions appear once in item-ID order. Output reports resolved dates; no run timestamp or history is retained."
       }
     ],
     "access": [
@@ -102,13 +106,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Reads load one consistent configuration snapshot; calculation occurs in memory. Identical explicit inputs, configuration, and engine version give the same result. A negative starting amount yields first_shortfall equal to from."
+        "statement": "Reads load one consistent configuration snapshot; composition and calculation occur in memory with no config writes. Identical explicit inputs, configuration, and engine version give the same result. Changing from changes an implicitly anchored inclusion. A negative starting amount yields first_shortfall equal to from."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Dates range from 0001-01-01 through 9999-12-31. Checked signed 64-bit cents and at most 100,000 selected occurrences are required; excess fails instead of truncating."
+        "statement": "Dates range from 0001-01-01 through 9999-12-31. Included recurrence intervals are 1 through 4,294,967,295. Checked signed 64-bit cents and at most 100,000 occurrences from the combined effective expenses are required; excluded rules do not count. Excess fails instead of truncating."
       },
       {
         "status": "unspecified",
@@ -118,7 +122,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Product release, state schema one, JSON output schema one, and entry version are separate. Direct SQLite integration, variable expenses, income rules, holiday adjustment, actual payment tracking, and automatic retention are unsupported."
+        "statement": "Product release, state schema one, forecast JSON output schema two, other command output schema one, and entry version are separate. Forecast schema two applies to every forecast success and operation error, replacing occurrence item_id with tagged source and adding complete expense composition. Schema-one forecast parsers must update. Direct SQLite integration, variable expenses, income rules, holiday adjustment, actual payment tracking, and automatic retention are unsupported."
       }
     ],
     "reliances": [
