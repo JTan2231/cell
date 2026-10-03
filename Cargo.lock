@@ -275,24 +275,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "milieu"
-version = "0.6.0"
-dependencies = [
- "cell-install",
- "chancery-usage",
- "clap",
- "fs2",
- "iatreion-api",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2",
- "time",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "cc"
 version = "1.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -443,7 +425,6 @@ name = "clew"
 version = "0.2.1"
 dependencies = [
  "anyhow",
- "milieu",
  "cell-install",
  "cell-maintenance",
  "chancery-usage",
@@ -453,6 +434,7 @@ dependencies = [
  "email",
  "fs2",
  "iatreion-api",
+ "milieu",
  "platter",
  "rusqlite",
  "serde",
@@ -1488,6 +1470,24 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "milieu"
+version = "0.6.0"
+dependencies = [
+ "cell-install",
+ "chancery-usage",
+ "clap",
+ "fs2",
+ "iatreion-api",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "time",
+ "url",
+ "uuid",
+]
 
 [[package]]
 name = "mime"
@@ -2574,6 +2574,31 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "telete"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bazaar",
+ "cell-install",
+ "chancery",
+ "clap",
+ "email",
+ "fs2",
+ "libc",
+ "nucleus-client",
+ "nucleus-core",
+ "rusqlite",
+ "rustix",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
+ "usher",
+ "uuid",
 ]
 
 [[package]]
