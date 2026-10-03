@@ -4,6 +4,11 @@ Telete implements Cell CI orchestration in Rust. It is separate from the
 installed Python CI manager. Telete uses its own executable, journal, worktrees,
 Git references, deployment records, and user service.
 
+Explicit host setup writes Cell's shared external-volume and signing selections.
+It preserves the existing CI setup guards through Rust reads and compatible
+locks, without running Python or changing the existing queue's records. Queue
+operation remains separate from host setup.
+
 The manager owns submission and source acceptance. The candidate validator owns
 gate selection. The broker owns gate admission and process results. Production
 preparation owns compilation, staging, and configured native signing. The

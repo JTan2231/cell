@@ -5,44 +5,252 @@
   "mode": "operate",
   "support": "supported",
   "title": "Operate the independent Rust Telete queue",
-  "summary": "Submit committed Cell source to Telete for private integration, native validation, repair, signed preparation, ordered deployment, and outcome notification.",
-  "use_when": ["Operate an explicitly initialized Telete installation."],
-  "do_not_use_when": ["Operate or replace the existing Cell CI manager."],
-  "outcome": "Telete retains the exact source delivery outcome and its separate deployment and notification observations.",
-  "effects": ["Creates private Git candidates and advances refs/telete/accepted.", "Runs selected gates, provider calls, native signing, and explicitly selected product deployment instructions."],
-  "authority": ["Telete records and runtime correlation checks decide source acceptance.", "Each provider and product retains its own execution, transport, installation, and domain authority."],
-  "success": ["The retained job reaches its terminal outcome with all required operations settled."],
-  "failure_and_recovery": ["Uncertain admitted effects remain retained and block admission until their exact operation is reconciled."],
-  "privacy": ["Private source and diagnostics can reach the selected Nucleus model; frozen outcome text can reach Email's configured provider and recipient."],
-  "does_not_authorize": ["Replacement of existing CI, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."],
-  "interfaces": [{ "label": "Telete command interface", "invocation": "telete --help" }],
+  "summary": "Configure shared Cell host storage and signing, then submit committed source to Telete for native validation, repair, signed preparation, deployment, and notification.",
+  "use_when": [
+    "Operate an explicitly initialized Telete installation.",
+    "Configure the shared external work volume or explicitly create or select the shared Cell signing identity through Rust host setup."
+  ],
+  "do_not_use_when": [
+    "Operate or replace the existing Cell CI manager."
+  ],
+  "outcome": "Telete records the selected host configuration or retains the exact source delivery outcome and its separate deployment and notification observations.",
+  "effects": [
+    "Creates private Git candidates and advances refs/telete/accepted.",
+    "Runs selected gates, provider calls, native signing, and explicitly selected product deployment instructions.",
+    "Explicit storage and signing commands publish shared current-user Cell host settings; initial signing imports one certificate and private key and adds user code-signing trust."
+  ],
+  "authority": [
+    "Telete records and runtime correlation checks decide source acceptance.",
+    "Each provider and product retains its own execution, transport, installation, and domain authority.",
+    "Host setup checks existing CI state under its compatible locks without operating that manager or changing its journal."
+  ],
+  "success": [
+    "The retained job reaches its terminal outcome with all required operations settled.",
+    "Host setup publishes the validated requested selection; signing preflight proves key usability at that observation only."
+  ],
+  "failure_and_recovery": [
+    "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
+    "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection."
+  ],
+  "privacy": [
+    "Private source and diagnostics can reach the selected Nucleus model; frozen outcome text can reach Email's configured provider and recipient.",
+    "Signing policy retains only the public fingerprint, Keychain path, profile and namespace. Private external generation files are removed on ordinary completion; Keychain retains the key."
+  ],
+  "does_not_authorize": [
+    "Replacement of existing CI, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
+  ],
+  "interfaces": [
+    {
+      "label": "Telete command interface",
+      "invocation": "telete --help"
+    },
+    {
+      "label": "Configure shared work storage",
+      "invocation": "telete storage configure --volume /Volumes/CellWork"
+    },
+    {
+      "label": "Inspect work storage",
+      "invocation": "telete storage status"
+    },
+    {
+      "label": "Create initial shared signing identity",
+      "invocation": "telete signing create-local"
+    },
+    {
+      "label": "Select shared signing identity",
+      "invocation": "telete signing configure --host --certificate-sha1 FINGERPRINT --keychain /absolute/login.keychain-db"
+    }
+  ],
   "dependencies": [
-    { "id": "nucleus.requester.integrate", "min_contract": 3, "max_contract_exclusive": 4 },
-    { "id": "bazaar.string.read", "min_contract": 2, "max_contract_exclusive": 3 },
-    { "id": "email.message.send", "min_contract": 4, "max_contract_exclusive": 5 },
-    { "id": "chancery.bundle.validate", "min_contract": 3, "max_contract_exclusive": 4 },
-    { "id": "usher.recognition.inspect", "min_contract": 3, "max_contract_exclusive": 4 }
+    {
+      "id": "nucleus.requester.integrate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "bazaar.string.read",
+      "min_contract": 2,
+      "max_contract_exclusive": 3
+    },
+    {
+      "id": "email.message.send",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "chancery.bundle.validate",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "usher.recognition.inspect",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
   ],
   "promise": {
-    "consumers": [{ "status": "declared", "statement": "Current-user operators may use the Telete command interface." }],
-    "preconditions": [{ "status": "declared", "statement": "A configured writable external APFS workspace, initialized Telete queue, supported native tools, and required provider state are available." }],
-    "inputs": [{ "status": "declared", "statement": "Exact committed source, an explicit baseline, frozen job policy, and selected product declarations." }],
-    "outputs": [{ "status": "declared", "statement": "Retained job, gate, preparation, deployment, repair, and notification records." }],
-    "data_semantics": [{ "status": "declared", "statement": "Validation, source acceptance, instruction completion, and Email acceptance have distinct meanings." }],
-    "identity_and_units": [{ "status": "declared", "statement": "Job and request IDs identify operations; Git object IDs identify source; timeouts use seconds." }],
-    "completeness_and_freshness": [{ "status": "declared", "statement": "Receipts describe the recorded selected scope and exact candidate; CLI status reads retained observations." }],
-    "access": [{ "status": "declared", "statement": "The supported interface is a local CLI; there is no public Rust CI client or status-snapshot probe." }],
-    "lifecycle_and_consistency": [{ "status": "declared", "statement": "One delivery job is active; effect intent is retained before execution and recovery preserves exact identities." }],
-    "operational_limits": [{ "status": "declared", "statement": "One heavy gate and two light gates are admitted; process output streams have a 16 MiB bound." }, { "status": "unspecified", "statement": "No completion deadline, total refunded-repair invocation ceiling, or inbox-delivery guarantee is supplied." }],
-    "compatibility_and_evolution": [{ "status": "declared", "statement": "Telete state and receipts use explicitly checked schema versions independent of existing CI." }, { "status": "unspecified", "statement": "No old-CI journal import or cross-release migration window is supplied." }],
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "Current-user operators may use the Telete command interface."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Queue work requires a configured writable external APFS workspace, initialized Telete queue, supported native tools, and required provider state."
+      },
+      {
+        "status": "declared",
+        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled and a stopped, paused, drained legacy CI service and queue with settled deployment. Signing requires configured storage, usable current-user Keychain access, paused settled queues, stopped selected Telete worker, and settled release publication and deployment."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "Exact committed source, an explicit baseline, frozen job policy, and selected product declarations."
+      },
+      {
+        "status": "declared",
+        "statement": "Host setup selects an exact volume mount and observed UUID or an exact certificate fingerprint, absolute Keychain path and permanent namespace."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Retained job, gate, preparation, deployment, repair, and notification records."
+      },
+      {
+        "status": "declared",
+        "statement": "Shared workspace.json remains schema_version 1 and shared signing.json remains schema 1. Storage status returns configuration path, selection and current root; signing status returns policy, ready and selection source."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "Validation, source acceptance, instruction completion, and Email acceptance have distinct meanings."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "Job and request IDs identify operations; Git object IDs identify source; timeouts use seconds."
+      },
+      {
+        "status": "declared",
+        "statement": "Volume UUID and mount path identify storage. Certificate SHA-1 selects the certificate, whose signature uses SHA-256; initial validity is 3650 days with an RSA 3072-bit key."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Receipts describe the recorded selected scope and exact candidate; CLI status reads retained observations."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The supported interface is a local CLI; there is no public Rust CI client or status-snapshot probe."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "One delivery job is active; effect intent is retained before execution and recovery preserves exact identities."
+      },
+      {
+        "status": "declared",
+        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses setup, legacy admission/deployment, and selected Telete state locks; configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "One heavy gate and two light gates are admitted; process output streams have a 16 MiB bound."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No completion deadline, total refunded-repair invocation ceiling, or inbox-delivery guarantee is supplied."
+      },
+      {
+        "status": "declared",
+        "statement": "Host setup does not format or mount volumes, enable ownership, migrate or import journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state and Cell queue; the operator must settle other independently configured consumers."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "Telete state and receipts use explicitly checked schema versions independent of existing CI."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No old-CI journal import or cross-release migration window is supplied."
+      },
+      {
+        "status": "declared",
+        "statement": "The Rust host setup uses the existing Cell host formats and schema-one legacy queue maintenance checks. Unknown legacy schemas stop setup without migration. Existing Telete signing overrides retain precedence; configure without --host retains its state-specific behavior."
+      }
+    ],
     "reliances": [
-      { "status": "declared", "statement": "Repair uses Nucleus execution without transferring source acceptance authority.", "target": "nucleus", "kind": "control", "contract": "nucleus.requester.integrate" },
-      { "status": "declared", "statement": "Repair reads dedicated immutable Bazaar prompt versions.", "target": "bazaar", "kind": "data", "contract": "bazaar.string.read" },
-      { "status": "declared", "statement": "Notification uses fixed-recipient Email transport.", "target": "email", "kind": "control", "contract": "email.message.send" },
-      { "status": "declared", "statement": "Provider checks use Chancery's owned bundle codecs and validator.", "target": "chancery", "kind": "control", "contract": "chancery.bundle.validate" },
-      { "status": "declared", "statement": "Membership checks use Usher's repository declaration projection.", "target": "usher", "kind": "data", "contract": "usher.recognition.inspect" },
-      { "status": "declared", "statement": "Git owns merges, patch application, object storage, and reference updates.", "target": "git", "kind": "external" },
-      { "status": "declared", "statement": "macOS owns filesystem sandboxing, Keychain signing, APFS observations, and launchd execution.", "target": "macos", "kind": "external" }
+      {
+        "status": "declared",
+        "statement": "Repair uses Nucleus execution without transferring source acceptance authority.",
+        "target": "nucleus",
+        "kind": "control",
+        "contract": "nucleus.requester.integrate"
+      },
+      {
+        "status": "declared",
+        "statement": "Repair reads dedicated immutable Bazaar prompt versions.",
+        "target": "bazaar",
+        "kind": "data",
+        "contract": "bazaar.string.read"
+      },
+      {
+        "status": "declared",
+        "statement": "Notification uses fixed-recipient Email transport.",
+        "target": "email",
+        "kind": "control",
+        "contract": "email.message.send"
+      },
+      {
+        "status": "declared",
+        "statement": "Provider checks use Chancery's owned bundle codecs and validator.",
+        "target": "chancery",
+        "kind": "control",
+        "contract": "chancery.bundle.validate"
+      },
+      {
+        "status": "declared",
+        "statement": "Membership checks use Usher's repository declaration projection.",
+        "target": "usher",
+        "kind": "data",
+        "contract": "usher.recognition.inspect"
+      },
+      {
+        "status": "declared",
+        "statement": "Git owns merges, patch application, object storage, and reference updates.",
+        "target": "git",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "macOS owns filesystem sandboxing, Keychain signing, APFS observations, and launchd execution.",
+        "target": "macos",
+        "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Host setup relies on compatible Cell schema-one queue records and existing admission, worker, release-publication and deployment locks to preserve the Python setup maintenance boundaries without executing Python.",
+        "target": "ci-manager",
+        "kind": "data"
+      },
+      {
+        "status": "declared",
+        "statement": "Initial certificate generation and fingerprint extraction use the installed OpenSSL command.",
+        "target": "openssl",
+        "kind": "external"
+      }
     ]
   },
   "manual": "manuals/queue-operate.md"

@@ -4,12 +4,11 @@ use std::{
     fs::{self, File, OpenOptions},
     io::Write,
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
 };
 
 use anyhow::{Context, Result, bail, ensure};
 use fs2::FileExt;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Paths {
@@ -17,82 +16,14 @@ pub(crate) struct Paths {
     pub(crate) workspace: PathBuf,
 }
 
-#[derive(Deserialize)]
-struct Workspace {
-    schema_version: u32,
-    volume: PathBuf,
-    volume_uuid: String,
-    directory: String,
-}
-
 pub(crate) fn default_root() -> Result<PathBuf> {
-    Ok(workspace()?.join("telete"))
-}
-
-fn workspace() -> Result<PathBuf> {
-    let home = std::env::var_os("HOME").context("HOME is unavailable")?;
-    let config_path = PathBuf::from(home).join("Library/Application Support/Cell/workspace.json");
-    ensure!(
-        !fs::symlink_metadata(&config_path)?.file_type().is_symlink(),
-        "symbolic workspace configuration"
-    );
-    let config: Workspace = serde_json::from_slice(&fs::read(&config_path)?)?;
-    ensure!(
-        config.schema_version == 1 && config.directory == "cell",
-        "unsupported workspace selection"
-    );
-    ensure!(
-        config.volume.is_absolute()
-            && !fs::symlink_metadata(&config.volume)?
-                .file_type()
-                .is_symlink(),
-        "work volume is missing or symbolic"
-    );
-    let plist = Command::new("/usr/sbin/diskutil")
-        .args(["info", "-plist"])
-        .arg(&config.volume)
-        .output()
-        .context("external APFS workspace requires macOS diskutil")?;
-    ensure!(
-        plist.status.success(),
-        "cannot inspect selected external volume"
-    );
-    let mut converter = Command::new("/usr/bin/plutil")
-        .args(["-convert", "json", "-o", "-", "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
-    converter
-        .stdin
-        .take()
-        .context("plutil stdin missing")?
-        .write_all(&plist.stdout)?;
-    let json = converter.wait_with_output()?;
-    ensure!(json.status.success(), "invalid volume observation");
-    let info: serde_json::Value = serde_json::from_slice(&json.stdout)?;
-    ensure!(
-        info["MountPoint"].as_str() == config.volume.to_str()
-            && info["Internal"] == false
-            && info["FilesystemType"] == "apfs"
-            && info["WritableVolume"] == true
-            && info["GlobalPermissionsEnabled"] == true
-            && info["VolumeUUID"].as_str() == Some(config.volume_uuid.as_str()),
-        "external volume identity, APFS or ownership mismatch"
-    );
-    let base = config.volume.join("cell");
-    ensure!(
-        base.is_dir()
-            && !fs::symlink_metadata(&base)?.file_type().is_symlink()
-            && fs::metadata(&base)?.dev() == fs::metadata(&config.volume)?.dev(),
-        "external workspace is missing or replaced"
-    );
-    Ok(base)
+    Ok(crate::workspace::root()?.join("telete"))
 }
 
 impl Paths {
     pub(crate) fn new(root: impl Into<PathBuf>) -> Result<Self> {
         let root = root.into();
-        let workspace = workspace()?;
+        let workspace = crate::workspace::root()?;
         ensure!(
             root.is_absolute() && root.starts_with(&workspace) && root != workspace,
             "Telete state must be inside the selected external workspace"
@@ -147,7 +78,7 @@ impl Paths {
     pub(crate) fn require_capacity(&self) -> Result<()> {
         #[cfg(not(test))]
         ensure!(
-            workspace()? == self.workspace,
+            crate::workspace::root()? == self.workspace,
             "external workspace selection changed"
         );
         ensure!(
@@ -209,9 +140,10 @@ pub(crate) fn ensure_private(path: &Path) -> Result<()> {
         fs::set_permissions(path, fs::Permissions::from_mode(0o700))?;
     }
     let metadata = fs::metadata(path)?;
-    let owner = fs::metadata(std::env::var_os("HOME").context("HOME unavailable")?)?.uid();
     ensure!(
-        metadata.is_dir() && metadata.uid() == owner && metadata.mode() & 0o777 == 0o700,
+        metadata.is_dir()
+            && metadata.uid() == crate::host_setup::uid()
+            && metadata.mode() & 0o777 == 0o700,
         "private directory must be user-owned mode 0700: {}",
         path.display()
     );
@@ -253,8 +185,10 @@ pub(crate) fn lock(path: &Path, blocking: bool) -> Result<FileLock> {
         .custom_flags(libc::O_NOFOLLOW)
         .open(path)?;
     ensure!(
-        file.metadata()?.is_file() && file.metadata()?.mode() & 0o777 == 0o600,
-        "lock must be a private regular file"
+        file.metadata()?.is_file()
+            && file.metadata()?.uid() == crate::host_setup::uid()
+            && file.metadata()?.mode() & 0o777 == 0o600,
+        "lock must be a private user-owned regular file"
     );
     if blocking {
         file.lock_exclusive()?;
@@ -271,6 +205,7 @@ pub(crate) fn lock(path: &Path, blocking: bool) -> Result<FileLock> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use std::process::Command;
 
     #[test]
     fn child_retains_lock_after_parent_descriptor_closes() {
