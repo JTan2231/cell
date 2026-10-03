@@ -90,7 +90,7 @@ pub fn local_dependencies(root: &Path) -> Result<Value> {
     }
     let annals = crate::source::annals_executable()?;
     for (name, path) in [
-        ("cast", &settings.cast_executable),
+        ("milieu", &settings.milieu_executable),
         ("annals", &annals),
         ("email", &settings.email_executable),
         ("weaver", &settings.weaver_executable),

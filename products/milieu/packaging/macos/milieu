@@ -1,0 +1,16 @@
+#!/bin/zsh
+
+milieu_environment=(
+    "HOME=${HOME:?}"
+    "PATH=/usr/bin:/bin:/usr/sbin:/sbin"
+    "CODEX_THREAD_ID=${CODEX_THREAD_ID-}"
+    "CHANCERY_USAGE_DB=${CHANCERY_USAGE_DB-}"
+    "CHANCERY_USAGE_DISABLED=${CHANCERY_USAGE_DISABLED-}"
+    "CHANCERY_USAGE_INTERNAL=${CHANCERY_USAGE_INTERNAL-}"
+)
+if [[ -n "${MILIEU_STATE_DIR-}" ]]; then
+    milieu_environment+=("MILIEU_STATE_DIR=$MILIEU_STATE_DIR")
+fi
+
+exec /usr/bin/env -i "${milieu_environment[@]}" \
+    "$HOME/Library/Application Support/Milieu/install/current/libexec/milieu" "$@"

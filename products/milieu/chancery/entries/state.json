@@ -1,0 +1,206 @@
+{
+  "id": "milieu.state",
+  "contract_version": 3,
+  "kind": "capability",
+  "mode": "operate",
+  "support": "supported",
+  "title": "Manage Milieu state and accepted current records",
+  "summary": "Select or initialize private schema-two state, diagnose local readiness, inspect record counts, add source metadata, and understand accepted current records and recovery limits.",
+  "use_when": [
+    "Selected Milieu state, source enrollment, local status, readiness or accepted current records must be understood or changed through supported interfaces.",
+    "The caller needs storage compatibility and state recovery limits."
+  ],
+  "do_not_use_when": [
+    "Collection, exact public job-URL retrieval or data migration is required.",
+    "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream job selection."
+  ],
+  "outcome": "Selected initialized schema-two private state, a local readiness or record-count result, or an accepted source enrollment.",
+  "interfaces": [
+    {
+      "label": "Initialize state",
+      "invocation": "/Users/joey/.local/bin/milieu init"
+    },
+    {
+      "label": "Inspect local readiness",
+      "invocation": "/Users/joey/.local/bin/milieu doctor"
+    },
+    {
+      "label": "Inspect local record counts",
+      "invocation": "/Users/joey/.local/bin/milieu status --json"
+    },
+    {
+      "label": "Read operational status",
+      "invocation": "/Users/joey/.local/bin/milieu status-snapshot --json"
+    },
+    {
+      "label": "Add a careers source",
+      "invocation": "/Users/joey/.local/bin/milieu source add URL [--company-id COMPANY_ID]"
+    }
+  ],
+  "effects": [
+    "Initialization creates missing schema-two accepted current state. Existing schema-two records remain. Schema-one and unknown database schemas are rejected without conversion.",
+    "Source enrollment retains metadata without fetching external records or establishing employer or source-operator ownership.",
+    "Doctor and status inspect selected local state. Milieu reads no collector configuration or provider keys."
+  ],
+  "authority": [
+    "Milieu owns state schema, accepted records, source enrollment, and local readiness.",
+    "Callers resolve duplicate and conflicting record facts before accepting them; consumers own personal selection and downstream actions."
+  ],
+  "success": [
+    "The selected state operation completes and supported reads confirm its intended local result."
+  ],
+  "failure_and_recovery": [
+    "Stop callers before state maintenance or recovery. Program recovery preserves the database.",
+    "Schema-one state fails explicitly. This release has no migration command, destructive reset or direct SQLite repair surface.",
+    "Select a program that accepts the retained database schema; program recovery does not check or restore data.",
+    "Older releases requiring stored collector configuration can fail status or diagnosis on newly initialized Milieu 0.6.0 state even if they read schema-two exports. Recovery does not recreate configuration."
+  ],
+  "privacy": [
+    "Private state, exports and diagnostics can contain locators, posting text, supplied evidence and dates.",
+    "Milieu reads no provider credentials and sends no records to remote sources."
+  ],
+  "does_not_authorize": [
+    "A provider purchase, credential replacement, state deletion, scheduled activation, model job or downstream application workflow."
+  ],
+  "dependencies": [
+    {
+      "id": "milieu.discovery.explore",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    }
+  ],
+  "promise": {
+    "consumers": [
+      {
+        "status": "declared",
+        "statement": "The current user may select and initialize private Milieu state, diagnose local readiness, inspect record counts, add source metadata and understand accepted-record storage."
+      }
+    ],
+    "preconditions": [
+      {
+        "status": "declared",
+        "statement": "Select the intended private state directory. Except explicit initialization, ordinary operations require initialized database schema 2 and valid inputs. Stop callers before state maintenance or recovery. The operational status-snapshot protocol does not open Milieu state."
+      }
+    ],
+    "inputs": [
+      {
+        "status": "declared",
+        "statement": "State defaults to ~/.local/share/milieu. --state-dir PATH or MILIEU_STATE_DIR selects another directory; the CLI flag selects independently of environment."
+      },
+      {
+        "status": "declared",
+        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS URLs reject that override and use canonical provider/tenant compatibility associations. That association establishes neither the optional source operator nor a job employer."
+      }
+    ],
+    "outputs": [
+      {
+        "status": "declared",
+        "statement": "Init prints selected state and returns its existing JSON receipt with --json. Doctor JSON schema 2 returns database:ready, database_schema:2 and state_dir. Ordinary status JSON schema 3 returns snapshot_revision and companies, jobs and sources counts. Global --json selects machine output before or after the command. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2."
+      },
+      {
+        "status": "declared",
+        "statement": "status-snapshot --json retains operational schema 1 and the milieu/discovery unit. It reports installed command availability without opening state or checking database integrity. It is separate from ordinary status output."
+      }
+    ],
+    "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "milieu::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both joins use composite primary keys with one URL per job/source pair. The core holds one accepted current record per job, with duplicates and conflicts resolved before writing. It has no history or collection mechanics."
+      },
+      {
+        "status": "declared",
+        "statement": "meta retains snapshot revision and company aliases. Compatibility columns in company/job/source retain supplied export fields, including timestamps, evidence, compensation, entity revisions and source metadata. There are no revision-history, observation, request-ledger or run tables. Accepted writes replace a job and its complete workplace/source links atomically. Company/job first_seen_at and last_seen_at must be valid ordered RFC 3339 values; they normalize to UTC with nine fractional-second digits. Updates preserve first_seen_at and do not move last_seen_at backwards. Existing location IDs preserve their names. There is no CLI job ingestion interface."
+      },
+      {
+        "status": "declared",
+        "statement": "Exported source enabled, status, timestamps, cursor and note remain compatibility metadata. No collector acts on them. Source enrollment makes no remote request."
+      },
+      {
+        "status": "declared",
+        "statement": "Collector query/budget/interval/adapter configuration, defaults, validation and provider-key diagnostics are removed. Milieu does not use retained collector configuration. The commands config show, config set, state reconcile-ownership, source disable and unresolved list are retired. Milieu does not infer or repair accepted employers or source operators."
+      }
+    ],
+    "identity_and_units": [
+      {
+        "status": "declared",
+        "statement": "The selected directory identifies an independent database named milieu.sqlite3. Current counts use retained company, job and source records. Stable IDs and current revisions remain under the read contract."
+      },
+      {
+        "status": "not_applicable",
+        "statement": "Local state operations define no provider budget, billing, or request-usage unit."
+      }
+    ],
+    "completeness_and_freshness": [
+      {
+        "status": "declared",
+        "statement": "Doctor and status describe selected local state at invocation. Doctor checks usable local database schema 2. Status counts retained records, not all external postings. Neither reads provider keys or collector configuration."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Local readiness and installation do not establish current source availability or successful collection."
+      }
+    ],
+    "access": [
+      {
+        "status": "declared",
+        "statement": "The current-user CLI is the local administration boundary. State directory mode is 0700 and milieu.sqlite3 mode is 0600."
+      },
+      {
+        "status": "unsupported",
+        "statement": "Direct SQLite reads and writes are not supported integration or repair surfaces."
+      }
+    ],
+    "lifecycle_and_consistency": [
+      {
+        "status": "declared",
+        "statement": "Initialization creates database schema 2 when missing and preserves supported existing state. Opening, initialization and deployment reject schema-one state without migrating or changing its records. Only one writer uses a selected directory through a kernel-backed mutation lock."
+      },
+      {
+        "status": "declared",
+        "statement": "Ordinary website source add without a company ID creates or reuses a hostname candidate. ATS enrollment uses canonical provider/tenant identity. Enrollment does not retrieve remote records."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema-one-only programs cannot open schema-two state, and this release cannot open schema-one state. Program selection and data recovery are separate operations."
+      }
+    ],
+    "operational_limits": [
+      {
+        "status": "declared",
+        "statement": "Milieu performs no collection and uses no provider credentials, configuration, budgets or request ledger."
+      },
+      {
+        "status": "unsupported",
+        "statement": "No automatic database migration, pruning, destructive reset or state uninstaller is provided."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future migration, retention horizon, state-size bound or deprecation window is promised."
+      }
+    ],
+    "compatibility_and_evolution": [
+      {
+        "status": "declared",
+        "statement": "State contract 3 retires schema-one runtime support and local collector controls. Ordinary status moves to response schema 3 and doctor to schema 2. Operational status-snapshot schema 1 and export/native Snapshot contract 3 remain. Database, export, contract and release versions are distinct. Program recovery restores no data."
+      },
+      {
+        "status": "declared",
+        "statement": "New state has no collector configuration. Existing metadata can retain old configuration values inertly; Milieu does not read or replace them. Older releases requiring those values can fail status or diagnosis on new state even if they support schema-two exports. Program recovery recreates no configuration."
+      },
+      {
+        "status": "unspecified",
+        "statement": "No future database migration or deprecation window is promised."
+      }
+    ],
+    "reliances": [
+      {
+        "status": "declared",
+        "statement": "Supported reads establish current identities, revisions, primary posting identity, and supplied evidence.",
+        "target": "milieu",
+        "kind": "data",
+        "contract": "milieu.discovery.explore"
+      }
+    ]
+  },
+  "manual": "manuals/state.md"
+}

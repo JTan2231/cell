@@ -25,6 +25,6 @@ pub fn gate(root: &Path) -> cell_maintenance::Gate {
     cell_maintenance::Gate::new(root.join("deployment-maintenance"))
 }
 
-pub fn cast_jobs() -> Result<Vec<jobs::Job>> {
-    jobs::read(&home()?.join(".local/bin/cast"))
+pub fn milieu_jobs() -> Result<Vec<jobs::Job>> {
+    jobs::read(&home()?.join(".local/bin/milieu"))
 }

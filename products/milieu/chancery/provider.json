@@ -1,0 +1,48 @@
+{
+  "schema_version": 4,
+  "provider": {
+    "id": "milieu",
+    "name": "Milieu",
+    "release": "0.6.0"
+  },
+  "promise_scope": {
+    "authoritative_for": [
+      "Milieu owns accepted company and job identities, workplaces and source appearances, current compatibility fields, source metadata, schema-two local state and diagnostics, consistent JSON exports, and program packaging."
+    ],
+    "not_authoritative_for": [
+      "Downstream products own personal selection, CRM cases, application packets, application submission and email delivery."
+    ],
+    "inventory": {
+      "covers": [
+        "All supported public Milieu CLI outcomes for record inspection and export, state initialization and local diagnostics, source enrollment, and program installation in this release. milieu.state owns supported storage, status and retired local controls."
+      ],
+      "completeness": "complete",
+      "excludes": [
+        "Help/version display, direct SQLite access, implementation helpers, collection and exact job-URL retrieval, remote-provider readiness, scheduled activation, agents, computer use and downstream application work."
+      ]
+    },
+    "shared_access_and_trust": [
+      "Milieu is a local current-user CLI with private selected state. Its installed frontend preserves documented state and command-usage environment values without sourcing shell configuration or extracting provider keys."
+    ],
+    "shared_privacy_and_retention": [
+      "Private state and exports include company/job evidence and dates, accepted posting text, source locators, and supplied compatibility metadata. Milieu reads no provider credentials and fetches no remote records.",
+      "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
+    ],
+    "compatibility_and_retirement": [
+      "Milieu release, feature contract versions, installation format, database schema and export schemas are distinct. Record-read contract 3, export schema 1, public Rust Snapshot and operational status-snapshot schema 1 remain. Matching installed documentation changes with the product release.",
+      "State contract 3 supports database schema 2 only and retires schema-one readers, collector configuration, provider-key diagnostics, ownership reconciliation, source disable and unresolved list. Ordinary status uses response schema 3 and doctor schema 2. Unsupported state fails explicitly without migration.",
+      "Installation contract 4 removes ~/.zshrc execution, provider-key extraction and deployment config_file. Program recovery leaves data unchanged and does not establish program/state compatibility.",
+      "Current source compatibility metadata, stable company/job/source identities, primary posting tuple, optional apply_url, supplied timestamps, revisions, evidence, compensation and availability remain in the consumer export. Schema-one-only programs cannot open schema-two state."
+    ],
+    "operational_limits": [
+      "Milieu performs no collection or runtime HTTP requests. It invokes no model, Nucleus, CRM steward, computer-use tool or email sender and installs no schedule."
+    ]
+  },
+  "entries": [
+    "entries/discovery-explore.json",
+    "entries/state.json",
+    "entries/installation.json",
+    "entries/install-operate.json"
+  ],
+  "overview": "overview.md"
+}

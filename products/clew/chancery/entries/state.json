@@ -1,6 +1,6 @@
 {
   "id": "clew.state",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -15,15 +15,15 @@
   ],
   "outcome": "An interpreted Clew state or installation observation and its supported lifecycle and recovery boundaries.",
   "effects": [
-    "Init creates empty ledger schema three or checks existing compatible state. Installer inspection reads release metadata; ordinary doctor checks local integrity without reports.",
-    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one or schema-two ledger state to schema three while preserving schedule intent."
+    "Init creates empty ledger schema four or checks existing compatible state. Installer inspection reads release metadata; ordinary doctor checks local integrity without reports.",
+    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one, schema-two, or schema-three ledger state to schema four while preserving schedule intent."
   ],
   "authority": [
     "Clew owns its installation, ledger schema, migration and email admission maintenance. The current user owns access and authorization; the coordinator owns shared deployment ordering.",
     "Platter owns exact legacy opportunity mappings. Clockwork owns schedule selection and failure halts."
   ],
   "success": [
-    "Doctor establishes local schema-three ledger integrity at invocation. Installation performs setup without artifact-integrity, ledger-integrity, or Cast readiness checks."
+    "Doctor establishes local schema-four ledger integrity at invocation. Installation performs setup without artifact-integrity, ledger-integrity, or Milieu readiness checks."
   ],
   "failure_and_recovery": [
     "Foreign selectors, stale expected selections, incompatible state, unsafe migration mappings and existing admission holds stop the operation. Completed deployment effects remain without automatic retry, rollback or product recovery. Preserve evidence and inspect current product state before an authorized new attempt.",
@@ -52,18 +52,18 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     },
     {
       "id": "platter.opportunity.explore",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "clockwork.schedule.operate",
@@ -93,7 +93,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration retains aliases and retry requests without a data copy."
+        "statement": "Commands print readable text by default. --json selects the existing schema-four machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Doctor returns local schema, integrity, and retained entry count. Installer inspection reads selected release metadata. Older-ledger migration retains aliases and retry requests without a data copy."
       }
     ],
     "data_semantics": [
@@ -105,13 +105,13 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque UUIDs identify immutable cell-install-v3 releases. Package version, feature contract version, ledger schema three and email schema one are independent identities. Maintenance owners are deployment run IDs."
+        "statement": "Opaque UUIDs identify immutable cell-install-v3 releases. Package version, feature contract version, ledger schema four and email schema one are independent identities. Maintenance owners are deployment run IDs."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Doctor checks local ledger integrity at invocation without probing Cast. Installation invokes neither doctor nor Cast snapshot reads. Migration covers every legacy ledger reference; observations establish no future availability."
+        "statement": "Doctor checks local ledger integrity at invocation without probing Milieu. Installation invokes neither doctor nor Milieu snapshot reads. Migration covers every legacy ledger reference; observations establish no future availability."
       }
     ],
     "access": [
@@ -123,13 +123,13 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Individual file-selector replacements are atomic; failed deployment retains completed changes. The product command initializes or migrates state and selects its daily definition directly under ordinary admission while preserving saved or explicit enabled intent and failure halts. Older-ledger migration excludes writers and commits schema three, application associations, aliases and exact write requests in one transaction. Old writers are rejected afterward. Explicit email maintenance retains its separate owner and admission rules."
+        "statement": "Individual file-selector replacements are atomic; failed deployment retains completed changes. The product command initializes or migrates state and selects its daily definition directly under ordinary admission while preserving saved or explicit enabled intent and failure halts. Older-ledger migration excludes writers and commits schema four, application associations, aliases and exact write requests in one transaction. Old writers are rejected afterward. Explicit email maintenance retains its separate owner and admission rules."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "State has no data backup, restore, automatic pruning or deletion operation. Compatible schema-three reads and short writes can finish during email maintenance and program selection."
+        "statement": "State has no data backup, restore, automatic pruning or deletion operation. Compatible schema-four reads and short writes can finish during email maintenance and program selection."
       },
       {
         "status": "unspecified",
@@ -143,7 +143,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one or two. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one through three. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
       },
       {
         "status": "unspecified",
@@ -152,19 +152,23 @@
       {
         "status": "declared",
         "statement": "Contract 4 requires --json for the ordinary CLI machine response. The prior JSON success and error shapes and their streams are preserved with that flag. Default readable text does not change persistent state formats or the separate installation and status-snapshot protocols."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema-three conversion renames the owned job column, canonical reference namespace and retry-request field to Milieu atomically. It preserves supplied content, opaque job and entry IDs, order, corrections, and frozen email records. Exact retries use the renamed request form and original write ID. Ordinary programs require schema four."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Application operations use the public Cast snapshot reader; installation does not probe it. Doctor checks only local ledger state.",
-        "target": "cast",
+        "statement": "Application operations use the public Milieu snapshot reader; installation does not probe it. Doctor checks only local ledger state.",
+        "target": "milieu",
         "kind": "readiness",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "A nonempty schema-one migration requires the exact legacy-reference-to-Cast-job mapping from the Platter public opportunity reader. Schema-two conversion and ordinary generic ledger work require no Platter read.",
+        "statement": "A nonempty schema-one migration requires the exact legacy-reference-to-Milieu-job mapping from the Platter public opportunity reader. Schema-two conversion and ordinary generic ledger work require no Platter read.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"

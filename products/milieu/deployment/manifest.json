@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "product": "milieu",
+  "order": 1,
+  "steps": [
+    {
+      "id": "install",
+      "kind": "run",
+      "argv": [
+        "{candidate_dir}/bin/milieu-install",
+        "deploy"
+      ],
+      "stdin": "deployment_request"
+    }
+  ]
+}

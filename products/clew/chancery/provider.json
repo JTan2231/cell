@@ -3,7 +3,7 @@
   "provider": {
     "id": "clew",
     "name": "Clew",
-    "release": "0.2.0"
+    "release": "0.2.1"
   },
   "promise_scope": {
     "authoritative_for": [
@@ -11,13 +11,13 @@
       "Clew owns deterministic application email selection, frozen message occurrences, submission recovery, email admission maintenance and its product schedule definition."
     ],
     "not_authoritative_for": [
-      "The caller supplies statements and status; the conversational agent interprets questions. External systems own the meaning and existence of their opaque identifiers. Cast owns job identities and details; Platter owns prepared material and supplies legacy migration mappings.",
+      "The caller supplies statements and status; the conversational agent interprets questions. External systems own the meaning and existence of their opaque identifiers. Milieu owns job identities and details; Platter owns prepared material and supplies legacy migration mappings.",
       "Clockwork owns activation and failure halts. Email and Resend own submission acceptance; Gmail owns final inbox delivery."
     ],
     "inventory": {
       "completeness": "complete",
       "covers": [
-        "All public Clew outcomes for initialization, local integrity checking, generic notes and status, named-thread appends and reads, optional external links, local search, exact entry reads, corrections, explicit application reports, complete retained-job search, and installation, including guarded conversion from supported ledger schemas one and two.",
+        "All public Clew outcomes for initialization, local integrity checking, generic notes and status, named-thread appends and reads, optional external links, local search, exact entry reads, corrections, explicit application reports, complete retained-job search, and installation, including guarded conversion from supported ledger schemas one through three.",
         "Daily application email previews, explicit sends and retries, retained occurrences, schedule definition generation and coordinated schedule lifecycle."
       ],
       "excludes": [
@@ -33,7 +33,7 @@
       "Frozen mail is retained privately without automatic pruning. Authorized sends disclose complete selected notes, statuses, job details and links through Email."
     ],
     "compatibility_and_retirement": [
-      "Ledger and CLI JSON schemas are three. Coordinated deployment alone converts supported schema-one and schema-two state transactionally with exact retry requests and legacy aliases. Existing jobs become explicit application-report associations; no thread is invented. Ordinary commands refuse older or unsupported state; old programs must not use a migrated ledger.",
+      "Ledger and CLI JSON schemas are four. Coordinated deployment alone converts supported schema-one, schema-two, and schema-three state transactionally with exact retry requests and legacy aliases. Existing jobs become explicit application-report associations; no thread is invented. Ordinary commands refuse older or unsupported state; old programs must not use a migrated ledger.",
       "Email storage remains schema one. Frozen messages, send keys and acceptance receipts survive ledger migration. Preserve delivery state and use matching program and ledger versions for recovery."
     ],
     "operational_limits": [

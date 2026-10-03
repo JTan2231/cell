@@ -42,7 +42,7 @@ pub fn list(root: &Path, query: Option<&str>) -> Result<OpportunityList> {
         }
         let item = Opportunity {
             reference: job.opportunity,
-            cast_job_id: job.cast_job_id,
+            milieu_job_id: job.milieu_job_id,
             company: job.company,
             title: job.title,
             urls,
@@ -54,7 +54,7 @@ pub fn list(root: &Path, query: Option<&str>) -> Result<OpportunityList> {
     }
     tx.commit()?;
     Ok(OpportunityList {
-        schema_version: 1,
+        schema_version: 2,
         items,
     })
 }
@@ -72,7 +72,7 @@ pub fn matches(item: &Opportunity, query: &str) -> bool {
     let query = query.to_lowercase();
     [
         &item.reference,
-        &item.cast_job_id,
+        &item.milieu_job_id,
         &item.company,
         &item.title,
     ]

@@ -23,7 +23,7 @@ members = [
     "infrastructure/usher/crates/usher",
     "infrastructure/iatreion/crates/iatreion-api",
     "infrastructure/iatreion/crates/iatreion",
-    "products/cast",
+    "products/milieu",
     "products/platter",
     "products/clew",
     "infrastructure/bazaar",

@@ -25,7 +25,7 @@ struct Cli {
 enum Command {
     /// Initialize an empty private ledger, or check the existing schema.
     Init,
-    /// Check local ledger integrity without reading Cast or creating entries.
+    /// Check local ledger integrity without reading Milieu or creating entries.
     Doctor,
     /// Find candidates by retained URL, company, title, reference or Clew notes.
     Find { query: String },
@@ -38,11 +38,11 @@ enum Command {
     /// Append a status and/or note, optionally in a named thread.
     Record {
         /// A retained legacy Platter reference, for old reports and exact retries.
-        #[arg(conflicts_with = "cast_job")]
+        #[arg(conflicts_with = "milieu_job")]
         reference: Option<String>,
-        /// The exact Cast job ID to track.
+        /// The exact Milieu job ID to track.
         #[arg(long)]
-        cast_job: Option<String>,
+        milieu_job: Option<String>,
         /// Find or create this named ledger thread.
         #[arg(long)]
         thread: Option<String>,
@@ -67,9 +67,9 @@ enum Command {
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List the latest supplied status for each currently tracked Cast job.
+    /// List the latest supplied status for each currently tracked Milieu job.
     List,
-    /// Read history by Cast job ID or a retained legacy Platter reference.
+    /// Read history by Milieu job ID or a retained legacy Platter reference.
     Show { reference: String },
     /// Preview or explicitly send the daily application snapshot.
     #[command(subcommand)]
@@ -123,7 +123,7 @@ fn main() {
     let command = cli.command.clone();
     match execute(cli) {
         Ok(data) if json_output => {
-            println!("{}", json!({"ok":true,"schema_version":3,"data":data}));
+            println!("{}", json!({"ok":true,"schema_version":4,"data":data}));
         }
         Ok(data) => print!("{}", output::render(&command, &data)),
         Err(error) => {
@@ -146,12 +146,12 @@ fn execute(cli: Cli) -> Result<serde_json::Value> {
     let data = match cli.command {
         Command::Init => {
             Store::initialize(&root)?;
-            json!({"initialized":true,"schema_version":3})
+            json!({"initialized":true,"schema_version":clew::store::SCHEMA_VERSION})
         }
         Command::Doctor => {
             let store = Store::open(&root, false)?;
             store.check()?;
-            json!({"schema_version":3,"entries":store.entries()?.len()})
+            json!({"schema_version":clew::store::SCHEMA_VERSION,"entries":store.entries()?.len()})
         }
         Command::Find { query } => find(&root, &query)?,
         Command::Search { query } => {
@@ -167,7 +167,7 @@ fn execute(cli: Cli) -> Result<serde_json::Value> {
         )?,
         Command::Record {
             reference,
-            cast_job,
+            milieu_job,
             thread,
             references,
             id,
@@ -178,7 +178,7 @@ fn execute(cli: Cli) -> Result<serde_json::Value> {
             let record = Record {
                 id,
                 platter_job_ref: reference,
-                cast_job_id: cast_job,
+                milieu_job_id: milieu_job,
                 status,
                 notes,
                 replaces,
@@ -210,7 +210,7 @@ fn execute(cli: Cli) -> Result<serde_json::Value> {
             let store = Store::open(&root, false)?;
             ensure!(store.knows(&reference)?, "job has no Clew history");
             let job_id = store.canonical_reference(&reference)?;
-            json!({"cast_job_id":job_id,"current":store.current()?.into_iter().find(|item| item.cast_job_id == job_id),"history":store.history(&reference)?})
+            json!({"milieu_job_id":job_id,"current":store.current()?.into_iter().find(|item| item.milieu_job_id == job_id),"history":store.history(&reference)?})
         }
         Command::Email(EmailCommand::Preview { occurrence }) => {
             clew::digest::preview(&root, occurrence.as_deref())?
@@ -228,19 +228,19 @@ fn append_record(root: &std::path::Path, record: &Record) -> Result<clew::store:
     if let Some(entry) = store.existing_record(record)? {
         return Ok(entry);
     }
-    if let Some(job_id) = &record.cast_job_id {
+    if let Some(job_id) = &record.milieu_job_id {
         if !store.knows_job(job_id)? {
             ensure!(
-                clew::cast_jobs()?
+                clew::milieu_jobs()?
                     .iter()
-                    .any(|job| job.cast_job_id == *job_id),
-                "Cast job is not retained"
+                    .any(|job| job.milieu_job_id == *job_id),
+                "Milieu job is not retained"
             );
         }
     } else if let Some(reference) = &record.platter_job_ref {
         ensure!(
             store.knows(reference)?,
-            "legacy reference has no Clew history; use --cast-job with a retained Cast job"
+            "legacy reference has no Clew history; use --milieu-job with a retained Milieu job"
         );
     }
     store.record(record)
@@ -253,14 +253,14 @@ fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
     let tracked: BTreeSet<_> = store
         .current()?
         .into_iter()
-        .map(|item| item.cast_job_id)
+        .map(|item| item.milieu_job_id)
         .collect();
     let text = query.to_lowercase();
     let mut references: BTreeSet<_> = entries
         .iter()
         .filter(|entry| {
             entry.references.iter().any(|reference| {
-                reference.namespace == "cast.job"
+                reference.namespace == "milieu.job"
                     && reference.external_id.to_lowercase().contains(&text)
             }) || entry
                 .thread
@@ -275,7 +275,7 @@ fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
             entry
                 .references
                 .iter()
-                .filter(|reference| reference.namespace == "cast.job")
+                .filter(|reference| reference.namespace == "milieu.job")
                 .map(|reference| reference.external_id.clone())
         })
         .collect();
@@ -286,21 +286,25 @@ fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
             .filter(|(alias, _)| alias.to_lowercase().contains(&text))
             .map(|(_, job_id)| job_id),
     );
-    let jobs = clew::cast_jobs()
+    let jobs = clew::milieu_jobs()
         .context("cannot complete candidate search; Clew list/show remain available")?;
     let mut candidates: Vec<_> = jobs
         .into_iter()
-        .filter(|item| references.contains(&item.cast_job_id) || item.matches(query))
+        .filter(|item| references.contains(&item.milieu_job_id) || item.matches(query))
         .collect();
-    candidates.sort_by(|a, b| a.cast_job_id.cmp(&b.cast_job_id));
+    candidates.sort_by(|a, b| a.milieu_job_id.cmp(&b.milieu_job_id));
     let unmatched: Vec<_> = references
         .into_iter()
-        .filter(|reference| !candidates.iter().any(|item| item.cast_job_id == *reference))
+        .filter(|reference| {
+            !candidates
+                .iter()
+                .any(|item| item.milieu_job_id == *reference)
+        })
         .collect();
     let candidates: Vec<_> = candidates.into_iter().map(|item| {
-        json!({"cast_job_id":item.cast_job_id,"company":item.company,"title":item.title,"urls":item.urls,"tracked":tracked.contains(&item.cast_job_id)})
+        json!({"milieu_job_id":item.milieu_job_id,"company":item.company,"title":item.title,"urls":item.urls,"tracked":tracked.contains(&item.milieu_job_id)})
     }).collect();
     Ok(
-        json!({"candidates":candidates,"retained_references_without_cast_record":unmatched,"complete":true}),
+        json!({"candidates":candidates,"retained_references_without_milieu_record":unmatched,"complete":true}),
     )
 }

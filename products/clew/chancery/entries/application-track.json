@@ -1,11 +1,11 @@
 {
   "id": "clew.application.track",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
   "title": "Record application status and notes",
-  "summary": "Find a job retained by Cast and append the user’s reported status or notes without requiring a prepared packet. Read current status and immutable history, or append a correction.",
+  "summary": "Find a job retained by Milieu and append the user’s reported status or notes without requiring a prepared packet. Read current status and immutable history, or append a correction.",
   "manual": "manuals/application-track.md",
   "interfaces": [
     {
@@ -14,7 +14,7 @@
     },
     {
       "label": "Record a report",
-      "invocation": "clew record --cast-job JOB_ID --id WRITE_ID --status STATUS --notes TEXT"
+      "invocation": "clew record --milieu-job JOB_ID --id WRITE_ID --status STATUS --notes TEXT"
     },
     {
       "label": "List current reports",
@@ -26,7 +26,7 @@
     },
     {
       "label": "Correct a report",
-      "invocation": "clew record --cast-job JOB_ID --id WRITE_ID --replaces ENTRY_ID --status STATUS --notes TEXT"
+      "invocation": "clew record --milieu-job JOB_ID --id WRITE_ID --replaces ENTRY_ID --status STATUS --notes TEXT"
     },
     {
       "label": "Retract a report",
@@ -43,37 +43,37 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Clew schema-three state is initialized. A first explicit application report for a Cast job requires the installed Cast snapshot reader. Existing exact jobs and retries remain writable while Cast is unavailable."
+        "statement": "Clew schema-four state is initialized. A first explicit application report for a Milieu job requires the installed Milieu snapshot reader. Existing exact jobs and retries remain writable while Milieu is unavailable."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "An application report supplies --cast-job JOB_ID or a retained positional legacy Platter alias, a caller-supplied write ID, and at least one nonblank status or notes value. Optional --thread NAME groups it with ledger notes. Repeatable --ref NAMESPACE EXTERNAL_ID attaches plain links. Status is free text. Optional replaces selects one active record. Retract selects an active record and a new write ID."
+        "statement": "An application report supplies --milieu-job JOB_ID or a retained positional legacy Platter alias, a caller-supplied write ID, and at least one nonblank status or notes value. Optional --thread NAME groups it with ledger notes. Repeatable --ref NAMESPACE EXTERNAL_ID attaches plain links. Status is free text. Optional replaces selects one active record. Retract selects an active record and a new write ID."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Schema-three JSON with ok and data returns generic ledger entries, current job records, complete histories, or candidate search results. Entries expose nullable thread and reference associations. The canonical cast.job association with role application_report marks a job report; role link is contextual only. Existing find/list/show remain job-specific views. Human lists and search use summary rows. Entry, thread and application history reads preserve the full selected text."
+        "statement": "Commands print readable text by default. --json selects the existing schema-four machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Schema-four JSON with ok and data returns generic ledger entries, current job records, complete histories, or candidate search results. Entries expose nullable thread and reference associations. The canonical milieu.job association with role application_report marks a job report; role link is contextual only. Existing find/list/show remain job-specific views. Human lists and search use summary rows. Entry, thread and application history reads preserve the full selected text."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Only explicit application reports contribute to current application status, notes, and email. A plain --ref cast.job link does not. Current status is the latest nonnull status among active application reports by sequence. A replacement supplies complete new content and associations while inheriting thread; omitted application associations are not copied. Retractions and replacements preserve original rows and exclude their targets from current reads."
+        "statement": "Only explicit application reports contribute to current application status, notes, and email. A plain --ref milieu.job link does not. Current status is the latest nonnull status among active application reports by sequence. A replacement supplies complete new content and associations while inheriting thread; omitted application associations are not copied. Retractions and replacements preserve original rows and exclude their targets from current reads."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Write IDs bind exact immutable content, original target namespace, thread selection, and reference associations. Migration preserves legacy arguments and aliases; changing an old positional write to --cast-job is conflicting content. Canonical external references use namespace cast.job and the opaque Cast job ID. Sequence orders committed entries. recorded_at is UTC RFC3339 recording time, not the application or reply date."
+        "statement": "Write IDs bind exact immutable content, original target namespace, thread selection, and reference associations. Migration preserves legacy arguments and aliases; changing an old positional write to --milieu-job is conflicting content. Canonical external references use namespace milieu.job and the opaque Milieu job ID. Sequence orders committed entries. recorded_at is UTC RFC3339 recording time, not the application or reply date."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "List covers all active explicit application reports and excludes generic linked notes. Show includes complete selected application history and corrections, including replacements that removed or changed the application association. Find combines one complete retained Cast export with Cast-linked ledger notes and thread names, including superseded notes and legacy aliases. A plain link can supply a search clue without creating application tracking. Product reads are separate snapshots; notes are clues, not identity proof. Failed Cast reads are errors, not complete empty results."
+        "statement": "List covers all active explicit application reports and excludes generic linked notes. Show includes complete selected application history and corrections, including replacements that removed or changed the application association. Find combines one complete retained Milieu export with Milieu-linked ledger notes and thread names, including superseded notes and legacy aliases. A plain link can supply a search clue without creating application tracking. Product reads are separate snapshots; notes are clues, not identity proof. Failed Milieu reads are errors, not complete empty results."
       }
     ],
     "access": [
@@ -97,7 +97,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Clew ledger and CLI output schemas are three. Coordinated deployment migrates schema-one and schema-two state with an exclusive transactional write boundary. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
+        "statement": "Clew ledger and CLI output schemas are four. Coordinated deployment migrates schema-one, schema-two, and schema-three state with an exclusive transactional write boundary. Legacy mappings preserve exact positional retry identities; schema-two conversion requires no external read. Original IDs, sequence, times, supplied content, and corrections remain unchanged. Migration assigns explicit application associations but creates no thread or new report. Ordinary commands refuse unsupported state; history has no automatic pruning."
       },
       {
         "status": "declared",
@@ -107,50 +107,50 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Cast supplies stable job identities, companies, job metadata and URLs through its complete retained snapshot interface. Platter packet preparation is not required.",
-        "target": "cast",
+        "statement": "Milieu supplies stable job identities, companies, job metadata and URLs through its complete retained snapshot interface. Platter packet preparation is not required.",
+        "target": "milieu",
         "kind": "data",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       }
     ]
   },
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     }
   ],
   "use_when": [
-    "The user reports applying, a response, rejection, or another status or note about a job retained by Cast.",
+    "The user reports applying, a response, rejection, or another status or note about a job retained by Milieu.",
     "The user wants application history, current supplied status, or correction of a mistaken entry."
   ],
   "do_not_use_when": [
     "The caller wants automatic status inference, application submission, job discovery, employer contact or scheduled monitoring."
   ],
-  "outcome": "A durable append-only report linked to one exact Cast job, or a complete selected read.",
+  "outcome": "A durable append-only report linked to one exact Milieu job, or a complete selected read.",
   "effects": [
     "Find, list and show read private application records. Record and retract append ledger rows, optionally in a named thread. Only explicit application associations contribute to job tracking. No command sends, applies, collects jobs, or starts a model."
   ],
   "authority": [
-    "The user supplies every status. The agent resolves a target using tools and conversation, and clarifies material ambiguity before writing. Clew owns the ledger; Cast owns job identity and details."
+    "The user supplies every status. The agent resolves a target using tools and conversation, and clarifies material ambiguity before writing. Clew owns the ledger; Milieu owns job identity and details."
   ],
   "success": [
     "A write succeeds only after its row commits and returns its entry ID. An exact retry returns that same entry."
   ],
   "failure_and_recovery": [
     "Retry an uncertain write with the same ID and identical arguments. Conflicting IDs, unavailable new references and invalid corrections fail without appending.",
-    "An unavailable Cast search fails explicitly. Clew list/show, exact retries and updates to already known exact jobs remain available."
+    "An unavailable Milieu search fails explicitly. Clew list/show, exact retries and updates to already known exact jobs remain available."
   ],
   "privacy": [
     "Notes, statuses and references remain in private local state and command output. Do not commit them or send them elsewhere without user authorization."
   ],
   "does_not_authorize": [
-    "Deriving status from employer pages, mail, delivery state or elapsed time; choosing among ambiguous jobs; collecting jobs, editing Cast or Platter, or contacting an employer."
+    "Deriving status from employer pages, mail, delivery state or elapsed time; choosing among ambiguous jobs; collecting jobs, editing Milieu or Platter, or contacting an employer."
   ]
 }

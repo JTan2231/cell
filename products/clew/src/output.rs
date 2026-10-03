@@ -37,7 +37,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
                 let _ = writeln!(
                     output,
                     "{} | Status: {} | Latest entry: {}",
-                    row_text(&application["cast_job_id"]),
+                    row_text(&application["milieu_job_id"]),
                     row_text(&application["status"]),
                     row_text(&application["latest_entry"]["id"])
                 );
@@ -54,7 +54,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
             history(&mut output, &data["history"]);
         }
         Command::Show { .. } => {
-            field(&mut output, "Cast job", &data["cast_job_id"]);
+            field(&mut output, "Milieu job", &data["milieu_job_id"]);
             field(&mut output, "Current status", &data["current"]["status"]);
             field(
                 &mut output,
@@ -104,7 +104,7 @@ fn candidates(output: &mut String, data: &Value) {
         let _ = writeln!(
             output,
             "{} | {} | {} | Tracked: {}",
-            row_text(&candidate["cast_job_id"]),
+            row_text(&candidate["milieu_job_id"]),
             row_text(&candidate["company"]),
             row_text(&candidate["title"]),
             row_text(&candidate["tracked"])
@@ -113,14 +113,14 @@ fn candidates(output: &mut String, data: &Value) {
             let _ = writeln!(output, "  URL: {}", row_text(url));
         }
     }
-    for reference in data["retained_references_without_cast_record"]
+    for reference in data["retained_references_without_milieu_record"]
         .as_array()
         .into_iter()
         .flatten()
     {
         let _ = writeln!(
             output,
-            "Retained reference without Cast record: {}",
+            "Retained reference without Milieu record: {}",
             row_text(reference)
         );
     }

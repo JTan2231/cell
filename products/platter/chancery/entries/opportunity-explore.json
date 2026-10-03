@@ -1,6 +1,6 @@
 {
   "id": "platter.opportunity.explore",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -27,7 +27,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The canonical Platter database exists at supported schema seven; preparation dependencies need not be available."
+        "statement": "The canonical Platter database exists at supported schema eight; preparation dependencies need not be available."
       }
     ],
     "inputs": [
@@ -39,7 +39,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Schema-one JSON contains items with reference, cast_job_id, company, title, retained urls and packets. Each packet has id, created_at, preparation_status and has_resume. has_resume refers to a PDF produced by that run. Daily brief-only runs can be ready with has_resume=false because the shared PDF belongs to the edition."
+        "statement": "Schema-two JSON contains items with reference, milieu_job_id, company, title, retained urls and packets. Each packet has id, created_at, preparation_status and has_resume. has_resume refers to a PDF produced by that run. Daily brief-only runs can be ready with has_resume=false because the shared PDF belongs to the edition."
       }
     ],
     "data_semantics": [
@@ -81,7 +81,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Read contract and JSON output schema are one. Platter persistent schema is seven."
+        "statement": "Read contract and JSON output schema are two. Platter persistent schema is eight."
       }
     ],
     "reliances": [
@@ -105,7 +105,7 @@
     "Platter owns opportunity references and packet facts. The caller owns application status."
   ],
   "success": [
-    "A schema-one response returns all selected retained records. An exact absent reference is an error."
+    "A schema-two response returns all selected retained records. An exact absent reference is an error."
   ],
   "failure_and_recovery": [
     "Missing or incompatible state fails; use the Platter installation contract. An empty search proves only no retained match."

@@ -46,22 +46,22 @@ backup files remain unchanged.
 ## Initialization and observations
 
 `clew init` and `clew doctor` print readable results by default. Use `--json`
-for the schema-three machine response. Human errors go to stderr. JSON errors
+for the schema-four machine response. Human errors go to stderr. JSON errors
 retain `ok: false` and `error.detail` on stdout, with a nonzero exit.
 
-Init creates ledger schema three in an empty database. It can finish initialization
+Init creates ledger schema four in an empty database. It can finish initialization
 when an interruption left an empty database. It preserves compatible existing
 rows and refuses nonempty foreign or unsupported state. Ordinary commands never
 initialize or migrate state implicitly. Init and ordinary commands refuse
 schema-one and schema-two ledgers.
 
 Doctor checks the local schema, SQLite integrity, and correction references. It
-returns the retained entry count without adding entries or probing Cast.
+returns the retained entry count without adding entries or probing Milieu.
 Installation inspection describes selected release metadata. It does not
 check artifact integrity or establish readiness.
 
 Coordinated deployment creates or migrates state and selects program files. It
-does not invoke doctor, check release integrity, or probe the Cast snapshot.
+does not invoke doctor, check release integrity, or probe the Milieu snapshot.
 
 ## Program and provider selection
 
@@ -87,8 +87,8 @@ unresolved installation evidence when recovery fails.
 ## Product deployment and email maintenance
 
 The deployment command captures `clew/daily-email`, selects program files, and
-enters ordinary admission. It initializes empty schema-three state, migrates
-supported schema-one or schema-two state, or opens compatible state. It then
+enters ordinary admission. It initializes empty schema-four state, migrates
+supported schema-one, schema-two, or schema-three state, or opens compatible state. It then
 retargets and selects the owned daily definition directly. Deployment creates no
 hold, drains no send, and temporarily disables no binding.
 
@@ -99,7 +99,7 @@ schedule policy and failure halts remain intact. No deployment step approves an
 incident.
 
 Explicit email maintenance retains its ordinary owner and admission rules.
-Schema-three ledger reads and short writes can continue during that maintenance.
+Schema-four ledger reads and short writes can continue during that maintenance.
 A scheduled send deliberately skipped under maintenance returns success. An
 existing hold can refuse ordinary deployment setup; deployment does not release
 it. Failed instructions retain completed effects without automatic retry,
@@ -112,19 +112,25 @@ runner. Definition generation does not register, activate, or send. The
 
 ## Ledger migration
 
-The product deployment command migrates supported schema-one or schema-two
-ledgers to schema three under ordinary admission. Migration excludes concurrent
+The product deployment command migrates supported schema-one, schema-two, or schema-three
+ledgers to schema four under ordinary admission. Migration excludes concurrent
 ledger writers. It does not create a maintenance hold or drain email.
 
-Schema-two conversion is local. It moves canonical Cast job identity into the
+Schema-two conversion is local. It moves canonical Milieu job identity into the
 external reference model and marks existing job reports as explicit application
 reports. It preserves legacy aliases and exact write namespace. It creates no
-threads and requires no Cast or Platter read.
+threads and requires no Milieu or Platter read.
+
+Schema-three conversion renames the owned job column, reference namespace, and
+write-request field to Milieu in one transaction. Exact retries use the renamed
+request form with the original write ID. Supplied text, opaque job IDs, entry
+order, corrections, and frozen email records stay unchanged. No dependency read
+is required. Older programs refuse schema four.
 
 Schema-one migration also requires Platter's public opportunity reader to map
-every retained legacy reference to its exact Cast job ID. An empty legacy ledger
+every retained legacy reference to its exact Milieu job ID. An empty legacy ledger
 needs no Platter read. Missing mappings or two legacy references that select the
-same Cast job stop migration. Clew does not infer mappings from company, role, or
+same Milieu job stop migration. Clew does not infer mappings from company, role, or
 URL and does not merge histories. Platter owns the mappings; Clew owns their
 application to its ledger.
 
@@ -143,14 +149,14 @@ completion check, or send.
 
 ## Program recovery compatibility
 
-Only schema-three-compatible programs can operate a migrated ledger. Program
+Only schema-four-compatible programs can operate a migrated ledger. Program
 recovery preserves ledger and email state and never restores earlier history.
 Select a program that supports the retained schema. No schema downgrade is
 supplied. Reconcile uncertain writes and provider acceptance before replay.
 
 Older Clew releases do not understand daily email state. Disable the daily
 binding and settle admitted sends before selecting such a release. Compatible
-schema-three commands can finish across program selection. Migration excludes
+schema-four commands can finish across program selection. Migration excludes
 writers and commits atomically. No completion-time or future compatibility
 window is promised.
 

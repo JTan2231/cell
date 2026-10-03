@@ -275,7 +275,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cast"
+name = "milieu"
 version = "0.6.0"
 dependencies = [
  "cell-install",
@@ -451,10 +451,10 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "clew"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
- "cast",
+ "milieu",
  "cell-install",
  "cell-maintenance",
  "chancery-usage",
@@ -1792,12 +1792,12 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "platter"
-version = "0.2.22"
+version = "0.2.23"
 dependencies = [
  "annals",
  "anyhow",
  "base64",
- "cast",
+ "milieu",
  "cell-install",
  "cell-maintenance",
  "cell-prompts",

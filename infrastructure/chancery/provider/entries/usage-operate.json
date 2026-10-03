@@ -20,7 +20,8 @@
   ],
   "authority": [
     "Chancery owns the journal and interpretation. Programs own instrumentation and product success.",
-    "File permissions form the current-user trust boundary; supplied threads do not authenticate callers."
+    "File permissions form the current-user trust boundary; supplied threads do not authenticate callers.",
+    "An explicitly authorized product rename can use supervised Chancery-owned identity maintenance with a prior backup, one write transaction and restored immutability triggers. Registration does not authorize this exception."
   ],
   "success": [
     "Expected registered identities and selected observations are confirmed through supported systems, command, and event reports.",

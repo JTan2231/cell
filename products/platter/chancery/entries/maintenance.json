@@ -1,6 +1,6 @@
 {
   "id": "platter.maintenance",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -61,7 +61,7 @@
   ],
   "failure_and_recovery": [
     "A failed instruction retains completed file, migration, configuration and schedule changes. The executor stops and performs no automatic retry, rollback or product recovery. Interrupted commands have unknown effects. Inspect current product state and complete authorized recovery separately from executor reconciliation and acknowledgement. Preserve separately acquired holds.",
-    "Old binaries cannot operate schema seven. Binary-only rollback cannot undo migration; select a compatible candidate. Interrupted cleanup requires agreeing source hashes. Completion receipts avoid repeating completed migration."
+    "Old binaries cannot operate schema eight. Binary-only rollback cannot undo migration; select a compatible candidate. Interrupted cleanup requires agreeing source hashes. Completion receipts avoid repeating completed migration."
   ],
   "privacy": [
     "Mode-0600 database and private state contain career, resume, packet and send history. Public installation manifests retain file modes, program/provider identity and local paths. Nucleus history and credentials remain separately owned."
@@ -72,18 +72,18 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "platter.preparation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "platter.editions",
-      "min_contract": 3,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "nucleus.execution.operate",
@@ -124,7 +124,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "All durable runtime content/settings/holds live in canonical schema-seven packets.sqlite3. Disposable Ashby cache and renderer files stay outside the database. Nucleus credentials/evidence remain separately owned."
+        "statement": "All durable runtime content/settings/holds live in canonical schema-eight packets.sqlite3. Disposable Ashby cache and renderer files stay outside the database. Nucleus credentials/evidence remain separately owned."
       },
       {
         "status": "declared",
@@ -160,7 +160,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-one import commits transactionally before hashed cleanup; schemas two through six preserve legacy workflows and ordered selections while advancing to seven. Interrupted cleanup retains originals and exact source hashes. Completion receipts avoid repeating completed migration, including legacy schema-one receipts without reading their former data-copy fields."
+        "statement": "Schema-one import commits transactionally before hashed cleanup; schemas two through six preserve legacy workflows and ordered selections while advancing to eight. Interrupted cleanup retains originals and exact source hashes. Completion receipts avoid repeating completed migration, including legacy schema-one receipts without reading their former data-copy fields."
       },
       {
         "status": "declared",
@@ -180,7 +180,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Schema seven preserves historical inputs, requests, artifacts, delivery meanings and ordered selected packets independent of attachments. Older binaries cannot operate it. Program selection does not reverse a migration. Failed instructions retain effects; recovery requires explicit product operations with a compatible program."
+        "statement": "Schema eight preserves historical inputs, requests, artifacts, delivery meanings and ordered selected packets independent of attachments. Older binaries cannot operate it. Program selection does not reverse a migration. Failed instructions retain effects; recovery requires explicit product operations with a compatible program."
+      },
+      {
+        "status": "declared",
+        "statement": "Schemas two through seven rename the owned discovery job column and configuration key to Milieu, selecting its public executable path before deployment pins the release. Schema eight preserves captured inputs, exact model requests, artifacts, frozen editions, eligibility and opaque identities; older programs cannot reopen it."
       }
     ],
     "reliances": [
@@ -200,7 +204,7 @@
       },
       {
         "status": "declared",
-        "statement": "Prerequisite probes depend on supported Cast, Annals, Weaver, Email, Nucleus, and local renderer interfaces; unselected installations are not upgraded implicitly.",
+        "statement": "Prerequisite probes depend on supported Milieu, Annals, Weaver, Email, Nucleus, and local renderer interfaces; unselected installations are not upgraded implicitly.",
         "target": "runtime-dependencies",
         "kind": "readiness"
       },

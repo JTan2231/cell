@@ -1,13 +1,13 @@
 [package]
 name = "clew"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
 anyhow = "1"
-cast = { path = "../cast" }
+milieu = { path = "../milieu" }
 cell-install.workspace = true
 cell-maintenance.workspace = true
 chancery-usage.workspace = true

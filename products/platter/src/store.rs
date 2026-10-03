@@ -6,7 +6,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: i64 = 7;
+pub const SCHEMA_VERSION: i64 = 8;
 pub const DATABASE: &str = "packets.sqlite3";
 
 pub struct Store {
@@ -30,7 +30,7 @@ pub struct PacketRecord {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobRecord {
     pub opportunity: String,
-    pub cast_job_id: String,
+    pub milieu_job_id: String,
     pub company: String,
     pub title: String,
     pub eligible: bool,
@@ -67,7 +67,7 @@ const SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS maintenance_holds(owner TEXT PRIMARY KEY);
 CREATE TABLE jobs(
- opportunity TEXT PRIMARY KEY, cast_job_id TEXT NOT NULL, company TEXT NOT NULL,
+ opportunity TEXT PRIMARY KEY, milieu_job_id TEXT NOT NULL, company TEXT NOT NULL,
  title TEXT NOT NULL, eligible INTEGER NOT NULL CHECK(eligible IN (0,1)));
 CREATE TABLE runs(
  id TEXT PRIMARY KEY, opportunity TEXT NOT NULL REFERENCES jobs(opportunity),
@@ -346,7 +346,7 @@ impl Store {
         let tx = self.connection.unchecked_transaction()?;
         ensure!(
             self.connection.execute(
-                "UPDATE jobs SET eligible=?2 WHERE opportunity=?1 OR cast_job_id=?1",
+                "UPDATE jobs SET eligible=?2 WHERE opportunity=?1 OR milieu_job_id=?1",
                 params![opportunity, eligible]
             )? == 1,
             "job is absent or ambiguous"
@@ -357,7 +357,7 @@ impl Store {
 
     pub(crate) fn exclude_job(&self, record: &PacketRecord) -> Result<()> {
         self.connection.execute(
-            "INSERT INTO jobs(opportunity,cast_job_id,company,title,eligible) VALUES(?1,?2,?3,?4,0)
+            "INSERT INTO jobs(opportunity,milieu_job_id,company,title,eligible) VALUES(?1,?2,?3,?4,0)
              ON CONFLICT(opportunity) DO UPDATE SET eligible=0",
             params![
                 record.opportunity,
@@ -371,13 +371,13 @@ impl Store {
 
     pub fn jobs(&self) -> Result<Vec<JobRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT opportunity,cast_job_id,company,title,eligible FROM jobs ORDER BY opportunity",
+            "SELECT opportunity,milieu_job_id,company,title,eligible FROM jobs ORDER BY opportunity",
         )?;
         Ok(statement
             .query_map([], |r| {
                 Ok(JobRecord {
                     opportunity: r.get(0)?,
-                    cast_job_id: r.get(1)?,
+                    milieu_job_id: r.get(1)?,
                     company: r.get(2)?,
                     title: r.get(3)?,
                     eligible: r.get(4)?,
@@ -612,7 +612,7 @@ impl Store {
     }
 }
 
-const PACKET_SELECT: &str = "SELECT r.id,j.opportunity,j.cast_job_id,j.company,j.title,r.status FROM runs r JOIN jobs j ON j.opportunity=r.opportunity";
+const PACKET_SELECT: &str = "SELECT r.id,j.opportunity,j.milieu_job_id,j.company,j.title,r.status FROM runs r JOIN jobs j ON j.opportunity=r.opportunity";
 fn row_packet(r: &rusqlite::Row<'_>) -> rusqlite::Result<PacketRecord> {
     Ok(PacketRecord {
         id: r.get(0)?,

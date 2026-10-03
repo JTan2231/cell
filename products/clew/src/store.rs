@@ -9,10 +9,11 @@ use std::{
 };
 
 pub const DATABASE: &str = "ledger.sqlite3";
+pub const SCHEMA_VERSION: i64 = 4;
 const SCHEMA: &str = "
 CREATE TABLE legacy_references (
  platter_job_ref TEXT PRIMARY KEY NOT NULL,
- cast_job_id TEXT NOT NULL UNIQUE
+ milieu_job_id TEXT NOT NULL UNIQUE
 );
 CREATE TABLE threads (
  id TEXT PRIMARY KEY NOT NULL,
@@ -59,8 +60,8 @@ CREATE TRIGGER entry_references_no_late_insert BEFORE INSERT ON entry_references
  BEGIN SELECT RAISE(ABORT,'Clew entry references must commit with their entry'); END;
 CREATE TRIGGER application_reference_namespace BEFORE INSERT ON entry_references
  WHEN NEW.role='application_report' AND
- (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'cast.job'
- BEGIN SELECT RAISE(ABORT,'Application reports require a Cast job reference'); END;
+ (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'milieu.job'
+ BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu job reference'); END;
 CREATE TRIGGER threads_no_update BEFORE UPDATE ON threads
  BEGIN SELECT RAISE(ABORT,'Clew thread identities are immutable'); END;
 CREATE TRIGGER threads_no_delete BEFORE DELETE ON threads
@@ -73,7 +74,7 @@ CREATE TRIGGER legacy_references_no_update BEFORE UPDATE ON legacy_references
  BEGIN SELECT RAISE(ABORT,'Clew legacy references are immutable'); END;
 CREATE TRIGGER legacy_references_no_delete BEFORE DELETE ON legacy_references
  BEGIN SELECT RAISE(ABORT,'Clew legacy references are immutable'); END;
-PRAGMA user_version=3;
+PRAGMA user_version=4;
 ";
 const ENTRY_SELECT: &str = "SELECT e.sequence,e.id,e.recorded_at,e.kind,t.id,t.name,e.status,e.notes,e.replaces FROM entries e LEFT JOIN threads t ON t.id=e.thread_id";
 
@@ -119,7 +120,7 @@ impl Entry {
         self.references
             .iter()
             .find(|reference| {
-                reference.namespace == "cast.job" && reference.role == "application_report"
+                reference.namespace == "milieu.job" && reference.role == "application_report"
             })
             .map(|reference| reference.external_id.as_str())
     }
@@ -128,7 +129,7 @@ impl Entry {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Record {
     pub id: String,
-    pub cast_job_id: Option<String>,
+    pub milieu_job_id: Option<String>,
     pub platter_job_ref: Option<String>,
     pub thread: Option<String>,
     #[serde(default)]
@@ -140,7 +141,7 @@ pub struct Record {
 
 #[derive(Debug, Serialize)]
 pub struct Current {
-    pub cast_job_id: String,
+    pub milieu_job_id: String,
     pub status: Option<String>,
     pub status_entry_id: Option<String>,
     pub latest_entry: Entry,
@@ -214,10 +215,13 @@ fn schema_version(connection: &Connection) -> Result<i64> {
 
 fn require_current_schema(version: i64) -> Result<()> {
     ensure!(
-        !matches!(version, 1 | 2),
+        !matches!(version, 1..=3),
         "Clew schema {version} requires the guarded ledger migration; deploy the current Clew release"
     );
-    ensure!(version == 3, "unsupported Clew database schema");
+    ensure!(
+        version == SCHEMA_VERSION,
+        "unsupported Clew database schema"
+    );
     Ok(())
 }
 
@@ -272,8 +276,8 @@ impl Store {
 
     pub fn migration_needed(root: &Path) -> Result<bool> {
         match Self::schema_version_at(root)? {
-            1 | 2 => Ok(true),
-            3 => Ok(false),
+            1..=3 => Ok(true),
+            SCHEMA_VERSION => Ok(false),
             _ => anyhow::bail!("unsupported Clew database schema"),
         }
     }
@@ -294,7 +298,11 @@ impl Store {
 
     /// Schema two already retains all identities needed for the general ledger.
     pub fn migrate_current(root: &Path) -> Result<()> {
-        migrate_ledger(root, 2, None)
+        if Self::schema_version_at(root)? == 3 {
+            migrate_identity(root)
+        } else {
+            migrate_ledger(root, 2, None)
+        }
     }
 
     pub fn entry(&self, id: &str) -> Result<Option<Entry>> {
@@ -353,7 +361,7 @@ impl Store {
         let mapped = self
             .connection
             .query_row(
-                "SELECT cast_job_id FROM legacy_references WHERE platter_job_ref=?1",
+                "SELECT milieu_job_id FROM legacy_references WHERE platter_job_ref=?1",
                 [reference],
                 |row| row.get::<_, String>(0),
             )
@@ -361,7 +369,7 @@ impl Store {
         if let Some(mapped) = mapped {
             ensure!(
                 mapped == reference || !self.knows_job(reference)?,
-                "reference is ambiguous between a Cast job and a legacy Platter reference"
+                "reference is ambiguous between a Milieu job and a legacy Platter reference"
             );
             return Ok(mapped);
         }
@@ -374,17 +382,17 @@ impl Store {
 
     pub fn legacy_aliases(&self) -> Result<Vec<(String, String)>> {
         let mut statement = self.connection.prepare(
-            "SELECT platter_job_ref,cast_job_id FROM legacy_references ORDER BY platter_job_ref",
+            "SELECT platter_job_ref,milieu_job_id FROM legacy_references ORDER BY platter_job_ref",
         )?;
         Ok(statement
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?)
     }
 
-    pub fn knows_job(&self, cast_job_id: &str) -> Result<bool> {
+    pub fn knows_job(&self, milieu_job_id: &str) -> Result<bool> {
         Ok(self.connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM entry_references e JOIN external_references r ON r.id=e.reference_id WHERE r.namespace='cast.job' AND r.external_id=?1 AND e.role='application_report')",
-            [cast_job_id], |row| row.get(0),
+            "SELECT EXISTS(SELECT 1 FROM entry_references e JOIN external_references r ON r.id=e.reference_id WHERE r.namespace='milieu.job' AND r.external_id=?1 AND e.role='application_report')",
+            [milieu_job_id], |row| row.get(0),
         )?)
     }
 
@@ -417,16 +425,16 @@ impl Store {
                 .map(|name| get_or_create_thread(&tx, name))
                 .transpose()?
         };
-        let application_job = match (&record.cast_job_id, &record.platter_job_ref) {
+        let application_job = match (&record.milieu_job_id, &record.platter_job_ref) {
             (Some(id), None) => Some(id.clone()),
             (None, Some(reference)) => Some(
                 tx.query_row(
-                    "SELECT cast_job_id FROM legacy_references WHERE platter_job_ref=?1",
+                    "SELECT milieu_job_id FROM legacy_references WHERE platter_job_ref=?1",
                     [reference],
                     |row| row.get(0),
                 )
                 .optional()?
-                .context("unknown legacy Platter reference; supply --cast-job JOB_ID")?,
+                .context("unknown legacy Platter reference; supply --milieu-job JOB_ID")?,
             ),
             (None, None) => None,
             _ => unreachable!("validated application target"),
@@ -443,7 +451,7 @@ impl Store {
             )?;
         }
         if let Some(job) = application_job {
-            attach_reference(&tx, &record.id, "cast.job", &job, "application_report")?;
+            attach_reference(&tx, &record.id, "milieu.job", &job, "application_report")?;
         }
         tx.execute(
             "INSERT INTO entries(id,recorded_at,kind,thread_id,status,notes,replaces,request_json) VALUES(?1,?2,'record',?3,?4,?5,?6,?7)",
@@ -491,7 +499,7 @@ impl Store {
                 continue;
             };
             let item = current.entry(job.to_owned()).or_insert_with(|| Current {
-                cast_job_id: job.to_owned(),
+                milieu_job_id: job.to_owned(),
                 status: None,
                 status_entry_id: None,
                 latest_entry: entry.clone(),
@@ -506,12 +514,12 @@ impl Store {
     }
 
     pub fn history(&self, reference: &str) -> Result<Vec<HistoryEntry>> {
-        let cast_job_id = self.canonical_reference(reference)?;
+        let milieu_job_id = self.canonical_reference(reference)?;
         let entries = self.entries()?;
         let mut ids = BTreeSet::new();
         // Corrections target earlier entries, so one ledger-order pass covers their lineage.
         for entry in &entries {
-            if entry.application_job_id() == Some(cast_job_id.as_str())
+            if entry.application_job_id() == Some(milieu_job_id.as_str())
                 || entry.replaces.as_ref().is_some_and(|id| ids.contains(id))
             {
                 ids.insert(entry.id.clone());
@@ -612,11 +620,11 @@ fn require_exact_request(connection: &Connection, id: &str, request: &str) -> Re
 fn validate_record(record: &Record) -> Result<()> {
     validate_id(&record.id)?;
     ensure!(
-        record.cast_job_id.is_none() || record.platter_job_ref.is_none(),
-        "supply at most one Cast job ID or legacy Platter reference"
+        record.milieu_job_id.is_none() || record.platter_job_ref.is_none(),
+        "supply at most one Milieu job ID or legacy Platter reference"
     );
     for value in [
-        &record.cast_job_id,
+        &record.milieu_job_id,
         &record.platter_job_ref,
         &record.thread,
         &record.status,
@@ -793,7 +801,7 @@ struct OldEntry {
     id: String,
     recorded_at: String,
     kind: String,
-    cast_job_id: Option<String>,
+    milieu_job_id: Option<String>,
     platter_job_ref: Option<String>,
     status: Option<String>,
     notes: Option<String>,
@@ -816,17 +824,17 @@ fn migration_mappings(
         );
         ensure!(
             mappings.values().all(|id| !id.trim().is_empty()),
-            "migration requires a Cast job ID for every retained reference"
+            "migration requires a Milieu job ID for every retained reference"
         );
         let distinct: BTreeSet<_> = mappings.values().collect();
         ensure!(
             distinct.len() == mappings.len(),
-            "multiple Platter histories map to one Cast job; resolve the mapping before migration"
+            "multiple Platter histories map to one Milieu job; resolve the mapping before migration"
         );
         Ok(mappings)
     } else {
         let mut statement = connection.prepare(
-            "SELECT platter_job_ref,cast_job_id FROM legacy_references ORDER BY platter_job_ref",
+            "SELECT platter_job_ref,milieu_job_id FROM legacy_references ORDER BY platter_job_ref",
         )?;
         Ok(statement
             .query_map([], |row| {
@@ -850,12 +858,16 @@ fn migrate_ledger(
         schema_version(&tx)? == version,
         "migration requires schema {version}"
     );
+    if version == 2 {
+        rename_job_column(&tx, "entries")?;
+        rename_job_column(&tx, "legacy_references")?;
+    }
     let mappings = migration_mappings(&tx, version, supplied_mappings)?;
     let old_entries = {
         let select = if version == 1 {
             "SELECT sequence,id,recorded_at,kind,NULL,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
         } else {
-            "SELECT sequence,id,recorded_at,kind,cast_job_id,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
+            "SELECT sequence,id,recorded_at,kind,milieu_job_id,platter_job_ref,status,notes,replaces FROM entries ORDER BY sequence"
         };
         let mut statement = tx.prepare(select)?;
         statement
@@ -865,7 +877,7 @@ fn migrate_ledger(
                     id: row.get(1)?,
                     recorded_at: row.get(2)?,
                     kind: row.get(3)?,
-                    cast_job_id: row.get(4)?,
+                    milieu_job_id: row.get(4)?,
                     platter_job_ref: row.get(5)?,
                     status: row.get(6)?,
                     notes: row.get(7)?,
@@ -874,9 +886,20 @@ fn migrate_ledger(
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?
     };
+    let guards = {
+        let mut statement = tx.prepare(
+            "SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'entries_require_%'",
+        )?;
+        statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for guard in guards {
+        tx.execute_batch(&format!("DROP TRIGGER \"{}\";", guard.replace('"', "\"\"")))?;
+    }
     tx.execute_batch(
         "DROP TRIGGER entries_no_update; DROP TRIGGER entries_no_delete;
-        DROP TRIGGER IF EXISTS entries_require_cast; DROP INDEX entries_job;
+        DROP INDEX entries_job;
         DROP INDEX IF EXISTS entries_legacy_job; ALTER TABLE entries RENAME TO entries_previous;",
     )?;
     if version == 2 {
@@ -885,23 +908,23 @@ fn migrate_ledger(
     tx.execute_batch(SCHEMA)?;
     for (reference, job) in &mappings {
         tx.execute(
-            "INSERT INTO legacy_references(platter_job_ref,cast_job_id) VALUES(?1,?2)",
+            "INSERT INTO legacy_references(platter_job_ref,milieu_job_id) VALUES(?1,?2)",
             params![reference, job],
         )?;
     }
     for entry in old_entries {
-        let job = match (&entry.cast_job_id, &entry.platter_job_ref) {
+        let job = match (&entry.milieu_job_id, &entry.platter_job_ref) {
             (Some(job), _) => job.clone(),
             (None, Some(reference)) => mappings
                 .get(reference)
-                .context("legacy entry has no Cast mapping")?
+                .context("legacy entry has no Milieu mapping")?
                 .clone(),
             _ => anyhow::bail!("retained application entry has no job identity"),
         };
         let request = if entry.kind == "record" {
             record_request(&Record {
                 id: entry.id.clone(),
-                cast_job_id: if entry.platter_job_ref.is_none() {
+                milieu_job_id: if entry.platter_job_ref.is_none() {
                     Some(job.clone())
                 } else {
                     None
@@ -922,7 +945,7 @@ fn migrate_ledger(
                 entry.notes.as_deref(),
             )?
         };
-        attach_reference(&tx, &entry.id, "cast.job", &job, "application_report")?;
+        attach_reference(&tx, &entry.id, "milieu.job", &job, "application_report")?;
         tx.execute("INSERT INTO entries(sequence,id,recorded_at,kind,status,notes,replaces,request_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", params![entry.sequence,entry.id,entry.recorded_at,entry.kind,entry.status,entry.notes,entry.replaces,request])?;
     }
     tx.execute_batch("DROP TABLE entries_previous;")?;
@@ -930,6 +953,79 @@ fn migrate_ledger(
         !tx.prepare("PRAGMA foreign_key_check")?.exists([])?,
         "Clew ledger has a broken reference"
     );
+    tx.commit()?;
+    std::fs::File::open(root)?.sync_all()?;
+    Ok(())
+}
+
+fn rename_job_column(connection: &Connection, table: &str) -> Result<Option<String>> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table})"))?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let previous = columns
+        .into_iter()
+        .find(|column| column.ends_with("_job_id") && column != "milieu_job_id");
+    if let Some(column) = &previous {
+        connection.execute_batch(&format!(
+            "ALTER TABLE {table} RENAME COLUMN \"{}\" TO milieu_job_id;",
+            column.replace('"', "\"\"")
+        ))?;
+    }
+    Ok(previous)
+}
+
+/// Rename owned relationship structure while preserving statements and retry IDs.
+fn migrate_identity(root: &Path) -> Result<()> {
+    private_directory(root)?;
+    let mut connection = connect(root, true)?;
+    let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    ensure!(
+        schema_version(&tx)? == 3,
+        "identity migration requires schema three"
+    );
+    let previous = rename_job_column(&tx, "legacy_references")?
+        .context("previous job identity column is missing")?;
+    let namespace = format!("{}.job", previous.trim_end_matches("_job_id"));
+    tx.execute_batch("DROP TRIGGER entries_no_update; DROP TRIGGER external_references_no_update; DROP TRIGGER application_reference_namespace;")?;
+    tx.execute(
+        "UPDATE external_references SET namespace='milieu.job' WHERE namespace=?1",
+        [&namespace],
+    )?;
+    let requests = {
+        let mut statement = tx.prepare("SELECT id,request_json FROM entries ORDER BY sequence")?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+    };
+    for (id, request) in requests {
+        let mut value: serde_json::Value = serde_json::from_str(&request)?;
+        if let Some(record) = value
+            .get_mut("record")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            if let Some(job) = record.remove(&previous) {
+                record.insert("milieu_job_id".into(), job);
+            }
+            let mut record: Record =
+                serde_json::from_value(serde_json::Value::Object(record.clone()))?;
+            for reference in &mut record.references {
+                if reference.namespace == namespace {
+                    reference.namespace = "milieu.job".into();
+                }
+            }
+            tx.execute(
+                "UPDATE entries SET request_json=?2 WHERE id=?1",
+                params![id, record_request(&record)?],
+            )?;
+        }
+    }
+    tx.execute_batch("CREATE TRIGGER entries_no_update BEFORE UPDATE ON entries BEGIN SELECT RAISE(ABORT,'Clew entries are append-only'); END;
+        CREATE TRIGGER external_references_no_update BEFORE UPDATE ON external_references BEGIN SELECT RAISE(ABORT,'Clew external references are immutable'); END;
+        CREATE TRIGGER application_reference_namespace BEFORE INSERT ON entry_references WHEN NEW.role='application_report' AND (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'milieu.job' BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu job reference'); END;")?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     std::fs::File::open(root)?.sync_all()?;
     Ok(())

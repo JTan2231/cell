@@ -53,7 +53,7 @@ platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' \
 
 The occurrence ID contains 1 through 80 ASCII letters, digits, underscores or
 hyphens. It uses the existing ad hoc edition namespace. A new occurrence
-captures the configured local date, selects one retained job from Cast's export
+captures the configured local date, selects one retained job from Milieu's export
 by canonical supported ATS identity or normalized public URL, prepares or
 resumes its normal packet, performs the ordinary freshness check,
 freezes one ordinary edition and sends it. It creates no separate packet,
@@ -61,7 +61,7 @@ edition or workflow type. One mutation admission lock covers the complete
 operation.
 
 An unknown URL, an ambiguous match, or a supported ATS board URL without a
-posting identity fails before preparation. This selection performs no Cast
+posting identity fails before preparation. This selection performs no Milieu
 collection.
 
 The command uses the existing packet when normal preparation already has a
@@ -69,7 +69,7 @@ ready one. It explicitly enables the selected job, and the successful freeze
 sets it ineligible like daily selection. A declined, stale or unavailable
 packet creates no edition and sends no email.
 
-An existing occurrence takes the send path before Cast or preparation work. A
+An existing occurrence takes the send path before Milieu or preparation work. A
 frozen occurrence sends its retained bytes, an accepted occurrence returns its
 receipt without resending, and an uncertain occurrence remains held. The
 original date stays fixed across retries. Reusing the ID for another URL or an
@@ -99,7 +99,7 @@ try an empty day again. Missed dates are not backfilled. `prepare-daily` and
 and continue to other candidates. A declined opportunity also permits the next
 candidate. If the final freshness check excludes the entire ready pool,
 `run-daily` prepares other candidates before trying preview again. Other
-preparation errors and failed Cast exports stop the run before sending.
+preparation errors and failed Milieu exports stop the run before sending.
 Accepted artifacts and frozen delivery records remain retained. Single-job
 preparation reports its retrieval error without selecting a replacement job.
 Output contains the edition date, delivery status and selected packet count,
@@ -164,7 +164,7 @@ platter send YYYY-MM-DD --ad-hoc RUN_ID \
 
 `--ad-hoc` remains a CLI selection operation, not an edition type. These
 editions use the same schema, ordinary subject format and sending behavior.
-The operation leaves job eligibility untouched and performs no Cast, Annals,
+The operation leaves job eligibility untouched and performs no Milieu, Annals,
 source retrieval, Nucleus or rendering work. Without `--packet`, it selects up
 to three retained complete packets in ID order. Repeated `--packet` specifies
 one through three distinct packets. `RUN_ID` contains 1 through 80 ASCII

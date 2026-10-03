@@ -1,6 +1,6 @@
 # Platter
 
-Platter prepares private job briefs and resumes from Cast opportunities and
+Platter prepares private job briefs and resumes from Milieu opportunities and
 Vita career material. Weaver supplies project bullets. Platter retains accepted
 packets, frozen editions, and authorized email submission outcomes.
 
@@ -9,7 +9,7 @@ packets, frozen editions, and authorized email submission outcomes.
 With an initialized library and ready dependencies:
 
 ```sh
-platter prepare CAST_JOB_ID
+platter prepare MILIEU_JOB_ID
 platter status
 platter export ARTIFACT_ID /absolute/private/chosen/resume.pdf
 ```

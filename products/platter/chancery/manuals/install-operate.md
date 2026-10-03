@@ -54,7 +54,7 @@ The committed declarations order selected instructions; the executor adds no
 dependencies or affected requesters. Unselected products retain their installed
 interfaces. Deployment creates no maintenance hold and drains no requester.
 
-Require Cast's supported retained export, Email's byte-payload interface, fixed
+Require Milieu's supported retained export, Email's byte-payload interface, fixed
 Annals Vita reads, compatible Weaver caller identity, authenticated Nucleus, renderer
 tools, and a complete Bazaar prompt selection. Read `platter.maintenance` and
 `platter.preparation` for exact readiness limits. A successful build or catalog
@@ -72,7 +72,7 @@ platter --json doctor --state-only
 does not run doctor or audit artifact integrity. Separately, full doctor checks retained state,
 configured PDF and documented command/runtime prerequisites. It collects no
 jobs, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
-Executable identity alone does not prove initialized Cast or Vita libraries.
+Executable identity alone does not prove initialized Milieu or Vita libraries.
 State-only verification needs no renderer or external service readiness.
 
 Stop for foreign selectors, ambiguous state roots, failed setup or migration,
@@ -115,10 +115,11 @@ command does not invoke hold or drain and does not operate Nucleus maintenance.
 Schema-one import commits before hashed file cleanup. Failure before commit
 leaves predecessor state; failure afterward retains new state, originals, and
 recovery information. Resume cleanup only with agreeing source hashes. Schemas
-two through six migrate retained selections and advance to seven. Every
+two through seven migrate owned discovery names and advance to eight. Schemas
+two through six also migrate retained packet selections. Every
 migration preserves captured inputs, requests, artifacts, and delivery identities.
 
-Older binaries cannot operate schema seven. Recovery needs a compatible
+Older binaries cannot operate schema eight. Recovery needs a compatible
 candidate. Program selection does not undo migration. Do not reset records to
 force success.
 
@@ -149,7 +150,7 @@ migration. Keep unresolved recovery held; do not reset domain state.
 Deployment initializes a missing template only from an explicit `resume`
 absolute path. It cannot replace an initialized template. Optional
 `projects_template` imports a new template through the Projects-only checks.
-Deployment updates final Cast, Email, and Weaver executable references and
+Deployment updates final Milieu, Email, and Weaver executable references and
 preserves the flat optional `resume_override`. Read `platter --json config`
 without loading dependency data or preparing packets. Set or clear a daily PDF
 with the configuration procedure in `platter.packet.prepare`.

@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use base64::Engine as _;
-use cast::models::Job;
+use milieu::models::Job;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::Path, time::Instant};
 
@@ -157,12 +157,12 @@ pub async fn regenerate(
         return prepare_record(&store, record, deadline).await;
     }
     let settings = config(root)?;
-    let snapshot = source::discovery(&settings.cast_executable)?;
+    let snapshot = source::discovery(&settings.milieu_executable)?;
     let job = snapshot
         .jobs
         .iter()
         .find(|job| job.id == job_id)
-        .context("Cast job not found")?;
+        .context("Milieu job not found")?;
     ensure!(
         source::eligible(job),
         "opportunity fails availability/compensation constraints"
@@ -240,12 +240,12 @@ async fn prepare_selected(
 ) -> Result<PacketRecord> {
     let settings = config(root)?;
     let store = Store::open(root)?;
-    let snapshot = source::discovery(&settings.cast_executable)?;
+    let snapshot = source::discovery(&settings.milieu_executable)?;
     let job = snapshot
         .jobs
         .iter()
         .find(|job| job.id == job_id)
-        .context("Cast job not found")?;
+        .context("Milieu job not found")?;
     let company = snapshot
         .companies
         .iter()
@@ -681,7 +681,7 @@ async fn prepare_daily_selected(
     let settings = config(root)?;
     let store = Store::open(root)?;
     refresh_ready(&store, daily_override).await?;
-    let snapshot = source::discovery(&settings.cast_executable)?;
+    let snapshot = source::discovery(&settings.milieu_executable)?;
     let mut jobs: Vec<_> = snapshot
         .jobs
         .iter()
@@ -765,7 +765,7 @@ pub async fn run_ad_hoc(
 
     let day = local_day(root, now)?;
     let settings = config(root)?;
-    let job = source::retained_job(&settings.cast_executable, url)?;
+    let job = source::retained_job(&settings.milieu_executable, url)?;
     let opportunity = source::identity(&job)?;
     let store = Store::open(root)?;
     if store

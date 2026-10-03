@@ -1,6 +1,6 @@
 {
   "id": "platter.materials",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -78,7 +78,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Use the canonical schema-seven library at ~/.local/share/platter or its sole existing ~/.local/share/job-packets predecessor. Two roots are ambiguous and refused; --state-dir must equal the canonical root. Imports require initialized state and supported separate Jackson/Projects regions and both project marker pairs."
+        "statement": "Use the canonical schema-eight library at ~/.local/share/platter or its sole existing ~/.local/share/job-packets predecessor. Two roots are ambiguous and refused; --state-dir must equal the canonical root. Imports require initialized state and supported separate Jackson/Projects regions and both project marker pairs."
       }
     ],
     "inputs": [
@@ -116,7 +116,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The schema-seven SQLite library contains retained inputs, templates, artifacts, editions, settings, holds and frozen daily PDF bytes. Current configuration does not refresh sources or establish current posting availability."
+        "statement": "The schema-eight SQLite library contains retained inputs, templates, artifacts, editions, settings, holds and frozen daily PDF bytes. Current configuration does not refresh sources or establish current posting availability."
       }
     ],
     "access": [
@@ -140,7 +140,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Persistent schema seven preserves retained legacy workflow and artifact meanings. Ordinary work refuses schemas one through six until supported maintenance migrates them. Full and Projects-only template imports do not rewrite historical captures."
+        "statement": "Persistent schema eight preserves retained legacy workflow and artifact meanings. Ordinary work refuses schemas one through seven until supported maintenance migrates them. Full and Projects-only template imports do not rewrite historical captures."
       }
     ],
     "reliances": [

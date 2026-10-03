@@ -50,7 +50,7 @@ fn migrate_if_needed(root: &Path, home: &Path) -> Result<()> {
         return Ok(());
     }
     let version = crate::store::Store::schema_version_at(root)?;
-    if version == 2 {
+    if matches!(version, 2 | 3) {
         crate::store::Store::migrate_current(root)?;
         return Ok(());
     }
@@ -80,8 +80,8 @@ fn legacy_mapping(
             continue;
         }
         ensure!(
-            !opportunity.cast_job_id.trim().is_empty(),
-            "legacy Platter reference has no Cast job ID: {}",
+            !opportunity.milieu_job_id.trim().is_empty(),
+            "legacy Platter reference has no Milieu job ID: {}",
             opportunity.reference
         );
         ensure!(
@@ -90,10 +90,10 @@ fn legacy_mapping(
             opportunity.reference
         );
         ensure!(
-            jobs.insert(opportunity.cast_job_id.clone()),
-            "multiple legacy Clew histories map to one Cast job; resolve before migration"
+            jobs.insert(opportunity.milieu_job_id.clone()),
+            "multiple legacy Clew histories map to one Milieu job; resolve before migration"
         );
-        mapping.insert(opportunity.reference, opportunity.cast_job_id);
+        mapping.insert(opportunity.reference, opportunity.milieu_job_id);
     }
     ensure!(
         mapping.len() == needed.len(),
@@ -226,10 +226,10 @@ fn deploy_inner(context: &Context) -> Result<()> {
 mod tests {
     use super::legacy_mapping;
 
-    fn opportunity(reference: &str, cast_job_id: &str) -> platter::api::Opportunity {
+    fn opportunity(reference: &str, milieu_job_id: &str) -> platter::api::Opportunity {
         platter::api::Opportunity {
             reference: reference.into(),
-            cast_job_id: cast_job_id.into(),
+            milieu_job_id: milieu_job_id.into(),
             company: "Company".into(),
             title: "Role".into(),
             urls: Vec::new(),
@@ -244,21 +244,21 @@ mod tests {
         let mapping = legacy_mapping(
             &references,
             vec![
-                opportunity("legacy-a", "cast-a"),
-                opportunity("legacy-b", "cast-b"),
-                opportunity("untracked", "cast-a"),
+                opportunity("legacy-a", "milieu-a"),
+                opportunity("legacy-b", "milieu-b"),
+                opportunity("untracked", "milieu-a"),
             ],
         )?;
-        assert_eq!(mapping["legacy-a"], "cast-a");
-        assert_eq!(mapping["legacy-b"], "cast-b");
+        assert_eq!(mapping["legacy-a"], "milieu-a");
+        assert_eq!(mapping["legacy-b"], "milieu-b");
         assert_eq!(mapping.len(), 2);
-        assert!(legacy_mapping(&references, vec![opportunity("legacy-a", "cast-a")]).is_err());
+        assert!(legacy_mapping(&references, vec![opportunity("legacy-a", "milieu-a")]).is_err());
         assert!(
             legacy_mapping(
                 &references,
                 vec![
-                    opportunity("legacy-a", "cast-a"),
-                    opportunity("legacy-b", "cast-a")
+                    opportunity("legacy-a", "milieu-a"),
+                    opportunity("legacy-b", "milieu-a")
                 ],
             )
             .is_err()
@@ -267,8 +267,8 @@ mod tests {
             legacy_mapping(
                 &["legacy-a".into()],
                 vec![
-                    opportunity("legacy-a", "cast-a"),
-                    opportunity("legacy-a", "cast-b")
+                    opportunity("legacy-a", "milieu-a"),
+                    opportunity("legacy-a", "milieu-b")
                 ],
             )
             .is_err()

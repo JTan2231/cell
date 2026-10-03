@@ -1,4 +1,4 @@
-//! Deterministic mail from one ledger snapshot and retained Cast metadata.
+//! Deterministic mail from one ledger snapshot and retained Milieu metadata.
 use crate::jobs::Job;
 use anyhow::{Context, Result};
 use chrono::Local;
@@ -50,7 +50,7 @@ pub fn render(entries: &[Entry], opportunities: Option<&[Job]>, date: &str) -> R
     let jobs: BTreeMap<_, _> = opportunities
         .unwrap_or_default()
         .iter()
-        .map(|job| (job.cast_job_id.as_str(), job))
+        .map(|job| (job.milieu_job_id.as_str(), job))
         .collect();
     let mut applications = BTreeMap::new();
     for entry in active_entries(entries) {
@@ -140,7 +140,7 @@ pub(crate) fn prepare(root: &Path) -> Result<Digest> {
     if without_context.application_count == 0 {
         return Ok(without_context);
     }
-    let jobs = crate::cast_jobs();
+    let jobs = crate::milieu_jobs();
     render(&entries, jobs.as_ref().ok().map(Vec::as_slice), &date)
 }
 

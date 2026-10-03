@@ -53,7 +53,7 @@ pub struct Config {
     pub delivery_hour: u32,
     pub delivery_minute: u32,
     pub timezone: String,
-    pub cast_executable: PathBuf,
+    pub milieu_executable: PathBuf,
     pub email_executable: PathBuf,
     pub original_resume: PathBuf,
     /// One shared PDF for future daily editions. Ad hoc work remains tailored.
@@ -76,7 +76,7 @@ impl Config {
             delivery_hour: 9,
             delivery_minute: 0,
             timezone: "America/Chicago".into(),
-            cast_executable: bin.join("cast"),
+            milieu_executable: bin.join("milieu"),
             email_executable: bin.join("email"),
             original_resume,
             resume_override: None,
@@ -101,7 +101,7 @@ impl Config {
             );
         }
         for path in [
-            &self.cast_executable,
+            &self.milieu_executable,
             &self.email_executable,
             &self.original_resume,
             &self.weaver_executable,
@@ -144,7 +144,7 @@ mod tests {
     fn stored_config_ignores_the_retired_crm_executable() -> Result<()> {
         let config: Config = serde_json::from_value(serde_json::json!({
             "daily_count":3,"delivery_hour":9,"delivery_minute":0,
-            "timezone":"America/Chicago","cast_executable":"/tools/cast",
+            "timezone":"America/Chicago","milieu_executable":"/tools/milieu",
             "crm_executable":"/missing/crm","email_executable":"/tools/email",
             "original_resume":"/private/resume.tex"
         }))?;
@@ -152,7 +152,7 @@ mod tests {
         let saved = serde_json::to_value(&config)?;
         assert!(saved.get("crm_executable").is_none());
         assert!(saved.get("vita_executable").is_none());
-        assert_eq!(saved["cast_executable"], "/tools/cast");
+        assert_eq!(saved["milieu_executable"], "/tools/milieu");
         Ok(())
     }
 }

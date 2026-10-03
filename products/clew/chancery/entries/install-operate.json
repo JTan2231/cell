@@ -1,6 +1,6 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -43,7 +43,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "An authorized explicit product selection and required Cast, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Product setup uses ordinary admission; an existing hold can refuse it. The executor adds no dependencies or maintenance holds."
+        "statement": "An authorized explicit product selection and required Milieu, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Product setup uses ordinary admission; an existing hold can refuse it. The executor adds no dependencies or maintenance holds."
       }
     ],
     "inputs": [
@@ -55,13 +55,13 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "The selected release contains clew, clew-install and its Chancery provider. The product command initializes empty schema-three state or converts schema one or two transactionally with retained exact retry requests and legacy aliases."
+        "statement": "The selected release contains clew, clew-install and its Chancery provider. The product command initializes empty schema-four state or converts schema one through three transactionally with retained exact retry requests and legacy aliases."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no new entries, statuses, or threads. Migration preserves entry IDs, times, sequence, text, corrections, retractions, and original write namespace. Existing jobs receive explicit application-report associations in the external reference model. Platter supplies only schema-one legacy-to-Cast mappings; schema-two conversion is local."
+        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no new entries, statuses, or threads. Migration preserves entry IDs, times, sequence, text, corrections, retractions, and original write namespace. Existing jobs receive explicit application-report associations in the external reference model. Platter supplies only schema-one legacy-to-Milieu mappings; schema-two conversion is local."
       }
     ],
     "identity_and_units": [
@@ -73,7 +73,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Installation performs setup without selected-byte integrity, local ledger integrity, or Cast snapshot checks. Migration retains its ordinary mapping requirements for every legacy reference. Installation establishes no future availability."
+        "statement": "Installation performs setup without selected-byte integrity, local ledger integrity, or Milieu snapshot checks. Migration retains its ordinary mapping requirements for every legacy reference. Installation establishes no future availability."
       }
     ],
     "access": [
@@ -85,32 +85,36 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Each file-selector replacement is atomic. Failed deployment retains completed file, ledger and schedule changes without automatic retry, rollback or recovery. The product command uses ordinary admission, migrates or initializes state, and retargets the owned daily definition directly while preserving saved or explicit enabled intent and failure incidents. Migration excludes ledger writers and commits schema three, reference associations, aliases and exact write requests in one transaction. Old writers are rejected; frozen email bytes, keys and receipts remain intact."
+        "statement": "Each file-selector replacement is atomic. Failed deployment retains completed file, ledger and schedule changes without automatic retry, rollback or recovery. The product command uses ordinary admission, migrates or initializes state, and retargets the owned daily definition directly while preserving saved or explicit enabled intent and failure incidents. Migration excludes ledger writers and commits schema four, reference associations, aliases and exact write requests in one transaction. Old writers are rejected; frozen email bytes, keys and receipts remain intact."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "There is no completion-time guarantee. Compatible schema-three readers and short SQLite writers can finish across program selection. Migration from schema one or two uses a separate guarded write boundary and preserves all retained entries atomically."
+        "statement": "There is no completion-time guarantee. Compatible schema-four readers and short SQLite writers can finish across program selection. Migration from schema one through three uses a separate guarded write boundary and preserves all retained entries atomically."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema three, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one and two. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
+        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one through three. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema-three conversion is local and transactionally renames owned job-reference and retry-request fields to Milieu. Retained supplied content, identifiers, order, correction links and frozen delivery evidence stay unchanged. Exact retries use the renamed argument and original write ID."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Application features require the complete Cast snapshot reader for first-job admission, job search, and email context. Installation and generic ledger operations do not probe Cast.",
-        "target": "cast",
+        "statement": "Application features require the complete Milieu snapshot reader for first-job admission, job search, and email context. Installation and generic ledger operations do not probe Milieu.",
+        "target": "milieu",
         "kind": "readiness",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Cast job ID. Schema-two conversion and generic ledger operations do not read Platter.",
+        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Milieu job ID. Schema-two conversion and generic ledger operations do not read Platter.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"
@@ -134,33 +138,33 @@
   "dependencies": [
     {
       "id": "clew.ledger.use",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clew.state",
-      "min_contract": 6,
-      "max_contract_exclusive": 7
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     },
     {
       "id": "clew.application.track",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
-    },
-    {
-      "id": "clew.digest.email",
       "min_contract": 5,
       "max_contract_exclusive": 6
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "clew.digest.email",
+      "min_contract": 6,
+      "max_contract_exclusive": 7
+    },
+    {
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     },
     {
       "id": "platter.opportunity.explore",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "email.message.send",
@@ -181,7 +185,7 @@
   ],
   "outcome": "Installed Clew commands and provider, with product-owned state setup or migration.",
   "effects": [
-    "Program deployment selects files and initializes a missing ledger or converts schema one or two to schema three transactionally in place. Existing entry identity, content and exact retry requests remain intact; no thread is invented.",
+    "Program deployment selects files and initializes a missing ledger or converts schema one through three to schema four transactionally in place. Existing entry identity, content and exact retry requests remain intact; no thread is invented.",
     "The product command updates its daily definition directly and preserves captured or explicitly supplied enabled intent and failure incidents. Deployment creates no hold, drains no send and temporarily disables no binding."
   ],
   "authority": [
@@ -189,10 +193,10 @@
     "Clockwork owns schedule enforcement; enabling daily_email_enabled explicitly grants standing authority for the Clew digest."
   ],
   "success": [
-    "Program selection and requested product setup commands complete. Installation does not check artifact integrity, ledger integrity or the Cast snapshot."
+    "Program selection and requested product setup commands complete. Installation does not check artifact integrity, ledger integrity or the Milieu snapshot."
   ],
   "failure_and_recovery": [
-    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema three. Missing or colliding schema-one mappings stop the upgrade. Preserve current data and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
+    "File recovery preserves ledger state and must not claim an incompatible old program can operate schema four. Missing or colliding schema-one mappings stop the upgrade. Preserve current data and unresolved installation evidence. Unsupported or nonempty foreign state fails.",
     "Retain email occurrences, uncertain acceptance and completed deployment effects. The executor stops at failure and performs no automatic retry or product recovery. Inspect current product and schedule state before an authorized new attempt; preserve separately acquired holds and failure incidents."
   ],
   "privacy": [

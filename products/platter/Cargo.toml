@@ -1,6 +1,6 @@
 [package]
 name = "platter"
-version = "0.2.22"
+version = "0.2.23"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ weaver = { path = "../weaver-narrative" }
 pulldown-cmark = "0.13"
 annals = { path = "../annals/crates/annals" }
 base64.workspace = true
-cast = { path = "../cast" }
+milieu = { path = "../milieu" }
 cell-install.workspace = true
 cell-maintenance.workspace = true
 nucleus-client.workspace = true

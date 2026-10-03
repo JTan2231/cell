@@ -54,7 +54,7 @@ progress needed for recovery, without a separate tool-receipt ledger.
 
 | Record | Owned meaning |
 | --- | --- |
-| jobs | Canonical opportunity identity, Cast correlation, employer/title, and explicit eligibility. |
+| jobs | Canonical opportunity identity, Milieu correlation, employer/title, and explicit eligibility. |
 | runs | One preparation's captured inputs, status, timestamps, and compact execution correlation. |
 | artifacts | Immutable bytes, producing run when applicable, kind, filename, media type, and integrity hash. |
 | editions | Frozen subject/body, date, occurrence identity, send key, delivery state, and acceptance. |
@@ -85,7 +85,7 @@ brief/Jackson-only draft interface.
 
 Run executions retain exact requests, input fingerprints, compact runtime
 state, and attempt correlation. They do not copy Nucleus's tool-call log.
-Regeneration also retains its `regeneration_id`, binding the captured Cast job
+Regeneration also retains its `regeneration_id`, binding the captured Milieu job
 and run as defined by `platter.preparation`.
 
 `platter status` reads local preparation and delivery state. It does not prove
@@ -159,7 +159,7 @@ edition owns its retained PDF bytes and no longer reads that file. Read
 
 ## Immutability, recovery, and privacy
 
-The schema-seven SQLite library contains retained inputs, templates, artifacts,
+The schema-eight SQLite library contains retained inputs, templates, artifacts,
 editions, settings, and holds. Schema-one through schema-six state must pass the
 explicit [installation migration](install-operate.md); ordinary work refuses it.
 

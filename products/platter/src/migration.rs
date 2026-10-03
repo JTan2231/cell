@@ -25,7 +25,7 @@ pub fn migrate(root: &Path) -> Result<()> {
     let store = Store::control(root)?;
     if store.version()? == 1 {
         import(&store)?;
-    } else if matches!(store.version()?, 2..=6) {
+    } else if matches!(store.version()?, 2..=7) {
         upgrade_editions(&store)?;
     }
     ensure!(
@@ -45,6 +45,26 @@ fn capture(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Vec<u8>
 
 fn upgrade_editions(store: &Store) -> Result<()> {
     let tx = store.connection.unchecked_transaction()?;
+    let previous = {
+        let mut statement = tx.prepare("PRAGMA table_info(jobs)")?;
+        statement
+            .query_map([], |row| row.get::<_, String>(1))?
+            .collect::<rusqlite::Result<Vec<_>>>()?
+            .into_iter()
+            .find(|column| column.ends_with("_job_id") && column != "milieu_job_id")
+    };
+    if let Some(column) = &previous {
+        tx.execute_batch(&format!(
+            "ALTER TABLE jobs RENAME COLUMN \"{}\" TO milieu_job_id;",
+            column.replace('"', "\"\"")
+        ))?;
+    }
+    if let Some(config) = store.setting::<Value>("config")? {
+        let previous_key = previous
+            .as_ref()
+            .map(|column| format!("{}_executable", column.trim_end_matches("_job_id")));
+        store.set_setting("config", &rename_config(config, previous_key.as_deref())?)?;
+    }
     tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS edition_packets(
         edition_id TEXT NOT NULL REFERENCES editions(id),
@@ -61,6 +81,41 @@ fn upgrade_editions(store: &Store) -> Result<()> {
     tx.commit()?;
     Ok(())
 }
+
+fn rename_config(mut value: Value, previous_key: Option<&str>) -> Result<Value> {
+    let config = value
+        .as_object_mut()
+        .context("invalid retained Platter configuration")?;
+    if !config.contains_key("milieu_executable") {
+        let previous = previous_key
+            .map(str::to_owned)
+            .or_else(|| {
+                config
+                    .keys()
+                    .find(|key| {
+                        key.ends_with("_executable")
+                            && !matches!(
+                                key.as_str(),
+                                "email_executable"
+                                    | "weaver_executable"
+                                    | "crm_executable"
+                                    | "vita_executable"
+                            )
+                    })
+                    .cloned()
+            })
+            .context("retained discovery executable is missing")?;
+        ensure!(
+            config.remove(&previous).is_some(),
+            "retained discovery executable is missing"
+        );
+        config.insert(
+            "milieu_executable".into(),
+            json!(crate::maintenance::home()?.join(".local/bin/milieu")),
+        );
+    }
+    Ok(value)
+}
 fn optional(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Option<Vec<u8>>> {
     if path.try_exists()? {
         Ok(Some(capture(path, owned)?))
@@ -73,8 +128,10 @@ fn optional(path: &Path, owned: &mut BTreeMap<PathBuf, String>) -> Result<Option
 fn import(store: &Store) -> Result<()> {
     let root = store.root();
     let mut owned = BTreeMap::new();
-    let settings: Config =
-        serde_json::from_slice(&capture(&root.join("config.json"), &mut owned)?)?;
+    let settings: Config = serde_json::from_value(rename_config(
+        serde_json::from_slice(&capture(&root.join("config.json"), &mut owned)?)?,
+        None,
+    )?)?;
     settings.validate()?;
     let template: ResumeTemplate =
         serde_json::from_slice(&capture(&settings.original_resume, &mut owned)?)?;

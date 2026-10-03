@@ -22,13 +22,13 @@ submission are outside this operation.
 ## Establish prerequisites and authority
 
 1. Inspect `platter status` and `platter --json doctor`.
-2. Confirm the canonical schema-seven library and required sources, runtime,
+2. Confirm the canonical schema-eight library and required sources, runtime,
    and renderer are ready. Ordinary work refuses predecessor schemas.
 3. Select preparation, preview, or an applicable authorized send.
 4. Keep resume sources, career text, exports, and override files private and
    outside the repository.
 
-Preparation reads supported Cast records and complete posting text, the fixed
+Preparation reads supported Milieu records and complete posting text, the fixed
 Annals `vita` library, and a complete Bazaar `cell.prompts.platter` selection.
 Tailored work also needs a supported fixed template, compatible Weaver and
 Nucleus, Tectonic, and Python with pypdf. Daily PDF override work validates its
@@ -90,10 +90,10 @@ preview continue to use tailored resumes.
 
 ## Prepare or continue a packet
 
-Select a Cast job, or prepare the ordinary daily pool without sending:
+Select a Milieu job, or prepare the ordinary daily pool without sending:
 
 ```sh
-platter prepare CAST_JOB_ID
+platter prepare MILIEU_JOB_ID
 platter prepare-daily
 platter status
 ```
@@ -115,12 +115,12 @@ an explicitly authorized new attempt.
 Single-job retrieval failure reports an error and selects no replacement job.
 Daily preparation marks unavailable postings ineligible and tries other
 candidates. Declined opportunities and an empty ready pool are expected
-outcomes. Other preparation failures and failed Cast exports stop the run.
+outcomes. Other preparation failures and failed Milieu exports stop the run.
 
 For an explicitly authorized fresh restart of incomplete work:
 
 ```sh
-platter prepare CAST_JOB_ID --fresh
+platter prepare MILIEU_JOB_ID --fresh
 ```
 
 Require an eligible job, an incomplete latest run with no accepted resume, and
@@ -131,13 +131,13 @@ Older runs and accepted artifacts remain intact.
 To create another packet for a previously prepared job:
 
 ```sh
-platter regenerate CAST_JOB_ID --id REQUEST_ID
+platter regenerate MILIEU_JOB_ID --id REQUEST_ID
 ```
 
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens. Other model
 jobs for the opportunity must be terminal or absent. An exact repeated ID
 continues its captured request or returns the retained outcome; reuse for a
-different Cast job is refused. A terminal stage failure needs a new ID for
+different Milieu job is refused. A terminal stage failure needs a new ID for
 another attempt. Regeneration does not enable the job, freeze an edition, or
 send. Retrieval failure or decline can still set eligibility false.
 
@@ -150,8 +150,8 @@ cancellation; it is not model content feedback.
 Change explicit selection eligibility only when intended:
 
 ```sh
-platter eligibility CAST_JOB_ID false
-platter eligibility CAST_JOB_ID true
+platter eligibility MILIEU_JOB_ID false
+platter eligibility MILIEU_JOB_ID true
 ```
 
 Enabling a deferred packet does not bypass freshness checks. Eligibility changes
@@ -207,13 +207,13 @@ platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' --id OCCURRENCE_ID
 ```
 
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens. A new occurrence
-selects one retained job from Cast's export by canonical supported ATS identity
+selects one retained job from Milieu's export by canonical supported ATS identity
 or normalized public URL, enables that job, prepares or reuses its tailored
 packet, checks freshness, freezes one ordinary edition, and sends. Freeze makes
 that job ineligible again. Unknown URLs, ambiguous matches, and supported ATS
 board URLs without a posting identity fail before preparation. A declined,
 stale, or unavailable packet creates no edition or email. Exact retries use the original date and
-retained send path before Cast or preparation. Reuse for another URL or an
+retained send path before Milieu or preparation. Reuse for another URL or an
 existing multi-packet retained-material edition is refused.
 
 Run commands print the edition date, delivery status, and packet count, or the
@@ -231,7 +231,7 @@ platter send YYYY-MM-DD --ad-hoc RUN_ID \
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens for `RUN_ID`.
 Specify one through three distinct complete tailored packets with repeated
 `--packet`, or omit it to select up to three retained complete packets in ID
-order. This freeze leaves eligibility unchanged and starts no Cast, Annals,
+order. This freeze leaves eligibility unchanged and starts no Milieu, Annals,
 source retrieval, Nucleus, or renderer work. Exact reuse returns the same
 edition; changed date or selection is refused.
 
