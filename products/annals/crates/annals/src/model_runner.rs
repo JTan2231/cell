@@ -39,7 +39,7 @@ pub(crate) fn instruction_context_sha256(
     prompt: &str,
     instruction_revision: i64,
     library_instructions: &str,
-    prompts: &cell_prompts::Prompts,
+    prompts: &bazaar::prompts::Prompts,
 ) -> AppResult<String> {
     let context = json!({
         "prompt_version": prompt_version,
@@ -47,7 +47,7 @@ pub(crate) fn instruction_context_sha256(
         "prompt": prompt,
         "instruction_revision": instruction_revision,
         "developer_instructions": library_instructions,
-        "toolset_version": prompts.toolset(toolset_ref(), TOOLSET_VERSION)?.version,
+        "toolset_version": prompts.toolset_version(TOOLSET_VERSION)?,
         "tools": resolved_definitions(prompts)?,
         "result_schema_id": TOOL_RESULT_SCHEMA,
         "result_schema": TOOL_RESULT_SCHEMA_DOCUMENT,
@@ -239,12 +239,11 @@ impl Runner {
         cancellation_requested: &dyn Fn() -> bool,
         deadline: Instant,
     ) -> AppResult<String> {
-        let prompts = cell_prompts::Prompts::at("annals", self.prompt_selection.unwrap_or(1))?;
-        let reference = if self.prompt_selection.is_some() {
-            prompts.toolset(toolset_ref(), TOOLSET_VERSION)?
-        } else {
-            toolset_ref()
-        };
+        let prompts = bazaar::prompts::Prompts::at("annals", self.prompt_selection.unwrap_or(1))?;
+        let mut reference = toolset_ref();
+        if self.prompt_selection.is_some() {
+            reference.version = prompts.toolset_version(TOOLSET_VERSION)?;
+        }
         register_runtime_contract(
             client,
             deadline,
@@ -608,7 +607,7 @@ async fn register_runtime_contract(
     client: &NucleusClient,
     deadline: Instant,
     cancellation_requested: &dyn Fn() -> bool,
-    prompts: &cell_prompts::Prompts,
+    prompts: &bazaar::prompts::Prompts,
     reference: ToolsetRef,
 ) -> AppResult<()> {
     let result_schema = LogSchemaV1::new(
@@ -646,7 +645,7 @@ async fn register_runtime_contract(
     Ok(())
 }
 
-fn resolved_definitions(prompts: &cell_prompts::Prompts) -> AppResult<Vec<Value>> {
+fn resolved_definitions(prompts: &bazaar::prompts::Prompts) -> AppResult<Vec<Value>> {
     let mut definitions = tool_server::tool_definitions();
     for definition in &mut definitions {
         prompts.descriptions(definition)?;
@@ -655,7 +654,7 @@ fn resolved_definitions(prompts: &cell_prompts::Prompts) -> AppResult<Vec<Value>
 }
 
 fn toolset_registration(
-    prompts: &cell_prompts::Prompts,
+    prompts: &bazaar::prompts::Prompts,
     reference: ToolsetRef,
 ) -> AppResult<ToolsetRegistrationV1> {
     let tools = resolved_definitions(prompts)?

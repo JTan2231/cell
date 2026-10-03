@@ -21,12 +21,13 @@ live jobs, account reads, messages, installation or activation.
 2. Select compatible Email send, receiving and account interfaces, Nucleus with
    invocation policy version two and `workspace-unrestricted`, Clockwork incident
    feed and notification handoff, and Iatreion read-only service checks.
-3. Review the prompt migration seed and select the intended private database.
-   Run the explicit importer from the Cell checkout before deploying callers:
+3. Review `infrastructure/bazaar/seed.json` and select the intended private
+   database. Read `bazaar.prompts.prepare` and `bazaar.prompts.import` for text
+   preparation, import effects, and recovery. Run the explicit importer from
+   the Cell checkout before deploying callers:
 
    ~~~sh
-   cargo run --locked --offline --package cell-prompts -- \
-     /absolute/private/bazaar.sqlite3 prompting/seed.json
+   bazaar --database /absolute/private/bazaar.sqlite3 import-prompts infrastructure/bazaar/seed.json
    ~~~
 
    The importer initializes only that selected path and publishes selections

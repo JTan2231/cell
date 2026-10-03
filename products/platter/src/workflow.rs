@@ -324,7 +324,7 @@ async fn capture_packet(
         status: "preparing".into(),
         directory: String::new(),
     };
-    let prompts = cell_prompts::Prompts::load("platter")?;
+    let prompts = bazaar::prompts::Prompts::load("platter")?;
     let (resume_editorial, project_directions) = if daily_override {
         (None, None)
     } else {
@@ -381,7 +381,7 @@ async fn prepare_record(
     deadline: Option<Instant>,
 ) -> Result<PacketRecord> {
     let captured: Captured = store.inputs(&record.id)?;
-    let prompts = cell_prompts::Prompts::at("platter", captured.prompt_selection.unwrap_or(1))?;
+    let prompts = bazaar::prompts::Prompts::at("platter", captured.prompt_selection.unwrap_or(1))?;
     let posting = prompts.render(
         "platter.posting.template",
         &[

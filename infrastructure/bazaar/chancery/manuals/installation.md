@@ -118,7 +118,9 @@ state compatible.
 Every committed string version remains retained. There is no pruning, deletion,
 or data restoration command.
 
-Content stays outside source and release files. Installation,
+Private stored content stays outside source and release files. The reviewed
+repository prompt seed is an explicit import artifact, not runtime state.
+Installation,
 initialization, inspection, and usage registration authorize no content update,
 caller migration, external send, or agent execution. `bazaar --register-usage`
 separately registers command identities in Chancery and creates no strings.
@@ -127,7 +129,10 @@ result. No installed catalog is required for core state operations.
 
 Read `bazaar.string.read` for exact content and history queries. Read
 `bazaar.string.update` for append transactions and uncertain update recovery.
-Those references are related reading, not required documentation dependencies.
+Read `bazaar.prompts.prepare` for selected prompt reads and rendering. Read
+`bazaar.prompts.import` for explicit content imports. Installation never runs
+that importer. Those references are related reading, not required documentation
+dependencies.
 
 ## Deployment recipe
 

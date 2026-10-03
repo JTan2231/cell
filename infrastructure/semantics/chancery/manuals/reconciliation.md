@@ -58,17 +58,19 @@ No wall-clock bound from source acceptance to a semantic revision is promised.
 New request preparation requires initialized private Bazaar state and a complete
 `cell.prompts.semantics` selection. The default database is
 `~/.local/share/bazaar/bazaar.sqlite3`; `CELL_BAZAAR_DATABASE` may select an
-absolute alternate. The selection is
-`{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`, with every component
-pinned to a positive integer version. `semantics.document.instructions` governs
+absolute alternate. Read `bazaar.prompts.prepare` for the shared selection format,
+exact component loading, rendering, and trusted description expansion.
+Semantics chooses its component set. `semantics.document.instructions` governs
 relevance and interpretation. Missing or invalid selections stop preparation
 before model admission. Runtime reads create no Bazaar state and use no embedded
 fallback. Deployment supplies no missing prompt text.
 
-The caller freezes resolved instructions in the retained request. Retries retain
+Semantics freezes resolved instructions in the retained request. Retries retain
 that selection; later text edits do not rewrite saved work. Selection version 1
-and all referenced component versions preserve the migration baseline. Models,
-permissions, schemas, tool execution, commits, and recovery remain Semantics-owned.
+and all referenced component versions preserve the migration baseline. Bazaar
+owns shared text preparation. Authored meaning, runtime inputs, request and
+toolset assembly, models, permissions, schemas, tool execution, commits, and
+recovery remain Semantics-owned.
 
 One job receives the complete accepted document and selected repository snapshot.
 New jobs use `semantics/semantic-document-reconciliation/1` with document-specific

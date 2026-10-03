@@ -1,4 +1,4 @@
-//! Caller-owned prompt selection and rendering over Bazaar's opaque strings.
+//! Bazaar-owned prompt selection and rendering over immutable strings.
 //!
 //! Reads never initialize state or supply embedded fallback instructions.
 #![allow(clippy::missing_errors_doc)]
@@ -6,24 +6,27 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use bazaar::api::{Reader, Record};
-use nucleus_core::{JobRequestV1, ToolsetRef};
+use crate::api::{Reader, Record};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("cannot read Bazaar prompt state: {0}")]
-    Bazaar(#[from] bazaar::api::Error),
+    Bazaar(#[from] crate::api::Error),
     #[error("invalid prompt selection: {0}")]
     Json(#[from] serde_json::Error),
     #[error("prompt configuration is invalid: {0}")]
     Invalid(String),
+    #[error("cannot read prompt import: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// An ordinary Bazaar string, interpreted by callers, that publishes exact versions.
+pub use crate::prompt_import::{ImportReport, import};
+
+/// A Bazaar prompt selection that names exact component versions.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Selection {
@@ -51,7 +54,7 @@ pub fn database_path() -> Result<PathBuf> {
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
         .ok_or_else(|| Error::Invalid("HOME must be absolute".into()))?;
-    Ok(bazaar::database_path(&home))
+    Ok(crate::database_path(&home))
 }
 
 impl Prompts {
@@ -133,29 +136,20 @@ impl Prompts {
         Ok(())
     }
 
-    /// New registrations use the selection version above the historical range.
-    pub fn toolset(&self, mut reference: ToolsetRef, historical_max: u32) -> Result<ToolsetRef> {
-        reference.version = u32::try_from(self.selection.version)
+    /// Derive a version above the caller's historical range.
+    pub fn toolset_version(&self, historical_max: u32) -> Result<u32> {
+        u32::try_from(self.selection.version)
             .ok()
             .and_then(|version| historical_max.checked_add(version))
-            .ok_or_else(|| Error::Invalid("toolset version exhausted".into()))?;
-        Ok(reference)
+            .ok_or_else(|| Error::Invalid("toolset version exhausted".into()))
     }
 
-    /// Historical registrations use the immutable migration selection, version one.
-    pub fn for_toolset(owner: &str, reference: &ToolsetRef, historical_max: u32) -> Result<Self> {
+    /// Resolve the selection behind a caller's version, using baseline one for history.
+    pub fn for_toolset_version(owner: &str, version: u32, historical_max: u32) -> Result<Self> {
         Self::at(
             owner,
-            i64::from(reference.version.saturating_sub(historical_max).max(1)),
+            i64::from(version.saturating_sub(historical_max).max(1)),
         )
-    }
-
-    pub fn instructions(&self, request: &mut JobRequestV1) -> Result<()> {
-        request.instructions = self.expand(&request.instructions)?;
-        if let Some(text) = &mut request.developer_instructions {
-            *text = self.expand(text)?;
-        }
-        Ok(())
     }
 }
 

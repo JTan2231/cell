@@ -65,8 +65,9 @@ readiness, maintenance, and release guarantees.
 1. Read `cell.prompts.weaver` through Bazaar's supported `get` interface. Select
    the caller's private database; use an explicit
    `bazaar --database /absolute/private/bazaar.sqlite3` prefix when Weaver uses
-   `CELL_BAZAAR_DATABASE`. The authoring feature owns selection shape, freeze,
-   missing-state failure, and immutable toolset semantics.
+   `CELL_BAZAAR_DATABASE`. Bazaar owns the shared selection format and preparation
+   through `bazaar.prompts.prepare`. The authoring feature owns component policy,
+   request freezing, missing-state failure and immutable toolset semantics.
 2. Append the changed component and retain the returned positive version.
 
    ```sh

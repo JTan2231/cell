@@ -12,7 +12,7 @@ checks_only=0
 if [ "$#" -eq 2 ]; then
     [ "$2" = --checks-only ] \
         || pipeline_fail 'usage: pipeline/platform.sh SUITE [--checks-only]'
-    case "$suite" in install|maintenance|prompts) ;; \
+    case "$suite" in install|maintenance) ;; \
         *) pipeline_fail 'checks-only requires a shared Rust suite' ;; esac
     checks_only=1
 fi
@@ -24,10 +24,11 @@ case "$suite" in
         python3 "$PIPELINE_ROOT/pipeline/test_autofix.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_autofix_dispatch.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_release_build.py" -q
+        python3 "$PIPELINE_ROOT/pipeline/test_select_changes.py" -q
         python3 "$PIPELINE_ROOT/pipeline/test_ci_notification.py" -q
         python3 -m unittest -q deployment.test_inventory deployment.test_signing deployment.test_candidate deployment.test_build deployment.test_cli ci_manager.test_signing ci_manager.test_installation ci_manager.test_integrations ci_manager.test_autofix ci_manager.test_worktree_cleanup ci_manager.test_recovery
         ;;
-    install|maintenance|prompts)
+    install|maintenance)
         CARGO_PATH_PREFIX=
         pipeline_bootstrap_cargo
         package=cell-$suite

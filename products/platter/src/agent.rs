@@ -500,7 +500,7 @@ fn validate_inputs(inputs: &StageInputs) -> Result<()> {
 }
 
 fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRequestV1> {
-    let prompts = cell_prompts::Prompts::at("platter", inputs.prompt_selection.unwrap_or(1))?;
+    let prompts = bazaar::prompts::Prompts::at("platter", inputs.prompt_selection.unwrap_or(1))?;
     let mut request = build_legacy_request(stage, inputs, cwd)?;
     if inputs.fixed_projects.is_some() {
         ensure!(
@@ -524,16 +524,13 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
         prompt["fixed_projects"] = serde_json::to_value(&inputs.fixed_projects)?;
         request.prompt = prompt.to_string();
         if inputs.prompt_selection.is_some() {
-            request.invocation.toolset = Some(
-                prompts.toolset(
-                    request
-                        .invocation
-                        .toolset
-                        .take()
-                        .context("draft toolset missing")?,
-                    3,
-                )?,
-            );
+            let mut reference = request
+                .invocation
+                .toolset
+                .take()
+                .context("draft toolset missing")?;
+            reference.version = prompts.toolset_version(3)?;
+            request.invocation.toolset = Some(reference);
         }
         return Ok(request);
     }
@@ -579,7 +576,7 @@ fn build_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRe
 }
 
 fn build_legacy_request(stage: Stage, inputs: &StageInputs, cwd: &Path) -> Result<JobRequestV1> {
-    let prompts = cell_prompts::Prompts::at("platter", inputs.prompt_selection.unwrap_or(1))?;
+    let prompts = bazaar::prompts::Prompts::at("platter", inputs.prompt_selection.unwrap_or(1))?;
     let mut invocation = AgentInvocationV1::new(
         "codex",
         MODEL,
@@ -1058,7 +1055,7 @@ async fn register_tools(client: &NucleusClient, state: &StageState) -> Result<()
         .toolset
         .as_ref()
         .context("stage toolset is missing")?;
-    let prompts = cell_prompts::Prompts::for_toolset("platter", reference, 3)?;
+    let prompts = bazaar::prompts::Prompts::for_toolset_version("platter", reference.version, 3)?;
     let mut definitions = if fixed_project_tools(state) {
         fixed_draft_definitions()?
     } else if project_tools(state) {

@@ -39,7 +39,7 @@
     "Authorized source and documentation changes affect a candidate release; prompt append changes future selected preparation only after a complete selection is published. Live jobs, account reads, messages, installation, activation, publication and CI submission require their own authority."
   ],
   "authority": [
-    "EMT owns its source, detailed feature explanations, procedures, rendering and selection meaning. Providers own their exported interfaces; affected products own intervention results. User deferral sets the authorized endpoint."
+    "EMT owns its source, detailed feature explanations, procedures, correspondence rendering, authored prompt meaning and component policy. Bazaar owns shared selection format and prompt preparation. Providers own their exported interfaces; affected products own intervention results. User deferral sets the authorized endpoint."
   ],
   "success": [
     "Owning feature/procedure declarations align, focused checks pass, compatible acyclic documentation closure is verified and the authorized endpoint is established. A deferred manager gate or deployment is not a passing or installed release."
@@ -175,7 +175,7 @@
       },
       {
         "status": "declared",
-        "statement": "Bazaar owns authorized append receipts and immutable version retention; EMT owns selection content.",
+        "statement": "Bazaar owns authorized append receipts and immutable version retention; EMT owns selected component versions and authored meaning.",
         "target": "bazaar",
         "kind": "control",
         "contract": "bazaar.string.update"

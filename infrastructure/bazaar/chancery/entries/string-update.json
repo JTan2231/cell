@@ -41,7 +41,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Content is an opaque UTF-8 string. Bazaar does not parse, normalize, template, merge, or execute it. Empty content is valid. IDs are nonempty exact strings with caller-owned meaning."
+        "statement": "Raw string operations preserve opaque UTF-8 without parsing, normalization, templating, merging, or execution. Empty content is valid. IDs are nonempty exact strings with caller-owned meaning. The separate bazaar.prompts.prepare feature owns prompt text preparation."
       }
     ],
     "identity_and_units": [

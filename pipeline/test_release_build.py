@@ -129,7 +129,7 @@ class ReleaseSelectionTests(unittest.TestCase):
                 plan = selection.make_plan(self.root, [])
             self.assertEqual(plan.selected, ["alpha", "beta"])
             self.assertTrue(all(plan.platform.values()))
-            self.assertTrue(all(plan.shared[suite] for suite in ("pipeline", "install", "maintenance", "prompts")))
+            self.assertTrue(all(plan.shared[suite] for suite in ("pipeline", "install", "maintenance")))
 
 
 if __name__ == "__main__":

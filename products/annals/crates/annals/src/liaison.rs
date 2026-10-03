@@ -111,7 +111,7 @@ fn integrate_with_runner_token_inner(
     } else {
         let base_revision = revision(&transaction)?;
         let selected_instructions = instructions::current(&transaction)?;
-        let prompts = cell_prompts::Prompts::load("annals")?;
+        let prompts = bazaar::prompts::Prompts::load("annals")?;
         let context =
             examination_context(&work.label, base_revision, &selected_instructions, &prompts)?;
         if reexamine {
@@ -140,7 +140,7 @@ fn integrate_with_runner_token_inner(
     let mut backend = LiaisonBackend::open(path, &token)?;
     let library_instructions = backend.library_instructions.clone();
     let selection = frozen_prompt_selection(&connection, &token)?;
-    let prompts = cell_prompts::Prompts::at("annals", selection.unwrap_or(1))?;
+    let prompts = bazaar::prompts::Prompts::at("annals", selection.unwrap_or(1))?;
     let prompt = render_pointer_prompt(&prompts, &backend.work.label, backend.base_revision)?;
     let runner = runner.with_prompt_selection(selection);
     let settings = frozen_run_settings(&connection, &token)?;
@@ -319,7 +319,7 @@ fn examination_context(
     work: &str,
     base_revision: i64,
     instructions: &instructions::InstructionRevision,
-    prompts: &cell_prompts::Prompts,
+    prompts: &bazaar::prompts::Prompts,
 ) -> Result<ExaminationContext, AppError> {
     let prompt_version = format!("{PROMPT_VERSION}-bazaar-{}", prompts.selection.version);
     let prompt = render_pointer_prompt(prompts, work, base_revision)?;
@@ -360,7 +360,7 @@ fn frozen_prompt_selection(connection: &Connection, token: &str) -> Result<Optio
 }
 
 fn render_pointer_prompt(
-    prompts: &cell_prompts::Prompts,
+    prompts: &bazaar::prompts::Prompts,
     work: &str,
     base_revision: i64,
 ) -> Result<String, AppError> {

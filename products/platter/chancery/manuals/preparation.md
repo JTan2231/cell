@@ -270,6 +270,9 @@ New request preparation requires initialized private Bazaar state and a complete
 is supported. Reads fail without creating state or using embedded fallback text.
 
 The selected string is `{"schema_version":1,"entries":{"PROMPT_ID":VERSION}}`.
+Bazaar owns this shared format, loading, prompt template rendering and trusted
+reference expansion through `bazaar.prompts.prepare`. Platter owns authored
+meaning, selected components, runtime inputs and request assembly.
 Every required component is pinned to a positive version. Missing or invalid
 selection stops new request preparation before model admission. Component text
 alone does not change the selected set. Platter owns selection meaning and

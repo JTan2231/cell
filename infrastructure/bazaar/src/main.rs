@@ -38,6 +38,8 @@ enum Command {
         #[command(flatten)]
         input: ContentInput,
     },
+    /// Import reviewed prompt components and publish exact owner selections.
+    ImportPrompts { file: PathBuf },
 }
 
 #[derive(Args)]
@@ -107,6 +109,9 @@ fn run(cli: Cli) -> Result<()> {
             };
             serde_json::to_value(Writer::open(&database)?.update(id, &content)?)?
         }
+        Command::ImportPrompts { file } => {
+            serde_json::to_value(bazaar::prompts::import(&database, file)?)?
+        }
     };
     if cli.json {
         println!("{}", json!({"schema_version":1,"ok":true,"data":data}));
@@ -134,6 +139,10 @@ fn run(cli: Cli) -> Result<()> {
                 }
             }
             Command::Update { id, .. } => println!("Stored {id} version {}.", data["version"]),
+            Command::ImportPrompts { .. } => println!(
+                "Imported {} prompt IDs; appended {} text versions; published {} selections.",
+                data["imported_ids"], data["appended_text_versions"], data["owner_selections"]
+            ),
         }
     }
     Ok(())

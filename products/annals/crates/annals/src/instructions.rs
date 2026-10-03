@@ -126,7 +126,7 @@ pub fn set(connection: &mut Connection, content: &str) -> Result<InstructionSetR
 }
 
 pub(crate) fn initialize(connection: &Connection) -> Result<(), AppError> {
-    let prompts = cell_prompts::Prompts::load("annals")?;
+    let prompts = bazaar::prompts::Prompts::load("annals")?;
     insert_revision(
         connection,
         1,

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "prompting",
     "deployment/crates/cell-install",
     "deployment/crates/cell-maintenance",
     "infrastructure/nucleus/crates/nucleus-cli",
@@ -52,7 +51,7 @@ rust-version = "1.89"
 license = "MIT"
 
 [workspace.dependencies]
-cell-prompts = { path = "prompting" }
+bazaar = { path = "infrastructure/bazaar" }
 chancery-usage = { path = "infrastructure/chancery/crates/chancery-usage" }
 cell-install = { path = "deployment/crates/cell-install" }
 cell-maintenance = { path = "deployment/crates/cell-maintenance" }

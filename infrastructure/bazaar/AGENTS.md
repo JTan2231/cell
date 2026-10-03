@@ -2,10 +2,13 @@
 
 Semantics-Project: bazaar
 
-- Keep Bazaar a store of opaque strings keyed by ID and immutable version.
+- Keep raw Bazaar strings opaque, keyed by ID and immutable version.
 - Use Cell terminology until a Bazaar Semantics repository is registered.
-- Callers own content formats, templates, configuration interpretation, and
-  agent execution. Keep these concerns outside Bazaar.
+- Bazaar owns shared prompt selections, rendering, trusted references,
+  description expansion, and explicit imports over its string store.
+- Products own authored meaning, runtime inputs, models, permissions, schemas,
+  tool implementations, request assembly, domain results, and recovery.
+  Keep agent execution and Nucleus types outside Bazaar.
 - Preserve every committed version. Updates append complete content, including
   when the content matches an earlier version.
 - Keep the Rust API in process. Read operations must not create or repair state.

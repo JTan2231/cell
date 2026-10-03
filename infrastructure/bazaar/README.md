@@ -1,7 +1,8 @@
 # Bazaar
 
-Bazaar stores opaque strings under stable IDs with append-only versions.
-Programs use its in-process Rust API. The CLI uses the same store.
+Bazaar stores strings under stable IDs with append-only versions. It also loads
+selected prompt versions and prepares their text for callers. Programs use its
+in-process Rust API. The CLI uses the same store and owns explicit prompt imports.
 
 ```sh
 bazaar init

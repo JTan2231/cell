@@ -43,7 +43,7 @@ pub fn prepare(root: &Path, store: &Store, exchange: &Exchange, config: &Config)
         .filter(|item|item.id!=exchange.id)
         .map(|item|json!({"incoming_email":item.incoming_json,"outgoing_email":item.mail_json,
             "email_submission":item.send_state,"nucleus_job_id":item.nucleus_job_id,"state":item.state})).collect::<Vec<_>>();
-    let prompts = cell_prompts::Prompts::load("emt")?;
+    let prompts = bazaar::prompts::Prompts::load("emt")?;
     let task = if exchange.kind == "diagnosis" {
         "<bazaar:emt.diagnosis.instructions>"
     } else {

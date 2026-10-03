@@ -49,10 +49,20 @@ SHARED_INPUTS = {
                  "deployment/signing.py", "deployment/test_signing.py"),
     "install": ("deployment/crates/cell-install/*",),
     "maintenance": ("deployment/crates/cell-maintenance/*",),
-    "prompts": ("prompting/*",),
     "catalog": ("pipeline/integrated.sh", "*/chancery/*.json",
                 "*/chancery-*/*.json", "infrastructure/chancery/provider/*.json"),
 }
+
+# Bazaar owns prompt resolution and the reviewed seed. Changes to these inputs
+# also select the requesters that use the shared prompt interface.
+PROMPT_INPUTS = (
+    "infrastructure/bazaar/src/prompts.rs",
+    "infrastructure/bazaar/src/prompt_import.rs",
+    "infrastructure/bazaar/seed.json",
+)
+PROMPT_CONSUMERS = frozenset((
+    "annals", "decisions", "semantics", "platter", "weaver", "emt", "conatus",
+))
 
 # cell-install is the common installer for every current product. A newly
 # introduced product also gets this suite. cell-maintenance has fewer consumers.

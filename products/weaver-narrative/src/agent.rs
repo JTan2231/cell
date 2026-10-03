@@ -49,7 +49,7 @@ fn definitions() -> Vec<(&'static str, &'static str, Value)> {
 
 pub fn request(direction: &str, existing: Option<&str>, cwd: &Path) -> Result<JobRequestV1> {
     ensure!(!direction.trim().is_empty(), "a direction is required");
-    let prompts = cell_prompts::Prompts::load("weaver")?;
+    let prompts = bazaar::prompts::Prompts::load("weaver")?;
     let id = format!("weaver-{}", uuid::Uuid::now_v7());
     let mut invocation = AgentInvocationV1::new(
         "codex",
@@ -63,7 +63,9 @@ pub fn request(direction: &str, existing: Option<&str>, cwd: &Path) -> Result<Jo
         TimeoutSeconds::new(1200),
     );
     invocation.reasoning_effort = Some(ReasoningEffort::High);
-    invocation.toolset = Some(prompts.toolset(toolset(), 1)?);
+    let mut reference = toolset();
+    reference.version = prompts.toolset_version(1)?;
+    invocation.toolset = Some(reference);
     let mut input = json!({"direction":direction});
     if let Some(markdown) = existing {
         input["document"] = json!(markdown);
@@ -79,7 +81,10 @@ pub fn request(direction: &str, existing: Option<&str>, cwd: &Path) -> Result<Jo
         input.to_string(),
         invocation,
     );
-    prompts.instructions(&mut request)?;
+    request.instructions = prompts.expand(&request.instructions)?;
+    if let Some(text) = &mut request.developer_instructions {
+        *text = prompts.expand(text)?;
+    }
     request.validate()?;
     Ok(request)
 }
@@ -160,7 +165,7 @@ pub async fn nonterminal_jobs(client: &NucleusClient) -> Result<usize> {
 }
 
 async fn register_tools(client: &NucleusClient, reference: &ToolsetRef) -> Result<()> {
-    let prompts = cell_prompts::Prompts::for_toolset("weaver", reference, 1)?;
+    let prompts = bazaar::prompts::Prompts::for_toolset_version("weaver", reference.version, 1)?;
     let mut tools = Vec::new();
     for (name, description, schema) in definitions() {
         let schema = to_raw_value(&schema)?;

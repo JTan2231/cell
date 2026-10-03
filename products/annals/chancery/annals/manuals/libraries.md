@@ -197,13 +197,15 @@ kind. It refuses replacement. Library initialization requires initialized
 private Bazaar state and a complete `cell.prompts.annals` selection. The default
 Bazaar database is `~/.local/share/bazaar/bazaar.sqlite3`; an absolute
 `CELL_BAZAAR_DATABASE` override is accepted. Reads fail without creating state
-or using embedded fallback text. Bazaar owns immutable text versions. Annals
-owns selection meaning, rendering, instructions, execution, and domain effects.
+or using embedded fallback text. Bazaar owns the shared selection format,
+exact component loading, and rendering. Annals chooses its initial instruction
+components and owns their meaning, immutable library capture, initialization,
+and domain effects.
 
-The `annals.work.integrate` feature owns the complete prompt-selection format,
-publication, frozen-context, and historical-version rules. Read it as related
-documentation when changing the initialization text selection. Runtime reads
-and deployment do not import missing prompt contents.
+Read `bazaar.prompts.prepare` for the shared format and text-preparation rules.
+Read `bazaar.prompts.import` for explicit publication and import recovery.
+`annals.work.integrate` owns examination context and Annals historical requester
+compatibility. Runtime reads and deployment do not import missing prompt contents.
 
 The current library schema is 7. Migration accepts versions 3 through 6 and
 applies the missing steps in one transaction. Versions 3 and 4 acquire the

@@ -33,7 +33,7 @@ The current user owns Bazaar programs and state. The Cell manifest executor runs
 declared deployment instructions in order; Bazaar owns selection and setup.
 Direct installation works independently. Installation and inspection grant no authority
 to append content, migrate callers, delete history, send externally, or run an
-agent. Protect all content outside source and release files.
+agent. Protect private stored content outside source and release files.
 
 ## Install programs
 

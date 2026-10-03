@@ -21,7 +21,7 @@
   ],
   "authority": [
     "Annals owns its catalog, library identity and immutable kind, exact stored instruction revisions, and library records.",
-    "Consuming applications define interpretation through stored instructions. Bazaar owns immutable text versions; Annals owns selection meaning and initialization."
+    "Consuming applications define interpretation through stored instructions. Bazaar owns immutable text versions and shared selection loading and rendering. Annals chooses its initial components and owns their meaning, immutable library capture, and initialization."
   ],
   "success": [
     "Selection verifies the intended persistent identity and returns the selected registration, instruction revision, schema, statistics.",
@@ -218,10 +218,10 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Bazaar supplies immutable text versions required for library initialization. Annals owns selection JSON, rendering, interpretation, and execution; returned text grants no extra authority.",
+        "statement": "Bazaar owns shared selection format, exact component loading, rendering, and trusted description expansion. Annals chooses its component set and owns authored meaning, runtime inputs, typed request and toolset assembly, permissions, execution, domain effects, and recovery. Prepared text grants no additional authority.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       },
       {
         "status": "not_applicable",
@@ -235,6 +235,11 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ]
 }

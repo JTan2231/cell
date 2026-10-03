@@ -126,6 +126,11 @@
       "id": "bazaar.string.read",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "bazaar.prompts.prepare",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "does_not_authorize": [
@@ -250,10 +255,10 @@
       },
       {
         "status": "declared",
-        "statement": "Bazaar supplies immutable text versions. The caller owns selection JSON, rendering, permissions, and execution; a string supplies no additional authority.",
+        "statement": "Bazaar owns immutable text versions, shared selection format and loading, template rendering, and trusted reference expansion. The caller owns authored meaning, component policy, runtime inputs, request assembly, permissions, execution policy, and domain success; prompt text grants no additional authority.",
         "target": "bazaar",
         "kind": "data",
-        "contract": "bazaar.string.read"
+        "contract": "bazaar.prompts.prepare"
       }
     ]
   },

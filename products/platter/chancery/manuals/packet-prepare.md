@@ -272,7 +272,10 @@ bazaar update cell.prompts.platter --file /absolute/private/selection.json
 
 Use an explicit `bazaar --database /absolute/private/bazaar.sqlite3` prefix when
 the caller uses `CELL_BAZAAR_DATABASE`. Inspect the committed component and
-selection versions. Bazaar does not validate Platter's JSON or prompt meaning.
+selection versions. Raw updates do not validate selection JSON or prompt meaning.
+Bazaar validates the shared selection format and prepares its selected text
+through `bazaar.prompts.prepare`. Platter owns authored meaning, selected
+components, runtime inputs and request assembly.
 Keep selection version 1 and all referenced historical texts. A missing or
 invalid selection stops new request preparation before model admission; saved
 work retains its frozen instructions.

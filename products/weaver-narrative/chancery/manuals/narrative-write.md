@@ -166,6 +166,10 @@ pinned to a positive integer version. Publish component text first, then publish
 the complete selection. A text append alone does not change the selected set.
 Missing or invalid selections stop new request preparation before model admission.
 
+Bazaar owns the shared selection format, loading, template rendering and trusted
+reference expansion through `bazaar.prompts.prepare`. Weaver owns authored meaning,
+selected components, runtime inputs and request assembly.
+
 The caller freezes resolved instructions in the exact request. Resume retains
 that selection; later edits do not rewrite saved work. Models, permissions,
 schemas, tool execution, domain commits, and recovery remain Weaver-owned.
@@ -189,3 +193,4 @@ interval is promised.
 - Read `chancery show weaver.develop.change`.
 - Read `chancery show annals.decision-account.exchange`.
 - Read `chancery show bazaar.string.read`.
+- Read `chancery show bazaar.prompts.prepare`.
