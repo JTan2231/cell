@@ -204,6 +204,7 @@ pub(crate) fn ensure_worktree(
     revision: &CommitId,
 ) -> Result<()> {
     private_worktree(paths, path)?;
+    crate::paths::ensure_private(path.parent().context("candidate has no job directory")?)?;
     if !path.exists() {
         value(
             paths,

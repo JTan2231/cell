@@ -1905,6 +1905,7 @@ mod tests {
     use super::*;
     use crate::signing::MacSigning;
     use bazaar::api::Record;
+    use std::os::unix::fs::PermissionsExt;
 
     fn policy(paths: &Paths) -> Result<Policy> {
         let signing_policy = SigningPolicy {
@@ -2083,6 +2084,63 @@ mod tests {
                 .id,
             queued.id
         );
+        Ok(())
+    }
+
+    #[test]
+    fn fresh_integration_creates_private_job_directory_before_git() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        fs::write(repo.join("file.txt"), "submitted\n")?;
+        git::value(&paths, &repo, &["add", "file.txt"])?;
+        let tree = git::value(&paths, &repo, &["write-tree"])?;
+        let input = git::commit_tree(
+            &paths,
+            &repo,
+            &tree,
+            std::slice::from_ref(&base),
+            "fixture",
+            1_700_000_001,
+            "Fixture submission",
+        )?;
+        git::value(&paths, &repo, &["reset", "--hard", &input.0])?;
+        let worker = worker(&paths)?;
+        let mut job = job(&paths, &base, "fresh-integration")?;
+        job.input = input.clone();
+        job.base = Some(base.clone());
+        job.phase = Phase::Integrating;
+        let mut job = worker.store.insert(&job)?;
+        let directory = paths.job(&job.id.0);
+        assert!(!directory.exists());
+
+        worker.integrating(&mut job)?;
+
+        assert_eq!(job.phase, Phase::Checking);
+        assert_eq!(
+            fs::metadata(&directory)?.permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(directory.join("merge.log"))?
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        let candidate = job.candidate.as_ref().context("integrated candidate")?;
+        assert_eq!(
+            git::commit(&paths, &worker.worktree(&job), "HEAD")?,
+            *candidate
+        );
+        assert_eq!(
+            git::ref_value(&paths, &repo, &git::private_ref(&job.id.0, "candidate")?)?,
+            Some(candidate.clone())
+        );
+        assert_eq!(
+            fs::read_to_string(worker.worktree(&job).join("file.txt"))?,
+            "submitted\n"
+        );
+        assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
+        assert_eq!(git::commit(&paths, &repo, "HEAD")?, input);
         Ok(())
     }
 
