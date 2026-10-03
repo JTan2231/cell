@@ -41,7 +41,7 @@ product and dependency updates explicitly. Committed declarations order that
 selection. The executor adds no products or requester maintenance. The supported
 CI, build, deployment, and recovery procedures belong to `platter.install.operate`.
 
-Cast must supply its supported retained export. URL-selected runs require one
+Milieu must supply its supported retained export. URL-selected runs require one
 matching retained job. Email must support `--payload-stdin` before Platter can
 send database artifacts. Tectonic, Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.
@@ -59,7 +59,7 @@ Foreign selectors stop publication; installation does not audit release bytes.
 Product and catalog writer locks serialize individual atomic selector changes.
 Failed publication retains completed changes without automatic compensation.
 
-All durable runtime content and maintenance holds live in schema-seven
+All durable runtime content and maintenance holds live in schema-eight
 `packets.sqlite3` at the canonical root. Fresh state uses
 `~/.local/share/platter`; a sole `~/.local/share/job-packets` predecessor remains
 in place. Both roots are ambiguous and refused. An explicit `--state-dir` must
@@ -105,7 +105,7 @@ release existing holds. Explicit maintenance commands retain their ordinary
 admission and ownership rules. Installation requires no post-publication
 readiness observation.
 
-Migration is an explicit one-way schema-one to schema-seven import. It preserves
+Migration is an explicit one-way schema-one to schema-eight import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
 bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
 Legacy reserved/sent jobs become ineligible; their preparation runs remain
@@ -119,7 +119,7 @@ changed source file stops import. Cleanup failure retains originals and recovery
 information. Reinvocation verifies every remaining source hash before removing
 only manifest files. No production migration is implied by a source edit.
 
-Old binaries cannot operate schema seven. Recovery after this boundary requires
+Old binaries cannot operate schema eight. Recovery after this boundary requires
 a compatible candidate. Program selection does not undo schema
 migration. Preserve holds after unresolved recovery.
 
@@ -129,6 +129,12 @@ It preserves exact selections, captured inputs, requests and artifact bytes. Exi
 keep their legacy workflow. The version guard prevents an older binary from
 interpreting a daily brief as a complete tailored packet or deriving packet
 selection from the shared attachment. Migration starts no model work.
+
+Schema-two through schema-seven migration also renames the owned discovery job
+column and configuration key to Milieu. It selects the Milieu public executable
+path; deployment then pins the selected release. Captured inputs, model requests,
+artifacts, frozen editions, eligibility, and opaque identifiers stay unchanged.
+Schema eight prevents older programs from reopening the renamed state.
 
 Migration verifies retained local state. It does not check dependency readiness
 before deployment updates retained executable paths. The deployment command
@@ -160,12 +166,12 @@ receipt. Omit `--completion-receipt` for ordinary migration.
 
 Installation does not invoke doctor. As a separate runtime diagnostic,
 `doctor` validates a configured resume override and checks retained state,
-Cast/Annals/Email/Weaver executable identities, Email's byte-payload interface,
+Milieu/Annals/Email/Weaver executable identities, Email's byte-payload interface,
 renderer availability and strict authenticated Nucleus readiness. Renderer
 overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
 `/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read Vita
-works, render a PDF, submit a model job or send mail. Cast/Annals executable
+works, render a PDF, submit a model job or send mail. Milieu/Annals executable
 identity is not proof that their libraries are initialized. `--state-only`
 requires neither rendering nor external service readiness.
 
@@ -238,7 +244,7 @@ reconcile an uncertain edition. No deployment step clears this incident.
 
 The product deployment command captures `platter/daily`. During setup it
 migrates supported state, initializes a missing template from the supplied
-`resume` absolute path, and updates Cast, Email and Weaver executable references
+`resume` absolute path, and updates Milieu, Email and Weaver executable references
 to the final installed releases. The `resume` setting cannot replace an initialized template. The optional
 `projects_template` absolute path imports a private template through the same
 projects-only checks as `platter import-projects-template`. Import retains the

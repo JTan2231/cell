@@ -11,12 +11,12 @@ platter opportunities list --query 'https://jobs.ashbyhq.com/company/posting'
 platter opportunities show REFERENCE
 ```
 
-Both commands return schema-one JSON with `schema_version` and `items`. List
+Both commands return schema-two JSON with `schema_version` and `items`. List
 returns every matching opportunity. Show requires an exact reference and returns
 one item, or fails if it is absent. `--json` is accepted but is not required.
 Rust callers use `platter::api::Client`, `OpportunityList` and `Opportunity`.
 
-Each item contains `reference`, `cast_job_id`, `company`, `title`, `urls`, and
+Each item contains `reference`, `milieu_job_id`, `company`, `title`, `urls`, and
 `packets`. Treat `reference` as opaque. It is the retained Platter opportunity
 key. Further preparation and regeneration preserve it. Each packet contains
 its run `id`, UTC `created_at`, `preparation_status`, and `has_resume`.
@@ -30,8 +30,8 @@ retrieval failure before preparation has no run and is excluded. URLs come from
 the captured job and posting. Missing historical URLs remain absent. No source
 text, career material, resume bytes or delivery body is returned.
 
-Text search matches references, Cast IDs, companies, titles and URLs without
-case sensitivity. An HTTP URL query uses exact supported ATS identity or Cast's
+Text search matches references, Milieu IDs, companies, titles and URLs without
+case sensitivity. An HTTP URL query uses exact supported ATS identity or Milieu's
 URL normalization. Supported ATS application-page suffixes and tracking queries
 can identify the same posting. Text matches are candidates, not a unique-choice
 guarantee. Empty results mean no retained match.
@@ -41,7 +41,7 @@ opens state read-only and performs no preparation, source request, dependency
 call, eligibility change, edition freeze or send. Closing a public posting does
 not prevent this read. Platter preparation dependencies need not be ready.
 
-The canonical database must exist at schema seven. Missing or incompatible state
+The canonical database must exist at schema eight. Missing or incompatible state
 fails; follow the [installation contract](install-operate.md). The interface
 does not repair or initialize state. Results cover retained records only, not
 current employer availability. Full reads use memory proportional to the

@@ -7,7 +7,7 @@ recover Clew. Read `chancery resolve clew.install.operate` for the required
 keeps prerequisites, effects, stop conditions, and verification in place.
 
 General notes, named threads, plain external links, and generic reads require
-no external reader. Explicit application features need Cast read contract two
+no external reader. Explicit application features need Milieu read contract two
 for job search, first-job admission, and email context.
 A nonempty schema-one migration also needs Platter read contract one. Email contract four supplies submission; Clockwork contract
 four supplies activation and the shared service-health delay before a new halt. Clew runs no model requester.
@@ -36,7 +36,7 @@ grant no note, mail, or status authority.
    absent when the setting is omitted. Deployment creates no maintenance hold,
    drains no send, and temporarily disables no binding.
 5. Confirm the retained deployment outcome and captured or explicit schedule intent.
-   Deployment does not check artifact integrity, ledger integrity, or the Cast
+   Deployment does not check artifact integrity, ledger integrity, or the Milieu
    snapshot. Ordinary doctor and application checks remain separate.
 
 Stop for unavailable required interfaces, an existing admission hold, unsafe
@@ -58,8 +58,8 @@ Preserve holds and failure incidents.
    Use `--home ABSOLUTE_PATH` for an explicit user home and
    `--expected-current absent|releases/ID` when selection must match an exact
    prior condition. Stop if selectors belong to another owner .
-3. Run `clew init` to create empty schema-three state or check compatible state.
-   Stop for schema one or two, nonempty foreign state, or unsupported state.
+3. Run `clew init` to create empty schema-four state or check compatible state.
+   Stop for schema one through three, nonempty foreign state, or unsupported state.
 4. Run `clew-install inspect` to read selected release metadata. Use `clew doctor`
    separately when a ledger diagnostic is needed; installation does not call it.
 5. Run `clew --register-usage` to register command identities without reports.
@@ -71,23 +71,23 @@ private state outside source and release trees.
 
 ## Migrate an older ledger
 
-1. Use the product deployment command to convert supported schema-one or schema-two
-   state to schema three under ordinary admission. Ordinary commands and `init`
+1. Use the product deployment command to convert supported schema-one, schema-two, or schema-three
+   state to schema four under ordinary admission. Ordinary commands and `init`
    refuse older schemas; direct program installation does not migrate state.
 2. Exclude concurrent ledger writers through the guarded migration transaction.
 3. Resolve every retained legacy reference through Platter's public opportunity
    reader for schema-one state. Stop on missing mappings or two legacy references
-   that select the same Cast job. An empty schema-one ledger needs no Platter read.
-   Schema-two conversion is local and needs no external reader. Do not infer a
+   that select the same Milieu job. An empty schema-one ledger needs no Platter read.
+   Schema-two and schema-three conversion are local and need no external reader. Do not infer a
    mapping from company, role, or URL and do not merge histories.
-4. Commit schema three, canonical external references, explicit application-report
+4. Commit schema four, canonical external references, explicit application-report
    associations, legacy aliases, and exact write requests in one transaction.
    No original-schema copy is created. Failure before commit preserves prior data.
 5. Read the retained deployment outcome. Preserve reported transaction evidence.
-   Keep a schema-three-compatible program selected after migration. Preserve
+   Keep a schema-four-compatible program selected after migration. Preserve
    saved or explicitly requested schedule intent.
 
-Existing job identity becomes a `cast.job` external reference with an explicit
+Existing job identity becomes a `milieu.job` external reference with an explicit
 application-report association. Migration preserves entry IDs, sequence,
 timestamps, supplied text, corrections, and retractions. Legacy aliases retain
 their exact argument identity for retries. No old entry receives an invented
@@ -97,6 +97,10 @@ completion check, or send.
 Frozen email occurrences, message bytes, send keys, and acceptance receipts stay
 unchanged. Old writers are rejected after commit. Do not replay a legacy write
 with a changed argument namespace. Migration does not downgrade state.
+
+Schema-three conversion changes owned job-reference names and stored retry fields
+to Milieu. Use the renamed application argument with the original write ID for
+an exact retry. This conversion preserves supplied content and job identity.
 
 ## Prepare the daily definition
 
@@ -136,7 +140,7 @@ permits future activation and does not retry an uncertain message.
    deployment. Reconcile and acknowledge executor admission separately from any
    authorized product recovery; acknowledgement does not establish ledger or
    schedule correctness.
-4. Run `clew-install inspect` to read release metadata. Ledger and Cast diagnostics
+4. Run `clew-install inspect` to read release metadata. Ledger and Milieu diagnostics
    remain separate. Restore only captured enabled intent. Keep unresolved holds and incidents intact.
 
 Stop when program and state versions do not match. Never repair a report by

@@ -14,12 +14,12 @@ migration, and maintenance.
 ## Primary interfaces
 
 ```sh
-platter prepare CAST_JOB_ID
+platter prepare MILIEU_JOB_ID
 platter prepare-daily
-platter prepare CAST_JOB_ID --fresh
-platter regenerate CAST_JOB_ID --id REQUEST_ID
-platter eligibility CAST_JOB_ID false
-platter eligibility CAST_JOB_ID true
+platter prepare MILIEU_JOB_ID --fresh
+platter regenerate MILIEU_JOB_ID --id REQUEST_ID
+platter eligibility MILIEU_JOB_ID false
+platter eligibility MILIEU_JOB_ID true
 ```
 
 Preparation starts or continues the applicable captured workflow without sending.
@@ -46,7 +46,7 @@ deferred packet must pass freshness before selection.
 Its ordinary one-packet freeze sets that job ineligible again.
 Delivery records retain what happened even after eligibility changes.
 
-Preparation reads supported Cast export and Annals work list/show interfaces.
+Preparation reads supported Milieu export and Annals work list/show interfaces.
 Vita is the fixed Annals library named `vita`. Platter invokes
 `~/.local/bin/annals library vita work list --limit 1000 --json` and reads each
 returned work with `work show LABEL --json`. It does not call CRM.
@@ -60,18 +60,18 @@ the supported Annals read contract.
 Read `annals.work.retain` and `annals.library.operate` for separately authorized
 career-library operations.
 
-Cast exports contain stored posting excerpts. Platter fetches full posting text
+Milieu exports contain stored posting excerpts. Platter fetches full posting text
 through a supported adapter before writing. Sources include Greenhouse, Ashby,
 Lever and supported JobPosting JSON-LD. Retrieval fails when pages require
 unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
 
-For `run-ad-hoc`, Platter selects one retained job from Cast's export by its
+For `run-ad-hoc`, Platter selects one retained job from Milieu's export by its
 canonical supported ATS identity or normalized public URL. It then uses that
 job through the same preparation path as scheduled work. An unknown URL, an
 ambiguous match, or a supported ATS board URL without a posting identity fails
-before packet preparation. This selection performs no Cast collection.
+before packet preparation. This selection performs no Milieu collection.
 
 Ashby boards are cached as private `ashby-cache/BOARD.json` files under the
 canonical runtime root. Each file contains the complete board response and its
@@ -169,7 +169,7 @@ remain unchanged.
 ## New and repeated preparation
 
 For an authorized restart after a failed or cancelled preparation, use
-`prepare CAST_JOB_ID --fresh`. The latest run must be incomplete, with no
+`prepare MILIEU_JOB_ID --fresh`. The latest run must be incomplete, with no
 accepted resume, and its model jobs must be terminal or absent. The job must
 remain eligible. This operation captures the posting, career entries and
 template again. It creates a new run and new model jobs without copying prior
@@ -178,7 +178,7 @@ artifacts remain retained. Ordinary preparation still resumes retained work.
 Fresh preparation uses the same Ashby cache policy.
 
 To create another packet for a previously prepared job, including one already
-used in an edition, run `regenerate CAST_JOB_ID --id REQUEST_ID`. It captures
+used in an edition, run `regenerate MILIEU_JOB_ID --id REQUEST_ID`. It captures
 source inputs and current writing instructions again, then uses the ordinary
 draft and mechanical validation pipeline. It does not copy prior outputs
 or model context, change old packet statuses, enable an ineligible job, freeze
@@ -189,7 +189,7 @@ Successful regeneration leaves the current eligibility policy unchanged.
 The request ID contains 1 through 80 ASCII letters, digits, underscores or
 hyphens and belongs to the regeneration namespace. It is retained atomically
 with the new run's captured inputs. A failure before capture creates no run
-or request binding. Reuse for another Cast job is refused. Repeating a captured
+or request binding. Reuse for another Milieu job is refused. Repeating a captured
 request resumes that exact preparation or returns its retained outcome without
 recapturing sources. A terminal stage failure remains a failure; another attempt
 requires a new request ID. Other model jobs for the opportunity must be terminal

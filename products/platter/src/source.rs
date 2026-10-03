@@ -1,7 +1,7 @@
 use crate::agent::CareerEntry;
 use annals::api::{CliClient, Request, Response, WorkCommand, WorkShowArgs};
 use anyhow::{Context, Result, bail, ensure};
-use cast::models::{Job, Snapshot};
+use milieu::models::{Job, Snapshot};
 use scraper::{Html, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,34 +21,34 @@ pub fn discovery(executable: &Path) -> Result<Snapshot> {
         .output()?;
     ensure!(
         output.status.success(),
-        "Cast export failed: {}",
+        "Milieu export failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     let snapshot: Snapshot = serde_json::from_slice(&output.stdout)?;
     ensure!(
         snapshot.schema_version == 1,
-        "unsupported Cast export schema"
+        "unsupported Milieu export schema"
     );
     Ok(snapshot)
 }
 
 pub fn retained_job(executable: &Path, url: &str) -> Result<Job> {
-    cast::adapters::validate_job_url(url).map_err(anyhow::Error::msg)?;
+    milieu::adapters::validate_job_url(url).map_err(anyhow::Error::msg)?;
     let mut selected = None;
     for job in discovery(executable)?.jobs {
         if job_url_matches(&job, url)? {
             ensure!(
                 selected.is_none(),
-                "job URL matches multiple retained Cast jobs"
+                "job URL matches multiple retained Milieu jobs"
             );
             selected = Some(job);
         }
     }
-    selected.context("job URL is not retained by Cast; Cast collection is unavailable")
+    selected.context("job URL is not retained by Milieu; Milieu collection is unavailable")
 }
 
 pub fn job_url_matches(job: &Job, url: &str) -> Result<bool> {
-    cast::adapters::job_url_matches(job, url).map_err(anyhow::Error::msg)
+    milieu::adapters::job_url_matches(job, url).map_err(anyhow::Error::msg)
 }
 
 pub(crate) fn annals_executable() -> Result<PathBuf> {
@@ -183,7 +183,7 @@ fn ats(job: &Job) -> Result<Option<AtsPosting>> {
     if let (Some(source), Some(hosted)) = (&source, &hosted) {
         ensure!(
             source == hosted,
-            "Cast source identity and hosted posting URL disagree"
+            "Milieu source identity and hosted posting URL disagree"
         );
     }
     Ok(source.or(hosted))
@@ -193,7 +193,7 @@ pub fn identity(job: &Job) -> Result<String> {
     if let Some(posting) = ats(job)? {
         return Ok(posting.key());
     }
-    cast::normalize_url(&job.url).map_err(|error| anyhow::anyhow!(error.to_string()))
+    milieu::normalize_url(&job.url).map_err(|error| anyhow::anyhow!(error.to_string()))
 }
 
 pub(crate) fn retained_url_matches(stored: &str, query: &str) -> bool {
@@ -206,7 +206,7 @@ pub(crate) fn retained_url_matches(stored: &str, query: &str) -> bool {
     ) {
         return stored == query;
     }
-    match (cast::normalize_url(stored), cast::normalize_url(query)) {
+    match (milieu::normalize_url(stored), milieu::normalize_url(query)) {
         (Ok(stored), Ok(query)) => stored == query,
         _ => false,
     }
@@ -314,7 +314,7 @@ pub async fn posting(root: &Path, job: &Job) -> Result<Posting> {
     );
     Ok(Posting {
         url: job.url.clone(),
-        retrieved_at: retrieved_at.unwrap_or_else(cast::now),
+        retrieved_at: retrieved_at.unwrap_or_else(milieu::now),
         text,
     })
 }
@@ -362,7 +362,7 @@ async fn ashby_board(root: &Path, ats: &AtsPosting, endpoint: &url::Url) -> Resu
         "invalid Ashby board"
     );
     let cached = AshbyBoard {
-        retrieved_at: cast::now(),
+        retrieved_at: milieu::now(),
         response,
     };
     crate::write_json(&path, &cached).context("write Ashby board cache")?;
@@ -533,7 +533,7 @@ fn normalized_title(title: &str) -> String {
 }
 fn normalized_posting_url(value: &str) -> Result<String> {
     let normalized =
-        cast::normalize_url(value).map_err(|error| anyhow::anyhow!(error.to_string()))?;
+        milieu::normalize_url(value).map_err(|error| anyhow::anyhow!(error.to_string()))?;
     Ok(normalized.trim_end_matches('/').to_owned())
 }
 

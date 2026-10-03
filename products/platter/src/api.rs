@@ -15,7 +15,7 @@ pub struct PacketSummary {
 pub struct Opportunity {
     /// Opaque stable opportunity key. Regeneration preserves this reference.
     pub reference: String,
-    pub cast_job_id: String,
+    pub milieu_job_id: String,
     pub company: String,
     pub title: String,
     pub urls: Vec<String>,
@@ -61,7 +61,7 @@ impl Client {
         );
         let result: OpportunityList = serde_json::from_slice(&output.stdout)?;
         ensure!(
-            result.schema_version == 1,
+            result.schema_version == 2,
             "unsupported Platter opportunity schema"
         );
         Ok(result)

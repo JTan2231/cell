@@ -6,12 +6,12 @@ and comparing without case sensitivity. Other status text is shown unchanged.
 A missing status appears as `No status recorded`. A notes-only report does not
 change status. Retractions and replacements use the same current-record rules
 as `clew list`. Only explicit application reports contribute status and notes.
-Generic ledger notes and plain `--ref cast.job JOB_ID` links do not appear in the
+Generic ledger notes and plain `--ref milieu.job JOB_ID` links do not appear in the
 application view or email, even when they share a thread with an application report.
 
 Each included application shows company, role, supplied status and all retained
 job URLs. Items sort by company, then role, without case sensitivity, with the
-opaque Cast job ID as the final tie-breaker. Saved notes follow the list,
+opaque Milieu job ID as the final tie-breaker. Saved notes follow the list,
 grouped in the same application order. Every active note appears unchanged in
 ledger sequence order. Superseded and retracted records, and retraction
 explanations, are excluded. Rejected applications contribute no counts or notes.
@@ -21,11 +21,11 @@ An empty snapshot says `No applications to show.` No model, application-age
 calculation, correspondence read, status inference or application write occurs.
 The ledger's `recorded_at` records reporting time, not application time.
 
-Clew reads the ledger once and joins Cast's complete retained snapshot by exact
-job ID. These are separate snapshots. A Cast read failure or missing job leaves
-each qualifying application visible under its Cast job ID, with missing job
+Clew reads the ledger once and joins Milieu's complete retained snapshot by exact
+job ID. These are separate snapshots. A Milieu read failure or missing job leaves
+each qualifying application visible under its Milieu job ID, with missing job
 details marked and one context-unavailable footer.
-A ledger read failure stops rendering. An empty selected list needs no Cast
+A ledger read failure stops rendering. An empty selected list needs no Milieu
 read. Retained links do not establish that a posting is still open.
 
 ## Preview and send
@@ -44,7 +44,7 @@ stdout, with a nonzero exit. JSON preview returns `data.digest` with
 `subject`, `body`, `application_count`, `context_available` and
 `ledger_sequence`. The sequence is the last ledger append observed, including
 corrections; it is null for an empty ledger. Context is available when every
-included application has Cast metadata. It is also true for an empty list.
+included application has Milieu metadata. It is also true for an empty list.
 Preview creates no delivery state and sends nothing.
 
 Manual send requires explicit authorization. Enabling `clew/daily-email` grants
@@ -58,7 +58,7 @@ notes are disclosed to Resend and Gmail. No attachments are sent.
 Clew retains an exact message, a random stable idempotency key, first-attempt
 time and acceptance receipt in private `email.sqlite3` beside `ledger.sqlite3`.
 The email database is schema one and is created on the first send; it does not
-change the schema-three ledger. Files use mode 0600 under the private
+change the schema-four ledger. Files use mode 0600 under the private
 0700 state directory. Records have no automatic pruning. Clew supplies no data backup or restore.
 
 Sends hold product admission and a separate email lock. A manual occurrence is
@@ -115,7 +115,7 @@ Resolve the cause and any uncertain
 submission before explicitly approving
 `clockwork binding resume clew/daily-email INCIDENT_ID`. Continuation permits
 future activations; it does not retry an uncertain message. Deliberate admission
-during deployment maintenance returns a successful skip. Schema-three ledger read and
+during deployment maintenance returns a successful skip. Schema-four ledger read and
 record commands remain available during email maintenance.
 
 CLI dispatch attempts metadata-only Chancery usage recording. It records no

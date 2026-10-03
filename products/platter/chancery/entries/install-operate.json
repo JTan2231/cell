@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 15,
+  "contract_version": 16,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -79,7 +79,7 @@
   "failure_and_recovery": [
     "A failed instruction retains completed file, migration, configuration and schedule changes. The executor stops and performs no automatic retry, rollback or product recovery. Interrupted commands have unknown effects. Inspect current product state and complete authorized recovery separately from executor reconciliation and acknowledgement. Preserve separately acquired holds.",
     "Use explicit product interfaces to inspect retained effects and complete authorized recovery. An interrupted executor request executes no automatic repair; a new attempt requires a new request ID. Preserve separately acquired maintenance holds and migration evidence.",
-    "Schema-seven state cannot use an older incompatible binary. Program selection does not undo migration; select a compatible program for explicit recovery.",
+    "Schema-eight state cannot use an older incompatible binary. Program selection does not undo migration; select a compatible program for explicit recovery.",
     "Preserve Clockwork halts and uncertain sends through deployment. Binding continuation does not authorize a preparation retry or ambiguous resend."
   ],
   "privacy": [
@@ -89,11 +89,11 @@
   "dependencies": [
     {
       "id": "platter.maintenance",
-      "min_contract": 6,
-      "max_contract_exclusive": 7
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     },
@@ -161,7 +161,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Use platter.maintenance for release, canonical schema-seven state, hold/drain, migration, and incident meaning. Platter state and Nucleus evidence/credentials remain separately owned."
+        "statement": "Use platter.maintenance for release, canonical schema-eight state, hold/drain, migration, and incident meaning. Platter state and Nucleus evidence/credentials remain separately owned."
       }
     ],
     "identity_and_units": [
@@ -201,7 +201,11 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 15 removes the Cast collection prerequisite. It preserves the product deploy command, explicit maintenance interfaces, opaque execution receipts, and product-owned transactional and hashed source-cleanup rules."
+        "statement": "Operation contract 16 removes the Milieu collection prerequisite. It preserves the product deploy command, explicit maintenance interfaces, opaque execution receipts, and product-owned transactional and hashed source-cleanup rules."
+      },
+      {
+        "status": "declared",
+        "statement": "Schemas two through seven migrate owned discovery job and configuration names to Milieu without changing captured requests, artifacts, editions, eligibility or opaque identities. Older programs cannot open schema eight."
       }
     ],
     "reliances": [
@@ -214,7 +218,7 @@
       },
       {
         "status": "declared",
-        "statement": "Runtime prerequisites rely on Cast retained export, Annals commands and Email attachment support; unselected installations are not upgraded implicitly.",
+        "statement": "Runtime prerequisites rely on Milieu retained export, Annals commands and Email attachment support; unselected installations are not upgraded implicitly.",
         "target": "runtime-dependencies",
         "kind": "readiness"
       },

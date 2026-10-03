@@ -2,7 +2,7 @@
 
 Clew is a private ledger notepad for supplied notes and status. Entries can
 belong to named threads and carry optional links to external stable IDs.
-It preserves append-only history and corrections. Explicit Cast job reports
+It preserves append-only history and corrections. Explicit Milieu job reports
 also support application tracking and a daily application email.
 
 ```sh

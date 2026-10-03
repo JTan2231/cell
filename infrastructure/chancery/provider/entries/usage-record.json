@@ -25,7 +25,7 @@
   ],
   "failure_and_recovery": [
     "Recording returns an error after bounded SQLite contention; the observe adapter emits a bounded diagnostic and preserves the product command result.",
-    "No automatic append retry, migration, update, delete or pruning. Preserve database-local cursor scope."
+    "No automatic append retry, migration, update, delete or pruning. Preserve database-local cursor scope. Explicitly authorized product identity maintenance is a separate Chancery-owned transaction with a prior backup and restored immutability triggers."
   ],
   "privacy": [
     "Retains opaque system, command and Codex thread identities, invocation IDs, and observation times in a private current-user database. New invocations require thread attribution; existing unattributed rows remain readable. The journal excludes arguments, credentials, output, and model context. It makes no network requests."
@@ -113,7 +113,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Initialization accepts only empty or schema-one Chancery state. Registration is idempotent and may partially commit before an error. Each append is a separate insert with a foreign key. Database triggers reject updates/deletes. No automatic retries or migrations."
+        "statement": "Initialization accepts only empty or schema-one Chancery state. Registration is idempotent and may partially commit before an error. Each append is a separate insert with a foreign key. Database triggers reject updates/deletes. No automatic retries or migrations. An explicitly authorized product rename can reassign the system and its references in one supervised owner transaction, preserving command IDs, observation IDs, times, attribution and insertion order and restoring all triggers before commit."
       }
     ],
     "operational_limits": [

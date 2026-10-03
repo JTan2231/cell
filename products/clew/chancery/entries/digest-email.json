@@ -1,6 +1,6 @@
 {
   "id": "clew.digest.email",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "use",
   "support": "supported",
@@ -15,17 +15,17 @@
   ],
   "outcome": "A complete qualifying application snapshot or a frozen email occurrence with provider acceptance or explicit uncertainty.",
   "effects": [
-    "Reads one Clew ledger snapshot and one complete retained Cast job snapshot.",
+    "Reads one Clew ledger snapshot and one complete retained Milieu job snapshot.",
     "Send creates private delivery state, freezes the message and invokes Email. It changes no application records and invokes no model."
   ],
   "authority": [
-    "The user supplies statuses. Clew owns selection, content, occurrence identity and recovery; Cast owns job metadata; Email owns transport; Clockwork owns activation and failure halts."
+    "The user supplies statuses. Clew owns selection, content, occurrence identity and recovery; Milieu owns job metadata; Email owns transport; Clockwork owns activation and failure halts."
   ],
   "success": [
     "Preview returns all qualifying applications and active notes. An acceptance receipt proves provider submission only."
   ],
   "failure_and_recovery": [
-    "Ledger read failure stops rendering. Missing Cast context leaves all qualifying jobs visible under their Cast IDs with a footer.",
+    "Ledger read failure stops rendering. Missing Milieu context leaves all qualifying jobs visible under their Milieu IDs with a footer.",
     "Uncertain acceptance requires provider inspection and explicit retry of retained bytes within 23 hours. A scheduled failure ends the current send; Clockwork permits later activations before its shared service-health threshold establishes a halt. Healthy or inactive checks clear a pending episode. An established halt requires exact approval."
   ],
   "privacy": [
@@ -60,11 +60,11 @@
   "dependencies": [
     {
       "id": "clew.application.track",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     },
@@ -89,7 +89,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "New rendering needs readable initialized Clew schema-three state. Context needs the Cast snapshot reader. Sending needs a private state directory and installed Email with credentials and network access."
+        "statement": "New rendering needs readable initialized Clew schema-four state. Context needs the Milieu snapshot reader. Sending needs a private state directory and installed Email with credentials and network access."
       }
     ],
     "inputs": [
@@ -101,25 +101,25 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Commands print readable text by default. --json selects the existing schema-three machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Text previews show From, To, Subject and body. With --json, previews return data.digest with application_count, context_available and ledger_sequence. Send returns occurrence and accepted_id or an error."
+        "statement": "Commands print readable text by default. --json selects the existing schema-four machine response. Human errors go to stderr with a nonzero exit. JSON errors retain ok:false and error.detail on stdout. Text previews show From, To, Subject and body. With --json, previews return data.digest with application_count, context_available and ledger_sequence. Send returns occurrence and accepted_id or an error."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Only active explicit application-report associations contribute status and notes; generic entries and plain cast.job links are excluded. Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active application notes are copied in ledger sequence order. Items sort by company, role and opaque Cast job ID. No application-age, response, or work-completion inference occurs."
+        "statement": "Only active explicit application-report associations contribute status and notes; generic entries and plain milieu.job links are excluded. Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active application notes are copied in ledger sequence order. Items sort by company, role and opaque Milieu job ID. No application-age, response, or work-completion inference occurs."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Cast job IDs identify tracked jobs. Occurrences use manual/UUIDv7 or daily/YYYY-MM-DD for the most recent local 09:00. A random UUID key identifies each frozen payload; attempted_at is UTC Unix seconds. ledger_sequence is the last observed append, not an application date."
+        "statement": "Milieu job IDs identify tracked jobs. Occurrences use manual/UUIDv7 or daily/YYYY-MM-DD for the most recent local 09:00. A random UUID key identifies each frozen payload; attempted_at is UTC Unix seconds. ledger_sequence is the last observed append, not an application date."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The full ledger is read once. Cast export is a separate complete retained-data snapshot. Rejected records contribute no counts or notes. Missing metadata does not omit qualifying applications. Frozen occurrences retain their original content after corrections and ledger migration. Provider acceptance is not inbox receipt."
+        "statement": "The full ledger is read once. Milieu export is a separate complete retained-data snapshot. Rejected records contribute no counts or notes. Missing metadata does not omit qualifying applications. Frozen occurrences retain their original content after corrections and ledger migration. Provider acceptance is not inbox receipt."
       }
     ],
     "access": [
@@ -143,7 +143,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Ledger and CLI JSON schemas are three; email storage remains schema one. Migration from supported ledger schemas preserves frozen payload bytes, send keys, occurrence identity, and acceptance receipts. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
+        "statement": "Ledger and CLI JSON schemas are four; email storage remains schema one. Migration from supported ledger schemas preserves frozen payload bytes, send keys, occurrence identity, and acceptance receipts. Unsupported state fails; no future cross-release support window or provider retention guarantee is promised."
       },
       {
         "status": "declared",
@@ -153,10 +153,10 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clew reads retained job metadata through the supported complete Cast snapshot interface.",
-        "target": "cast",
+        "statement": "Clew reads retained job metadata through the supported complete Milieu snapshot interface.",
+        "target": "milieu",
         "kind": "data",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",

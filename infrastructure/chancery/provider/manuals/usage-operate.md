@@ -65,7 +65,33 @@ changing stored identities, or migrating an unsupported journal.
 Stop on a foreign or unsupported journal schema, invalid identity, unavailable
 private file, or unexplained registration result. Product programs do not
 migrate the journal. Preserve history and diagnose through Chancery's owning
-interface rather than editing SQLite or disabling its triggers.
+interface rather than editing SQLite or disabling its triggers during ordinary
+operation.
+
+## Supervised identity maintenance
+
+Use this exception only for an explicitly authorized product rename. Chancery
+owns the journal changes. No CLI or Rust registration interface performs a
+rename, and registration alone does not authorize this maintenance.
+
+1. Stop calls that use the former identity. Update the product's recorder and
+   installed command selection before admitting calls with the new identity.
+2. Back up the supported owned journal. Reject a destination identity that
+   already exists; do not merge two histories.
+3. Acquire one SQLite write transaction. Retain the existing trigger definitions,
+   suspend only the identity and observation immutability triggers, and rename
+   the system and its command and observation references together.
+4. Preserve command IDs, observation IDs, timestamps, thread attribution, and
+   insertion order. Restore every retained trigger before committing. Check
+   foreign keys and journal integrity within the transaction. Roll back the
+   entire transaction on failure.
+5. Read the renamed system through the supported reports. Keep the backup
+   until the renamed product installation is complete. Restore it only before
+   new observations are admitted; later recovery must preserve those rows.
+
+This maintenance preserves database-local observation cursors. It does not
+permit pruning, rewriting observations, migrating an unsupported schema, or
+weakening the triggers after the rename.
 
 ## Inspect recorded activity
 

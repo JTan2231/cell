@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "product": "clew",
-  "order": 10,
+  "order": 18,
   "steps": [
     {
       "id": "install",

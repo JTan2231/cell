@@ -2,7 +2,7 @@
 
 Semantics-Project: cell
 
-- Keep this requester simple. Cast owns discovery; Annals retains Vita career material.
+- Keep this requester simple. Milieu owns discovery; Annals retains Vita career material.
   Nucleus owns execution; Platter owns preparation and delivery state.
 - Until a separate semantic repository is registered, query Cell terminology.
 - Tailored runs replace only Jackson, Cell and Wrought bullet regions in the captured

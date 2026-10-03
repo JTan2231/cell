@@ -5,7 +5,7 @@ editions, and records authorized email submission. It owns captured inputs,
 preparation and acceptance, explicit job eligibility, immutable artifacts,
 editions, delivery records, configuration, and maintenance holds.
 
-Cast owns discovery and retained job records. Annals owns career works in the
+Milieu owns discovery and retained job records. Annals owns career works in the
 fixed `vita` library. Weaver supplies project prose and owns its source reads.
 Nucleus owns constrained execution. Email and Resend own submission acceptance;
 Gmail owns final receipt. Clockwork owns separately authorized activation and
@@ -44,7 +44,7 @@ Platter owns what those selected bytes mean for its future preparation.
 
 ## How the features work together
 
-Preparation captures Cast/posting and Vita material with exact selected prompts.
+Preparation captures Milieu/posting and Vita material with exact selected prompts.
 Tailored runs capture a fixed template, obtain Cell/Wrought bullets from Weaver,
 and ask the Platter draft for the brief and Jackson bullets. Mechanical
 validation commits final brief, content, LaTeX, and a one-page PDF together.

@@ -178,7 +178,7 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
             );
         }
         let mut config = crate::workflow::config(&root)?;
-        config.cast_executable = std::fs::canonicalize(context.home.join(".local/bin/cast"))?;
+        config.milieu_executable = std::fs::canonicalize(context.home.join(".local/bin/milieu"))?;
         config.email_executable = std::fs::canonicalize(context.home.join(".local/bin/email"))?;
         config.weaver_executable = std::fs::canonicalize(context.home.join(".local/bin/weaver"))?;
         store.set_setting("config", &config)?;

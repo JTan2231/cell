@@ -36,7 +36,7 @@ clew record --id sla-commit --thread 'SLA implementation' \
   --notes 'The implementation is in this commit.' \
   --ref repository.commit 'repository-id/commit-id'
 clew record --id job-context --notes 'This posting explains the requirement.' \
-  --ref cast.job JOB_ID
+  --ref milieu.job JOB_ID
 ```
 
 Repeat `--ref NAMESPACE EXTERNAL_ID` to attach several links. An external
@@ -53,11 +53,11 @@ identity without belonging to the same thread. A thread can contain entries
 with different references or no references. Thread membership and external links
 are separate facts.
 
-A plain `--ref cast.job JOB_ID` is a link. It neither creates an application
+A plain `--ref milieu.job JOB_ID` is a link. It neither creates an application
 report nor changes application status, `clew list`, or the daily email. Use the
-explicit `--cast-job JOB_ID` form for an application report. Read
+explicit `--milieu-job JOB_ID` form for an application report. Read
 `chancery show clew.application.track` for first-job admission, legacy aliases,
-and the application view. Generic entries require no Cast or Platter read.
+and the application view. Generic entries require no Milieu or Platter read.
 
 ## Read entries and threads
 
@@ -89,7 +89,7 @@ snapshot; successive commands can observe different appends.
 Commands print readable text by default. Search prints a summary row for each
 matching entry. Entry and thread reads include the full selected text. Use
 `--json` for machine reads and writes. JSON success retains `ok`,
-`schema_version: 3`, and `data`. Human errors go to stderr. JSON errors retain
+`schema_version: 4`, and `data`. Human errors go to stderr. JSON errors retain
 `ok: false` and `error.detail` on stdout, with a nonzero exit. Entries expose `sequence`, `id`, `recorded_at`, `kind`, `status`, `notes`,
 `replaces`, `thread`, and `references`. Thread is null or `{id, name}`. Each
 reference has `namespace`, `external_id`, and `role`, which is `link` or
@@ -135,7 +135,7 @@ IDs, or invalid inputs leave history unchanged. Updates and deletes of ledger
 entries and associations are prohibited. Ordinary commands never initialize or
 migrate state implicitly.
 
-Use initialized ledger schema three at `~/.local/share/clew/ledger.sqlite3`, or
+Use initialized ledger schema four at `~/.local/share/clew/ledger.sqlite3`, or
 select an independent private ledger with global `--state-dir ABSOLUTE_PATH`.
 The directory has mode 0700 and the database is a regular file with mode 0600.
 Read `chancery show clew.state` for initialization, migration, and

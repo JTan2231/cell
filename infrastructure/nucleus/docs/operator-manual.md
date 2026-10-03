@@ -38,7 +38,7 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
-| Cast | Retained companies, public jobs, collection outcomes, and exports | [Cast](/Users/joey/rust/cell/products/cast/chancery/overview.md) |
+| Milieu | Retained companies, jobs, source metadata, and exports | [Milieu](/Users/joey/rust/cell/products/milieu/chancery/overview.md) |
 | Bazaar | Opaque strings and their immutable numbered versions | [Bazaar](/Users/joey/rust/cell/infrastructure/bazaar/chancery/overview.md) |
 | Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/products/platter/README.md) |
 | Clew | Append-only notes, named threads, optional external links, and explicit application reports with daily snapshots | [Clew](/Users/joey/rust/cell/products/clew/chancery/overview.md) |
@@ -70,8 +70,8 @@ requesting products --> Nucleus --> isolated Codex app-server
 Clockwork --> registered product programs
 Conversations --> normal-user Codex App Server
 Krisis --> dedicated Annals decisions library --> Semantics, Conatus, Weaver
-Cast --> Platter <-- Vita career works in Annals
-Cast --> Clew application history
+Milieu --> Platter <-- Vita career works in Annals
+Milieu --> Clew application history
 Platter, Clew, Conatus, Paperboy, EMT --> Email --> Resend
 configured renderer scripts --> Paperboy --> Email
 installed product releases --> Chancery documentation
@@ -93,7 +93,7 @@ Interpretation belongs to each
 consumer. See [the document exchange](/Users/joey/rust/cell/products/annals/chancery/annals/manuals/decision-account-exchange.md)
 and [Krisis source documents](/Users/joey/rust/cell/products/decisions/docs/source-documents.md).
 
-Cast owns stored job records and the retained read handoff. Cast performs no
+Milieu owns stored job records and the retained read handoff. Milieu performs no
 collection. Platter owns job selection, packet
 preparation, and delivery. It reads career material from the Annals `vita`
 library and obtains project prose from Weaver. Platter and Weaver retain their
@@ -479,14 +479,14 @@ A partial provider view does not perform full validation. Clients retain the
 effects, failures, and transport rules of their operations. Publish incompatible
 exports with the provider and update affected consumers.
 
-Pass `--json` when a caller parses CLI output. Bazaar, Cast, Clew, Clockwork,
+Pass `--json` when a caller parses CLI output. Bazaar, Milieu, Clew, Clockwork,
 Conatus, and Semantics use readable text by default. The flag selects each
 product's structured output. Export files and internal installation interfaces
 retain their documented formats.
 
 Install the CI manager consumer that requests Bazaar `--json` before selecting
 a Bazaar release with readable default output. Follow the paused, drained
-manager replacement procedure. Cast installation uses the
+manager replacement procedure. Milieu installation uses the
 native store interface so recovery can retain an older CLI.
 
 ## Serial CI delivery
@@ -772,7 +772,7 @@ Keep each full explanation with its owning product. This manual owns shared
 topology, authority, compatibility, coordination, and recovery order. Product
 references own record meaning and exact operations.
 
-Nucleus, Annals, Annals Usage, Bazaar, Cast, Chancery, Clew, Clockwork, Conatus,
+Nucleus, Annals, Annals Usage, Bazaar, Milieu, Chancery, Clew, Clockwork, Conatus,
 Conversations, Email, EMT, Paperboy, Platter, Semantics, Usher, and Weaver publish
 detailed behavior as feature contracts in their product-owned Chancery provider bundles.
 Read `chancery product PROVIDER_ID`

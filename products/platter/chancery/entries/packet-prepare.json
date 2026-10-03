@@ -1,13 +1,13 @@
 {
   "id": "platter.packet.prepare",
-  "contract_version": 15,
+  "contract_version": 16,
   "kind": "operation",
   "mode": "use",
   "support": "supported",
   "title": "Prepare and deliver private job application packets",
   "summary": "Prepare private job briefs and tailored resumes, or use one configured PDF for daily emails. Freeze editions and send retained attachment bytes through authorized runs.",
   "use_when": [
-    "The user wants to prepare or preview eligible Cast opportunities with a concise brief and a constrained resume.",
+    "The user wants to prepare or preview eligible Milieu opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
     "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
     "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
@@ -27,7 +27,7 @@
       "invocation": "platter init --resume /absolute/original.tex"
     },
     {
-      "label": "Prepare one Cast opportunity",
+      "label": "Prepare one Milieu opportunity",
       "invocation": "platter prepare JOB_ID"
     },
     {
@@ -36,7 +36,7 @@
     },
     {
       "label": "Generate another packet for a previously prepared job",
-      "invocation": "platter regenerate CAST_JOB_ID --id REQUEST_ID"
+      "invocation": "platter regenerate MILIEU_JOB_ID --id REQUEST_ID"
     },
     {
       "label": "Prepare the daily ready pool",
@@ -76,7 +76,7 @@
     },
     {
       "label": "Change explicit job eligibility",
-      "invocation": "platter eligibility CAST_JOB_ID true|false"
+      "invocation": "platter eligibility MILIEU_JOB_ID true|false"
     },
     {
       "label": "Export a retained artifact",
@@ -138,21 +138,21 @@
   "dependencies": [
     {
       "id": "platter.materials",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "platter.preparation",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
-    },
-    {
-      "id": "platter.editions",
       "min_contract": 3,
       "max_contract_exclusive": 4
     },
     {
-      "id": "cast.discovery.explore",
+      "id": "platter.preparation",
+      "min_contract": 3,
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "platter.editions",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
+    },
+    {
+      "id": "milieu.discovery.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
     },
@@ -195,7 +195,7 @@
   "does_not_authorize": [
     "Installing or enabling any scheduled activation.",
     "Sending when the user requested only preparation or preview.",
-    "Changing fixed resume content, modifying Vita or Cast, applying to a job or contacting an employer."
+    "Changing fixed resume content, modifying Vita or Milieu, applying to a job or contacting an employer."
   ],
   "promise": {
     "consumers": [
@@ -207,7 +207,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Use canonical schema-seven state and the required source/runtime/template or daily-PDF prerequisites declared by platter.materials and platter.preparation. Retained-only selection needs completed material and makes no source/model/rendering calls. Each send needs applicable authority and Email --payload-stdin."
+        "statement": "Use canonical schema-eight state and the required source/runtime/template or daily-PDF prerequisites declared by platter.materials and platter.preparation. Retained-only selection needs completed material and makes no source/model/rendering calls. Each send needs applicable authority and Email --payload-stdin."
       },
       {
         "status": "declared",
@@ -217,7 +217,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Select a Cast job, daily pool, exact public URL, or retained complete packets. Supply exact regeneration/occurrence identities and applicable explicit template, PDF, brief-override, export, and deadline inputs. Required features own their formats and meaning."
+        "statement": "Select a Milieu job, daily pool, exact public URL, or retained complete packets. Supply exact regeneration/occurrence identities and applicable explicit template, PDF, brief-override, export, and deadline inputs. Required features own their formats and meaning."
       }
     ],
     "outputs": [
@@ -269,7 +269,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 15 preserves supported commands and exact historical input/output/delivery meaning while limiting URL-selected runs to retained Cast jobs. Required features define current and historical generation, template, state, and prompt compatibility."
+        "statement": "Operation contract 16 preserves supported commands and exact historical input/output/delivery meaning while limiting URL-selected runs to retained Milieu jobs. Required features define current and historical generation, template, state, and prompt compatibility."
       },
       {
         "status": "unspecified",
@@ -279,17 +279,17 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Retained job evidence and stable discovery IDs come from Cast supported exports.",
-        "target": "cast",
+        "statement": "Retained job evidence and stable discovery IDs come from Milieu supported exports.",
+        "target": "milieu",
         "kind": "data",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "URL-selected runs match one retained Cast job by canonical supported ATS identity or normalized public URL; unknown or ambiguous matches fail before preparation.",
-        "target": "cast",
+        "statement": "URL-selected runs match one retained Milieu job by canonical supported ATS identity or normalized public URL; unknown or ambiguous matches fail before preparation.",
+        "target": "milieu",
         "kind": "data",
-        "contract": "cast.discovery.explore"
+        "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
@@ -376,7 +376,7 @@
     "Use supported source/prompt/activation operations separately, preserving exact historical work and external halts."
   ],
   "checkpoints": [
-    "Canonical schema-seven state and required source/runtime/material prerequisites are established.",
+    "Canonical schema-eight state and required source/runtime/material prerequisites are established.",
     "Any send has applicable direct or standing authority; preview alone supplies none.",
     "Preparation is accepted by Platter rather than inferred from Nucleus completion.",
     "The exact frozen selection/body/attachment identity and send outcome are retained."

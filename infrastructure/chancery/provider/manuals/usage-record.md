@@ -95,6 +95,9 @@ A foreign key binds each usage row to its registered command and system.
 Unknown identities fail recording. Repeated invocations append separate rows.
 The API and database triggers prohibit updating or deleting usage or reassigning
 registered identities. There is no retention cleanup or pruning command.
+An explicitly authorized product rename can use the supervised identity
+maintenance procedure in `chancery.usage.operate`. Ordinary registration and
+recording retain these immutability rules.
 `recorded_at` is the writer's whole Unix-second timestamp. `id` orders committed
 inserts within this database history; wall-clock time does not define ordering.
 New writes require thread attribution; existing nullable rows remain readable.
@@ -174,7 +177,8 @@ objective is promised. Rows contain no duration, outcome, token count or output.
 
 Program rollback does not erase new rows. Missing or unsupported state
 remains an explicit error; never recreate a populated database or bypass its
-triggers. Chancery recording does not operate product databases, authenticate
+triggers during ordinary operation. Supervised identity maintenance is a
+separate owner-controlled exception. Chancery recording does not operate product databases, authenticate
 services, execute represented capabilities, or authorize domain actions. Read
 `chancery.usage.operate` for registration and inspection steps.
 
