@@ -74,6 +74,10 @@ enum Command {
     Recover {
         job: String,
     },
+    /// Abandon a blocked preparation after reviewing its retained effects.
+    AcknowledgePreparation {
+        job: String,
+    },
     /// Release an interrupted deployment after reviewing its retained effects.
     AcknowledgeDeployment {
         request: String,
@@ -221,6 +225,7 @@ async fn execute(cli: Cli) -> Result<serde_json::Value> {
         Command::Resume => manager::resume(&paths),
         Command::Cancel { job } => manager::cancel(&paths, &job),
         Command::Recover { job } => manager::recover(&paths, &job).await,
+        Command::AcknowledgePreparation { job } => manager::acknowledge_preparation(&paths, &job),
         Command::AcknowledgeDeployment { request } => Ok(serde_json::to_value(
             deployment::acknowledge(&paths, &request)?,
         )?),

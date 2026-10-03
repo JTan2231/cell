@@ -231,6 +231,15 @@ fn binary_metadata(
     Ok(binaries)
 }
 
+fn preparation_staging(parent: &Path) -> Result<tempfile::TempDir> {
+    let temporary = tempfile::Builder::new()
+        .prefix(".preparation-")
+        .permissions(fs::Permissions::from_mode(0o700))
+        .tempdir_in(parent)?;
+    paths::ensure_private(temporary.path())?;
+    Ok(temporary)
+}
+
 #[allow(clippy::too_many_lines)]
 pub(crate) fn prepare(
     paths: &Paths,
@@ -368,9 +377,7 @@ pub(crate) fn prepare(
         );
     }
     require_source(paths, repo, commit)?;
-    let temporary = tempfile::Builder::new()
-        .prefix(".preparation-")
-        .tempdir_in(parent)?;
+    let temporary = preparation_staging(parent)?;
     paths::ensure_private(&temporary.path().join("candidates"))?;
     let mut candidates = BTreeMap::new();
     for product in selected {
@@ -1384,6 +1391,60 @@ pub(crate) fn acknowledge(paths: &Paths, request: &str) -> Result<DeploymentResu
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preparation_staging_is_private_under_ordinary_umask() -> Result<()> {
+        const CHILD: &str = "TELETE_TEST_PREPARATION_UMASK_CHILD";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new("/bin/sh")
+                .args([
+                    "-c",
+                    "umask 022; exec \"$1\" --exact deployment::tests::preparation_staging_is_private_under_ordinary_umask --nocapture",
+                    "telete-staging-test",
+                ])
+                .arg(std::env::current_exe()?)
+                .env(CHILD, "1")
+                .output()?;
+            ensure!(
+                output.status.success(),
+                "staging child failed: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            return Ok(());
+        }
+
+        let owner = tempfile::tempdir()?;
+        let ordinary = owner.path().join("ordinary");
+        fs::create_dir(&ordinary)?;
+        assert_eq!(fs::metadata(&ordinary)?.permissions().mode() & 0o777, 0o755);
+        let parent = owner.path().join("production");
+        paths::ensure_private(&parent)?;
+        let temporary = preparation_staging(&parent)?;
+        assert_eq!(
+            fs::metadata(temporary.path())?.permissions().mode() & 0o777,
+            0o700
+        );
+        paths::ensure_private(&temporary.path().join("candidates"))?;
+        let receipt = json!({"schema":1,"release_check":true});
+        paths::atomic_json(&temporary.path().join("result.json"), &receipt)?;
+        let output = parent.join("production-0");
+        fs::rename(temporary.keep(), &output)?;
+        paths::ensure_private(&output)?;
+        assert_eq!(
+            fs::metadata(output.join("result.json"))?
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(output.join("result.json"))?)?,
+            receipt
+        );
+        Ok(())
+    }
+
     #[test]
     fn manifest_requires_known_fields_unique_ids_and_literal_commands() {
         let valid = r#"{"schema":1,"product":"email","order":4,"steps":[{"id":"install","kind":"run","argv":["{candidate_dir}/bin/email-install","deploy"],"stdin":"deployment_request"}]}"#;

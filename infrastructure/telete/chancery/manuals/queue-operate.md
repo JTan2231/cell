@@ -114,6 +114,17 @@ native authorization can require the user. Signing and preparation failures
 stop before source acceptance. Compiler failures can use the frozen repair
 budget. There is no alternate certificate or unsigned fallback.
 
+Inspect retained gate receipts and staging effects when preparation stops without
+a final receipt. Stop the worker and pause the queue. Use `telete
+acknowledge-preparation JOB` only to abandon that blocked preparation. The command
+requires exclusive worker and resource ownership, exact terminal child receipts,
+unchanged accepted source, and no source acceptance, deployment, or unresolved
+model work. It retains the original operation in an acknowledgement record,
+preserves the failed outcome and its settled notification, and cleans the owned
+worktree. It does not replay preparation, publish staged candidates, or report
+preparation success. A repeated acknowledgement joins the same record. Submit a
+new commit with a new request ID after correcting the failure.
+
 Promotion checks runtime source, scope, and policy correlation and uses an
 expected-old reference update. Telete retains the facts in its journal.
 

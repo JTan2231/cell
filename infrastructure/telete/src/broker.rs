@@ -3,7 +3,7 @@ use crate::{
     paths::{Paths, atomic_json, ensure_private, lock},
     process::{CommandSpec, ProcessResult},
 };
-use anyhow::{Result, bail, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf, thread, time::Duration};
 
@@ -182,6 +182,70 @@ pub(crate) fn status(paths: &Paths) -> Result<serde_json::Value> {
     Ok(serde_json::json!({"schema":1,"executions":records}))
 }
 
+// The caller holds worker and admission ownership. This only inspects evidence;
+// terminal command failure is settled, but missing evidence is never repaired.
+pub(crate) fn require_settled(paths: &Paths) -> Result<()> {
+    let directory = paths.root.join("broker");
+    let slots = ["heavy-0", "light-0", "light-1"];
+    let _guards = slots
+        .iter()
+        .map(|slot| lock(&directory.join(format!("slot-{slot}.lock")), false))
+        .collect::<Result<Vec<_>>>()?;
+    let slot_records = slots.map(|slot| directory.join(format!("slot-{slot}.json")));
+    for slot in &slot_records {
+        if slot.try_exists()? {
+            let record: PathBuf = serde_json::from_slice(&fs::read(slot)?)?;
+            ensure!(
+                record.parent() == Some(directory.as_path())
+                    && record.extension().is_some_and(|v| v == "json")
+                    && !slot_records.contains(&record)
+                    && record.is_file(),
+                "broker slot has a foreign or missing execution record"
+            );
+        }
+    }
+    for entry in fs::read_dir(&directory)? {
+        let record = entry?.path();
+        if record.extension().is_some_and(|v| v == "process") {
+            ensure!(
+                record.with_extension("json").is_file(),
+                "broker process has no retained execution record"
+            );
+        }
+        if record.extension().is_none_or(|v| v != "json") || slot_records.contains(&record) {
+            continue;
+        }
+        let execution: Execution = serde_json::from_slice(&fs::read(&record)?)?;
+        let name = basename(&execution.key)?;
+        ensure!(
+            execution.schema == 1
+                && record == directory.join(format!("{name}.json"))
+                && execution.state == "finished",
+            "broker execution is not a matching terminal record: {}",
+            execution.key
+        );
+        let retained = execution
+            .result
+            .context("terminal broker execution has no retained result")?;
+        let process = directory.join(format!("{name}.process"));
+        let request: CommandSpec =
+            serde_json::from_slice(&fs::read(process.join("request.json"))?)?;
+        ensure!(
+            serde_json::to_value(request)? == serde_json::to_value(&execution.command)?,
+            "broker terminal process request names another command: {}",
+            execution.key
+        );
+        let observed = crate::process::observe(&process)?
+            .context("terminal broker execution has no process completion")?;
+        ensure!(
+            serde_json::to_value(retained)? == serde_json::to_value(observed)?,
+            "broker result differs from its process completion: {}",
+            execution.key
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -267,5 +331,123 @@ mod tests {
         );
         let settled: Execution = serde_json::from_slice(&fs::read(record).unwrap()).unwrap();
         assert!(settled.result.unwrap().success());
+    }
+
+    fn settled_fixture() -> (tempfile::TempDir, Paths, CommandSpec) {
+        let temporary = tempfile::tempdir().unwrap();
+        let paths = Paths::for_test(temporary.path().join("work")).unwrap();
+        let command = CommandSpec {
+            program: "/usr/bin/false".into(),
+            args: vec![],
+            cwd: paths.root.clone(),
+            env: BTreeMap::new(),
+            timeout_seconds: 5,
+            stdin: None,
+            confined: false,
+        };
+        let result = run(&paths, "terminal", ResourceClass::Light, &command).unwrap();
+        assert_eq!(result.exit_code, Some(1));
+        (temporary, paths, command)
+    }
+
+    // Parallel fixtures can inherit each other's lock descriptors. Create this
+    // test's fixture only after re-executing the single test in its own process.
+    fn run_isolated(test: &str) -> bool {
+        const CHILD: &str = "TELETE_TEST_BROKER_SETTLEMENT_CHILD";
+        if std::env::var_os(CHILD).as_deref() == Some(std::ffi::OsStr::new(test)) {
+            return false;
+        }
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", test, "--nocapture", "--test-threads=1"])
+            .env(CHILD, test)
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = std::time::Instant::now();
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success(), "isolated broker test failed: {test}");
+                return true;
+            }
+            if started.elapsed() >= Duration::from_secs(30) {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!("isolated broker test timed out: {test}");
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    #[test]
+    fn settlement_accepts_correlated_terminal_failure_without_changing_records() {
+        if run_isolated(
+            "broker::tests::settlement_accepts_correlated_terminal_failure_without_changing_records",
+        ) {
+            return;
+        }
+        let (_temporary, paths, _command) = settled_fixture();
+        let record = paths.root.join("broker/terminal.json");
+        let before = fs::read(&record).unwrap();
+        require_settled(&paths).unwrap();
+        assert_eq!(fs::read(record).unwrap(), before);
+        let _released = lock(&paths.root.join("broker/slot-heavy-0.lock"), false).unwrap();
+    }
+
+    #[test]
+    fn settlement_rejects_nonterminal_or_missing_gate_evidence_without_reconciliation() {
+        if run_isolated(
+            "broker::tests::settlement_rejects_nonterminal_or_missing_gate_evidence_without_reconciliation",
+        ) {
+            return;
+        }
+        let (_temporary, paths, _command) = settled_fixture();
+        let record = paths.root.join("broker/terminal.json");
+        let mut execution: Execution = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
+        execution.result = None;
+        for state in ["queued", "running", "finished"] {
+            execution.state = state.into();
+            atomic_json(&record, &execution).unwrap();
+            let before = fs::read(&record).unwrap();
+            assert!(require_settled(&paths).is_err());
+            assert_eq!(fs::read(&record).unwrap(), before);
+        }
+        fs::remove_file(record).unwrap();
+        assert!(require_settled(&paths).is_err());
+    }
+
+    #[test]
+    fn settlement_rejects_changed_requests_results_and_missing_completion() {
+        if run_isolated(
+            "broker::tests::settlement_rejects_changed_requests_results_and_missing_completion",
+        ) {
+            return;
+        }
+        let (_temporary, paths, command) = settled_fixture();
+        let directory = paths.root.join("broker/terminal.process");
+        let mut changed = command.clone();
+        changed.args.push("changed".into());
+        atomic_json(&directory.join("request.json"), &changed).unwrap();
+        assert!(require_settled(&paths).is_err());
+        atomic_json(&directory.join("request.json"), &command).unwrap();
+        let result = directory.join("result.json");
+        let mut completion: serde_json::Value =
+            serde_json::from_slice(&fs::read(&result).unwrap()).unwrap();
+        completion["result"]["stdout"] = "changed".into();
+        atomic_json(&result, &completion).unwrap();
+        assert!(require_settled(&paths).is_err());
+        fs::remove_file(result).unwrap();
+        assert!(require_settled(&paths).is_err());
+    }
+
+    #[test]
+    fn settlement_refuses_an_owned_resource_slot() {
+        if run_isolated("broker::tests::settlement_refuses_an_owned_resource_slot") {
+            return;
+        }
+        let (_temporary, paths, _command) = settled_fixture();
+        let owned = lock(&paths.root.join("broker/slot-light-1.lock"), false).unwrap();
+        assert!(require_settled(&paths).is_err());
+        drop(owned);
+        require_settled(&paths).unwrap();
     }
 }

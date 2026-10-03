@@ -517,6 +517,122 @@ pub(crate) async fn worker_once(paths: &Paths) -> Result<Value> {
     worker.tick().await
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PreparationAcknowledgement {
+    schema: u32,
+    job: JobId,
+    operation: Operation,
+    acknowledged: u64,
+}
+
+// Keep the identity checks and durable abandonment transition in one place.
+#[allow(clippy::too_many_lines)]
+pub(crate) fn acknowledge_preparation(paths: &Paths, id: &str) -> Result<Value> {
+    let _worker = store::lock(&paths.root.join("worker.lock"), false)?;
+    let _admission = store::lock(&paths.root.join("admission.lock"), true)?;
+    let (store, config) = configured(paths)?;
+    ensure!(
+        store.paused()?,
+        "pause Telete before acknowledging preparation"
+    );
+    let mut job = store.job(id)?;
+    let directory = paths.job(&job.id.0);
+    let name = format!("production-{}", job.preparation_generation);
+    let record = directory.join(format!("{name}.acknowledged.json"));
+    let previous: Option<PreparationAcknowledgement> = if record.try_exists()? {
+        Some(serde_json::from_slice(&fs::read(&record)?)?)
+    } else {
+        None
+    };
+    if let Some(acknowledgement) = &previous {
+        ensure!(
+            acknowledgement.schema == 1
+                && acknowledgement.job == job.id
+                && acknowledgement.operation.phase == Phase::Preparing
+                && acknowledgement.operation.name == name
+                && Some(&acknowledgement.operation.candidate) == job.candidate.as_ref()
+                && acknowledgement.operation.result == directory.join(format!("{name}.json")),
+            "preparation acknowledgement names another operation"
+        );
+        if job.phase == Phase::Failed && !job.unresolved && job.operation.is_none() {
+            let worker = Worker {
+                paths,
+                store,
+                config,
+            };
+            worker.cleanup(&mut job)?;
+            return job.output();
+        }
+    }
+    ensure!(
+        job.phase == Phase::Blocked
+            && job.stopped_phase == Some(Phase::Preparing)
+            && job.outcome == Some(Phase::Failed)
+            && job.unresolved
+            && !job.model_unresolved
+            && !job.accepted
+            && job.preparation.is_none()
+            && job.deployment_request.is_none()
+            && job.deployment_result.is_none()
+            && (!job.options.notify
+                || job
+                    .notification
+                    .as_ref()
+                    .is_some_and(|notice| { notice.accepted && !notice.uncertain })),
+        "only an unaccepted blocked preparation can be acknowledged"
+    );
+    let operation = job
+        .operation
+        .as_ref()
+        .context("preparation intent absent")?;
+    ensure!(
+        operation.phase == Phase::Preparing
+            && operation.name == name
+            && Some(&operation.candidate) == job.candidate.as_ref()
+            && operation.result == directory.join(format!("{name}.json")),
+        "preparation intent does not match the job"
+    );
+    ensure!(
+        !operation.result.try_exists()?
+            && !directory.join(&name).join("result.json").try_exists()?,
+        "preparation has a terminal receipt; use recover"
+    );
+    ensure!(
+        git::ref_value(paths, &config.repository, git::ACCEPTED)?.as_ref() == job.base.as_ref(),
+        "accepted source changed after preparation"
+    );
+    crate::broker::require_settled(paths)?;
+    if previous.is_none() {
+        store::atomic_json(
+            &record,
+            &PreparationAcknowledgement {
+                schema: 1,
+                job: job.id.clone(),
+                operation: operation.clone(),
+                acknowledged: store::now(),
+            },
+        )?;
+    } else {
+        ensure!(
+            serde_json::to_value(&previous.context("acknowledgement absent")?.operation)?
+                == serde_json::to_value(operation)?,
+            "retained preparation intent changed"
+        );
+    }
+    job.operation = None;
+    job.unresolved = false;
+    job.phase = Phase::Failed;
+    store.save(&mut job)?;
+    let worker = Worker {
+        paths,
+        store,
+        config,
+    };
+    worker.cleanup(&mut job)?;
+    job.output()
+}
+
 pub(crate) async fn worker(paths: &Paths) -> Result<()> {
     let _worker = store::lock(&paths.root.join("worker.lock"), false)?;
     let (store, config) = configured(paths)?;
@@ -2141,6 +2257,69 @@ mod tests {
         );
         assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
         assert_eq!(git::commit(&paths, &repo, "HEAD")?, input);
+        Ok(())
+    }
+
+    #[test]
+    fn preparation_acknowledgement_abandons_without_replay_or_new_outcome() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        let store = Store::open(&paths.root, false)?;
+        let mut blocked = job(&paths, &base, "abandon-preparation")?;
+        blocked.base = Some(base.clone());
+        blocked.candidate = Some(base.clone());
+        blocked.phase = Phase::Blocked;
+        blocked.stopped_phase = Some(Phase::Preparing);
+        blocked.outcome = Some(Phase::Failed);
+        blocked.outcome_message = Some("retained staging failure".into());
+        blocked.last_error = blocked.outcome_message.clone();
+        blocked.unresolved = true;
+        blocked.operation = Some(Operation {
+            phase: Phase::Preparing,
+            candidate: base.clone(),
+            name: "production-0".into(),
+            result: paths.job(&blocked.id.0).join("production-0.json"),
+            started: 1_700_000_002,
+        });
+        blocked.options.notify = true;
+        blocked.notification = Some(Notification {
+            message: email::api::Message {
+                subject: "retained failure".into(),
+                body: "retained body".into(),
+                idempotency_key: Some("retained-key".into()),
+            },
+            accepted: true,
+            uncertain: false,
+            attempts: Vec::new(),
+            created: 1_700_000_003,
+        });
+        let blocked = store.insert(&blocked)?;
+        let directory = paths.job(&blocked.id.0);
+        git::ensure_worktree(&paths, &repo, &directory.join("worktree"), &base)?;
+        store.set("paused", &false)?;
+        assert!(acknowledge_preparation(&paths, &blocked.id.0).is_err());
+        store.set("paused", &true)?;
+        let active_child = store::lock(&paths.root.join("worker.lock"), false)?;
+        assert!(acknowledge_preparation(&paths, &blocked.id.0).is_err());
+        drop(active_child);
+
+        acknowledge_preparation(&paths, &blocked.id.0)?;
+        let settled = store.job(&blocked.id.0)?;
+        assert_eq!(settled.phase, Phase::Failed);
+        assert!(!settled.unresolved);
+        assert!(settled.operation.is_none());
+        assert_eq!(settled.last_error, blocked.last_error);
+        assert_eq!(settled.outcome_message, blocked.outcome_message);
+        assert_eq!(settled.outcome_generation, blocked.outcome_generation);
+        assert_eq!(
+            serde_json::to_value(settled.notification)?,
+            serde_json::to_value(blocked.notification)?
+        );
+        assert_eq!(settled.cleanup.state, "removed");
+        assert!(directory.join("production-0.acknowledged.json").is_file());
+        assert!(!directory.join("production-0.json").exists());
+        assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
+        acknowledge_preparation(&paths, &blocked.id.0)?;
+        assert_eq!(store.job(&blocked.id.0)?.revision, settled.revision);
         Ok(())
     }
 
