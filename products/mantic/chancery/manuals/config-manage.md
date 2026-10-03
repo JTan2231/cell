@@ -1,9 +1,11 @@
 # Manage configs and expense items
 
 Mantic preserves current calculation definitions in one private SQLite database.
-A config is a named container. Each expense item belongs to exactly one config
-and describes a fixed amount and its expected due dates. There is no config
-history, saved active config, balance, run, or payment state.
+A config is a named reusable expense bundle. Each saved expense item belongs
+to exactly one config and describes a fixed amount and its expected due dates.
+A forecast can exclude saved items and include temporary expenses without
+changing this bundle. There is no config history, saved active config, balance,
+run, or payment state.
 
 ## Interfaces
 
@@ -102,5 +104,6 @@ observation time, and `CODEX_THREAD_ID` in Chancery's journal. It retains no
 arguments, configuration bodies, output, or success result. Recording failures
 preserve Mantic results. Missing thread attribution and internal calls are skipped.
 
-Read `mantic.forecast.calculate` for recurrence expansion and calculations.
+Read `mantic.forecast.calculate` for temporary expense composition, recurrence
+expansion, calculations, and forecast output schema two.
 Read `mantic.installation` for program and private-state lifecycle.

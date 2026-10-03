@@ -61,7 +61,10 @@ Direct database integration and restoring configs through program rollback are
 unsupported. Do not run an incompatible program against state or replace a
 populated database to overcome a version error. This initial release supports
 schema one; no older persistent schema migration or future migration window is
-promised. CLI output schema one and entry contract versions have separate meanings.
+promised. Forecast CLI output uses schema two; config and item output remains
+schema one. These output schemas and entry contract versions have separate
+meanings. Forecast schema-one parsers must update for tagged occurrence sources
+and complete effective and excluded expense definitions.
 
 Names, amounts, schedules, and output remain private local data. Initialization
 creates private parent directories and state. Filesystem access by the local

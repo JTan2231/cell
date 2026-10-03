@@ -35,9 +35,7 @@ impl RepeatUnit {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConfigItem {
-    pub id: i64,
-    pub config_id: i64,
+pub struct ExpenseRule {
     pub name: String,
     pub amount_cents: i64,
     pub first_due: Date,
@@ -46,16 +44,12 @@ pub struct ConfigItem {
     pub end_date: Option<Date>,
 }
 
-impl ConfigItem {
+impl ExpenseRule {
     /// Check the complete expense rule.
     ///
     /// # Errors
-    /// Returns an error for invalid identity, money, dates, or recurrence.
+    /// Returns an error for invalid money, dates, or recurrence.
     pub fn validate(&self) -> Result<()> {
-        ensure!(
-            self.id > 0 && self.config_id > 0,
-            "item IDs must be positive"
-        );
         validate_name(&self.name)?;
         ensure!(self.amount_cents > 0, "expense amount must be positive");
         validate_date(self.first_due)?;
@@ -69,6 +63,59 @@ impl ConfigItem {
         }
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigItem {
+    pub id: i64,
+    pub config_id: i64,
+    pub name: String,
+    pub amount_cents: i64,
+    pub first_due: Date,
+    pub repeat_unit: Option<RepeatUnit>,
+    pub repeat_every: Option<u32>,
+    pub end_date: Option<Date>,
+}
+
+impl ConfigItem {
+    /// Check the saved identity and complete expense rule.
+    ///
+    /// # Errors
+    /// Returns an error for invalid identity, money, dates, or recurrence.
+    pub fn validate(&self) -> Result<()> {
+        ensure!(
+            self.id > 0 && self.config_id > 0,
+            "item IDs must be positive"
+        );
+        ExpenseRule::from(self).validate()
+    }
+}
+
+impl From<&ConfigItem> for ExpenseRule {
+    fn from(item: &ConfigItem) -> Self {
+        Self {
+            name: item.name.clone(),
+            amount_cents: item.amount_cents,
+            first_due: item.first_due,
+            repeat_unit: item.repeat_unit,
+            repeat_every: item.repeat_every,
+            end_date: item.end_date,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ExpenseSource {
+    Saved { item_id: i64 },
+    Included { ordinal: usize },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForecastExpense {
+    pub source: ExpenseSource,
+    #[serde(flatten)]
+    pub rule: ExpenseRule,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -88,7 +135,7 @@ pub struct ForecastInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Occurrence {
     pub date: Date,
-    pub item_id: i64,
+    pub source: ExpenseSource,
     pub item_name: String,
     pub amount_cents: i64,
     pub remainder_cents: i64,
@@ -104,7 +151,16 @@ pub struct ForecastResult {
     pub total_expenses_cents: i64,
     pub remainder_cents: i64,
     pub first_shortfall: Option<Date>,
+    pub expenses: Vec<ForecastExpense>,
+    pub excluded_items: Vec<ConfigItem>,
     pub occurrences: Vec<Occurrence>,
+}
+
+struct Calculation {
+    total_expenses_cents: i64,
+    remainder_cents: i64,
+    first_shortfall: Option<Date>,
+    occurrences: Vec<Occurrence>,
 }
 
 #[must_use]
@@ -204,22 +260,85 @@ fn validate_date(date: Date) -> Result<()> {
 /// # Errors
 /// Returns an error for invalid inputs, arithmetic overflow, or over 100,000 occurrences.
 pub fn forecast(config: &Config, input: ForecastInput) -> Result<ForecastResult> {
+    forecast_with_adjustments(config, input, &[], &[])
+}
+
+/// Compose saved and temporary expense rules, then calculate without changing the config.
+///
+/// # Errors
+/// Returns an error for invalid inputs, unknown excluded IDs, arithmetic overflow,
+/// or over 100,000 occurrences.
+pub fn forecast_with_adjustments(
+    config: &Config,
+    input: ForecastInput,
+    excluded: &[i64],
+    included: &[ExpenseRule],
+) -> Result<ForecastResult> {
     ensure!(config.id > 0, "config ID must be positive");
     validate_name(&config.name)?;
-    validate_date(input.from)?;
-    validate_date(input.until)?;
-    ensure!(
-        input.from <= input.until,
-        "forecast end precedes start date"
-    );
     let mut ids = HashSet::new();
-    let mut occurrences = Vec::new();
     for item in &config.items {
         item.validate()?;
         ensure!(
             item.config_id == config.id && ids.insert(item.id),
             "invalid config item membership or duplicate ID"
         );
+    }
+    let excluded_ids = excluded.iter().copied().collect::<HashSet<_>>();
+    for id in excluded {
+        ensure!(
+            ids.contains(id),
+            "excluded item {id} is not in config {}",
+            config.name
+        );
+    }
+    let mut expenses = Vec::new();
+    let mut excluded_items = Vec::new();
+    for item in &config.items {
+        if excluded_ids.contains(&item.id) {
+            excluded_items.push(item.clone());
+        } else {
+            expenses.push(ForecastExpense {
+                source: ExpenseSource::Saved { item_id: item.id },
+                rule: ExpenseRule::from(item),
+            });
+        }
+    }
+    for (index, rule) in included.iter().enumerate() {
+        rule.validate()?;
+        expenses.push(ForecastExpense {
+            source: ExpenseSource::Included { ordinal: index + 1 },
+            rule: rule.clone(),
+        });
+    }
+    expenses.sort_by_key(|expense| expense.source);
+    excluded_items.sort_by_key(|item| item.id);
+    let calculation = calculate(&expenses, input)?;
+    Ok(ForecastResult {
+        config_id: config.id,
+        config_name: config.name.clone(),
+        starting_amount_cents: input.starting_amount_cents,
+        from: input.from,
+        until: input.until,
+        total_expenses_cents: calculation.total_expenses_cents,
+        remainder_cents: calculation.remainder_cents,
+        first_shortfall: calculation.first_shortfall,
+        expenses,
+        excluded_items,
+        occurrences: calculation.occurrences,
+    })
+}
+
+fn calculate(expenses: &[ForecastExpense], input: ForecastInput) -> Result<Calculation> {
+    validate_date(input.from)?;
+    validate_date(input.until)?;
+    ensure!(
+        input.from <= input.until,
+        "forecast end precedes start date"
+    );
+    let mut occurrences = Vec::new();
+    for expense in expenses {
+        let item = &expense.rule;
         let cutoff = item
             .end_date
             .map_or(input.until, |end| end.min(input.until));
@@ -235,7 +354,7 @@ pub fn forecast(config: &Config, input: ForecastInput) -> Result<ForecastResult>
                 );
                 occurrences.push(Occurrence {
                     date,
-                    item_id: item.id,
+                    source: expense.source,
                     item_name: item.name.clone(),
                     amount_cents: item.amount_cents,
                     remainder_cents: 0,
@@ -244,7 +363,7 @@ pub fn forecast(config: &Config, input: ForecastInput) -> Result<ForecastResult>
             index += 1;
         }
     }
-    occurrences.sort_by_key(|event| (event.date, event.item_id));
+    occurrences.sort_by_key(|event| (event.date, event.source));
     let mut remainder = input.starting_amount_cents;
     let mut total = 0_i64;
     let mut first_shortfall = (remainder < 0).then_some(input.from);
@@ -260,12 +379,7 @@ pub fn forecast(config: &Config, input: ForecastInput) -> Result<ForecastResult>
             first_shortfall = Some(event.date);
         }
     }
-    Ok(ForecastResult {
-        config_id: config.id,
-        config_name: config.name.clone(),
-        starting_amount_cents: input.starting_amount_cents,
-        from: input.from,
-        until: input.until,
+    Ok(Calculation {
         total_expenses_cents: total,
         remainder_cents: remainder,
         first_shortfall,
@@ -273,7 +387,7 @@ pub fn forecast(config: &Config, input: ForecastInput) -> Result<ForecastResult>
     })
 }
 
-fn first_index(item: &ConfigItem, from: Date) -> u64 {
+fn first_index(item: &ExpenseRule, from: Date) -> u64 {
     if from <= item.first_due {
         return 0;
     }
@@ -294,7 +408,7 @@ fn month_index(date: Date) -> i64 {
     i64::from(date.year()) * 12 + i64::from(u8::from(date.month())) - 1
 }
 
-fn occurrence_date(item: &ConfigItem, index: u64) -> Result<Option<Date>> {
+fn occurrence_date(item: &ExpenseRule, index: u64) -> Result<Option<Date>> {
     let (Some(unit), Some(every)) = (item.repeat_unit, item.repeat_every) else {
         return Ok((index == 0).then_some(item.first_due));
     };

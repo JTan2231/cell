@@ -1,12 +1,14 @@
 # Mantic
 
-Mantic is a local forecasting CLI. It subtracts configured expected expenses
-from a supplied starting amount over a supplied calendar period. One private
-SQLite database holds multiple named configs. Each config groups expense items
-that define amounts and recurrence schedules.
+Mantic is a local forecasting CLI. It subtracts expected expenses from a
+supplied starting amount over a supplied calendar period. One private SQLite
+database holds multiple named configs. Each config is a reusable expense bundle
+that defines amounts and recurrence schedules. A forecast can exclude saved
+expenses and include temporary expenses through ordinary CLI arguments.
 
 Mantic preserves only the current config definitions. A forecast reads one
-consistent snapshot, calculates in memory, prints its result, and exits.
+consistent snapshot, applies temporary adjustments in memory, prints its
+calculated result, and exits. Saved definitions remain unchanged.
 Starting amounts, runs, generated occurrences, balances, and payment records
 are not retained. The caller can preserve stdout when needed.
 
@@ -15,13 +17,15 @@ are not retained. The caller can preserve stdout when needed.
 | ID | Read this to understand |
 | --- | --- |
 | `mantic.config.manage` | Database initialization, named configs, item ownership, amounts, recurrence definitions, and config edits. |
-| `mantic.forecast.calculate` | Transient inputs, inclusive dates, anchored calendar recurrence, totals, details, shortfalls, and output. |
+| `mantic.forecast.calculate` | Temporary exclusions and inclusions, inclusive dates, anchored recurrence, composition, totals, details, shortfalls, and output. |
 | `mantic.installation` | Private state, immutable program and provider selection, compatibility, and recovery boundaries. |
 
 Use `mantic.install.operate` for installation and retained-release recovery.
 Its required feature contract explains selection and state behavior.
 
 The CLI prints readable text by default. Pass `--json` for machine output.
+Forecast output uses schema two with complete effective and excluded definitions
+and tagged occurrence sources. Config and item output remains schema one.
 The default database is
 `~/Library/Application Support/Mantic/mantic.db`. A global
 `--database ABSOLUTE_PATH` selects a different database for that invocation.

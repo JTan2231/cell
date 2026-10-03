@@ -9,7 +9,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, TransactionBehavior, pa
 use serde::Serialize;
 use time::Date;
 
-use crate::{Config, ConfigItem, RepeatUnit, parse_date, validate_name};
+use crate::{Config, ConfigItem, ExpenseRule, RepeatUnit, parse_date, validate_name};
 
 const APPLICATION_ID: i32 = 0x4d41_4e54;
 const SCHEMA_VERSION: i32 = 1;
@@ -20,15 +20,7 @@ pub struct ConfigSummary {
     pub name: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct ItemInput {
-    pub name: String,
-    pub amount_cents: i64,
-    pub first_due: Date,
-    pub repeat_unit: Option<RepeatUnit>,
-    pub repeat_every: Option<u32>,
-    pub end_date: Option<Date>,
-}
+pub type ItemInput = ExpenseRule;
 
 #[derive(Default, Debug)]
 pub struct ItemChanges {

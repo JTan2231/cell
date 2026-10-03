@@ -1,7 +1,7 @@
 use anyhow::Result;
 use mantic::{
-    Config, ConfigItem, ForecastInput, ForecastResult, MAX_OCCURRENCES, RepeatUnit, forecast,
-    format_amount, parse_amount, parse_date,
+    Config, ConfigItem, ExpenseRule, ExpenseSource, ForecastInput, ForecastResult, MAX_OCCURRENCES,
+    RepeatUnit, forecast, forecast_with_adjustments, format_amount, parse_amount, parse_date,
 };
 use time::{Date, Duration};
 
@@ -306,7 +306,7 @@ fn same_day_expenses_sort_by_id_and_explain_running_remainders() {
         .iter()
         .map(|entry| {
             (
-                entry.item_id,
+                entry.source,
                 entry.item_name.as_str(),
                 entry.amount_cents,
                 entry.remainder_cents,
@@ -316,10 +316,10 @@ fn same_day_expenses_sort_by_id_and_explain_running_remainders() {
     assert_eq!(
         entries,
         vec![
-            (10, "item-10", 1, 100),
-            (2, "item-2", 50, 50),
-            (5, "item-5", 80, -30),
-            (9, "item-9", 30, -60),
+            (ExpenseSource::Saved { item_id: 10 }, "item-10", 1, 100),
+            (ExpenseSource::Saved { item_id: 2 }, "item-2", 50, 50),
+            (ExpenseSource::Saved { item_id: 5 }, "item-5", 80, -30),
+            (ExpenseSource::Saved { item_id: 9 }, "item-9", 30, -60),
         ]
     );
     assert_eq!(result.total_expenses_cents, 161);
@@ -370,6 +370,13 @@ fn forecast_json_uses_calendar_dates_and_exact_integer_cents() -> Result<()> {
     assert_eq!(value["total_expenses_cents"].as_i64(), Some(100));
     assert_eq!(value["remainder_cents"].as_i64(), Some(i64::MAX - 100));
     assert_eq!(value["occurrences"][0]["date"], "2024-02-29");
+    assert_eq!(value["occurrences"][0]["source"]["kind"], "saved");
+    assert_eq!(value["occurrences"][0]["source"]["item_id"], 1);
+    assert!(value["occurrences"][0].get("item_id").is_none());
+    assert_eq!(value["expenses"][0]["source"]["kind"], "saved");
+    assert_eq!(value["expenses"][0]["first_due"], "2024-01-31");
+    assert_eq!(value["expenses"][0]["amount_cents"], 100);
+    assert_eq!(value["excluded_items"], serde_json::json!([]));
     assert!(value["first_shortfall"].is_null());
 
     let result = run(&config, 99, "2024-02-01", "2024-02-29");
@@ -471,5 +478,258 @@ fn monetary_overflow_returns_an_error_instead_of_wrapping() -> Result<()> {
     let empty = configuration(vec![]);
     assert_eq!(forecast(&empty, input(i64::MAX))?.remainder_cents, i64::MAX);
     assert_eq!(forecast(&empty, input(i64::MIN))?.remainder_cents, i64::MIN);
+    Ok(())
+}
+
+#[test]
+fn adjustments_compose_an_ephemeral_bundle_and_keep_saved_anchors() -> Result<()> {
+    let config = configuration(vec![
+        recurring(17, 6_000, "2026-01-01", RepeatUnit::Day, 1),
+        recurring(23, 1_000, "2026-01-31", RepeatUnit::Month, 1),
+    ]);
+    let saved = config.clone();
+    let extra = ExpenseRule {
+        name: "Extra monthly".to_owned(),
+        ..ExpenseRule::from(&recurring(1, 50_000, "2026-10-02", RepeatUnit::Month, 1))
+    };
+    let input = ForecastInput {
+        starting_amount_cents: 500_000,
+        from: date("2026-10-02"),
+        until: date("2026-12-31"),
+    };
+    let result =
+        forecast_with_adjustments(&config, input, &[17, 17], std::slice::from_ref(&extra))?;
+    assert_eq!(result.excluded_items, vec![config.items[0].clone()]);
+    assert_eq!(result.expenses.len(), 2);
+    assert_eq!(
+        result.expenses[0].source,
+        ExpenseSource::Saved { item_id: 23 }
+    );
+    assert_eq!(result.expenses[0].rule.first_due, date("2026-01-31"));
+    assert_eq!(
+        result.expenses[1].source,
+        ExpenseSource::Included { ordinal: 1 }
+    );
+    assert_eq!(result.expenses[1].rule, extra);
+    assert_eq!(
+        occurrence_dates(&result),
+        vec![
+            date("2026-10-02"),
+            date("2026-10-31"),
+            date("2026-11-02"),
+            date("2026-11-30"),
+            date("2026-12-02"),
+            date("2026-12-31"),
+        ]
+    );
+    assert_eq!(result.total_expenses_cents, 153_000);
+    assert_eq!(result.remainder_cents, 347_000);
+    assert_eq!(
+        forecast_with_adjustments(&config, input, &[17], &[extra])?,
+        result
+    );
+    assert_eq!(config, saved);
+    assert_eq!(forecast(&config, input)?.occurrences.len(), 94);
+    Ok(())
+}
+
+#[test]
+fn identical_additions_remain_distinct_and_follow_saved_ids_on_each_date() -> Result<()> {
+    let config = configuration(vec![
+        once(9, 30, "2024-01-03"),
+        once(2, 50, "2024-01-03"),
+        once(10, 1, "2024-01-02"),
+    ]);
+    let included = ExpenseRule::from(&once(2, 50, "2024-01-03"));
+    let result = forecast_with_adjustments(
+        &config,
+        ForecastInput {
+            starting_amount_cents: 101,
+            from: date("2024-01-01"),
+            until: date("2024-01-03"),
+        },
+        &[],
+        &[included.clone(), included],
+    )?;
+    assert_eq!(
+        result
+            .occurrences
+            .iter()
+            .map(|entry| (entry.source, entry.remainder_cents))
+            .collect::<Vec<_>>(),
+        vec![
+            (ExpenseSource::Saved { item_id: 10 }, 100),
+            (ExpenseSource::Saved { item_id: 2 }, 50),
+            (ExpenseSource::Saved { item_id: 9 }, 20),
+            (ExpenseSource::Included { ordinal: 1 }, -30),
+            (ExpenseSource::Included { ordinal: 2 }, -80),
+        ]
+    );
+    assert_eq!(result.total_expenses_cents, 181);
+    assert_eq!(result.first_shortfall, Some(date("2024-01-03")));
+    Ok(())
+}
+
+#[test]
+fn composition_explains_rules_with_no_occurrences() -> Result<()> {
+    let config = configuration(vec![once(1, 100, "2023-01-01"), once(2, 200, "2025-01-01")]);
+    let included = ExpenseRule::from(&once(3, 300, "2025-02-01"));
+    let result = forecast_with_adjustments(
+        &config,
+        ForecastInput {
+            starting_amount_cents: 1_000,
+            from: date("2024-01-01"),
+            until: date("2024-01-31"),
+        },
+        &[2],
+        &[included],
+    )?;
+    assert!(result.occurrences.is_empty());
+    assert_eq!(result.expenses.len(), 2);
+    assert_eq!(result.excluded_items, vec![config.items[1].clone()]);
+    let json = serde_json::to_value(result)?;
+    assert_eq!(
+        json["expenses"][1]["source"],
+        serde_json::json!({"kind":"included","ordinal":1})
+    );
+    assert_eq!(json["expenses"][1]["first_due"], "2025-02-01");
+    assert_eq!(json["excluded_items"][0]["id"], 2);
+    assert_eq!(json["excluded_items"][0]["amount_cents"], 200);
+    Ok(())
+}
+
+#[test]
+fn exclusions_must_belong_to_the_selected_snapshot_and_cannot_hide_invalid_items() {
+    let config = configuration(vec![once(1, 100, "2024-01-01")]);
+    let input = ForecastInput {
+        starting_amount_cents: 1_000,
+        from: date("2024-01-01"),
+        until: date("2024-01-31"),
+    };
+    let foreign = Config {
+        id: 2,
+        name: "other".to_owned(),
+        items: vec![ConfigItem {
+            id: 2,
+            config_id: 2,
+            ..once(1, 100, "2024-01-01")
+        }],
+    };
+    for excluded in [0, -1, 99, foreign.items[0].id] {
+        let result = forecast_with_adjustments(&config, input, &[excluded], &[]);
+        assert!(result.is_err(), "excluded ID {excluded}");
+    }
+    let invalid_configs = [
+        configuration(vec![ConfigItem {
+            config_id: 2,
+            ..config.items[0].clone()
+        }]),
+        configuration(vec![ConfigItem {
+            amount_cents: 0,
+            ..config.items[0].clone()
+        }]),
+        configuration(vec![config.items[0].clone(), config.items[0].clone()]),
+    ];
+    for invalid in invalid_configs {
+        assert!(forecast_with_adjustments(&invalid, input, &[1], &[]).is_err());
+    }
+}
+
+#[test]
+fn included_rules_use_the_same_validation_as_saved_rules() {
+    let valid = ExpenseRule::from(&once(1, 100, "2024-01-01"));
+    let invalid_rules = [
+        ExpenseRule {
+            name: " ".to_owned(),
+            ..valid.clone()
+        },
+        ExpenseRule {
+            name: "bad\nname".to_owned(),
+            ..valid.clone()
+        },
+        ExpenseRule {
+            amount_cents: 0,
+            ..valid.clone()
+        },
+        ExpenseRule {
+            amount_cents: -1,
+            ..valid.clone()
+        },
+        ExpenseRule {
+            repeat_unit: Some(RepeatUnit::Day),
+            ..valid.clone()
+        },
+        ExpenseRule {
+            repeat_every: Some(1),
+            ..valid.clone()
+        },
+        ExpenseRule {
+            repeat_unit: Some(RepeatUnit::Day),
+            repeat_every: Some(0),
+            ..valid.clone()
+        },
+        ExpenseRule {
+            end_date: Some(date("2023-12-31")),
+            ..valid
+        },
+    ];
+    let input = ForecastInput {
+        starting_amount_cents: 1_000,
+        from: date("2024-01-01"),
+        until: date("2024-01-31"),
+    };
+    for rule in invalid_rules {
+        assert!(forecast_with_adjustments(&configuration(vec![]), input, &[], &[rule]).is_err());
+    }
+}
+
+#[test]
+fn the_occurrence_limit_applies_to_the_effective_bundle() -> Result<()> {
+    let config = configuration(vec![
+        recurring(1, 1, "2024-01-01", RepeatUnit::Day, 1),
+        recurring(2, 1, "2024-01-01", RepeatUnit::Day, 1),
+    ]);
+    let limit = i64::try_from(MAX_OCCURRENCES)?;
+    let input = ForecastInput {
+        starting_amount_cents: limit,
+        from: date("2024-01-01"),
+        until: date("2024-01-01") + Duration::days(limit - 1),
+    };
+    let result = forecast_with_adjustments(&config, input, &[1], &[])?;
+    assert_eq!(result.occurrences.len(), MAX_OCCURRENCES);
+    assert_eq!(result.remainder_cents, 0);
+    assert!(forecast(&config, input).is_err());
+    let extra = ExpenseRule::from(&once(3, 1, "2024-01-01"));
+    assert!(forecast_with_adjustments(&config, input, &[1], &[extra]).is_err());
+    Ok(())
+}
+
+#[test]
+fn adjustments_preserve_checked_money_arithmetic() -> Result<()> {
+    let config = configuration(vec![once(1, i64::MAX, "2024-01-01")]);
+    let extra = ExpenseRule::from(&once(2, 1, "2024-01-01"));
+    let input = ForecastInput {
+        starting_amount_cents: i64::MAX,
+        from: date("2024-01-01"),
+        until: date("2024-01-01"),
+    };
+    assert!(forecast_with_adjustments(&config, input, &[], std::slice::from_ref(&extra)).is_err());
+    assert_eq!(
+        forecast_with_adjustments(&config, input, &[1], std::slice::from_ref(&extra))?
+            .remainder_cents,
+        i64::MAX - 1
+    );
+    assert!(
+        forecast_with_adjustments(
+            &config,
+            ForecastInput {
+                starting_amount_cents: i64::MIN,
+                ..input
+            },
+            &[1],
+            &[extra]
+        )
+        .is_err()
+    );
     Ok(())
 }
