@@ -2,6 +2,7 @@ mod autofix;
 mod broker;
 mod deployment;
 mod git;
+mod host_setup;
 mod installation;
 mod inventory;
 mod manager;
@@ -12,6 +13,7 @@ mod providers;
 mod signing;
 mod store;
 mod validation;
+mod workspace;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -31,6 +33,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Configure or inspect Cell's shared external work volume.
+    Storage {
+        #[command(subcommand)]
+        command: Storage,
+    },
     /// Create a paused independent queue with an explicitly selected baseline.
     Init {
         #[arg(long)]
@@ -141,6 +148,8 @@ enum Maintenance {
 #[derive(Subcommand)]
 enum Signing {
     Status,
+    /// Create the initial shared Cell certificate and signing selection.
+    CreateLocal,
     Configure {
         #[arg(long)]
         certificate_sha1: String,
@@ -148,7 +157,18 @@ enum Signing {
         keychain: PathBuf,
         #[arg(long, default_value = "local.cell")]
         identifier_namespace: String,
+        /// Write Cell's shared host policy instead of a Telete state override.
+        #[arg(long)]
+        host: bool,
     },
+}
+#[derive(Subcommand)]
+enum Storage {
+    Configure {
+        #[arg(long)]
+        volume: PathBuf,
+    },
+    Status,
 }
 #[derive(Subcommand)]
 enum Service {
@@ -186,12 +206,20 @@ async fn main() {
 
 #[allow(clippy::too_many_lines)] // Keep command dispatch in one place.
 async fn execute(cli: Cli) -> Result<serde_json::Value> {
+    // Bootstrap must work before the workspace selector or a queue exists.
+    if let Command::Storage { command } = &cli.command {
+        return match command {
+            Storage::Configure { volume } => workspace::configure(volume),
+            Storage::Status => workspace::status(),
+        };
+    }
     let state = match cli.state {
         Some(path) => path,
         None => paths::default_root()?,
     };
     let paths = paths::Paths::new(state)?;
     match cli.command {
+        Command::Storage { .. } => unreachable!("storage was dispatched before queue paths"),
         Command::Init {
             repo,
             accepted_baseline,
@@ -244,16 +272,22 @@ async fn execute(cli: Cli) -> Result<serde_json::Value> {
         },
         Command::Signing { command } => match command {
             Signing::Status => signing::status(&paths),
+            Signing::CreateLocal => signing::create_local(&paths),
             Signing::Configure {
                 certificate_sha1,
                 keychain,
                 identifier_namespace,
-            } => Ok(serde_json::to_value(signing::configure(
-                &paths,
-                &certificate_sha1,
-                &keychain,
-                &identifier_namespace,
-            )?)?),
+                host,
+            } => Ok(serde_json::to_value(if host {
+                signing::configure_host(
+                    &paths,
+                    &certificate_sha1,
+                    &keychain,
+                    &identifier_namespace,
+                )?
+            } else {
+                signing::configure(&paths, &certificate_sha1, &keychain, &identifier_namespace)?
+            })?),
         },
         Command::Install => installation::install(&paths),
         Command::Service { command } => match command {

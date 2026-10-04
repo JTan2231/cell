@@ -1,10 +1,10 @@
 # Cell pipelines
 
-This directory provides shared product CI and Git release operations. Product
-descriptors contain shell assignments only. The pipeline starts with the system
-shell and repository tools, without compiling a bootstrap binary. The internal
-validator and drift checks require Python 3.10 or newer. The installed CI
-manager requires Python 3.11 or newer.
+This directory provides product descriptors, generated entry points, retained
+Python validation helpers, and manual Git release operations. Telete owns
+current queued CI and reads the product descriptors through its Rust validator.
+The retained Python validator and drift checks require Python 3.10 or newer;
+the Python CI manager requires Python 3.11 or newer.
 
 `generate.sh --write` updates checked-in product entry points.
 `generate.sh --check` rejects drift. In either mode, repeat `--product PRODUCT`
@@ -43,38 +43,34 @@ Commit the intended changes and submit the commit from the Cell root:
 ./ci.sh submit COMMIT
 ```
 
-`cell-ci submit COMMIT` uses the same installed manager. Root and product
-`ci.sh` wrappers provide manager commands only. The manager queues the commit,
-integrates it privately, validates it, attempts bounded repairs, deploys the
-accepted source, and emails the outcome. See [the CI manager](../ci_manager/README.md)
-for setup, effects, status, and recovery. Bare `./ci.sh`, product selection
+`telete submit COMMIT --repo /absolute/cell` uses the same installed program.
+Root and product `ci.sh` wrappers provide Telete commands only. Telete queues
+the commit, integrates it privately, validates it, attempts bounded repairs,
+deploys the accepted source, and emails the outcome. See
+[Telete](../infrastructure/telete/README.md) for setup, effects, status, and
+recovery. Use `cell-ci` to inspect or recover retained Python jobs.
+Bare `./ci.sh`, product selection
 arguments, and direct validation flags are not supported CI entry points.
 
 New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
-to run selected tests. `--skip-tests` selects the default explicitly. The
-validator retains syntax, formatting, lint, provider and build checks. It skips
-Rust tests and shared Python regression suites. The receipt records
-`selection.tests_skipped`. Product selection still controls automatic deployment.
+to run selected Rust tests. Syntax, formatting, lint, provider, build, and
+production signing checks still run. Telete invokes no Python regression
+runner. Its receipts state when tests were skipped. Product selection controls
+default deployment.
 
 ### Prepare or update the test runner
 
-Install the pinned nextest executable before submitting a change that uses the
-parallel Rust test stage:
+Install Telete's pinned nextest executable before submitting a job that runs
+tests:
 
 ```sh
-python3 pipeline/nextest_tool.py install
+telete prepare-tools
 ```
 
-The installer selects nextest 0.9.146 from its fixed upstream macOS archive and
-stores the executable on the configured external work volume. It runs `--version`
-to check basic execution. CI requires the configured executable path. It does not
-audit archive or executable bytes, download a runner during a gate, or select a
-runner from `PATH`.
-
-Set `CELL_CI_TEST_THREADS` to a positive integer to change the parallel test
-limit. The default is four concurrent test processes. The dispatcher records
-the limit in the gate command. This limit is separate from the broker's compiler
-job limit. All selected tests use the configured worker limit.
+Validation does not download a missing runner. Read
+[Telete's operating contract](../infrastructure/telete/chancery/manuals/queue-operate.md#validate-source)
+for its tools and gate limits. `pipeline/nextest_tool.py` remains the pinned
+runner setup helper for retained Python validation.
 
 ### Change CI while a job is active
 
@@ -83,13 +79,22 @@ candidate. A later submission uses the new validation code in its candidate.
 Installing the pinned runner does not replace the active manager or change the
 active job's source.
 
-Replace the installed manager only through its maintenance procedure. Pause
-admission, finish or recover the active job, install the fixed source package,
-and inspect status before resuming. Queued jobs remain retained. Read
-[manager replacement](../ci_manager/chancery/manuals/queue-operate.md) for the
-complete procedure and the limited cancelled-validation exception.
+Replace Telete only through its maintenance procedure. Pause admission, settle
+queued and active jobs, and install the intended executable. Inspect status,
+start the installed service, and resume admission. Read
+[Telete installation](../infrastructure/telete/chancery/manuals/queue-operate.md#install-only-on-explicit-request)
+for the complete procedure. Python manager replacement remains a separate
+operation under its [retained contract](../ci_manager/chancery/manuals/queue-operate.md).
 
-## Internal validation
+## Retained Python validation and manual release support
+
+The sections below describe the Python validator, broker, and release helpers
+used by retained Python jobs and manual release workflows. Telete has its own
+validator, broker, production preparation, and deployment implementation. It
+does not invoke these Python CI helpers. Read its operating contract for current
+queued CI behavior.
+
+### Internal validation
 
 The manager invokes `select_changes.py run` with the fixed job base, the exact
 committed candidate, and machine receipts. This is an internal validation
@@ -327,10 +332,10 @@ longer exists. Other hosts use a `mkdir` fallback that fails closed. On those
 hosts, confirm that no release is active before removing a stale
 `.git/cell-release-publication.lock.d`.
 
-## Prompt tests
+## Retained Python prompt-test selection
 
 Bazaar's product checks cover its prompt library and import command. Changes to
 `infrastructure/bazaar/src/prompts.rs`, `src/prompt_import.rs`, or `seed.json`
-select Bazaar and all current prompt consumers in the manager's validation
+select Bazaar and all listed prompt consumers in the Python manager's validation
 plan: Annals, Krisis, Semantics, Platter, Weaver, EMT, and Conatus.
 The prompt tests do not import state into the installed Bazaar database.

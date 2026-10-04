@@ -1,9 +1,92 @@
 # Operate Telete
 
-Telete is a separate Rust implementation of Cell CI orchestration. Source
+Telete is Cell's Rust CI system. Root and product `ci.sh` wrappers select the
+installed `telete` command. Source
 installation does not replace or operate the existing CI manager. Telete uses
 `refs/telete/accepted` and `refs/telete/jobs/` and does not advance development
 `main` or `refs/ci/accepted`.
+
+For the handoff from Python CI, pause and settle its work through `cell-ci`,
+then stop its service. Initialize Telete from the exact final
+`refs/ci/accepted` commit. The Git commit ID identifies the accepted source
+used for merges and change selection. Preserve the Python journal, refs, and
+receipts separately. Telete does not import them. Keep the Python worker
+stopped while Telete owns new delivery work.
+
+## Set up the host
+
+Use the built Telete executable for first setup. Installation itself requires
+configured storage, an initialized queue, and a usable signing identity.
+
+```sh
+telete storage configure --volume /Volumes/CellWork
+telete storage status
+telete signing create-local
+telete signing status
+```
+
+Storage setup runs before queue paths are opened. It writes the shared
+current-user `~/Library/Application Support/Cell/workspace.json`, with
+`schema_version: 1`, the exact mount path and `volume_uuid`, and
+`directory: "cell"`. The account database selects the home directory; `HOME`
+and `--state` do not redirect this host file. The volume must be mounted,
+external, writable APFS with ownership enabled. Setup creates a private
+mode-0700 `cell` directory and publishes the mode-0600 selector without
+replacing an existing file. Repeating an identical valid selection succeeds
+without rewriting it. A different selection fails. Status reads the selection
+and current volume observation without creating queue state.
+
+Before first storage selection, pause and drain the legacy CI queue, release its
+maintenance owners, stop its service, and settle its deployment. Rust setup
+checks the service and reads its schema-one journal under the existing admission
+and worker locks. It holds the legacy deployment lock and refuses retained
+deployment recovery. It does not run Python, change the legacy journal, move
+data, import job history, or select another accepted baseline. An unavailable
+volume never selects a new queue. Restore the selected volume and its identity.
+
+Initial signing creates the same shared Cell identity as Python setup. It writes
+`~/Library/Application Support/Cell/signing.json`, not a Telete state override.
+Creation requires configured storage but no initialized queue. It refuses an
+existing shared or selected Telete policy, or an existing `Cell Local Signing`
+certificate in the login Keychain. An invalid selection is not permission to
+create a replacement.
+
+The certificate uses RSA 3072, SHA-256, 3,650-day validity, and critical
+`CA:FALSE`, digital-signature, and code-signing extensions. Setup imports the
+certificate and key into the current user's login Keychain, authorizes
+`/usr/bin/codesign` for key use, and adds user code-signing trust. Native user
+authorization can be required. The SHA-1 fingerprint selects the exact
+certificate; it is not the certificate signature algorithm. The schema-one
+policy uses the `local` profile and `local.cell` namespace.
+
+Shared signing writers hold the host setup lock, the selected Telete state's
+admission, worker, and deployment locks, and the existing Cell queue admission
+and deployment locks. Both queues must be paused and settled when present.
+Stop the Telete worker before maintenance. Release publication and retained
+deployment recovery must be settled. Settle any other independently configured
+Telete states before changing a shared selection; these commands check the
+selected state and the shared Cell queue, not an inventory of all consumers.
+The commands do not pause, stop, cancel, or recover work for the operator.
+
+Private generation files are removed on ordinary completion or failure. Only
+Keychain retains the key. Setup preflights the identity before publishing the
+policy. Keychain changes and file publication are not one transaction: a failure
+or timeout can leave an imported certificate or key without configuration.
+Inspect the reported fingerprint and Keychain effects. Do not delete or
+regenerate the identity to repeat creation. Once that exact key is usable,
+select it explicitly with:
+
+```sh
+telete signing configure --host --certificate-sha1 FINGERPRINT \
+  --keychain /absolute/login.keychain-db --identifier-namespace local.cell
+```
+
+This command also supports deliberate shared identity changes under the same
+maintenance guards. A failed preflight preserves the prior policy. If key
+import did not complete, configuration alone cannot restore the missing key.
+An abrupt process termination can also leave private generation staging for
+explicit inspection and cleanup. No automatic renewal, identity replacement,
+volume formatting, mounting, ownership change, or journal migration is supplied.
 
 ## Initialize and control a queue
 
@@ -24,7 +107,8 @@ telete submit COMMIT --repo /absolute/cell --run-tests
 telete worker --once
 ```
 
-Run `telete worker` to keep the serial worker active. Use `telete pause` to prevent
+After installation, run `telete service start` to start the installed worker.
+Run `telete worker` for a directly operated worker. Use `telete pause` to prevent
 new claims. Use `telete cancel JOB` for an intended stop at a safe boundary. Use
 `telete recover JOB` to reconcile retained work. Use `telete wait JOB --timeout
 60` to observe the same job without resubmission. Status is a CLI observation;
@@ -50,8 +134,27 @@ base, including deletions and both rename paths.
 The validator loads literal product descriptors and Cargo metadata. Telete's
 own descriptor is `infrastructure/telete/product.sh`; it does not register Telete
 with the existing CI inventory. Product, provider, package, and executable
-identities remain separate. Selection includes linked Rust consumers and
-explicit shared platform inputs. Selection does not expand deployment authority.
+identities remain separate.
+
+Product changes select their owner. Explicit prompt and shared platform inputs
+also select their consumers. Changes to `cell-install` or `cell-maintenance`
+select their direct local Cargo consumers. Common Telete validation inputs
+select the full product and platform inventory. Root `Cargo.toml` and
+`Cargo.lock` changes do not select all products. Other local Cargo dependencies
+do not expand product selection.
+
+With tests enabled, each selected platform product adds the shared
+`cell-install` tests. A platform product with a direct local `cell-maintenance`
+dependency also adds that suite. Adding these tests does not select more
+products. New product introductions follow the same rules.
+
+Default deployment uses the selected products, except Telete. An explicit
+`--deploy PRODUCT` list selects deployment products, and `--no-deploy` prevents
+deployment. Test selection does not add products to an explicit deployment list.
+
+Contract 2 narrows product selection and adds the shared platform tests above.
+Validation receipts remain schema 1. Retained receipts keep their recorded
+scope; this change does not migrate or reinterpret them.
 
 The host compiles the exact candidate's Telete validator in an isolated target
 directory. Candidate code owns validation. Host Telete code owns promotion,
@@ -105,8 +208,9 @@ and signs native commands with the frozen certificate and
 stable product identifiers. Telete reads the shared host signing selection by
 default. `telete signing configure --certificate-sha1 FINGERPRINT --keychain
 /absolute/keychain --identifier-namespace local.cell` selects an existing
-certificate in Telete's own configuration. It never changes Cell's signing
-configuration or creates a certificate. Configuration and installation require
+certificate in Telete's own configuration. Add `--host` to change the shared
+Cell policy. Initial `signing create-local` also selects the shared policy;
+an existing Telete override retains precedence. Configuration and installation require
 paused, drained Telete work and settled Telete deployment.
 
 Use `telete signing status` to inspect the selected identity. Keychain access or
@@ -157,6 +261,10 @@ installer publishes the executing binary and matching embedded provider in its
 own immutable release. It selects `~/.local/bin/telete`, its own Chancery provider,
 and its own `org.cell.telete` user service. Operational state stays external.
 Telete does not install or replace `cell-ci` or its service.
+
+Installation leaves the Telete service stopped. Start it explicitly, then
+resume queue admission. `cell-ci` remains the interface for retained Python
+records; root and product `ci.sh` wrappers do not route to that manager.
 
 Use `telete service status`, `service start`, and `service stop` for this service.
 Service stop and program replacement require paused, drained work. Installation,

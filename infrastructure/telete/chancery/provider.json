@@ -1,19 +1,44 @@
 {
   "schema_version": 4,
-  "provider": { "id": "telete", "name": "Telete", "release": "0.1.0" },
+  "provider": {
+    "id": "telete",
+    "name": "Telete",
+    "release": "0.1.0"
+  },
   "promise_scope": {
-    "authoritative_for": ["Telete queue records, private candidates, and guarded advancement of refs/telete/accepted."],
-    "not_authoritative_for": ["Existing Cell CI state, provider runtime outcomes, product domain state, and final inbox delivery."],
+    "authoritative_for": [
+      "Telete queue records, private candidates, and guarded advancement of refs/telete/accepted.",
+      "Explicit shared Cell external-workspace and signing setup under compatible maintenance guards."
+    ],
+    "not_authoritative_for": [
+      "Existing Cell CI state, provider runtime outcomes, product domain state, and final inbox delivery."
+    ],
     "inventory": {
-      "covers": ["Telete queue, validation, preparation, instruction execution, signing selection, and installation commands."],
+      "covers": [
+        "Telete queue, validation, preparation, instruction execution, signing selection, and installation commands.",
+        "Initial shared host storage selection, storage inspection, initial signing-certificate creation, and explicit shared signing selection."
+      ],
       "completeness": "complete",
-      "excludes": ["A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and existing CI replacement."]
+      "excludes": [
+        "A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and mutation or import of legacy CI records."
+      ]
     },
-    "shared_access_and_trust": ["Local current-user commands; explicit external APFS workspace selection is required."],
-    "shared_privacy_and_retention": ["Retained source, prompts, diagnostics, requests, and receipts are private operational records."],
-    "compatibility_and_retirement": ["Telete journal and receipt schemas are independent from the existing CI manager."],
-    "operational_limits": ["One delivery lifecycle, one heavy gate, two light gates; no completion-time guarantee."]
+    "shared_access_and_trust": [
+      "Local current-user commands; explicit external APFS workspace selection is required.",
+      "Host setup selects the current account home independently of HOME and --state; Keychain retains private-key authority."
+    ],
+    "shared_privacy_and_retention": [
+      "Retained source, prompts, diagnostics, requests, and receipts are private operational records."
+    ],
+    "compatibility_and_retirement": [
+      "Telete journal and receipt schemas are independent from the existing CI manager."
+    ],
+    "operational_limits": [
+      "One delivery lifecycle, one heavy gate, two light gates; no completion-time guarantee."
+    ]
   },
   "overview": "overview.md",
-  "entries": ["entries/queue-operate.json"]
+  "entries": [
+    "entries/queue-operate.json"
+  ]
 }
