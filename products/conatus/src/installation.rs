@@ -255,6 +255,18 @@ pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<
     deploy_inner(context).map_err(|error| cell_install::Error::new(format!("{error:#}")))
 }
 
+fn suspend_schedules(
+    context: &cell_install::adapter::Context,
+    schedule: &clockwork::deployment::ScheduleState,
+    email_schedule: &clockwork::deployment::ScheduleState,
+) -> Result<()> {
+    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+        .with_home(&context.home);
+    schedule.suspend(&clockwork, "conatus/update")?;
+    email_schedule.suspend(&clockwork, "conatus/daily-email")?;
+    Ok(())
+}
+
 fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
     use clockwork::deployment::ScheduleState;
     let settings: Settings = serde_json::from_value(
@@ -286,10 +298,7 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
     }
     let schedule = ScheduleState::capture_installed(&context.home, "conatus/update")?;
     let email_schedule = ScheduleState::capture_installed(&context.home, "conatus/daily-email")?;
-    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
-        .with_home(&context.home);
-    schedule.suspend(&clockwork, "conatus/update")?;
-    email_schedule.suspend(&clockwork, "conatus/daily-email")?;
+    suspend_schedules(context, &schedule, &email_schedule)?;
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     {
         let _admission = crate::gate(&root).enter()?;
