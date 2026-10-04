@@ -985,6 +985,7 @@ fn cargo_command(
         args.push("--offline".into());
     }
     let mut command = spec(paths, repo, "cargo", args, true);
+    command.timeout_seconds = None;
     command
         .env
         .insert("CARGO_BUILD_WARNINGS".into(), "deny".into());
@@ -1040,27 +1041,29 @@ fn validate_inner(
             Ok(())
         })(),
     )?;
+    let mut metadata_command = spec(
+        paths,
+        repo,
+        "cargo",
+        vec![
+            "metadata".into(),
+            "--manifest-path".into(),
+            repo.join("Cargo.toml").display().to_string(),
+            "--locked".into(),
+            "--no-deps".into(),
+            "--format-version".into(),
+            "1".into(),
+        ],
+        true,
+    );
+    metadata_command.timeout_seconds = None;
     let metadata_result = run_gate(
         paths,
         repo,
         report,
         "cargo.metadata",
         ResourceClass::Heavy,
-        spec(
-            paths,
-            repo,
-            "cargo",
-            vec![
-                "metadata".into(),
-                "--manifest-path".into(),
-                repo.join("Cargo.toml").display().to_string(),
-                "--locked".into(),
-                "--no-deps".into(),
-                "--format-version".into(),
-                "1".into(),
-            ],
-            true,
-        ),
+        metadata_command,
     )?;
     ensure!(metadata_result.success(), "Cargo metadata failed");
     let metadata: CargoMetadata = serde_json::from_str(&metadata_result.stdout)?;
@@ -1411,6 +1414,7 @@ fn validate_inner(
             args.push("--offline".into());
         }
         let mut command = spec(paths, repo, &nextest.display().to_string(), args, true);
+        command.timeout_seconds = None;
         command.env.retain(|key, _| !key.starts_with("NEXTEST_"));
         ensure!(
             run_gate(

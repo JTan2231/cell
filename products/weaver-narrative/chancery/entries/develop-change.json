@@ -54,7 +54,7 @@
     {
       "id": "telete.queue.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 8
+      "max_contract_exclusive": 9
     },
     {
       "id": "semantics.repository.explore",

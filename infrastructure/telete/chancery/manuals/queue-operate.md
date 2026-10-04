@@ -126,11 +126,14 @@ The validator runs native structure, provider, shell syntax, formatting, Clippy,
 selected nextest, and release checks. Deferred release checks run in trusted
 production preparation. Receipts state when tests were skipped.
 
-The candidate validator dispatcher has no whole-validation deadline. Individual
-commands retain their positive time limits. Unbounded dispatchers use distinct
-gate identities; retained bounded dispatchers keep their recorded requests and
-deadlines. Process completion and the aggregate validation report remain separate
-requirements for validation success.
+The candidate validator dispatcher has no whole-validation deadline. Telete also
+sets no aggregate deadline for Cargo metadata, Clippy, selected tests, formatting,
+tool builds, release builds, or production builds. Git, provider, signing,
+individual probes, and deployment instructions retain their time limits.
+Unbounded dispatchers use distinct gate identities. Retained command requests
+keep their recorded time limits and exact correlation; a different command cannot
+reuse their gate identity. Process completion and the aggregate validation report
+remain separate requirements for validation success.
 
 Install the pinned nextest runner explicitly with `telete prepare-tools` before
 jobs that run tests. Validation does not download a missing runner.

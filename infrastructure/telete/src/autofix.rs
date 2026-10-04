@@ -287,7 +287,7 @@ pub(crate) fn prepare(
         args,
         cwd: copied.clone(),
         env: paths.environment(),
-        timeout_seconds: Some(600),
+        timeout_seconds: None,
         stdin: None,
         confined: true,
     };

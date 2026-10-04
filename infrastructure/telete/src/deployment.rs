@@ -305,6 +305,7 @@ pub(crate) fn prepare(
         ],
         true,
     );
+    metadata_spec.timeout_seconds = None;
     metadata_spec.env = environment.clone();
     let preparation_id = Uuid::new_v4().to_string();
     let metadata = broker::run(
@@ -344,6 +345,7 @@ pub(crate) fn prepare(
         args.extend(["--package".into(), package]);
     }
     let mut build = spec(paths, repo, "cargo", args, true);
+    build.timeout_seconds = None;
     build.env = environment;
     let compiled = broker::run(
         paths,
