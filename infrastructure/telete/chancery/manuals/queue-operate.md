@@ -1,9 +1,17 @@
 # Operate Telete
 
-Telete is a separate Rust implementation of Cell CI orchestration. Source
+Telete is Cell's Rust CI system. Root and product `ci.sh` wrappers select the
+installed `telete` command. Source
 installation does not replace or operate the existing CI manager. Telete uses
 `refs/telete/accepted` and `refs/telete/jobs/` and does not advance development
 `main` or `refs/ci/accepted`.
+
+For the handoff from Python CI, pause and settle its work through `cell-ci`,
+then stop its service. Initialize Telete from the exact final
+`refs/ci/accepted` commit. The Git commit ID identifies the accepted source
+used for merges and change selection. Preserve the Python journal, refs, and
+receipts separately. Telete does not import them. Keep the Python worker
+stopped while Telete owns new delivery work.
 
 ## Set up the host
 
@@ -99,7 +107,8 @@ telete submit COMMIT --repo /absolute/cell --run-tests
 telete worker --once
 ```
 
-Run `telete worker` to keep the serial worker active. Use `telete pause` to prevent
+After installation, run `telete service start` to start the installed worker.
+Run `telete worker` for a directly operated worker. Use `telete pause` to prevent
 new claims. Use `telete cancel JOB` for an intended stop at a safe boundary. Use
 `telete recover JOB` to reconcile retained work. Use `telete wait JOB --timeout
 60` to observe the same job without resubmission. Status is a CLI observation;
@@ -252,6 +261,10 @@ installer publishes the executing binary and matching embedded provider in its
 own immutable release. It selects `~/.local/bin/telete`, its own Chancery provider,
 and its own `org.cell.telete` user service. Operational state stays external.
 Telete does not install or replace `cell-ci` or its service.
+
+Installation leaves the Telete service stopped. Start it explicitly, then
+resume queue admission. `cell-ci` remains the interface for retained Python
+records; root and product `ci.sh` wrappers do not route to that manager.
 
 Use `telete service status`, `service start`, and `service stop` for this service.
 Service stop and program replacement require paused, drained work. Installation,

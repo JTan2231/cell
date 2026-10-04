@@ -20,7 +20,7 @@
       ],
       "completeness": "complete",
       "excludes": [
-        "A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and existing CI replacement."
+        "A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and mutation or import of legacy CI records."
       ]
     },
     "shared_access_and_trust": [

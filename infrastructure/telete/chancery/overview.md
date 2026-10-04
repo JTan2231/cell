@@ -1,7 +1,8 @@
 # Telete
 
-Telete implements Cell CI orchestration in Rust. It is separate from the
-installed Python CI manager. Telete uses its own executable, journal, worktrees,
+Telete implements Cell CI orchestration in Rust. Root and product `ci.sh`
+wrappers select installed Telete. The retained Python CI manager is paused
+and stopped after cutover. Telete uses its own executable, journal, worktrees,
 Git references, deployment records, and user service.
 
 Explicit host setup writes Cell's shared external-volume and signing selections.

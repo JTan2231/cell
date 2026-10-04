@@ -11,7 +11,7 @@
     "Configure the shared external work volume or explicitly create or select the shared Cell signing identity through Rust host setup."
   ],
   "do_not_use_when": [
-    "Operate or replace the existing Cell CI manager."
+    "Operate or mutate retained Python CI jobs, records, or service."
   ],
   "outcome": "Telete records the selected host configuration or retains the exact source delivery outcome and its separate deployment and notification observations.",
   "effects": [
@@ -37,7 +37,7 @@
     "Signing policy retains only the public fingerprint, Keychain path, profile and namespace. Private external generation files are removed on ordinary completion; Keychain retains the key."
   ],
   "does_not_authorize": [
-    "Replacement of existing CI, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
+    "Mutation or import of legacy CI records, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
   ],
   "interfaces": [
     {

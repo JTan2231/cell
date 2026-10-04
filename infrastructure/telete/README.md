@@ -1,13 +1,14 @@
 # Telete
 
-Telete is an independent Rust CI system for Cell. It owns a serial delivery
+Telete is Cell's Rust CI system. It owns a serial delivery
 queue, candidate validation, gate admission, repair, production preparation,
 deployment, and outcome notification.
 
-Build and inspect its command interface:
+Submit a committed change through the installed program:
 
 ```sh
-cargo run -p telete -- --help
+telete submit COMMIT --repo /absolute/cell
+telete status JOB
 ```
 
 Read the [operating contract](chancery/manuals/queue-operate.md) for state,
