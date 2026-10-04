@@ -109,7 +109,7 @@ fn wait_stopped(paths: &Paths) -> Result<()> {
     let started = Instant::now();
     loop {
         if let Ok(_worker) = paths::lock(&paths.root.join("worker.lock"), false) {
-            crate::manager::require_quiescent(paths)?;
+            crate::manager::require_service_stoppable(paths)?;
             return Ok(());
         }
         ensure!(
@@ -121,7 +121,17 @@ fn wait_stopped(paths: &Paths) -> Result<()> {
 }
 
 fn stop(paths: &Paths) -> Result<()> {
-    crate::manager::require_quiescent(paths)?;
+    let _guards = if crate::manager::require_quiescent(paths).is_ok() {
+        Vec::new()
+    } else {
+        let mut guards = crate::broker::settled_guards(paths)?;
+        guards.push(paths::lock(
+            &paths.root.join("deployments/deployment.lock"),
+            false,
+        )?);
+        crate::manager::require_service_stoppable(paths)?;
+        guards
+    };
     if loaded()? {
         installed(paths)?;
         let output = launchctl(&["bootout", &format!("gui/{}/{LABEL}", uid()?)])?;

@@ -353,6 +353,53 @@ pub(crate) fn require_quiescent(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
+// Service stop holds broker and deployment ownership for this recovery case.
+// Installation and signing retain the stricter quiescent queue requirement.
+pub(crate) fn require_service_stoppable(paths: &Paths) -> Result<()> {
+    if require_quiescent(paths).is_ok() {
+        return Ok(());
+    }
+    let (store, config) = configured(paths)?;
+    ensure!(store.paused()?, "pause Telete before stopping its service");
+    let job = store.active()?.context("Telete has unsettled queued work")?;
+    ensure!(
+        job.phase == Phase::Blocked
+            && job.stopped_phase == Some(Phase::Deploying)
+            && job.accepted
+            && job.operation.is_none()
+            && !job.model_unresolved
+            && (!job.options.notify
+                || job
+                    .notification
+                    .as_ref()
+                    .is_some_and(|notice| notice.accepted && !notice.uncertain))
+            && store.jobs()?.iter().all(|other| {
+                other.id == job.id
+                    || (other.phase.terminal() && !other.unresolved && !other.model_unresolved)
+            }),
+        "service stop requires settled work or one blocked completed deployment"
+    );
+    let request = job
+        .deployment_request
+        .as_ref()
+        .context("blocked deployment has no saved request")?;
+    ensure!(
+        job.candidate.as_ref() == Some(&request.source)
+            && git::ref_value(paths, &config.repository, git::ACCEPTED)?.as_ref()
+                == Some(&request.source)
+            && !paths.root.join("deployments/active.json").try_exists()?,
+        "blocked deployment source or execution ownership is unsettled"
+    );
+    let result = deployment::observe(paths, &request.id)?
+        .context("blocked deployment has no terminal receipt")?;
+    correlate_deployment(&result, request)?;
+    ensure!(
+        result.state == DeploymentState::Succeeded,
+        "service stop requires the blocked deployment to have completed successfully"
+    );
+    Ok(())
+}
+
 // Keep the authoritative recovery decisions together before the state transition.
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn recover(paths: &Paths, id: &str) -> Result<Value> {
@@ -1886,11 +1933,15 @@ fn correlate_preparation(
 }
 
 fn correlate_deployment(result: &DeploymentResult, request: &DeploymentRequest) -> Result<()> {
+    let result_products = result.products.iter().collect::<BTreeSet<_>>();
+    let request_products = request.products.iter().collect::<BTreeSet<_>>();
     ensure!(
         result.schema == 2
             && result.request_id == request.id
             && result.source == request.source
-            && result.products == request.products,
+            && result_products.len() == result.products.len()
+            && request_products.len() == request.products.len()
+            && result_products == request_products,
         "deployment receipt does not match admitted request"
     );
     ensure!(
