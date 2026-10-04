@@ -1,6 +1,6 @@
 {
   "id": "clockwork.bindings",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -56,8 +56,8 @@
   "dependencies": [
     {
       "id": "clockwork.definitions",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     }
   ],
   "promise": {
@@ -70,7 +70,11 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Switch requires an existing same-key definition, inactive activation, maintained product gate, validated prior state, exact content-addressed installed broker, filesystem authority and available current-user launchd GUI domain."
+        "statement": "Switch requires an existing same-key definition, inactive activation, maintained product gate, validated prior state, exact fixed physical installed broker path, filesystem authority and available current-user launchd GUI domain."
+      },
+      {
+        "status": "declared",
+        "statement": "The installed broker is a regular file at Clockwork/install/runtime/bin/clockwork. Binding changes compare its bytes with the current retained archive; generated plists preserve this physical path across deployments."
       }
     ],
     "inputs": [

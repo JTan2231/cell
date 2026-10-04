@@ -40,7 +40,7 @@ does not maintain a second operating contract.
 : The guarded transition that aligns the selected definition, generated plist bytes, and launchd loaded state. It restores the prior coherent state or, while the projection remains attributable to Clockwork, durably attempts a disabled state. An unattributable projection is retained, reported, and recovery-gated without destructive mutation.
 
 **Clockwork frontend**
-: The exact installed content-addressed Clockwork binary path embedded in generated plists and used only to resolve a stable activation key through Clockwork-owned state.
+: The fixed physical Clockwork runtime binary path embedded in generated plists and used only to resolve a stable activation key through Clockwork-owned state.
 
 **Product output**
 : The direct child's stdout or stderr bytes appended to distinct exact product-selected private files. Clockwork validates and opens those destinations but never ingests their bodies or owns their meaning or retention.

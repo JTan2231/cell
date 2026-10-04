@@ -34,7 +34,7 @@ grant no note, mail, or status authority.
    daily definition. It preserves the saved schedule policy and enabled intent,
    unless `daily_email_enabled` overrides that intent. An absent binding remains
    absent when the setting is omitted. Deployment creates no maintenance hold,
-   drains no send, and temporarily disables no binding.
+   waits for owned scheduled activations before runtime publication, and preserves prior enabled intent.
 5. Confirm the retained deployment outcome and captured or explicit schedule intent.
    Deployment does not check artifact integrity, ledger integrity, or the Milieu
    snapshot. Ordinary doctor and application checks remain separate.

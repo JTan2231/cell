@@ -93,6 +93,14 @@ compatibility checks. The native product installer owns resource placement and
 any setup, maintenance, service, migration, or scheduling commands it requires.
 There is no required seven-operation adapter protocol.
 
+The shared native installer retains each UUID release as an archive and copies
+its payload to regular files under the product's fixed `install/runtime`
+directory. Public file links resolve to this fixed tree. Directory links for
+Chancery providers continue to resolve through `current` to one archived bundle.
+Product lifecycle operations quiesce affected execution before publication.
+File replacement is atomic per file, not across the complete runtime tree.
+Recovery copies the selected retained payload back to the same runtime paths.
+
 ## Interpret the receipt
 
 New receipts use `schema: 2` and `manifest_executor: 1`. They retain source and

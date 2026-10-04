@@ -18,7 +18,7 @@
   ],
   "outcome": "Completion of the selected placement and setup instructions, or the separately documented explicit manual installation, maintenance or recovery result. Deployment completion does not establish application health.",
   "effects": [
-    "The schema-2 annals-install deploy command places the release, creates or migrates the primary, decisions and registered libraries in place, writes configuration, and selects the two inbox schedules without holds or draining.",
+    "The schema-2 annals-install deploy command places the release, creates or migrates the primary, decisions and registered libraries in place, writes configuration, and selects the two inbox schedules without application holds or durable-work draining. It suspends owned schedules and waits for their active processes before runtime publication.",
     "The maintenance, ownership-proof and compensation procedures for explicitly invoked `annals-install install`, `provision-decisions`, `recover` and `migrate-to-user` do not run from schema-2 `deploy`.",
     "Stages and atomically selects a complete immutable release containing Annals, Annals Usage, runners, configuration, and provider documentation.",
     "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Registers an immutable Clockwork definition for `annals/inbox`. Before disabling or replacing a prior selection, verifies that its digest resolves to the complete current Annals release definition. Establishes maintenance, migrates the library, and atomically switches the binding after the release is ready.",
@@ -28,7 +28,9 @@
     "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: Before opening decisions state or selecting its schedule, the provisioner checks existing mutable control files and both fixed logs. They must be operator-owned private regular files with one hard link. It creates absent logs privately and rejects symbolic or hard-linked targets.",
     "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: With `--keep-maintenance`, records and retains an Annals-owned decisions maintenance hold for an outer cutover; a later successful invocation clears only that matching owned hold.",
     "For explicit `annals-install install`, `provision-decisions`, `recover` or `migrate-to-user`: A failed pre-commit cutover restores compatible program, configuration and schedule state while retaining current library and spool data.",
-    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain durable work, check readiness, or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication, then restores saved enabled intent with the new definitions. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Annals/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Manual primary installation requires annals/decisions-inbox disabled because its separate provisioner owns the schedule handoff. With --no-start, annals/inbox must also be disabled. The installer rejects enabled bindings without a handoff and waits for active processes in retained disabled bindings before runtime publication. A later explicit schedule handoff selects the matching definition."
   ],
   "authority": [
     "Annals owns its installed programs, library, spool, schedule requirements, configuration, migration, maintenance, domain result, and recovery.",
@@ -39,7 +41,7 @@
     "The manifest command completes the declared placement and setup instructions. An omitted enabled setting preserves captured schedule intent; a new schedule defaults enabled. Existing data, operator pauses, application maintenance, and incident halts remain in place. Completion does not establish application health."
   ],
   "failure_and_recovery": [
-    "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
+    "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "The manifest command does not inspect installed maintenance support or perform automatic recovery. An interrupted command leaves completed effects in place; inspect the retained command log and use explicit product procedures when needed.",
     "After an interrupted schema-2 deploy command, inspect its retained log and current selections before further instructions; completed effects remain in place. For a retained explicit manual transaction, use `annals-install recover` without deleting its maintenance or editing spool receipts.",
     "The schema-2 deploy command does not probe storage readiness. Actual staging, migration or publication writes can fail for insufficient space. Separately invoked diagnostics can report `storage_probe_failed`.",
@@ -121,8 +123,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "bazaar.string.read",
@@ -167,7 +169,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The schema-2 `annals-install deploy` command takes the declared candidate and source paths plus optional boolean enabled settings. It does not inspect installed maintenance support, hold or drain work, suspend scheduling, check readiness or recover automatically."
+        "statement": "The schema-2 `annals-install deploy` command takes the declared candidate and source paths plus optional boolean enabled settings. It does not inspect installed maintenance support, hold or drain durable work, check readiness or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication."
       },
       {
         "status": "declared",
@@ -179,7 +181,7 @@
       },
       {
         "status": "declared",
-        "statement": "Explicit `annals-install provision-decisions` takes a retained cell-install-v3 release and checks the selected prior decisions definition against its dedicated state and recorded release. Schema-2 `deploy` creates or migrates decisions state and selects its new definition directly."
+        "statement": "Explicit `annals-install provision-decisions` takes the currently selected retained Cell release and checks the selected prior decisions definition against its dedicated state and recorded release. Schema-2 `deploy` creates or migrates decisions state and selects its new definition directly."
       },
       {
         "status": "declared",
@@ -188,12 +190,16 @@
       {
         "status": "declared",
         "statement": "Prompt preparation requires initialized private Bazaar state and a complete cell.prompts.annals selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      },
+      {
+        "status": "declared",
+        "statement": "Manual primary installation requires annals/decisions-inbox disabled because its separate provisioner owns the schedule handoff. With --no-start, annals/inbox must also be disabled. The installer rejects enabled bindings without a handoff and waits for active processes in retained disabled bindings before runtime publication. A later explicit schedule handoff selects the matching definition."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Maintenance accepts the selected library path and one run ID of 1\u2013128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
+        "statement": "Maintenance accepts the selected library path and one run ID of 1–128 ASCII letters, digits, hyphens, underscores, or periods, without a leading period. A controlled installer command may set CELL_DEPLOYMENT_RUN_ID; existing holds require that exact sole owner and exclusive drained admission, while absent holds use ordinary admission."
       },
       {
         "status": "declared",
@@ -285,7 +291,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
+        "statement": "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
       },
       {
         "status": "declared",
@@ -330,6 +336,10 @@
       {
         "status": "declared",
         "statement": "Callers resolve cell.prompts.annals to exact component versions before preparing new work. Prompt edits affect new selections. Retained requests, packet inputs, library revisions, and assignment snapshots preserve their existing recovery and retention semantics."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Annals/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [

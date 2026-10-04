@@ -168,8 +168,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.corpus.explore",
@@ -331,7 +331,7 @@
       },
       {
         "status": "declared",
-        "statement": "The product-owned schema-two definition declares halt-until-approved. Clockwork owns activation, the shared service-health delay before a new durable halt, incident email and exact continuation approval; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
+        "statement": "The product-owned schema-three definition declares halt-until-approved. Clockwork owns activation, the shared service-health delay before a new durable halt, incident email and exact continuation approval; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

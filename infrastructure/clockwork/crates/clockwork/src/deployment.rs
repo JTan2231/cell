@@ -29,7 +29,7 @@ impl ScheduleState {
                 .map_err(|error| Error(error.to_string()))?
             || database.is_symlink()
         {
-            return Self::capture(&Client::new(executable), key);
+            return Self::capture(&Client::new(executable).with_home(home), key);
         }
         let agents = home.join("Library/LaunchAgents");
         if agents
@@ -93,9 +93,7 @@ impl ScheduleState {
                 if prior.definition_digest == now.definition_digest
                     && prior.halted_incident == now.halted_incident =>
             {
-                if now.enabled {
-                    client.disable(key, None)?;
-                }
+                client.disable(key, None)?;
                 Ok(())
             }
             _ => Err(Error(
@@ -139,6 +137,7 @@ impl ScheduleState {
                 .into(),
             sha256,
         };
+        manifest.use_runtime_paths()?;
         Ok(manifest)
     }
 
@@ -268,14 +267,18 @@ mod tests {
         };
         let next = state.retarget(
             manifest.clone(),
-            Path::new("/releases/new"),
-            Path::new("/releases/new/bin/test"),
+            Path::new("/fixture/install/releases/6ce29a62-15b0-4e71-b5c0-4c5db83bb38d"),
+            Path::new("/fixture/install/releases/6ce29a62-15b0-4e71-b5c0-4c5db83bb38d/bin/test"),
             "new".into(),
         )?;
         assert_eq!(next.schedule, manifest.schedule);
         assert_eq!(next.environment, manifest.environment);
         assert_eq!(next.output, manifest.output);
-        assert_eq!(next.release_id, "new");
+        assert_eq!(next.release_id, "6ce29a62-15b0-4e71-b5c0-4c5db83bb38d");
+        assert_eq!(next.schema_version, 3);
+        assert!(
+            matches!(next.launch, LaunchImage::Direct { program, .. } if program == "/fixture/install/runtime/bin/test")
+        );
         Ok(())
     }
 }

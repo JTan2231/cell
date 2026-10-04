@@ -8,8 +8,8 @@ and runtime checks remain available separately.
 Use this procedure for authorized installation, diagnosis, program
 rollback, selector detach, or explicit state migration. Read the required
 `clockwork.installation` and `clockwork.schedule.operate` contracts for release,
-state, and schedule details. Direct program installation changes owned program
-and provider selectors; it does not operate product definitions or bindings.
+state, and schedule details. Direct program installation requires disabled, drained bindings and changes
+owned program and provider selectors while preserving selection and halts.
 Manifest deployment also refreshes existing enabled broker bindings.
 
 Public `clockwork` commands print plain text by default. Add `--json` when
@@ -18,10 +18,13 @@ schemas and the private broker output are unchanged.
 
 ## Prepare and install
 
-1. Select the candidate binary, installer, and provider bundle at absolute paths.
+1. Disable existing bindings and let their admitted work finish. Exclude
+   concurrent manual activations. Select the candidate binary, installer, and
+   provider bundle at absolute paths.
 2. Run the installer with `install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE`.
    Use `--home ABSOLUTE_HOME` for an alternate home and `--expected-current` to
-   retain a captured selector expectation.
+   retain a captured selector expectation. The installer uses the selected home
+   for both binding operations and program publication.
 3. Register command inventory with `clockwork --register-usage`.
 
 The installer prepares resource directories and publishes command and provider
@@ -35,23 +38,27 @@ through `clockwork doctor`; that command's state effects are unchanged.
 
 1. Authorize Cell deployment separately, then use `./deploy.sh clockwork`.
    Select any product updates explicitly; the executor adds no products.
-2. Let the product command select Clockwork files. If its runtime database exists,
-   it lists current bindings and switches each enabled binding to the same
-   definition digest through the selected broker. Disabled bindings stay disabled.
-   It creates no maintenance hold and temporarily disables no binding.
-3. Inspect the retained result after interruption. Completed selector and binding
-   changes remain. Reconcile and acknowledge executor admission separately from
-   any authorized Clockwork recovery. No automatic retry or recovery follows.
+2. Let the product command retain complete prior binding intent in the private
+   deployment run, disable all bindings, and wait for admitted activations.
+   The command then replaces fixed runtime files and restores only previously
+   enabled definitions. Disabled intent and all incidents remain unchanged.
+3. Inspect `clockwork-binding-intent.json` in the retained run after interruption.
+   Completed file and binding changes remain; unrestored bindings stay disabled.
+   Reconcile executor admission separately from explicit Clockwork recovery.
 
 Stop on a failed file or binding operation. Refresh preserves definitions and
 failure incidents; it approves no halt and retries no product work. A run-at-load
 definition can start product work when its enabled binding is refreshed.
-Direct installation and program rollback alone do not refresh pinned broker paths.
+Direct installation and program rollback preserve plist bytes. Converted plists
+use the fixed runtime; legacy archive-bound plists need a binding refresh.
 
 ## Roll back a program release
 
 1. Preserve failure evidence. Resolve `install/previous` to the canonical owned
-   retained release and select its installer.
+   retained release. Require a `cell-install-v4` runtime-aware target and use
+   a compatible trusted installer. Older archive metadata remains readable,
+   but its broker cannot execute correctly from the fixed runtime; rebuild
+   historical source with runtime support instead.
 2. Recover through the explicit candidate reader:
 
    ```sh

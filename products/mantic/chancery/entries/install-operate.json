@@ -1,6 +1,6 @@
 {
   "id": "mantic.install.operate",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -44,8 +44,8 @@
   "dependencies": [
     {
       "id": "mantic.installation",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "session_surfaces": [
@@ -108,6 +108,10 @@
       {
         "status": "declared",
         "statement": "Opaque release identity and expected-current releases/ID guard local program selection; no monetary or forecast unit is defined by installation."
+      },
+      {
+        "status": "declared",
+        "statement": "Program archives retain release identities. Running executable files are regular files beneath Mantic/install/runtime and keep the same actual path across install and recovery."
       }
     ],
     "completeness_and_freshness": [

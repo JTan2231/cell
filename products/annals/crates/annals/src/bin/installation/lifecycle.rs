@@ -501,6 +501,7 @@ pub(super) fn deploy(args: &InstallArgs) -> Result<Value> {
         directory(&library)?;
         directory(&library.join("log"))?;
         let control = schedule::inspect(&home, &args.clockwork, key)?;
+        schedule::disable(&home, &args.clockwork, key, &control)?;
         let before = capture(&library.join("config.toml"))?;
         let fresh = !optional_private(&library.join("annals.db"))?;
         let initialized = if fresh {
@@ -562,17 +563,16 @@ pub(super) fn deploy(args: &InstallArgs) -> Result<Value> {
             &home,
             None,
         )?;
-        let definition = schedule::definition(&home, key, &library, &candidate.info)?;
+        let definition = schedule::runtime_definition(&home, key, &library, &candidate.info)?;
         let file = tempfile::NamedTempFile::new_in(install_root(&home))?;
         fs::write(
             file.path(),
             toml::to_string(&definition)
                 .map_err(|_| Error::new("cannot render Annals Clockwork definition"))?,
         )?;
-        let digest = schedule::register(&home, &args.clockwork, key, file.path())?;
         definitions.push((
             key,
-            digest,
+            file,
             args.enabled.unwrap_or(!control.present || control.enabled),
         ));
     }
@@ -583,7 +583,8 @@ pub(super) fn deploy(args: &InstallArgs) -> Result<Value> {
         optional_private(&usage)?,
     )?;
     transaction.publish(&candidate, &prior, |_| Ok(()))?;
-    for (key, digest, enabled) in definitions {
+    for (key, file, enabled) in definitions {
+        let digest = schedule::register(&home, &args.clockwork, key, file.path())?;
         let mut arguments = vec![
             "--json".into(),
             "binding".into(),
@@ -608,6 +609,18 @@ pub(super) fn install_owned(args: &InstallArgs, owner: &str, outer: bool) -> Res
     let home = home(args.home.home.clone())?;
     let prior = cell_install::inspect_installation(&release::layout(), &home, &release::legacy)?;
     expected(&prior, args.expected_current.as_deref())?;
+    for key in ["annals/inbox", "annals/decisions-inbox"] {
+        if key == "annals/inbox" && !args.no_start {
+            continue;
+        }
+        let control = schedule::inspect(&home, &args.clockwork, key)?;
+        if control.enabled {
+            return Err(Error::new(format!(
+                "disable {key} before installing without its schedule handoff"
+            )));
+        }
+        schedule::disable(&home, &args.clockwork, key, &control)?;
+    }
     let candidate = release::prepare(args, &home)?;
     deploy_library(
         &home,
@@ -640,6 +653,11 @@ pub(super) fn provision_owned(args: &DecisionsArgs, owner: &str, outer: bool) ->
         info,
     };
     let prior = cell_install::inspect_installation(&release::layout(), &home, &release::legacy)?;
+    if prior.current.as_ref() != Some(&candidate.info) {
+        return Err(Error::new(
+            "decisions provisioning requires the selected Annals release",
+        ));
+    }
     deploy_library(
         &home,
         &candidate,
@@ -892,17 +910,8 @@ fn apply_library(
         }
     }
     let definition =
-        schedule::definition(&journal.home, &journal.key, &library, &journal.candidate)?;
+        schedule::runtime_definition(&journal.home, &journal.key, &library, &journal.candidate)?;
     schedule::render(&path.join("definition.toml"), &definition)?;
-    if !handoff && journal.database_existed {
-        journal.candidate_digest = Some(schedule::register(
-            &journal.home,
-            &journal.clockwork,
-            &journal.key,
-            &path.join("definition.toml"),
-        )?);
-        journal.save(path)?;
-    }
     let disabled = if journal.no_start || handoff {
         journal.prior_control.clone()
     } else {
@@ -975,15 +984,6 @@ fn apply_library(
         hold(&payload, &library, &journal.home, &journal.owner, "hold")?;
     }
     private_state(&library, decisions)?;
-    if !handoff && journal.candidate_digest.is_none() {
-        journal.candidate_digest = Some(schedule::register(
-            &journal.home,
-            &journal.clockwork,
-            &journal.key,
-            &path.join("definition.toml"),
-        )?);
-        journal.save(path)?;
-    }
     if let Some(config) = &journal.usage_after {
         write_private(&state(&journal.home).join("usage.toml"), config, true)?;
     }
@@ -1002,6 +1002,16 @@ fn apply_library(
                 |_| Ok(()),
             )?,
         );
+        journal.save(path)?;
+    }
+    let payload = install_root(&journal.home).join("runtime/libexec/annals");
+    if !handoff && journal.candidate_digest.is_none() {
+        journal.candidate_digest = Some(schedule::register(
+            &journal.home,
+            &journal.clockwork,
+            &journal.key,
+            &path.join("definition.toml"),
+        )?);
         journal.save(path)?;
     }
     if !journal.no_start && !handoff {

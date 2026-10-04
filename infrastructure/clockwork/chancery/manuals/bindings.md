@@ -41,9 +41,10 @@ Clockwork restores the prior coherent state or, while the projection remains
 attributable, durably attempts a disabled state. An unattributable projection
 is retained and recovery-gated without mutation.
 
-Binding changes require running the exact current-user-owned binary from a
-content-addressed installed Clockwork release; Clockwork checks that binary
-against its release manifest before writing its path to a plist. It records the
+Binding changes require the current-user-owned regular executable at
+`~/Library/Application Support/Clockwork/install/runtime/bin/clockwork`.
+Clockwork checks its path, ownership, and bytes against the selected retained
+release before writing this fixed physical path to a plist. It records the
 generated plist's digest and refuses to replace or remove bytes it cannot
 attribute to the binding.
 
@@ -95,8 +96,8 @@ there is no external projection to coordinate.
 
 ## Trigger and authority limits
 
-Generated plists contain the verified content-addressed installed Clockwork
-binary, stable key, interval or daily local-calendar schedule, `HOME`, and
+Generated plists contain the verified fixed Clockwork runtime
+binary path, stable key, interval or daily local-calendar schedule, `HOME`, and
 Clockwork broker logs under `~/Library/Logs/Clockwork`. They contain no product
 program, arguments, secret environment, or mutable product selector. They are
 current-user LaunchAgents under `~/Library/LaunchAgents/org.clockwork.*.plist`.

@@ -18,7 +18,9 @@
     "May create a named general library, append instructions, and persist Conatus configuration and feed intake.",
     "Update enqueues immutable documents and runs Annals automatic integration. Retry and re-examination can use model allowance and apply valid changes.",
     "Direct installation changes only the packaged release selection; Cell deployment also configures state and manages saved runner intent.",
-    "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path, preserving library IDs, cursor, records, instructions and product pause. It publishes each selected schedule with its intended enabled state under ordinary admission and runner locks. It creates no maintenance hold, suspends no runner, drains no work and performs no health or signature audit."
+    "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path, preserving library IDs, cursor, records, instructions and product pause. It publishes each selected schedule with its intended enabled state under ordinary admission and runner locks. It creates no maintenance hold, suspends owned schedules and waits for their active processes before runtime publication; it does not drain durable work or perform a health or signature audit.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Direct install and recovery require both owned Clockwork bindings disabled. They reject enabled bindings and run the disable transition for each retained disabled binding to wait for active processes before runtime publication. They do not select new definitions; select the matching definition before enabling a recovered or updated program."
   ],
   "authority": [
     "Conatus owns intake, baseline, handoff, framing and views. Annals owns library content, graph interpretation, model submission and recovery. Clockwork owns activation; Nucleus owns execution."
@@ -28,7 +30,7 @@
     "Installation or schedule generation alone does not prove a running or ready product."
   ],
   "failure_and_recovery": [
-    "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
+    "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "Retain captured inputs after handoff errors. Resume normal pending work with update once the dependency is available.",
     "Use an explicit failed-job interval for retry and a selected retained input for re-examination. Do not infer failed domain work from runtime exit alone.",
     "Keep source, application, installation and activation failures distinct; do not reset the baseline to recover a failed handoff."
@@ -106,6 +108,10 @@
       {
         "status": "declared",
         "statement": "Library initialization requires initialized private Bazaar state and a complete cell.prompts.conatus selection. The default database is ~/.local/share/bazaar/bazaar.sqlite3; callers accept an absolute CELL_BAZAAR_DATABASE override. Reads fail without creating state or using embedded fallback text."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install and recovery require both owned Clockwork bindings disabled. They reject enabled bindings and run the disable transition for each retained disabled binding to wait for active processes before runtime publication. They do not select new definitions; select the matching definition before enabling a recovered or updated program."
       }
     ],
     "inputs": [
@@ -149,7 +155,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
+        "statement": "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
       },
       {
         "status": "declared",
@@ -166,6 +172,10 @@
       {
         "status": "declared",
         "statement": "Callers resolve cell.prompts.conatus before preparing new library instructions. Prompt edits affect new selections; existing library revisions and retained source work preserve their recovery and retention semantics."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "reliances": [
@@ -251,8 +261,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "bazaar.string.read",

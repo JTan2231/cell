@@ -18,7 +18,7 @@ they do not run Usher or its installer.
 | ID | Read this to understand |
 | --- | --- |
 | `usher.recognition.inspect` | Inventory, identity and evidence rules, membership findings, report/check output, the separate operational declaration projection, consistency, privacy, and limits. |
-| `usher.installation` | The separate Rust installer, exact release identity, owned selectors, recorded metadata, atomic selector updates, and supported retained-release recovery. |
+| `usher.installation` | The separate Rust installer, retained release identity, fixed runtime paths, owned selectors, recorded metadata, and supported retained-release recovery. |
 
 ## Operations
 

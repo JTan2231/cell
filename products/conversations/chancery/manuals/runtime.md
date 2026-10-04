@@ -83,14 +83,17 @@ installed contract for this data surface; complete resolution preserves that gap
 
 ## Installed release and selectors
 
-The installer copies the supplied programs and provider bundle into a retained
-release and selects their owned public paths together. It creates required
-installation directories and uses product and catalog locks with atomic selector
-updates. `--expected-current absent|releases/ID` guards the selected release.
+The installer retains the supplied programs and provider bundle in a release
+archive. It publishes regular executable files beneath
+`~/Library/Application Support/Conversations/install/runtime/`. Updates and recovery
+replace those files at the same actual paths. Public command selectors use this runtime tree. Provider directory selectors
+use the selected archive, so each catalog read selects one retained bundle. The installer uses product and catalog locks;
+each file replacement is atomic. The complete tree is not one atomic update.
+`--expected-current absent|releases/ID` guards the recorded release selection.
 Foreign public selectors are refused. An instruction failure retains completed
 file and selector changes for explicit recovery.
 
-Opaque UUID release IDs name the staged files. Installation and recovery do not compare
+Opaque UUID release IDs name retained archives. Installation and recovery do not compare
 artifact hashes, component versions, or retained file inventories. They do not
 run executable probes, native-signature audits, database integrity checks,
 dependency probes, or readiness checks. Inspection reads recorded installation
@@ -98,9 +101,10 @@ metadata and selectors; it is not an integrity result.
 
 The installation root is
 `~/Library/Application Support/Conversations/install`. Public `conversations`,
-`conversations-install`, and the Conversations provider follow `current`.
+`conversations-install` follow `runtime`. The Conversations provider follows
+`current`, which records the selected archive.
 `previous` retains the prior selection. `manifest.json` describes the
-`cell-install-v3` layout, and `package/install` retains the installer.
+`cell-install-v4` layout, and `package/install` retains the installer.
 Recovery also reads the previous shell format.
 
 Deployment does not run `doctor`, read history, or change Codex authentication.

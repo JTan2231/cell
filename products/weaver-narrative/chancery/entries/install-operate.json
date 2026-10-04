@@ -52,7 +52,8 @@
     }
   ],
   "effects": [
-    "Install selects immutable program and provider bytes, initializes supported Weaver SQLite state, stores reading configuration, and acquires and releases run-owned admission holds. It creates no narrative, model job, email, or schedule."
+    "Install selects immutable program and provider bytes, initializes supported Weaver SQLite state, stores reading configuration, and acquires and releases run-owned admission holds. It creates no narrative, model job, email, or schedule.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Weaver/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity."
   ],
   "authority": [
     "Weaver owns authored Markdown, exact authoring requests, one pending mailbox reply per document, observed execution outcomes, reading configuration, and deployment admission.",
@@ -82,7 +83,7 @@
     {
       "id": "telete.queue.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 6
+      "max_contract_exclusive": 7
     }
   ],
   "does_not_authorize": [
@@ -153,6 +154,10 @@
       {
         "status": "declared",
         "statement": "The executor runs the declared product command. Weaver selects program and provider files and writes reading configuration and state under ordinary admission and the runner lock. Deployment creates no hold, drains no authoring job and invokes no readiness probe. Failed instructions retain completed effects without automatic retry, rollback or product recovery."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Weaver/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity."
       }
     ],
     "operational_limits": [

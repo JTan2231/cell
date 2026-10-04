@@ -45,13 +45,13 @@ hyphens. Its collision-free LaunchAgent label is `org.clockwork.owner.name`.
 `definition register` accepts a regular UTF-8 TOML file of at most 1 MiB.
 The file must belong to the current user and must not be a symbolic link.
 Group and other users must not have write permission. Clockwork rejects unknown
-fields. The version-two shape is:
+fields. Schema three uses the fixed product runtime while retaining the release identity. Its shape is:
 
 ```toml
-schema_version = 2
+schema_version = 3
 key = "annals/inbox"
 release_id = "01234567-89ab-7cde-8fab-0123456789ab"
-release_root = "/absolute/immutable/release/root"
+release_root = "/absolute/Product/install/releases/01234567-89ab-7cde-8fab-0123456789ab"
 authority = "current-user-background"
 overlap = "skip"
 arguments = []
@@ -65,7 +65,7 @@ run_at_load = true
 
 [launch]
 kind = "direct"
-program = "/absolute/immutable/release/root/bin/annals-inbox-runner"
+program = "/absolute/Product/install/runtime/bin/annals-inbox-runner"
 sha256 = "64 lowercase hexadecimal characters"
 
 [environment]
@@ -93,12 +93,12 @@ An interpreted launch replaces the direct executable fields with:
 kind = "interpreted"
 interpreter = "/bin/sh"
 interpreter_sha256 = "64 lowercase hexadecimal characters"
-script = "/absolute/immutable/release/root/libexec/job-script"
+script = "/absolute/Product/install/runtime/libexec/job-script"
 script_sha256 = "64 lowercase hexadecimal characters"
 ```
 
 Arguments and environment values are literal strings. The registered environment
-replaces the broker environment. A schema-two child additionally receives the
+replaces the broker environment. A schema-two or schema-three child additionally receives the
 three reserved activation correlation fields. Names and values are stored in state;
 secret-looking names are rejected and no field may contain a secret. The
 literal `-c` command-string argument is rejected.
@@ -106,20 +106,19 @@ literal `-c` command-string argument is rejected.
 Output paths are distinct and absolute. Their existing canonical parents are
 symlink-free, owner-writable/searchable, and not group- or world-writable.
 Existing destinations must be private, owner-writable regular files without
-symbolic or hard links. Outputs cannot target the product release or Clockwork's
+symbolic or hard links. Outputs cannot target the product release, fixed runtime, or Clockwork's
 state, broker-log, or LaunchAgent trees. Runtime opening and append behavior
 belong to `clockwork.activations`; Clockwork never ingests the bodies.
 
-Both supported manifest schemas bound interval and optional timeout values to
+All supported manifest schemas bound interval and optional timeout values to
 1 through 31,536,000 whole seconds. Local-calendar schedules use hour 0 through
-23 and minute 0 through 59. Both schemas require
+23 and minute 0 through 59. All schemas require
 `authority = "current-user-background"` and `overlap = "skip"`. A timeout can
 be omitted.
 
 Definition registration requires an absolute non-symbolic `release_root` and a
 caller-supplied exact product `release_id` (canonical UUID or retained
-64-lowercase-hex release ID), resolves every
-product program or script beneath that root, and verifies artifact digests,
+64-lowercase-hex release ID), keeps that retained archive separate from its launch path, and verifies artifact digests,
 ownership, and permissions before writing a definition row. Opening Clockwork
 may first create its private state directories and empty schema-two store.
 
@@ -132,7 +131,7 @@ canonical, symlink-free, non-hard-linked, executable by the current user, and
 not group- or world-writable.
 
 Direct programs must carry recognized Mach-O/fat magic; this header check does not
-prove that the current host loader can run them. Schema-one interpreted
+prove that the current host loader can run them. Interpreted
 definitions support only the exact root-owned `/bin/sh` profile, with its hash
 recorded separately from the release-local script. Every path ancestor is root- or
 current-user-owned and not group- or world-writable. Clockwork pins
@@ -143,6 +142,36 @@ Repeated registration of the identical normalized manifest returns the same
 digest; a changed schedule, path, release identity, artifact hash, argument,
 environment, working directory, output path, timeout, or policy produces a
 distinct immutable digest.
+
+## Fixed runtime and retained definitions
+
+Schema three requires `release_root` to name the canonical retained
+`install/releases/RELEASE_ID` directory. The product program or script must be
+a regular file under the exact sibling `install/runtime` tree, at the same
+relative path as its retained release artifact. Neither the tree nor the image
+can be a symbolic link. Registration and each activation check both copies
+against the definition's frozen SHA-256. The installation's `current` selector
+must identify that exact retained archive, including when a runner hash is
+unchanged. The launch image path itself is fixed and is not a selector.
+
+A product update replaces bytes at the same physical runtime path and publishes
+a new immutable definition. An older schema-three definition remains readable,
+but cannot execute while another archive is selected or its runtime image
+no longer matches. To recover an older release, publish its bytes to the fixed
+runtime before selecting its definition. History is never rewritten.
+
+Schemas one and two retain their existing decoding, digest, and archive-local
+launch paths. Their product image must remain beneath `release_root`.
+The public `Manifest::use_runtime_paths()` helper converts an archive-local
+manifest, or preserves an already mapped path, into schema three. It changes
+only the schema and product launch path; release identity, hashes, policy and
+other context remain unchanged. Registration performs the filesystem checks.
+
+Product lifecycle code must disable and drain its binding before replacing
+runtime files. It publishes the complete runtime and selects the retained
+archive before registering the new definition. Do not run manual work during
+replacement. These rules prevent an unchanged runner from opening a partially
+replaced sibling payload; Clockwork does not attest transitive execution.
 
 ## Verification and trust limits
 
@@ -161,10 +190,10 @@ processes. Direct SQLite access is unsupported.
 
 ## Compatibility and related features
 
-Schema-one and schema-two manifests, SQLite schema, provider release, product
+Schema-one, schema-two, and schema-three manifests, SQLite schema, provider release, product
 release identity, and definition digest are separate compatibility axes.
 Existing definitions keep their content and identity. Changed registered
-meaning requires a new definition and explicit binding selection. The versioned Clockwork failure-check contract applies its delay to schema-two
+meaning requires a new definition and explicit binding selection. Schema three retains schema-two failure policy. The versioned Clockwork failure-check contract applies its delay to schema-two and schema-three
 failures without rewriting retained definitions. A database migration alone
 does not add failure enforcement to schema-one definitions.
 No retention horizon, deprecation interval, or cross-release migration window
