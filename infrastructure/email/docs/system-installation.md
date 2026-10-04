@@ -13,7 +13,7 @@ Repository readers can open the [installation feature](../chancery/manuals/insta
 
 Use the published `email.install.operate` procedure for ordinary Cell delivery
 or explicitly authorized manual artifact selection. Read
-`chancery show ci-manager.queue.operate` for the installed queue procedure.
+`chancery show telete.queue.operate` for the installed queue procedure.
 Read `nucleus manual` for shared deployment coordination and recovery order.
 
 ## Validate a real send

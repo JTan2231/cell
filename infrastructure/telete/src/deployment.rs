@@ -74,7 +74,7 @@ fn spec(
         args,
         cwd: repo.into(),
         env: paths.environment(),
-        timeout_seconds: 1800,
+        timeout_seconds: Some(1800),
         stdin: None,
         confined,
     }
@@ -305,6 +305,7 @@ pub(crate) fn prepare(
         ],
         true,
     );
+    metadata_spec.timeout_seconds = None;
     metadata_spec.env = environment.clone();
     let preparation_id = Uuid::new_v4().to_string();
     let metadata = broker::run(
@@ -344,6 +345,7 @@ pub(crate) fn prepare(
         args.extend(["--package".into(), package]);
     }
     let mut build = spec(paths, repo, "cargo", args, true);
+    build.timeout_seconds = None;
     build.env = environment;
     let compiled = broker::run(
         paths,
@@ -821,7 +823,7 @@ fn command(
             .transpose()?
             .unwrap_or(worktree),
         env: environment,
-        timeout_seconds: timeout_seconds.unwrap_or(1800),
+        timeout_seconds: Some(timeout_seconds.unwrap_or(1800)),
         stdin: stdin
             .as_ref()
             .map(|text| -> Result<String> {

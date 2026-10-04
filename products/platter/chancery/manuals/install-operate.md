@@ -28,7 +28,7 @@ owns readiness and prompt captures; `platter.editions` owns delivery authority.
 Use the CI manager for ordinary committed delivery:
 
 ```sh
-cell-ci submit COMMIT
+telete submit COMMIT
 ```
 
 The manager integrates, validates, attempts bounded repairs, deploys, and emails

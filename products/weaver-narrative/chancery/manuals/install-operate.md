@@ -16,7 +16,7 @@ publish a narrative, send email, or authorize an authoring retry.
 ## Install or update
 
 1. Select the authorized delivery route. For ordinary CI delivery, commit the
-   intended change and submit `cell-ci submit COMMIT`, or `./ci.sh submit COMMIT`
+   intended change and submit `telete submit COMMIT`, or `./ci.sh submit COMMIT`
    from the Cell root. The manager integrates, validates, attempts bounded
    repairs, deploys, and sends its deterministic outcome email. Verify its
    retained job outcome. For a separate authorized manual deployment, select

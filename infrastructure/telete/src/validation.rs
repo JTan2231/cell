@@ -353,8 +353,6 @@ fn select(
     }
     for path in operational {
         if path.starts_with("pipeline/")
-            || path.starts_with("ci_manager/")
-            || path.starts_with("ci_broker/")
             || path.starts_with("infrastructure/telete/")
             || path == "ci.sh"
         {
@@ -367,7 +365,6 @@ fn select(
             && Path::new(path)
                 .extension()
                 .is_some_and(|extension| extension == "json")
-            || path == "pipeline/integrated.sh"
             || (path.starts_with("pipeline/products/")
                 && Path::new(path)
                     .extension()
@@ -533,7 +530,7 @@ fn spec(
         args,
         cwd: repo.to_owned(),
         env,
-        timeout_seconds: 1800,
+        timeout_seconds: Some(1800),
         stdin: None,
         confined,
     }
@@ -548,7 +545,7 @@ fn git(paths: &Paths, repo: &Path, args: &[&str]) -> Result<ProcessResult> {
         false,
     );
     command.env.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
-    command.timeout_seconds = 120;
+    command.timeout_seconds = Some(120);
     process::run(paths, &command)
 }
 
@@ -830,17 +827,12 @@ fn catalog(paths: &Paths, repo: &Path, inventory: &Inventory, executable: &Path)
         .tempdir_in(paths.root.join("scratch"))?;
     let mut entries = Vec::new();
     let mut ids = BTreeSet::new();
-    let mut bundles: Vec<_> = inventory
+    let bundles: Vec<_> = inventory
         .products
         .iter()
         .flat_map(|product| &product.providers)
         .map(|provider| (provider.id.to_string(), repo.join(&provider.path)))
         .collect();
-    // Existing product contracts refer to this shared source declaration.
-    // Reading its bundle does not operate the old queue or its Python code.
-    if repo.join("ci_manager/chancery/provider.json").is_file() {
-        bundles.push(("ci-manager".into(), repo.join("ci_manager/chancery")));
-    }
     for (id, bundle) in bundles {
         ensure!(ids.insert(id.clone()), "duplicate catalog provider: {id}");
         std::os::unix::fs::symlink(&bundle, registry.path().join(&id))?;
@@ -993,6 +985,7 @@ fn cargo_command(
         args.push("--offline".into());
     }
     let mut command = spec(paths, repo, "cargo", args, true);
+    command.timeout_seconds = None;
     command
         .env
         .insert("CARGO_BUILD_WARNINGS".into(), "deny".into());
@@ -1048,27 +1041,29 @@ fn validate_inner(
             Ok(())
         })(),
     )?;
+    let mut metadata_command = spec(
+        paths,
+        repo,
+        "cargo",
+        vec![
+            "metadata".into(),
+            "--manifest-path".into(),
+            repo.join("Cargo.toml").display().to_string(),
+            "--locked".into(),
+            "--no-deps".into(),
+            "--format-version".into(),
+            "1".into(),
+        ],
+        true,
+    );
+    metadata_command.timeout_seconds = None;
     let metadata_result = run_gate(
         paths,
         repo,
         report,
         "cargo.metadata",
         ResourceClass::Heavy,
-        spec(
-            paths,
-            repo,
-            "cargo",
-            vec![
-                "metadata".into(),
-                "--manifest-path".into(),
-                repo.join("Cargo.toml").display().to_string(),
-                "--locked".into(),
-                "--no-deps".into(),
-                "--format-version".into(),
-                "1".into(),
-            ],
-            true,
-        ),
+        metadata_command,
     )?;
     ensure!(metadata_result.success(), "Cargo metadata failed");
     let metadata: CargoMetadata = serde_json::from_str(&metadata_result.stdout)?;
@@ -1419,6 +1414,7 @@ fn validate_inner(
             args.push("--offline".into());
         }
         let mut command = spec(paths, repo, &nextest.display().to_string(), args, true);
+        command.timeout_seconds = None;
         command.env.retain(|key, _| !key.starts_with("NEXTEST_"));
         ensure!(
             run_gate(
@@ -1645,6 +1641,97 @@ pub(crate) fn verify_report(
     Ok(())
 }
 
+fn dispatcher_spec(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+    timeout_seconds: Option<u64>,
+) -> CommandSpec {
+    let output = receipt_path(paths, base, candidate, run_tests, defer_release);
+    let mut args = vec![
+        "--state".into(),
+        paths.root.display().to_string(),
+        "internal-validate".into(),
+        "--repo".into(),
+        repo.display().to_string(),
+        "--base".into(),
+        base.to_string(),
+        "--candidate".into(),
+        candidate.to_string(),
+        "--receipt".into(),
+        output.display().to_string(),
+    ];
+    if run_tests {
+        args.push("--run-tests".into());
+    }
+    if defer_release {
+        args.push("--defer-release-builds".into());
+    }
+    let program = paths
+        .targets()
+        .join("candidate-validator")
+        .join(candidate.to_string())
+        .join("debug/telete");
+    let mut command = spec(paths, repo, &program.display().to_string(), args, false);
+    command.timeout_seconds = timeout_seconds;
+    command
+}
+
+pub(crate) fn require_completed_dispatcher(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+) -> Result<()> {
+    let result = broker::completed(
+        paths,
+        &format!(
+            "validation/{base}/{candidate}/dispatcher-unbounded-tests-{}-defer-{}",
+            u8::from(run_tests),
+            u8::from(defer_release)
+        ),
+        ResourceClass::Supervisor,
+        &dispatcher_spec(paths, repo, base, candidate, run_tests, defer_release, None),
+    )?;
+    ensure!(result.success(), "validation dispatcher did not succeed");
+    Ok(())
+}
+
+pub(crate) fn require_timed_out_dispatcher(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+) -> Result<()> {
+    let result = broker::completed(
+        paths,
+        &format!(
+            "validation/{base}/{candidate}/dispatcher-tests-{}-defer-{}",
+            u8::from(run_tests),
+            u8::from(defer_release)
+        ),
+        ResourceClass::Supervisor,
+        &dispatcher_spec(
+            paths,
+            repo,
+            base,
+            candidate,
+            run_tests,
+            defer_release,
+            Some(1800),
+        ),
+    )?;
+    ensure!(result.timed_out, "validation dispatcher did not time out");
+    Ok(())
+}
+
 pub(crate) fn run_candidate(
     paths: &Paths,
     repo: &Path,
@@ -1684,42 +1771,17 @@ pub(crate) fn run_candidate(
         "candidate changed during Rust validator bootstrap"
     );
     let output = receipt_path(paths, base, candidate, run_tests, defer_release);
-    let mut args = vec![
-        "--state".into(),
-        paths.root.display().to_string(),
-        "internal-validate".into(),
-        "--repo".into(),
-        repo.display().to_string(),
-        "--base".into(),
-        base.to_string(),
-        "--candidate".into(),
-        candidate.to_string(),
-        "--receipt".into(),
-        output.display().to_string(),
-    ];
-    if run_tests {
-        args.push("--run-tests".into());
-    }
-    if defer_release {
-        args.push("--defer-release-builds".into());
-    }
     // Dispatch supervision retains process completion without holding a
     // compiler or light slot while the child admits its actual gates.
     let result = broker::run(
         paths,
         &format!(
-            "validation/{base}/{candidate}/dispatcher-tests-{}-defer-{}",
+            "validation/{base}/{candidate}/dispatcher-unbounded-tests-{}-defer-{}",
             u8::from(run_tests),
             u8::from(defer_release)
         ),
         ResourceClass::Supervisor,
-        &spec(
-            paths,
-            repo,
-            &target.join("debug/telete").display().to_string(),
-            args,
-            false,
-        ),
+        &dispatcher_spec(paths, repo, base, candidate, run_tests, defer_release, None),
     )?;
     ensure!(
         result.success(),

@@ -53,7 +53,7 @@ whose retained recovery requires its contract.
 
 ## Install or update
 
-Use `cell-ci submit COMMIT` for ordinary delivery. For a separately authorized
+Use `telete submit COMMIT` for ordinary delivery. For a separately authorized
 manual installation, select the binary, installer, provider bundle, and Clockwork:
 
 ```sh
@@ -78,7 +78,7 @@ initializes or migrates state, and selects the worker directly. Omission
 preserves the current enabled intent; a new schedule defaults enabled.
 `{"semantics":{"enabled":false}}` selects the new definition disabled.
 
-This command does not hold or drain work, suspend scheduling, check readiness,
+This command does not hold or drain durable work or check readiness,
 or recover automatically. It preserves project pauses, existing application
 maintenance and incident halts. Actual mutations use native state and publication
 locks. Inspect the retained command log after an interrupted command.

@@ -1,6 +1,6 @@
 {
   "id": "email.installation",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -36,7 +36,7 @@
     }
   ],
   "effects": [
-    "Copy supplied programs and documentation into retained releases and update owned public paths under installation locks. Preserve other product selectors and separate product data."
+    "Retain supplied programs and documentation in release archives and publish regular files at fixed runtime paths under installation locks. Public file selectors use runtime paths; provider directory selectors use the selected retained archive. Preserve other product selectors and separate product data."
   ],
   "authority": [
     "Email owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
@@ -89,7 +89,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque UUID release IDs name staged files. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
+        "statement": "Opaque UUID release IDs name retained archives; executable files run at fixed actual paths beneath Email/install/runtime. Product releases, provider contract versions, and application state versions remain distinct. Installation does not compare component versions or artifact hashes."
       }
     ],
     "completeness_and_freshness": [
@@ -107,7 +107,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product and catalog locks serialize publication with atomic selector updates. Expected-current guards detect changed selection. An instruction failure retains completed file and selector changes for explicit recovery. Recovery reads retained metadata without integrity validation and preserves separate product state."
+        "statement": "Product and catalog locks serialize publication. Regular runtime files are replaced atomically at fixed actual paths; the complete tree is not one atomic update. Expected-current guards detect changed selection. An instruction failure retains completed file and selector changes for explicit recovery. Recovery reads retained metadata without integrity validation and preserves separate product state."
       }
     ],
     "operational_limits": [
@@ -123,14 +123,14 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "The installer retains its existing release layout and supported legacy metadata readers. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
+        "statement": "The installer retains its archive layout and supported legacy metadata readers. Install and recovery publish regular runtime files at fixed actual paths and migrate owned older command selectors to that tree. Installer verify and verify-release commands are removed. Program recovery does not restore product data."
       }
     ],
     "reliances": [
       {
         "status": "declared",
         "statement": "Ordinary committed-candidate delivery uses the Cell CI manager; explicit authorized manual installation uses matching tested artifacts. The manager owns its integration, validation, repair, deployment and outcome-email semantics.",
-        "target": "ci-manager",
+        "target": "telete",
         "kind": "control"
       }
     ]

@@ -2,4 +2,4 @@
 
 set -eu
 
-exec "$HOME/Library/Application Support/Decisions/install/current/libexec/krisis" "$@"
+exec "$HOME/Library/Application Support/Decisions/install/runtime/libexec/krisis" "$@"

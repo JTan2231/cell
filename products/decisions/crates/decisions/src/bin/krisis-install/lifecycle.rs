@@ -4,7 +4,8 @@ use super::{
     support::{
         ACTIVE, Binding, LEGACY_DAILY, LEGACY_OBSERVER, Paths, Pins, args, atomic_write, binding,
         binding_receipt, checked, definition, directory, disable, executable, exists,
-        inspect_result, owned_file, require, restore_binding, run, switch, template, text,
+        inspect_result, owned_file, require, restore_binding, retained_template, run,
+        runtime_template, switch, template, text,
     },
 };
 use cell_install::transaction::{self, InstallSnapshot, SelectionReceipt};
@@ -326,11 +327,12 @@ fn pins_from_receipt_with_fallback(
     pins.validate_retained()?;
     require(
         definition
-            == template(
+            == retained_template(
                 paths,
                 &package::root(paths, current),
                 &pins,
                 "krisis-observer",
+                &definition,
             )?,
         "installed observer definition is not exact",
     )?;
@@ -368,7 +370,7 @@ fn prove_bindings(
         if digest == candidate_digest {
             require(
                 definition(paths, clockwork, digest)?
-                    == template(paths, candidate, pins, "krisis-observer")?,
+                    == runtime_template(paths, candidate, pins, "krisis-observer")?,
                 "candidate definition differs",
             )?;
         } else {
@@ -443,7 +445,7 @@ fn installed_hook(paths: &Paths, snapshot: &InstallSnapshot) -> Result<SavedFile
 }
 
 fn register(paths: &Paths, clockwork: &Path, release: &Path, pins: &Pins) -> Result<String> {
-    let manifest = template(paths, release, pins, "krisis-observer")?;
+    let manifest = runtime_template(paths, release, pins, "krisis-observer")?;
     let digest = manifest
         .digest()
         .map_err(|_| Error::new("definition digest failed"))?;
@@ -505,6 +507,9 @@ pub fn deploy(options: &Install, enabled: Option<bool>) -> Result<()> {
         codex: options.codex.clone(),
     };
     let captured = binding(&paths, &options.clockwork, ACTIVE)?;
+    if captured.exists {
+        disable(&paths, &options.clockwork, ACTIVE, &captured)?;
+    }
     let hook = installed_hook(&paths, &prior)?;
     let receipt = SavedFile::capture(&paths.binding, paths.uid, 0o600)?;
     let layout = package::layout();
@@ -517,8 +522,8 @@ pub fn deploy(options: &Install, enabled: Option<bool>) -> Result<()> {
         &pins.environment(),
         180,
     )?;
-    let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
     transaction.publish(&prepared, &prior, |_| Ok(()))?;
+    let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
     hook.unchanged()?;
     receipt.unchanged()?;
     atomic_write(
@@ -624,7 +629,9 @@ pub fn install(options: &Install, deployment_run_id: Option<&str>) -> Result<Val
             "current release differs from expected selection",
         )?;
     }
-    let digest = register(&paths, &options.clockwork, &prepared.root, &pins)?;
+    let digest = runtime_template(&paths, &prepared.root, &pins, "krisis-observer")?
+        .digest()
+        .map_err(|error| Error::new(error.to_string()))?;
     let prior_hold = SavedFile::capture(&paths.hold, paths.uid, 0o600)?;
     if options.release_maintenance {
         return release_maintenance(&paths, options, &pins, &prepared, &digest, &prior);
@@ -716,7 +723,7 @@ fn cutover(
         hook.unchanged()?;
         receipt.unchanged()?;
         for key in [ACTIVE, LEGACY_OBSERVER, LEGACY_DAILY] {
-            if controls[key].enabled {
+            if controls[key].enabled || (key == ACTIVE && controls[key].exists) {
                 touched.push(key);
                 disable(paths, &options.clockwork, key, &controls[key])?;
             }
@@ -776,6 +783,10 @@ fn cutover(
             .ok_or_else(|| Error::new("missing suspension proof"))?
             .after;
         let published = transaction.publish(prepared, before, |_| Ok(()))?;
+        require(
+            register(paths, &options.clockwork, &prepared.root, pins)? == digest,
+            "registered observer definition differs from prepared definition",
+        )?;
         atomic_write(
             &evidence.join("publication.json"),
             &serde_json::to_vec(&published)?,
@@ -825,14 +836,10 @@ fn cutover(
             )));
         }
         let rollback: Result<()> = (|| {
-            // Public candidate access stays fenced while program compatibility is checked.
-            if let Some(selection) = &suspended {
-                transaction.recover(&selection.after, prepared, false, |_| Ok(()))?;
-            }
             hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
             for key in touched.iter().rev() {
                 let selected = binding(paths, &options.clockwork, key)?;
-                if selected.enabled {
+                if selected.exists {
                     disable(paths, &options.clockwork, key, &selected)?;
                 }
             }
@@ -842,6 +849,11 @@ fn cutover(
                     database_schema(paths)? == schema,
                     "database migration requires forward recovery with the retained candidate",
                 )?;
+            }
+            // Restore runtime bytes while all owned activations remain stopped.
+            if let Some(selection) = &suspended {
+                transaction.recover(&selection.after, prepared, false, |_| Ok(()))?;
+                transaction.restore(selection, |_| Ok(()))?;
             }
             receipt.restore()?;
             for key in touched.iter().rev() {
@@ -862,9 +874,6 @@ fn cutover(
                     &BTreeMap::new(),
                     30,
                 )?;
-            }
-            if let Some(selection) = &suspended {
-                transaction.restore(selection, |_| Ok(()))?;
             }
             hook.remove_owned_image(&fs::read(prepared.root.join("package/hooks.json"))?)?;
             hook.restore()?;

@@ -106,6 +106,20 @@ pub(super) fn definition(
     Ok(serde_json::to_value(manifest)?)
 }
 
+pub(super) fn runtime_definition(
+    home: &Path,
+    key: &str,
+    library: &Path,
+    info: &ReleaseInfo,
+) -> Result<Value> {
+    let mut manifest: clockwork::api::Manifest =
+        serde_json::from_value(definition(home, key, library, info)?)?;
+    manifest
+        .use_runtime_paths()
+        .map_err(|error| Error::new(error.to_string()))?;
+    Ok(serde_json::to_value(manifest)?)
+}
+
 pub(super) fn prove(
     home: &Path,
     clockwork: &Path,
@@ -134,7 +148,9 @@ pub(super) fn prove(
         )?;
         let mut expected = definition(home, key, library, info)?;
         // Prove the original owned definition before replacing a schema-one binding.
-        if value.pointer("/data/manifest/schema_version") == Some(&json!(1)) {
+        if value.pointer("/data/manifest/schema_version") == Some(&json!(3)) {
+            expected = runtime_definition(home, key, library, info)?;
+        } else if value.pointer("/data/manifest/schema_version") == Some(&json!(1)) {
             expected["schema_version"] = json!(1);
         }
         if value.pointer("/data/key") != Some(&json!(key))
@@ -233,7 +249,7 @@ pub(super) fn disable(
     if inspect(home, clockwork, key)? != *expected {
         return Err(Error::new("Annals binding changed before disable"));
     }
-    if !expected.enabled {
+    if !expected.present {
         return Ok(expected.clone());
     }
     call(
@@ -328,7 +344,7 @@ mod tests {
         std::fs::write(&runner, b"\xcf\xfa\xed\xfe native fixture")?;
         let pin = cell_install::file_digest(&runner)?;
         let direct = json!({"kind":"direct","program":runner,"sha256":pin});
-        for format in ["cell-install-v2", "cell-install-v3"] {
+        for format in ["cell-install-v2", "cell-install-v3", "cell-install-v4"] {
             assert_eq!(launch(format, &runner)?, direct);
         }
 
@@ -338,7 +354,7 @@ mod tests {
         }
 
         std::fs::write(&runner, b"\xcf\xfa\xed\xfe changed fixture")?;
-        for format in ["cell-install-v2", "cell-install-v3"] {
+        for format in ["cell-install-v2", "cell-install-v3", "cell-install-v4"] {
             let changed = launch(format, &runner)?;
             assert_eq!(changed["kind"], "direct");
             assert_eq!(changed["program"], json!(runner));

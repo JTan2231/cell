@@ -106,7 +106,7 @@ older binaries cannot open schema 6.
 
 ## Scheduled failure policy
 
-Krisis configures Clockwork definition schema 2 for `krisis/observer` with
+Krisis configures Clockwork definition schema 3 for `krisis/observer` with
 `[failure] on_abend = "halt-until-approved"`. A conversation read failure
 (`document_source_unavailable`), including a timeout or protocol error, is a
 handled outcome after Krisis saves the failed observation. It returns zero,
@@ -134,7 +134,7 @@ exact documents, target identity, and idempotent Annals acceptance.
 Definition switches and deployment preserve the Clockwork incident. Existing
 failed observations remain terminal history; cutover does not re-alert or retry
 them. The retired Decisions schedules remain disabled. Schema-one definitions
-keep their old policy until a schema-two definition is explicitly selected.
+keep their old policy until a schema-two or schema-three definition is explicitly selected.
 
 ## Command usage
 

@@ -6,16 +6,11 @@ STATUS_SCHEMA=1
 STATUS_COMMAND=clew
 STATUS_UNITS='clew/ledger|on_demand||clew.ledger.use
 clew/daily-email|active|clew/daily-email|clew.digest.email'
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='product:clew
-chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=clew
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|products/clew/release.sh'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='clew|Clew|package|products/clew/Cargo.toml|clew-|1'
 RELEASE_BINARY_CHECKS='clew|target/release/clew|clew
 clew|target/release/clew-install|clew-install'

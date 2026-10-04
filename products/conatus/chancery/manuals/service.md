@@ -1,5 +1,28 @@
 # Installation, maintenance and scheduled activation
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
+Direct install and recovery require both owned Clockwork bindings disabled. They reject
+enabled bindings and run the disable transition for each retained disabled binding to
+wait for active processes before runtime publication. They do not select new
+definitions; select the matching definition before enabling a recovered or updated
+program.
+
 Use this feature to understand Conatus release selection, maintenance admission
 and its two independent Clockwork schedules. Use `conatus.update.operate` for
 installation, activation and recovery steps. Installation, initialization,
@@ -45,8 +68,8 @@ definition and creates the private state log directory. Its receipt separates
 the key, release identity and output path from `registered:false` and
 `activated:false`. Definitions contain selected paths and no credential.
 
-`conatus/update` uses definition schema 2, every 300 seconds, run-at-load enabled
-and overlap skip. It pins the immutable release and invokes
+`conatus/update` uses definition schema 3, every 300 seconds, run-at-load enabled
+and overlap skip. It retains the immutable archive identity, pins the runtime executable, and invokes
 `conatus --state-dir ABS_STATE update`. Clockwork opens product-owned
 `logs/update.out.log` and `logs/update.err.log`; Conatus owns their contents.
 The definition uses an explicit home and minimal system search path.
@@ -108,8 +131,9 @@ release of another owner's hold or approval of a Clockwork incident.
 The installer publishes programs, initializes absent state or updates the final
 Annals executable path. Existing library identities, cursor, records,
 instructions and product pause remain unchanged. It uses ordinary product
-admission and runner locks. It creates no maintenance hold, suspends no schedule,
-drains no work and performs no health or signature audit.
+admission and runner locks. It creates no maintenance hold. It suspends owned
+schedules and waits for active processes before runtime publication. It does not
+drain durable work or perform a health or signature audit.
 
 Settings accept absolute `state_dir`, `decisions_config` and `annals_state_dir`,
 plus `library`, update `enabled` and independent `daily_email_enabled`.

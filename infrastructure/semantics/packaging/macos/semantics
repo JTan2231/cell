@@ -8,4 +8,4 @@ if [ -e "$maintenance" ] || [ -L "$maintenance" ]; then
     exit 1
 fi
 
-exec "$HOME/Library/Application Support/Semantics/install/current/libexec/semantics" "$@"
+exec "$HOME/Library/Application Support/Semantics/install/runtime/libexec/semantics" "$@"

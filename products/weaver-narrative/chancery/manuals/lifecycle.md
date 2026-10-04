@@ -1,5 +1,10 @@
 # Configuration, readiness, and maintenance
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Weaver/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
 Weaver owns its reading configuration, private state, runner exclusion, owned
 admission holds, and matched program/provider release selection. Use this
 feature to interpret those boundaries. Use `chancery show weaver.install.operate`
@@ -83,7 +88,7 @@ project are `weaver-narrative`. The predecessor `weaver` project is permanently
 retired; its workflow records are not imported or replaced.
 
 The maintained installer uses the shared Cell file placement helper.
-Public binary and Chancery selectors follow the selected release.
+Public commands use fixed runtime files. The Chancery selector follows the selected archive.
 It refuses foreign selectors and unsupported legacy installation formats. Direct installer `install` and `recover` are refused;
 use the Cell coordinator. Read-only inspection remains available. Uninstall detaches owned selectors and retains private state.
 

@@ -1,341 +1,57 @@
-# Cell pipelines
+# Cell product descriptors and releases
 
-This directory provides product descriptors, generated entry points, retained
-Python validation helpers, and manual Git release operations. Telete owns
-current queued CI and reads the product descriptors through its Rust validator.
-The retained Python validator and drift checks require Python 3.10 or newer;
-the Python CI manager requires Python 3.11 or newer.
+This directory contains the literal product descriptors, wrapper generator,
+and manual release command. [Telete](../infrastructure/telete/README.md) owns
+queued CI, validation, repair, production preparation, deployment, and outcome
+notification.
 
-`generate.sh --write` updates checked-in product entry points.
-`generate.sh --check` rejects drift. In either mode, repeat `--product PRODUCT`
-to select products. Generated wrappers locate the Cell root from the depth of
-the descriptor's repository-relative `PRODUCT_DIR`. The routine `check.sh` body
-checks descriptor shape, provider counts, shell syntax, and generated wrapper
-drift in the light lane.
-It does not run regression suites or invoke Cargo. The `test.sh` wrapper uses
-the same manager command path as root and product `ci.sh` wrappers. Focused
-unit tests remain development checks, not CI submission.
-
-Each `products/*.sh` descriptor names the product's Cargo packages and manifest,
-shell and packaging checks, provider bundles, independently versioned release
-units, CI resource class, release branch, deployment profile, and conservative
-deployment conflict keys. The shared format has no product-specific script
-hooks. CI keeps common verification stages and the standard Rust test suites;
-it does not add bespoke shell, Python, or catalog assertions for one product.
-
-Descriptors cover systems in both `infrastructure/` and `products/`.
-`PRODUCT_ID` keeps the delivery identity. `PRODUCT_DIR` selects the canonical
-checkout-relative source root. Directory groups do not expand deployment
-selection or determine instruction order.
-
-`RELEASE_COMPANION_MANIFESTS` optionally lists `release-unit|package-manifest`
-rows for provider-owned libraries released at their owner's version. Annals'
-`annals-api` and Krisis' `krisis-api` follow this rule; Annals Usage remains an
-independent release unit. Release preflight requires matching versions, then
-updates, checks, commits, or restores every companion with the primary manifest,
-root lockfile, and provider bundles. Companions have no separate release tag.
-
-## Submit CI
-
-Commit the intended changes and submit the commit from the Cell root:
+Commit a change and submit it from the Cell root:
 
 ```sh
 ./ci.sh submit COMMIT
+./ci.sh status JOB
 ```
 
-`telete submit COMMIT --repo /absolute/cell` uses the same installed program.
-Root and product `ci.sh` wrappers provide Telete commands only. Telete queues
-the commit, integrates it privately, validates it, attempts bounded repairs,
-deploys the accepted source, and emails the outcome. See
-[Telete](../infrastructure/telete/README.md) for setup, effects, status, and
-recovery. Use `cell-ci` to inspect or recover retained Python jobs.
-Bare `./ci.sh`, product selection
-arguments, and direct validation flags are not supported CI entry points.
+New jobs skip tests by default. Add `--run-tests` to run selected tests. Prepare
+the pinned runner with `telete prepare-tools` before jobs that run tests. Read
+[Telete's operating contract](../infrastructure/telete/chancery/manuals/queue-operate.md)
+for selection, signing, retained evidence, and recovery. Root and product
+`ci.sh` wrappers and `pipeline/test.sh` select installed Telete.
 
-New submissions skip tests by default. Use `./ci.sh submit COMMIT --run-tests`
-to run selected Rust tests. Syntax, formatting, lint, provider, build, and
-production signing checks still run. Telete invokes no Python regression
-runner. Its receipts state when tests were skipped. Product selection controls
-default deployment.
+## Maintain descriptors and wrappers
 
-### Prepare or update the test runner
+`products/*.sh` declares each product's identity, source root, Cargo packages,
+provider bundles, native executables, checks, and independently versioned
+release units. Telete and Usher read these literal assignments. Source groups
+do not determine deployment scope or instruction order.
 
-Install Telete's pinned nextest executable before submitting a job that runs
-tests:
+Regenerate entry points after changing their shared form or a product path:
 
 ```sh
-telete prepare-tools
+pipeline/generate.sh --write
+pipeline/generate.sh --check
 ```
 
-Validation does not download a missing runner. Read
-[Telete's operating contract](../infrastructure/telete/chancery/manuals/queue-operate.md#validate-source)
-for its tools and gate limits. `pipeline/nextest_tool.py` remains the pinned
-runner setup helper for retained Python validation.
+Repeat `--product PRODUCT` to select descriptors. Generated wrappers locate the
+Cell root from the descriptor's repository-relative `PRODUCT_DIR`.
 
-### Change CI while a job is active
+## Publish a product release
 
-Edit and commit validation code normally. The active job uses its own committed
-candidate. A later submission uses the new validation code in its candidate.
-Installing the pinned runner does not replace the active manager or change the
-active job's source.
+Product `release.sh` wrappers invoke `pipeline/release.sh`. This command updates
+the selected release unit's version, builds the release, commits, tags, and
+pushes atomically. It requires publication authority, a clean `main`, a
+configured `origin`, and matching remote history. It is not a build-only or CI
+command.
 
-Replace Telete only through its maintenance procedure. Pause admission, settle
-queued and active jobs, and install the intended executable. Inspect status,
-start the installed service, and resume admission. Read
-[Telete installation](../infrastructure/telete/chancery/manuals/queue-operate.md#install-only-on-explicit-request)
-for the complete procedure. Python manager replacement remains a separate
-operation under its [retained contract](../ci_manager/chancery/manuals/queue-operate.md).
+`RELEASE_COMPANION_MANIFESTS` lists `release-unit|package-manifest` rows for
+provider-owned libraries released at their owner's version. The release
+command requires matching versions and updates each companion with the primary
+manifest, root lockfile, and provider bundles. Companions have no separate tag.
 
-## Retained Python validation and manual release support
+The release command holds a lock in Git's common directory and rechecks remote
+`main` and tag absence before publication. macOS uses `shlock`; the portable
+`mkdir` fallback fails closed. Confirm that no release is active before
+removing a stale `cell-release-publication.lock.d`.
 
-The sections below describe the Python validator, broker, and release helpers
-used by retained Python jobs and manual release workflows. Telete has its own
-validator, broker, production preparation, and deployment implementation. It
-does not invoke these Python CI helpers. Read its operating contract for current
-queued CI behavior.
-
-### Internal validation
-
-The manager invokes `select_changes.py run` with the fixed job base, the exact
-committed candidate, and machine receipts. This is an internal validation
-boundary, not a second user CI workflow. The worktree and index must be clean,
-and `HEAD` must equal the candidate. A mismatch returns stale state before gate
-admission. The validator does not choose either commit from `main` or
-`refs/ci/accepted`; the manager supplies them.
-
-The descriptor files define the product inventory. The validator compares the
-base and candidate trees. A changed path selects the product whose descriptor
-`PRODUCT_DIR` contains it. An edit to `pipeline/products/PRODUCT.sh` selects that
-product. Deletions and both paths of a rename count. The same base controls
-changed paths, platform classification, and descriptor introductions and
-removals. Each repair is committed before validation, and the base stays fixed,
-so selection includes the submitted changes and every retained repair.
-
-There are two target groups:
-
-- The product group selects library and command unit tests and remaining
-  integration targets.
-- The platform group selects installer binary unit tests and the shared
-  `cell-install` and `cell-maintenance` packages. Its target convention also
-  recognizes integration targets named `install` or `maintenance`.
-
-The Rust test suites use in-memory inputs and have no filesystem, process,
-socket, thread, or lock fixtures. The generator regression suite uses temporary
-source roots and stub commands to check wrapper paths and argument forwarding.
-The test runners and build tools still use operating-system resources.
-
-`parallel_tests.py` selects Cargo targets from metadata inside one admitted
-heavy gate. The plan identifies each allowed package, target kind, and target
-name. Nextest runs all ordinary, non-ignored tests in these targets through one
-parallel scheduler. It does not select individual test functions by relevance.
-Library targets that mix product and lifecycle behavior remain complete targets.
-The Cargo command selects library and named targets from this plan. It does not
-use `--all-targets`. Cargo can still compile prerequisite binaries and targets
-with matching names in other selected packages. Execution uses the exact allowed
-target filter. Shared dependencies use Cargo's combined feature selection.
-
-Development and test builds retain line-table debug information for workspace
-packages. Dependency builds omit debug information. Panic backtraces retain
-workspace file and line locations. Full debugger inspection requires an override
-of these profile settings. Release profile settings are unchanged.
-
-Product checks run in two phases. The first phase runs shell and packaging
-checks, applicable provider checks, and formatting. One heavy `cell.clippy`
-gate then runs Clippy for the combined Cargo package set from selected products
-and shared Rust suites. It keeps all target checks and the strict lint rules.
-The shared test gate follows Clippy when tests are enabled. The second product
-phase runs applicable provider checks. Ordinary validator calls
-then run one heavy `cell.build.release` gate for the combined selected product
-package set. Shared infrastructure Python regression suites remain separate
-required checks.
-
-The shared release command keeps locked dependencies, warning rejection, and the
-pinned toolchain. It uses offline mode if any selected product requires it. The
-combined command unifies dependency features. It does not prove each product's
-isolated feature configuration. The full private product body retains its own
-release build for existing internal callers.
-
-The Clippy command lists each selected package once and uses Cargo's combined
-dependency feature selection. `CARGO_BUILD_WARNINGS=deny` rejects warnings without
-the cache invalidation from `-D warnings`. The remaining strict lint flags stay
-enabled. It does not prove each product's isolated feature configuration.
-It uses offline mode if any selected product requires offline
-Cargo access, as the shared test gate does. Missing cached dependencies then
-fail without a download. It keeps going after compiler errors if any selected
-product requests that behavior; any lint or compiler failure still fails the
-gate. Clippy runs when tests are skipped. The receipt records its selected
-products and shared suites in the gate command and records its timing separately.
-
-The installed manager can request `--autofix-patch ABSOLUTE_PATH` when the
-committed candidate contains `pipeline/autofix.py`. In this mode, product and
-shared check bodies skip their separate check-only formatting steps. The
-existing strict Clippy invocation emits JSON diagnostics for the helper; it
-does not add a discovery pass. The helper applies complete, nonconflicting
-`MachineApplicable` suggestion groups for tracked files in a temporary snapshot.
-It omits other suggestions, incomplete groups and conflicting groups, then runs
-the formatter once for the selected Cargo packages. It leaves the committed
-candidate unchanged throughout the brokered checks.
-
-If the snapshot changes, the helper writes one raw Git patch to the requested
-path. The dispatcher returns `autofix` before tests and later product stages.
-The manager retains and applies this patch through a private index, records a
-private child candidate, and validates it against the same base. Source
-selection is recomputed for that candidate. This path invokes no model and
-consumes no model repair point. Residual failures enter the ordinary model
-repair path after revalidation. Older candidates keep check-only behavior.
-
-Nextest builds and discovers the tests before it runs them. Each test runs in
-its own process. A free worker can execute a test from any selected product or
-shared suite. The run uses no automatic retries and continues after test
-failures. CI does not run doctests or generate Rust API documentation. Build or
-discovery failure does not establish completed test coverage.
-
-`platform_inputs.py` is the explicit platform input map. Product installer
-sources, packaging, migrations, schemas, maintenance modules, selected runtime
-command files, and operational descriptor edits select that product's platform
-tests. Non-version Cargo manifest edits select their owner's platform tests;
-shared installer changes select all installer consumers. Shared maintenance
-changes select its declared consumers. Pipeline and catalog changes select
-their own shared suites.
-A descriptor absent from the job base selects the new product's platform
-tests, the shared pipeline introduction checks, and integrated catalog
-validation.
-
-Prose, descriptor comments, and package/provider release-version-only edits do
-not select platform tests. Root manifests and lockfiles do not trigger blanket
-consumer coverage. Keep installation-affecting shared inputs in the platform
-input map.
-
-Mixed runtime/lifecycle files are conservative inputs: any edit to such a file
-selects platform tests. Move the lifecycle code to its own module to narrow
-that boundary. When adding or moving a platform input or target, update this
-map in the same change.
-
-Shared platform inputs can add their affected consumers. There is no general
-dependency expansion. The shared suite names are `pipeline`, `install`,
-`maintenance`, and `catalog`. A validation with no selected products
-still checks structure and
-recognition. Its success does not establish full repository validation.
-
-Changes to the shared Clippy runner, parallel test runner, release build runner,
-validator selector, or pinned test tool selector select all current products and
-both shared Rust suites. When tests are enabled, this includes product and
-platform tests. This validates the common
-executors across their complete target inventory. Test-only and documentation
-edits do not select this expansion.
-
-The validator binds selection and every gate to one candidate commit. It
-checks HEAD and Git status during planning and after execution. A changed
-commit or a dirty committed candidate is stale. CI does not hash source files
-or run source-check commands for individual gates. The manager's fixed base
-controls product, platform, and new-product selection.
-
-The plan names that baseline and reports platform run/skip reasons. Usher reads
-the descriptors' literal assignments without executing them. It checks each
-product's identity, Semantics marker, and Chancery introduction. The validator
-runs `pipeline/recognition.sh` as a brokered heavy body against its exact source
-candidate before the selected product gates. Full Chancery validation remains
-in the existing product and integrated catalog gates.
-
-Recognition does not run shared library tests. The `install` and `maintenance`
-check gates format those libraries. Their lint checks join the shared Clippy
-gate, and their tests run in the parallel Rust gate. They are infrastructure,
-with no separate product identity or release unit.
-
-The `pipeline` suite checks signing-policy and job-signing logic with in-memory
-mocks. These tests do not create files, subprocesses, locks, or live Keychain
-state.
-
-The internal dispatcher in `select_changes.py` requests broker admission for
-each product phase, shared check suite, shared Clippy stage, and parallel Rust
-test stage. The
-broker schedules execution; it does not decide relevance. Product bodies receive
-`--tests product|all|none` and their phase in the brokered command identity. The Rust
-test command records all selected products, platform products, shared Rust
-suites, and its worker limit. Its toolchain identity includes the pinned nextest
-path and configured version. An inherited flag cannot bypass admission.
-The manager validates source before acceptance and deployment. New jobs also
-freeze the host signing policy and prepare signed production candidates through
-the installed manager's shared builder before source acceptance. This step runs
-when tests are skipped. A signing configuration failure stops acceptance without
-model repair. Read [Cell signing](../ci_manager/chancery/manuals/signing-operate.md).
-
-New manager jobs can request `--defer-release-builds` for committed-range JSON
-validation when their candidate contains `pipeline/release_build.py` and their
-frozen job policy requires signed production preparation. The validator omits
-the shared release gate and records `selection.release_builds_deferred` as true.
-The mandatory production build remains before acceptance. Older jobs and
-callers keep the shared release gate. This flag does not omit provider checks,
-Clippy, or selected tests.
-
-CI does not run installation persistent-state, general artifact-integrity, or operational-readiness
-checks, or retain test assertions requiring those removed checks. Ordinary
-product behavior and setup operations remain in their applicable test suites.
-
-The broker captures build and test transcripts. The dispatcher reports
-selection before execution and retains the completed product and platform
-scope. Failures identify the gate and include bounded diagnostics and a private
-log path. The transcript identifies the failed stage. See
-[the broker](../ci_broker/README.md) for log bounds and retention.
-
-The manager requests one aggregate JSON receipt on stdout. Progress and
-diagnostics remain on stderr. The receipt uses `schema_version: 1` and contains
-`state`, `base_commit`, `candidate_commit`, `observed_head`, `source_key`,
-`selection`, `gates`, and `failure`. The `source_key` field contains the full
-candidate commit ID. Fields that could not be established are null. The base
-and candidate fields name the manager's exact committed range.
-
-The selection records its change mode, coverage mode, product tests, platform
-products, shared suites, selection reasons, `release_builds_deferred`, and ordered
-`required_gates`.
-Each required gate names its gate ID, lane, and command. The `gates` array
-contains the broker receipts for gates that ran. A required gate absent from
-that array did not complete. The dispatcher stops after the first unsuccessful
-gate and checks HEAD and Git status before it returns the aggregate result.
-
-Aggregate states are `passed`, `failed`, `stale`, `lost`, `cancelled`, `autofix`,
-and `error`. `autofix` identifies a retained deterministic patch and incomplete
-validation; it does not establish a pass. A failed gate does not by itself
-establish a source-code defect.
-The `failure` object records its kind, message, gate, and execution ID when
-available. Planning, configuration, or invalid broker receipts produce `error`
-with exit code 78. Other states retain the broker's exit-code rules. Missing
-terminal JSON after process interruption is incomplete validation, never a
-pass. The manager owns receipt retention, bounded repair decisions, and the
-deployment handoff.
-
-Release and deployment use the shared release builder below. Each product
-seals its runtime executables and dedicated `PRODUCT-install`. The coordinator
-executes the product's declared manifest instructions. The shared `cell-install` library
-owns program publication and file replacement. Product Rust code owns lifecycle and
-recovery. Credential and scheduled-job shell frontends remain versioned assets.
-
-`deployment/build.py` requires Python 3.11 or newer. It prepares production
-executables without tests, formatting, Clippy, documentation builds, or
-generator CI. One release-profile Cargo invocation builds the selected
-packages and binaries. The builder then seals product candidates in parallel.
-Release builds share a persistent target and file lock, separate from CI.
-Cargo defaults to at most eight jobs.
-
-Cargo owns compilation reuse and freshness. Cell copies its compiler outputs,
-signs native executables, and records source identity with opaque candidate IDs.
-Cell computes no artifact, policy, configuration, or build-cache hashes. Native
-signing completes before source acceptance. Deployment does not audit signatures. See
-[deployment](../deployment/README.md)
-for invocation, candidate identity, and cache retention.
-
-`pipeline/release.sh` owns product release publication. It holds one lock in
-Git's common directory from preflight through the release build and atomic
-push. Immediately before commit, tag, and push, it rechecks `origin/main` and
-the release tag. On macOS, `shlock` replaces a lock if its recorded process no
-longer exists. Other hosts use a `mkdir` fallback that fails closed. On those
-hosts, confirm that no release is active before removing a stale
-`.git/cell-release-publication.lock.d`.
-
-## Retained Python prompt-test selection
-
-Bazaar's product checks cover its prompt library and import command. Changes to
-`infrastructure/bazaar/src/prompts.rs`, `src/prompt_import.rs`, or `seed.json`
-select Bazaar and all listed prompt consumers in the Python manager's validation
-plan: Annals, Krisis, Semantics, Platter, Weaver, EMT, and Conatus.
-The prompt tests do not import state into the installed Bazaar database.
+Read [deployment](../deployment/README.md) for the shared manual release builder,
+candidate preparation, signing, and external workspace requirements.

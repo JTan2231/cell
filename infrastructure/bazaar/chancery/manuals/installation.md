@@ -11,14 +11,17 @@ programs and private SQLite state. There is no application-level authentication.
 
 ## Program publication
 
-The installer copies the supplied programs and provider bundle into a retained
-release and selects their owned public paths together. It creates required
-installation directories and uses product and catalog locks with atomic selector
-updates. `--expected-current absent|releases/ID` guards the selected release.
+The installer retains the supplied programs and provider bundle in a release
+archive. It publishes regular executable files beneath
+`~/Library/Application Support/Bazaar/install/runtime/`. Updates and recovery
+replace those files at the same actual paths. Public command selectors use this runtime tree. Provider directory selectors
+use the selected archive, so each catalog read selects one retained bundle. The installer uses product and catalog locks;
+each file replacement is atomic. The complete tree is not one atomic update.
+`--expected-current absent|releases/ID` guards the recorded release selection.
 Foreign public selectors are refused. An instruction failure retains completed
 file and selector changes for explicit recovery.
 
-Opaque UUID release IDs name the staged files. Installation and recovery do not compare
+Opaque UUID release IDs name retained archives. Installation and recovery do not compare
 artifact hashes, component versions, or retained file inventories. They do not
 run executable probes, native-signature audits, database integrity checks,
 dependency probes, or readiness checks. Inspection reads recorded installation
@@ -27,6 +30,8 @@ metadata and selectors; it is not an integrity result.
 The release contains `bazaar`, `bazaar-install`, its recovery installer, and the
 Bazaar provider. Releases live under
 `~/Library/Application Support/Bazaar/install/releases/ID`.
+The archive UUID identifies retained bytes for recovery. It is not part of the
+running program pathname.
 
 ```sh
 bazaar-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE

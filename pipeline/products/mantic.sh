@@ -2,16 +2,11 @@ PIPELINE_SCHEMA=1
 PRODUCT_ID=mantic
 PRODUCT_NAME=Mantic
 PRODUCT_DIR=products/mantic
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='product:mantic
-chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=mantic
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|products/mantic/release.sh'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='mantic|Mantic|package|products/mantic/Cargo.toml|mantic-|1'
 RELEASE_BINARY_CHECKS='mantic|target/release/mantic|mantic
 mantic|target/release/mantic-install|mantic-install'

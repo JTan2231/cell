@@ -21,7 +21,7 @@ pub(crate) struct CommandSpec {
     pub(crate) cwd: PathBuf,
     #[serde(default)]
     pub(crate) env: BTreeMap<String, String>,
-    pub(crate) timeout_seconds: u64,
+    pub(crate) timeout_seconds: Option<u64>,
     pub(crate) stdin: Option<String>,
     pub(crate) confined: bool,
 }
@@ -61,7 +61,7 @@ fn read_stream(stream: impl Read) -> Result<String> {
 
 pub(crate) fn run(paths: &Paths, spec: &CommandSpec) -> Result<ProcessResult> {
     ensure!(
-        spec.timeout_seconds > 0 && spec.cwd.is_absolute(),
+        spec.timeout_seconds.is_none_or(|seconds| seconds > 0) && spec.cwd.is_absolute(),
         "invalid process timeout or working directory"
     );
     let mut command = if spec.confined {
@@ -116,7 +116,10 @@ pub(crate) fn run(paths: &Paths, spec: &CommandSpec) -> Result<ProcessResult> {
         if let Some(status) = child.try_wait()? {
             break status;
         }
-        if started.elapsed() >= Duration::from_secs(spec.timeout_seconds) {
+        if spec
+            .timeout_seconds
+            .is_some_and(|seconds| started.elapsed() >= Duration::from_secs(seconds))
+        {
             timed_out = true;
             let pid = format!("-{}", child.id());
             let _ = Command::new("/bin/kill")
@@ -299,7 +302,7 @@ mod tests {
             ],
             cwd: paths.root.clone(),
             env: BTreeMap::new(),
-            timeout_seconds: 5,
+            timeout_seconds: Some(5),
             stdin: None,
             confined: false,
         };
@@ -341,5 +344,27 @@ mod tests {
         execute_request(&paths, &directory).unwrap();
         assert_eq!(observe(&directory).unwrap().unwrap().exit_code, Some(7));
         assert!(execute_request(&paths, &directory).is_err());
+    }
+
+    #[test]
+    fn optional_deadline_preserves_legacy_requests_and_bounded_commands() {
+        let (_temporary, paths, mut request) = fixture();
+        let legacy = serde_json::to_value(&request).unwrap();
+        assert_eq!(legacy["timeout_seconds"], 5);
+        assert_eq!(
+            serde_json::from_value::<CommandSpec>(legacy)
+                .unwrap()
+                .timeout_seconds,
+            Some(5)
+        );
+        request.args = vec!["-c".into(), "sleep 2; printf complete".into()];
+        request.timeout_seconds = Some(1);
+        assert!(run(&paths, &request).unwrap().timed_out);
+        request.timeout_seconds = None;
+        let result = run(&paths, &request).unwrap();
+        assert!(result.success());
+        assert_eq!(result.stdout, "complete");
+        request.timeout_seconds = Some(0);
+        assert!(run(&paths, &request).is_err());
     }
 }

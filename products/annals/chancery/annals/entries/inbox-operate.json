@@ -34,7 +34,7 @@
     "Original failed jobs and deliveries remain unchanged after retry."
   ],
   "failure_and_recovery": [
-    "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
+    "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "Every inbox job has at most one processing attempt; never move a terminal envelope back to queued.",
     "A storage probe failure prevents a claim and exits nonzero; insufficient storage halts an attended retry until the operator continues it.",
     "When low storage closes the gate, preserve the queued work and leave storage remediation or a reserve change to the user under explicit target-scoped consent.",
@@ -103,8 +103,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",

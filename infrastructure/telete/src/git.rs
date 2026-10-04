@@ -19,6 +19,9 @@ pub(crate) fn run(
     stdin: Option<String>,
     extra: BTreeMap<String, String>,
 ) -> Result<ProcessResult> {
+    let repo = repo
+        .canonicalize()
+        .context("Git repository directory is unavailable")?;
     let mut arguments = vec![
         "-c".into(),
         "core.hooksPath=/dev/null".into(),
@@ -37,9 +40,9 @@ pub(crate) fn run(
         &CommandSpec {
             program: PathBuf::from("/usr/bin/git"),
             args: arguments,
-            cwd: repo.to_path_buf(),
+            cwd: repo.clone(),
             env: environment,
-            timeout_seconds: 120,
+            timeout_seconds: Some(120),
             stdin,
             confined: false,
         },

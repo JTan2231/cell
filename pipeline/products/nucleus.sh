@@ -5,10 +5,7 @@ PRODUCT_DIR=infrastructure/nucleus
 STATUS_SCHEMA=1
 STATUS_COMMAND=nucleus
 STATUS_UNITS='nucleus/service|active||nucleus.execution.operate'
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='global'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES='nucleus-cli
 nucleus-client
@@ -18,9 +15,7 @@ nucleus-daemon
 nucleus-store'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
-TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|infrastructure/nucleus/release.sh'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='nucleus|Nucleus|workspace-package|Cargo.toml|nucleus-|1'
 RELEASE_METADATA_NO_DEPS=0
 RELEASE_BINARY_CHECKS='nucleus|target/release/nucleus|nucleus

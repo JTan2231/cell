@@ -59,6 +59,44 @@ fn reconcile(paths: &Paths, record: &std::path::Path, execution: &mut Execution)
     Ok(())
 }
 
+pub(crate) fn completed(
+    paths: &Paths,
+    key: &str,
+    class: ResourceClass,
+    spec: &CommandSpec,
+) -> Result<ProcessResult> {
+    let directory = paths.root.join("broker");
+    let name = basename(key)?;
+    let _owner = lock(&directory.join(format!("{name}.lock")), false)?;
+    let record = directory.join(format!("{name}.json"));
+    let mut execution: Execution = serde_json::from_slice(&fs::read(&record)?)?;
+    ensure!(
+        execution.schema == 1
+            && execution.key == key
+            && execution.class == class
+            && serde_json::to_value(&execution.command)? == serde_json::to_value(spec)?,
+        "retained gate belongs to another execution"
+    );
+    reconcile(paths, &record, &mut execution)?;
+    ensure!(
+        execution.state == "finished",
+        "gate has no terminal completion"
+    );
+    let result = execution.result.context("terminal gate has no result")?;
+    let process = directory.join(format!("{name}.process"));
+    let request: CommandSpec = serde_json::from_slice(&fs::read(process.join("request.json"))?)?;
+    ensure!(
+        serde_json::to_value(request)? == serde_json::to_value(spec)?,
+        "terminal process request names another command"
+    );
+    let observed = crate::process::observe(&process)?.context("gate has no process completion")?;
+    ensure!(
+        serde_json::to_value(&result)? == serde_json::to_value(observed)?,
+        "gate result differs from its process completion"
+    );
+    Ok(result)
+}
+
 pub(crate) fn run(
     paths: &Paths,
     key: &str,
@@ -182,8 +220,8 @@ pub(crate) fn status(paths: &Paths) -> Result<serde_json::Value> {
     Ok(serde_json::json!({"schema":1,"executions":records}))
 }
 
-// The caller holds worker and admission ownership. This only inspects evidence;
-// terminal command failure is settled, but missing evidence is never repaired.
+// The caller holds admission ownership and prevents new work. Reconcile only
+// exact retained process completions; missing evidence is never fabricated.
 pub(crate) fn require_settled(paths: &Paths) -> Result<()> {
     let _guards = settled_guards(paths)?;
     Ok(())
@@ -220,12 +258,16 @@ pub(crate) fn settled_guards(paths: &Paths) -> Result<Vec<crate::paths::FileLock
         if record.extension().is_none_or(|v| v != "json") || slot_records.contains(&record) {
             continue;
         }
-        let execution: Execution = serde_json::from_slice(&fs::read(&record)?)?;
+        let mut execution: Execution = serde_json::from_slice(&fs::read(&record)?)?;
         let name = basename(&execution.key)?;
+        let _owner = lock(&directory.join(format!("{name}.lock")), false)?;
         ensure!(
-            execution.schema == 1
-                && record == directory.join(format!("{name}.json"))
-                && execution.state == "finished",
+            execution.schema == 1 && record == directory.join(format!("{name}.json")),
+            "broker execution record has another identity"
+        );
+        reconcile(paths, &record, &mut execution)?;
+        ensure!(
+            execution.state == "finished",
             "broker execution is not a matching terminal record: {}",
             execution.key
         );
@@ -265,7 +307,7 @@ mod tests {
             args: vec![],
             cwd: temporary.path().to_path_buf(),
             env: BTreeMap::new(),
-            timeout_seconds: 5,
+            timeout_seconds: Some(5),
             stdin: None,
             confined: false,
         };
@@ -292,7 +334,7 @@ mod tests {
             args: vec![],
             cwd: temporary.path().to_path_buf(),
             env: BTreeMap::new(),
-            timeout_seconds: 5,
+            timeout_seconds: Some(5),
             stdin: None,
             confined: false,
         };
@@ -314,7 +356,7 @@ mod tests {
             args: vec![],
             cwd: paths.root.clone(),
             env: BTreeMap::new(),
-            timeout_seconds: 5,
+            timeout_seconds: Some(5),
             stdin: None,
             confined: false,
         };
@@ -346,7 +388,7 @@ mod tests {
             args: vec![],
             cwd: paths.root.clone(),
             env: BTreeMap::new(),
-            timeout_seconds: 5,
+            timeout_seconds: Some(5),
             stdin: None,
             confined: false,
         };
@@ -399,17 +441,27 @@ mod tests {
     }
 
     #[test]
-    fn settlement_rejects_nonterminal_or_missing_gate_evidence_without_reconciliation() {
+    fn settlement_reconciles_exact_completions_and_rejects_missing_evidence() {
         if run_isolated(
-            "broker::tests::settlement_rejects_nonterminal_or_missing_gate_evidence_without_reconciliation",
+            "broker::tests::settlement_reconciles_exact_completions_and_rejects_missing_evidence",
         ) {
             return;
         }
         let (_temporary, paths, _command) = settled_fixture();
         let record = paths.root.join("broker/terminal.json");
         let mut execution: Execution = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
-        execution.result = None;
         for state in ["queued", "running", "finished"] {
+            execution.result = None;
+            execution.state = state.into();
+            atomic_json(&record, &execution).unwrap();
+            require_settled(&paths).unwrap();
+            let settled: Execution = serde_json::from_slice(&fs::read(&record).unwrap()).unwrap();
+            assert_eq!(settled.state, "finished");
+            assert_eq!(settled.result.unwrap().exit_code, Some(1));
+        }
+        fs::remove_file(paths.root.join("broker/terminal.process/result.json")).unwrap();
+        for state in ["queued", "running", "finished"] {
+            execution.result = None;
             execution.state = state.into();
             atomic_json(&record, &execution).unwrap();
             let before = fs::read(&record).unwrap();

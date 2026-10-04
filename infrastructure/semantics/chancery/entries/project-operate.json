@@ -20,7 +20,7 @@
   "effects": [
     "Authorized procedures can change project/intake state, prepare a restricted reconciliation job, or install/migrate/publish the matching product release. Required features own the detailed effect and consistency guarantees.",
     "Install/recovery preserves proved state and captured admission; uninstall removes owned installation surfaces while retaining state.",
-    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain durable work, check readiness, or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication, then restores saved enabled intent with the new definitions. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
   ],
   "authority": [
     "Semantics owns project identity, routing, cursor persistence, intake transitions, stable concept IDs, typed-effect validation, and the SQLite commit.",
@@ -52,8 +52,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "bazaar.string.read",
@@ -93,7 +93,7 @@
     {
       "id": "bazaar.prompts.import",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "session_surfaces": [

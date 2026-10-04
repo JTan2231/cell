@@ -110,7 +110,7 @@ authority for each ordinary daily brief and its resume attachments to Email's
 fixed personal recipient. Without that authority, use preparation or preview
 only. A separately managed Clockwork binding may invoke the exact installed
 `run-daily` binary at 18:00 machine-local time. `platter schedule-definition`
-prints the selected release's product-owned schema-two definition with
+prints the selected release's product-owned schema-three definition with
 `halt-until-approved`; it does not register or enable a binding. Activation is a separate
 authorized operation under `clockwork.schedule.operate`; the installer and
 stored 09:00 fields do not enable it. Platter status and doctor report the

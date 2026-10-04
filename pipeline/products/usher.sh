@@ -5,16 +5,11 @@ PRODUCT_DIR=infrastructure/usher
 STATUS_SCHEMA=1
 STATUS_COMMAND=usher
 STATUS_UNITS='usher/report|on_demand||usher.recognition.inspect'
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='product:usher
-chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=usher
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|infrastructure/usher/release.sh'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='usher|Usher|package|infrastructure/usher/crates/usher/Cargo.toml|usher-|1'
 RELEASE_BINARY_CHECKS='usher|target/release/usher|usher
 usher|target/release/usher-install|usher-install'

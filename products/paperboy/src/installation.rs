@@ -65,16 +65,18 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
     if manifest_path.try_exists()? {
         crate::manifest::Manifest::load(&manifest_path)?;
     }
+    let prior = crate::schedule::suspend_for_deployment(&clockwork_binary)?;
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     crate::manifest::Manifest::initialize(&manifest_path)?;
     let manifest = crate::manifest::Manifest::load(&manifest_path)?;
     let executable = std::fs::canonicalize(context.home.join(".local/bin/paperboy"))?;
-    crate::schedule::apply_with(
+    crate::schedule::apply_with_prior(
         &root,
         &manifest,
         &clockwork_binary,
         &email_binary,
         &executable,
+        Some(prior),
     )?;
     Ok(())
 }

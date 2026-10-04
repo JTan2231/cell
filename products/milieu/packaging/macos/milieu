@@ -13,4 +13,4 @@ if [[ -n "${MILIEU_STATE_DIR-}" ]]; then
 fi
 
 exec /usr/bin/env -i "${milieu_environment[@]}" \
-    "$HOME/Library/Application Support/Milieu/install/current/libexec/milieu" "$@"
+    "$HOME/Library/Application Support/Milieu/install/runtime/libexec/milieu" "$@"

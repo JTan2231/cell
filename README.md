@@ -26,9 +26,9 @@ Commit the intended changes, then submit that commit:
 ./ci.sh submit COMMIT
 ```
 
-The installed [CI manager](ci_manager/README.md) queues the commit, integrates
+The installed [Telete](infrastructure/telete/README.md) queues the commit, integrates
 it privately, validates it, attempts bounded repairs, deploys, and emails the
-outcome. `cell-ci submit COMMIT` uses the same path.
+outcome. `telete submit COMMIT` uses the same path.
 
 ## Further documentation
 

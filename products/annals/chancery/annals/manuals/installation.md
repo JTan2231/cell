@@ -1,5 +1,30 @@
 # Annals installation and maintenance
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Annals/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
+Decisions provisioning requires the currently selected Annals archive because both inbox
+schedules share its fixed runtime image. Manual primary installation requires
+annals/decisions-inbox disabled because its separate provisioner owns the schedule
+handoff. With --no-start, annals/inbox must also be disabled. The installer rejects
+enabled bindings without a handoff and waits for active processes in retained disabled
+bindings before runtime publication. A later explicit schedule handoff selects the
+matching definition.
+
 Initialization, migration, and recovery leave readable persistent WAL coordination files for readers without write access. Named creation prepares them at the final library path. Migration prepares the configured spool control lock. Maintenance status opens existing private locks read-only and never creates or repairs a gate. Missing required coordination state stops inspection until an authorized setup or recovery operation prepares it.
 
 The user-owned macOS deployment installs Annals and Annals Usage together,
@@ -26,8 +51,8 @@ The explicit manual installer stages a immutable release without artifact or dep
 readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
 and exact Clockwork definition digest, and publishes the installed commands.
-The definition is first registered inactive. Before the deployer disables or
-replaces a binding, it reads current release metadata and compares every stored
+The definition is registered inactive after runtime publication. Before the
+deployer disables or replaces a binding, it reads current release metadata and compares every stored
 executable-definition field with it. A foreign definition with the same key
 stays untouched. The first handoff similarly removes only an exactly owned
 legacy LaunchAgent. It does not stop, replace, or take ownership of Nucleus or
@@ -39,9 +64,8 @@ or migration is unsupported; reinspection detects attributable changes where
 possible, fails the handoff closed, and may retain maintenance for recovery.
 
 The immutable definition requests run-at-load and a 300-second interval. It
-skips overlap and has no activation timeout. It pins the native release-local
-Rust Annals runner by SHA-256. The runner executes only its sibling
-release payload as `annals --quiet inbox run --stop-on-failure` in the Annals state directory
+skips overlap and has no activation timeout. It pins the native Rust Annals runner by SHA-256 and executes it from
+`install/runtime/bin`. The runner executes its sibling runtime payload as `annals --quiet inbox run --stop-on-failure` in the Annals state directory
 with an explicit nonsecret environment and umask `077`. Clockwork records
 process outcomes but does not inspect Annals domain state or ingest
 Annals-owned log bodies.
@@ -141,7 +165,7 @@ The Cell manifest runs one `annals-install deploy` command. The schema-2
 stdin request supplies candidate and source paths, the run identity and product
 settings. Annals performs its own primary setup and dedicated decisions
 provisioning. It creates or migrates libraries, writes configuration, places the release, and directly selects the two schedules. It
-does not hold or drain application work, suspend schedules, check readiness,
+does not hold or drain durable application work or check readiness,
 or recover automatically. Shared deployment does not run a mandatory application lifecycle
 or parse Annals state as its success condition.
 
@@ -211,7 +235,8 @@ migration and publication. Runtime diagnostics remain separate.
 The macOS state root is `~/Library/Application Support/Annals`. It contains
 `config.toml`, `usage.toml`, the primary `annals.db`, `spool/`, `log/`,
 and immutable releases under `install/releases/`. Public commands
-in `~/.local/bin/` and both Chancery selectors follow the same `current` release.
+in `~/.local/bin/` use `install/runtime` files copied from the selected archive.
+Both Chancery selectors follow the `current` archive.
 Annals Usage is independently versioned and is installed with Annals. The joint
 cutover preserves `usage.toml` and pins both configs to the selected Nucleus
 socket. An obsolete `usage.db` and its sidecars are retained only inside the
@@ -219,7 +244,7 @@ uncommitted transaction for rollback and discarded after successful commit. Its
 current configuration and live diagnostic semantics belong to
 `annals-usage.execution.operate`.
 
-The `cell-install-v3` release records the declared paths for both programs,
+The `cell-install-v4` release records the declared paths for both programs,
 the exact installer, native frontend and runner roles, and both provider bundles.
 Provider Markdown, entry JSON, and the schema-4 product overview are release
 bytes. A documentation change follows the same selection and rollback as the

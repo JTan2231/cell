@@ -1,6 +1,6 @@
 {
   "id": "bazaar.installation",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -59,7 +59,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque UUID release IDs select immutable program files. Database schema, release version and string versions are independent."
+        "statement": "Opaque UUID release IDs select retained program archives. Executable files run at fixed actual paths beneath Bazaar/install/runtime. Database schema, release version and string versions are independent."
       }
     ],
     "access": [
@@ -81,7 +81,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Bazaar accepts database schema one. New releases use cell-install-v3; retained earlier formats remain readable. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
+        "statement": "Bazaar accepts database schema one. New releases use cell-install-v4; retained earlier formats remain readable. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
       }
     ],
     "reliances": [
@@ -117,7 +117,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Shared cell-install-v3 file transactions select matching programs and provider. Direct installation does not initialize data. The Bazaar deployment recipe initializes only default state. Init preserves existing versions and can finish interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. Reader::open and Writer::open create no state; Reader::check reads integrity without content in its result."
+        "statement": "Shared cell-install-v4 file transactions select matching programs and provider. Direct installation does not initialize data. The Bazaar deployment recipe initializes only default state. Init preserves existing versions and can finish interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. Reader::open and Writer::open create no state; Reader::check reads integrity without content in its result."
       },
       {
         "status": "declared",

@@ -21,11 +21,10 @@ sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker.client import bootstrap_cargo_path, git
-from ci_broker.broker import MINIMAL_ENVIRONMENT
+from deployment.runtime import bootstrap_cargo_path, git, MINIMAL_ENVIRONMENT
 from deployment import candidate, signing
 from deployment.inventory import descriptor
-from ci_manager import workspace
+from deployment import workspace
 
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 CONFIG_ENV = ("AR", "CC", "CXX", "CFLAGS", "CXXFLAGS", "LDFLAGS", "SDKROOT",

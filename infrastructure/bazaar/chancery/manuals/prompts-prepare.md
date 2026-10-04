@@ -39,7 +39,7 @@ exact version. Its public `selection` field is the selected Bazaar `Record`.
 selection is an error. No database handle survives preparation.
 
 Cell's imported owners are `annals`, `conatus`, `krisis`, `semantics`, `platter`,
-`weaver`, `emt`, and `ci-manager`. Publish component versions before publishing
+`weaver`, `emt`, and `telete`. Publish component versions before publishing
 the complete selection that names them. This ordering gives a consistent
 selected set without a transaction across separate reads. A new selection
 affects new preparations. An already loaded `Prompts` retains its selected

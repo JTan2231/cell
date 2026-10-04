@@ -33,5 +33,5 @@ Use [prepare and delivery procedures](chancery/manuals/packet-prepare.md) or
 `chancery show ID` reads one page; `chancery resolve ID` includes required
 contracts. These reads do not probe readiness or authorize execution.
 
-Submit committed changes through the [CI manager](../../ci_manager/README.md) with
+Submit committed changes through the [Telete](../../infrastructure/telete/README.md) with
 `./ci.sh submit COMMIT` from the Cell root.

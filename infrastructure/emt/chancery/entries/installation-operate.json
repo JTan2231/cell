@@ -45,7 +45,8 @@
   ],
   "effects": [
     "Agent work can inspect and operate current-user Cell systems and send incident email under the authorized exchange. Configuration, scheduling, maintenance and installation have their documented separate effects.",
-    "The declared deploy instruction resolves a missing receiving domain through Email, initializes or migrates local state, saves configuration, configures the EMT route and publishes the exact worker definition with intended enabled state. It creates no maintenance hold or migration receipt and drains no exchanges. It preserves absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent."
+    "The declared deploy instruction resolves a missing receiving domain through Email, initializes or migrates local state, saves configuration, configures the EMT route and publishes the exact worker definition with intended enabled state. It creates no maintenance hold or migration receipt and drains no exchanges. It preserves absence, disabled intent, operator pause and failure halts unless a supported setup option changes operator intent.",
+    "Direct install remains limited to uninitialized EMT state. It rejects an enabled worker binding and runs the disable transition for a retained disabled binding to wait for active processes before runtime publication."
   ],
   "authority": [
     "EMT owns its configuration, admission, state, maintenance holds and installation. Clockwork owns scheduling and exact failure-halt continuation; Nucleus owns jobs; Email owns transport and credentials."
@@ -93,7 +94,7 @@
     {
       "id": "bazaar.prompts.import",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [
@@ -114,6 +115,10 @@
       {
         "status": "declared",
         "statement": "New preparation requires initialized Bazaar state and a complete cell.prompts.emt selection; seed import and historical version preservation precede deployment, which supplies no missing content."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install remains limited to uninitialized EMT state. It rejects an enabled worker binding and runs the disable transition for a retained disabled binding to wait for active processes before runtime publication."
       }
     ],
     "inputs": [
@@ -159,7 +164,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The declared deploy instruction publishes matched bytes, initializes or migrates local state, saves configuration and publishes an exact worker definition under ordinary admission and runner locks. It neither suspends scheduling nor holds or drains exchanges."
+        "statement": "The declared deploy instruction publishes matched bytes, initializes or migrates local state, saves configuration and publishes an exact worker definition under ordinary admission and runner locks. It suspends owned scheduling and waits for active processes before runtime publication. It does not hold or drain durable exchanges."
       },
       {
         "status": "declared",

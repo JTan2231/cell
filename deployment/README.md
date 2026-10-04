@@ -5,9 +5,10 @@ instructions. The executor copies opaque files, creates declared links, and runs
 literal commands. It does not inspect application state, judge health, verify
 artifact contents, infer compatibility, or recover a product.
 
-Ordinary delivery uses `./ci.sh submit COMMIT`. The installed CI manager selects
-an exact commit and product set, prepares production artifacts, and calls this
-executor. Validation and application diagnostics have separate owners.
+Use `./deploy.sh` for manual deployment. This executor prepares and runs the
+exact selected commit and product set. Ordinary delivery uses
+`./ci.sh submit COMMIT` and [Telete's native executor](../infrastructure/telete/README.md).
+Validation and application diagnostics have separate owners.
 
 ## Select an execution
 
@@ -91,6 +92,14 @@ product installer inputs. Their presence does not imply dependency discovery or
 compatibility checks. The native product installer owns resource placement and
 any setup, maintenance, service, migration, or scheduling commands it requires.
 There is no required seven-operation adapter protocol.
+
+The shared native installer retains each UUID release as an archive and copies
+its payload to regular files under the product's fixed `install/runtime`
+directory. Public file links resolve to this fixed tree. Directory links for
+Chancery providers continue to resolve through `current` to one archived bundle.
+Product lifecycle operations quiesce affected execution before publication.
+File replacement is atomic per file, not across the complete runtime tree.
+Recovery copies the selected retained payload back to the same runtime paths.
 
 ## Interpret the receipt
 
