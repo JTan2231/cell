@@ -19,6 +19,9 @@ pub(crate) fn run(
     stdin: Option<String>,
     extra: BTreeMap<String, String>,
 ) -> Result<ProcessResult> {
+    let repo = repo
+        .canonicalize()
+        .context("Git repository directory is unavailable")?;
     let mut arguments = vec![
         "-c".into(),
         "core.hooksPath=/dev/null".into(),
