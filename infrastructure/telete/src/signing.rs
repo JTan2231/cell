@@ -319,7 +319,7 @@ pub(crate) fn configure_host(
     let policy = policy(fingerprint, keychain, namespace)?;
     let _setup = crate::host_setup::setup_lock()?;
     let _guards = configuration_guard(paths)?;
-    let _host_guards = crate::host_setup::signing_guard(paths)?;
+    let _manual_deployment = manual_deployment_guard(paths)?;
     configure_with(&host_policy(&home()?), policy, &mut run_tool)
 }
 
@@ -343,6 +343,22 @@ fn configuration_guard(paths: &Paths) -> Result<Vec<paths::FileLock>> {
         paths::lock(&paths.root.join("deployments/deployment.lock"), false)?,
     ];
     crate::manager::require_quiescent(paths)?;
+    if present(&paths.root.join("queue.sqlite3"))? {
+        let config = crate::store::Store::open(&paths.root, false)?.config()?;
+        ensure!(
+            crate::git::common(paths, &config.repository)? == config.common_git_dir,
+            "configured Git repository identity changed"
+        );
+        for name in [
+            "cell-release-publication.lock",
+            "cell-release-publication.lock.d",
+        ] {
+            ensure!(
+                !present(&config.common_git_dir.join(name))?,
+                "settle release publication before changing signing configuration"
+            );
+        }
+    }
     ensure!(
         !present(&paths.root.join("deployments/active.json"))?,
         "settle interrupted Telete deployment before changing signing selection"
@@ -375,11 +391,21 @@ fn present(path: &Path) -> Result<bool> {
     }
 }
 
+fn manual_deployment_guard(paths: &Paths) -> Result<paths::FileLock> {
+    let root = paths.workspace.join("deployments");
+    let guard = paths::lock(&root.join("deployment.lock"), false)?;
+    ensure!(
+        !present(&root.join("active"))?,
+        "settle retained manual deployment recovery before changing shared signing selection"
+    );
+    Ok(guard)
+}
+
 pub(crate) fn create_local(paths: &Paths) -> Result<Value> {
     ensure!(cfg!(target_os = "macos"), "native signing requires macOS");
     let _setup = crate::host_setup::setup_lock()?;
     let _guards = configuration_guard(paths)?;
-    let _host_guards = crate::host_setup::signing_guard(paths)?;
+    let _manual_deployment = manual_deployment_guard(paths)?;
     let policy = create_local_with(paths, &home()?, &mut run_tool)?;
     Ok(json!({"policy":policy}))
 }
@@ -831,13 +857,15 @@ mod tests {
     }
 
     #[test]
-    fn signing_maintenance_requires_existing_queue_to_be_paused() {
+    fn signing_maintenance_requires_existing_queue_to_be_paused_and_initialized() {
         let fixture = SetupFixture::new();
         let store = crate::store::Store::open(&fixture.paths.root, true).unwrap();
         store.set("paused", &false).unwrap();
-        assert!(configuration_guard(&fixture.paths).is_err());
+        let error = configuration_guard(&fixture.paths).err().unwrap();
+        assert!(error.to_string().contains("pause Telete"));
         store.set("paused", &true).unwrap();
-        assert!(configuration_guard(&fixture.paths).is_ok());
+        let error = configuration_guard(&fixture.paths).err().unwrap();
+        assert!(error.to_string().contains("initialization is incomplete"));
     }
 
     #[test]

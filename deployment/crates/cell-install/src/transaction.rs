@@ -11,12 +11,15 @@ use std::io::Write;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt, symlink};
 use std::path::{Component, Path, PathBuf};
 
-pub const TRANSACTION_FORMAT: &str = "cell-install-v3";
+pub const TRANSACTION_FORMAT: &str = "cell-install-v4";
 
 /// Recognize current and retained shared transaction release formats.
 #[must_use]
 pub fn is_transaction_format(value: &str) -> bool {
-    matches!(value, TRANSACTION_FORMAT | "cell-install-v2")
+    matches!(
+        value,
+        TRANSACTION_FORMAT | "cell-install-v3" | "cell-install-v2"
+    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -125,7 +128,7 @@ impl PartialEq for InstallSnapshot {
     fn eq(&self, other: &Self) -> bool {
         selection(self.current.as_ref()) == selection(other.current.as_ref())
             && selection(self.previous.as_ref()) == selection(other.previous.as_ref())
-            && self.entries == other.entries
+            && matches_view(&self.entries, &other.entries)
     }
 }
 
@@ -179,6 +182,37 @@ fn install_root(layout: &InstallLayout, home: &Path) -> PathBuf {
     home.join("Library/Application Support")
         .join(&layout.application)
         .join("install")
+}
+
+/// Fixed physical payload location. Release selectors only identify retained archives.
+#[must_use]
+pub fn runtime_root(layout: &InstallLayout, home: &Path) -> PathBuf {
+    install_root(layout, home).join("runtime")
+}
+
+fn runtime_entries(layout: &InstallLayout, release: &ReleaseInfo) -> Vec<PublicEntry> {
+    let root = PathBuf::from("Library/Application Support")
+        .join(&layout.application)
+        .join("install/runtime");
+    release
+        .files
+        .iter()
+        .map(|(artifact, file)| PublicEntry {
+            path: root.join(artifact),
+            artifact: artifact.clone(),
+            kind: PublicKind::Copy,
+            mode: file.mode,
+        })
+        .collect()
+}
+
+fn owned_entries(layout: &InstallLayout, release: &ReleaseInfo) -> Vec<PublicEntry> {
+    release
+        .public
+        .iter()
+        .cloned()
+        .chain(runtime_entries(layout, release))
+        .collect()
 }
 
 fn validate_layout(layout: &InstallLayout, home: &Path) -> Result<u32> {
@@ -384,7 +418,7 @@ fn read_manifest(root: &Path) -> Result<Manifest> {
 /// # Errors
 /// Returns an error for unsupported metadata or invalid installation paths.
 pub fn read_release_at(
-    _layout: &InstallLayout,
+    layout: &InstallLayout,
     root: &Path,
     legacy: &LegacyReader<'_>,
 ) -> Result<ReleaseInfo> {
@@ -407,6 +441,7 @@ pub fn read_release_at(
         legacy(root)?
     };
     validate_public(&result.public)?;
+    validate_public(&owned_entries(layout, &result))?;
     Ok(result)
 }
 
@@ -463,6 +498,7 @@ pub fn prepare_release(
         public: layout.public.clone(),
         release_id: uuid::Uuid::now_v7().to_string(),
     };
+    validate_public(&owned_entries(layout, &manifest.info()))?;
     fs::write(
         stage.path().join("manifest.json"),
         serde_json::to_vec(&manifest)?,
@@ -534,15 +570,135 @@ fn selected(
     }
 }
 
-fn expected_entry(layout: &InstallLayout, home: &Path, entry: &PublicEntry) -> CapturedEntry {
+fn expected_entry(
+    layout: &InstallLayout,
+    home: &Path,
+    entry: &PublicEntry,
+    runtime: bool,
+) -> CapturedEntry {
     match entry.kind {
         PublicKind::Symlink => CapturedEntry::Link(
             install_root(layout, home)
-                .join("current")
+                .join(if runtime { "runtime" } else { "current" })
                 .join(&entry.artifact),
         ),
         PublicKind::Copy => CapturedEntry::Copy,
     }
+}
+
+fn expected_view(
+    layout: &InstallLayout,
+    home: &Path,
+    release: Option<&ReleaseInfo>,
+    runtime: bool,
+) -> BTreeMap<PathBuf, CapturedEntry> {
+    let Some(release) = release else {
+        return BTreeMap::new();
+    };
+    let entries = if runtime {
+        owned_entries(layout, release)
+    } else {
+        release.public.clone()
+    };
+    entries
+        .into_iter()
+        .map(|entry| {
+            let value = expected_entry(
+                layout,
+                home,
+                &entry,
+                runtime && release.files.contains_key(&entry.artifact),
+            );
+            (entry.path, value)
+        })
+        .collect()
+}
+
+fn matches_view(
+    actual: &BTreeMap<PathBuf, CapturedEntry>,
+    expected: &BTreeMap<PathBuf, CapturedEntry>,
+) -> bool {
+    actual
+        .iter()
+        .filter(|(_, value)| **value != CapturedEntry::Absent)
+        .eq(expected
+            .iter()
+            .filter(|(_, value)| **value != CapturedEntry::Absent))
+}
+
+fn publication_view(
+    layout: &InstallLayout,
+    home: &Path,
+    expected: &InstallSnapshot,
+    info: &ReleaseInfo,
+) -> InstallSnapshot {
+    let mut after = expected.clone();
+    if selection(after.current.as_ref()) != Some(info.release_id.as_str()) {
+        after.previous.clone_from(&after.current);
+    }
+    after.current = Some(info.clone());
+    for value in after.entries.values_mut() {
+        *value = CapturedEntry::Absent;
+    }
+    for entry in owned_entries(layout, info) {
+        after.entries.insert(
+            entry.path.clone(),
+            expected_entry(
+                layout,
+                home,
+                &entry,
+                info.files.contains_key(&entry.artifact),
+            ),
+        );
+    }
+    after
+}
+
+fn restoration_view(
+    layout: &InstallLayout,
+    home: &Path,
+    prior: &InstallSnapshot,
+    changed: &InstallSnapshot,
+) -> InstallSnapshot {
+    let mut restored = prior.clone();
+    for path in changed.entries.keys() {
+        restored
+            .entries
+            .entry(path.clone())
+            .or_insert(CapturedEntry::Absent);
+    }
+    for value in restored.entries.values_mut() {
+        *value = CapturedEntry::Absent;
+    }
+    restored
+        .entries
+        .extend(expected_view(layout, home, prior.current.as_ref(), true));
+    restored
+}
+
+fn prove_recovery_view(
+    actual: &InstallSnapshot,
+    prior: &InstallSnapshot,
+    target: &InstallSnapshot,
+) -> Result<()> {
+    if actual.current.is_some()
+        && selection(actual.current.as_ref()) != selection(prior.current.as_ref())
+        && selection(actual.current.as_ref()) != selection(target.current.as_ref())
+        || actual.previous.is_some()
+            && selection(actual.previous.as_ref()) != selection(prior.previous.as_ref())
+            && selection(actual.previous.as_ref()) != selection(target.previous.as_ref())
+    {
+        return Err(Error::new("unattributable recovery release selection"));
+    }
+    for (path, value) in &actual.entries {
+        if *value != CapturedEntry::Absent
+            && Some(value) != prior.entries.get(path)
+            && Some(value) != target.entries.get(path)
+        {
+            return Err(Error::new("unattributable recovery public path"));
+        }
+    }
+    Ok(())
 }
 
 fn snapshot(
@@ -562,35 +718,38 @@ fn snapshot(
     )?;
     let current = selected(layout, home, "current", legacy)?;
     let previous = selected(layout, home, "previous", legacy)?;
-    let mut public = BTreeMap::new();
+    let mut public = BTreeSet::new();
     for entry in layout
         .public
         .iter()
         .chain(current.iter().flat_map(|r| &r.public))
         .chain(previous.iter().flat_map(|r| &r.public))
     {
-        public.insert(entry.path.clone(), entry);
+        public.insert(entry.path.clone());
+    }
+    for release in current.iter().chain(previous.iter()) {
+        for entry in runtime_entries(layout, release) {
+            public.insert(entry.path);
+        }
     }
     let mut entries = BTreeMap::new();
-    for path in public.keys() {
+    for path in &public {
         if let Some(parent) = path.parent() {
             ensure_path(home, parent, uid, false)?;
         }
         let actual = capture(&home.join(path))?;
-        let required = current
-            .as_ref()
-            .and_then(|r| r.public.iter().find(|e| &e.path == path));
-        let expected = if let Some(entry) = required {
-            expected_entry(layout, home, entry)
-        } else {
-            CapturedEntry::Absent
-        };
-        if strict && actual != expected {
-            return Err(Error::new(
-                "foreign or incoherent public installation entry",
-            ));
-        }
         entries.insert(path.clone(), actual);
+    }
+    let stable = expected_view(layout, home, current.as_ref(), true);
+    let retained = expected_view(layout, home, current.as_ref(), false);
+    let legacy_view = current
+        .as_ref()
+        .is_some_and(|r| r.format != TRANSACTION_FORMAT)
+        && matches_view(&entries, &retained);
+    if strict && !matches_view(&entries, &stable) && !legacy_view {
+        return Err(Error::new(
+            "foreign or incoherent public installation entry",
+        ));
     }
     if strict && current.is_none() && previous.is_some() {
         return Err(Error::new("previous selector exists without current"));
@@ -631,12 +790,21 @@ pub fn inspect_detached_installation(
             .current
             .as_ref()
             .ok_or_else(|| Error::new("public entry has no selected release"))?;
-        let entry = current
-            .public
+        let owned = owned_entries(layout, current);
+        let entry = owned
             .iter()
             .find(|entry| &entry.path == path)
             .ok_or_else(|| Error::new("public entry is not owned by selected release"))?;
-        if *value != expected_entry(layout, home, entry) {
+        if *value
+            != expected_entry(
+                layout,
+                home,
+                entry,
+                current.files.contains_key(&entry.artifact),
+            )
+            && (current.format == TRANSACTION_FORMAT
+                || *value != expected_entry(layout, home, entry, false))
+        {
             return Err(Error::new("foreign public installation entry"));
         }
     }
@@ -745,26 +913,8 @@ impl InstallTransaction<'_> {
         }
         let _catalog = self.catalog()?;
         self.recheck(expected)?;
-        let after = self.publication(expected, &prepared.info);
+        let after = publication_view(&self.layout, &self.home, expected, &prepared.info);
         self.change(expected, &after, false, || verify(&prepared.info))
-    }
-
-    fn publication(&self, expected: &InstallSnapshot, info: &ReleaseInfo) -> InstallSnapshot {
-        let mut after = expected.clone();
-        if selection(after.current.as_ref()) != Some(info.release_id.as_str()) {
-            after.previous.clone_from(&after.current);
-        }
-        after.current = Some(info.clone());
-        for value in after.entries.values_mut() {
-            *value = CapturedEntry::Absent;
-        }
-        for entry in &info.public {
-            after.entries.insert(
-                entry.path.clone(),
-                expected_entry(&self.layout, &self.home, entry),
-            );
-        }
-        after
     }
 
     /// Repair an interrupted publication using captured prior and exact candidate evidence.
@@ -787,27 +937,22 @@ impl InstallTransaction<'_> {
                 "recovery candidate belongs to another installation",
             ));
         }
-        let target = self.publication(prior, &candidate.info);
+        let target = publication_view(&self.layout, &self.home, prior, &candidate.info);
         let _catalog = self.catalog()?;
-        let actual = snapshot(&self.layout, &self.home, self.legacy, false)?;
-        if actual.current.is_some()
-            && selection(actual.current.as_ref()) != selection(prior.current.as_ref())
-            && selection(actual.current.as_ref()) != selection(target.current.as_ref())
-            || actual.previous.is_some()
-                && selection(actual.previous.as_ref()) != selection(prior.previous.as_ref())
-                && selection(actual.previous.as_ref()) != selection(target.previous.as_ref())
-        {
-            return Err(Error::new("unattributable recovery release selection"));
-        }
-        for (path, value) in &actual.entries {
-            if *value != CapturedEntry::Absent
-                && Some(value) != prior.entries.get(path)
-                && Some(value) != target.entries.get(path)
-            {
-                return Err(Error::new("unattributable recovery public path"));
+        let mut actual = snapshot(&self.layout, &self.home, self.legacy, false)?;
+        for path in prior.entries.keys().chain(target.entries.keys()) {
+            if !actual.entries.contains_key(path) {
+                if let Some(parent) = path.parent() {
+                    ensure_path(&self.home, parent, self.uid, false)?;
+                }
+                actual
+                    .entries
+                    .insert(path.clone(), capture(&self.home.join(path))?);
             }
         }
-        let selected = if select_candidate { &target } else { prior };
+        prove_recovery_view(&actual, prior, &target)?;
+        let restored = restoration_view(&self.layout, &self.home, prior, &target);
+        let selected = if select_candidate { &target } else { &restored };
         self.change(&actual, selected, !select_candidate, || {
             if let Some(info) = &selected.current {
                 verify(info)?;
@@ -826,7 +971,8 @@ impl InstallTransaction<'_> {
     ) -> Result<()> {
         let _catalog = self.catalog()?;
         self.recheck(&receipt.after)?;
-        self.change(&receipt.after, &receipt.before, true, || {
+        let restored = restoration_view(&self.layout, &self.home, &receipt.before, &receipt.after);
+        self.change(&receipt.after, &restored, true, || {
             if let Some(prior) = &receipt.before.current {
                 verify(prior)?;
             }
@@ -842,6 +988,18 @@ impl InstallTransaction<'_> {
         recorded_recovery: bool,
         verify: impl FnOnce() -> Result<()>,
     ) -> Result<SelectionReceipt> {
+        for path in after
+            .entries
+            .keys()
+            .filter(|path| !before.entries.contains_key(*path))
+        {
+            if let Some(parent) = path.parent() {
+                ensure_path(&self.home, parent, self.uid, false)?;
+            }
+            if capture(&self.home.join(path))? != CapturedEntry::Absent {
+                return Err(Error::new("new installation path is already occupied"));
+            }
+        }
         self.clean_scratch(before, after)?;
         let result = self
             .write_view(after, recorded_recovery)
@@ -907,8 +1065,8 @@ impl InstallTransaction<'_> {
                         .current
                         .as_ref()
                         .ok_or_else(|| Error::new("copied public path has no selected release"))?;
-                    let entry = selected
-                        .public
+                    let owned = owned_entries(&self.layout, selected);
+                    let entry = owned
                         .iter()
                         .find(|e| &e.path == path && e.kind == PublicKind::Copy)
                         .ok_or_else(|| Error::new("missing copied path declaration"))?;
@@ -1088,6 +1246,187 @@ pub fn verify_release_at(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn fixture() -> (InstallLayout, ReleaseInfo) {
+        let layout = InstallLayout {
+            product: "fixture".to_owned(),
+            application: "Fixture".to_owned(),
+            product_lock: LockSpec {
+                path: PathBuf::from(".fixture/lock"),
+                kind: LockKind::Directory,
+            },
+            catalog_lock: None,
+            public: vec![
+                PublicEntry {
+                    path: PathBuf::from(".local/bin/fixture"),
+                    artifact: "bin/fixture".to_owned(),
+                    kind: PublicKind::Symlink,
+                    mode: 0o555,
+                },
+                PublicEntry {
+                    path: PathBuf::from("providers/fixture"),
+                    artifact: "share/chancery".to_owned(),
+                    kind: PublicKind::Symlink,
+                    mode: 0o555,
+                },
+            ],
+        };
+        let release = ReleaseInfo {
+            release_id: "first-archive".to_owned(),
+            format: TRANSACTION_FORMAT.to_owned(),
+            versions: BTreeMap::new(),
+            public: layout.public.clone(),
+            files: BTreeMap::from([
+                (
+                    "bin/fixture".to_owned(),
+                    FileEntry {
+                        sha256: String::new(),
+                        mode: 0o555,
+                        code_identifier: None,
+                    },
+                ),
+                (
+                    "share/chancery/provider.json".to_owned(),
+                    FileEntry {
+                        sha256: String::new(),
+                        mode: 0o444,
+                        code_identifier: None,
+                    },
+                ),
+            ]),
+        };
+        (layout, release)
+    }
+
+    #[test]
+    fn publication_keeps_actual_paths_when_archive_identity_changes() {
+        let (layout, first) = fixture();
+        let home = Path::new("/operator");
+        let empty = InstallSnapshot {
+            current: None,
+            previous: None,
+            entries: BTreeMap::new(),
+        };
+        let before = publication_view(&layout, home, &empty, &first);
+        let mut second = first.clone();
+        second.release_id = "second-archive".to_owned();
+        let after = publication_view(&layout, home, &before, &second);
+        assert_eq!(before.entries, after.entries);
+        assert_ne!(before.current, after.current);
+        assert_eq!(after.previous, Some(first));
+        assert_eq!(
+            after.entries[Path::new(".local/bin/fixture")],
+            CapturedEntry::Link(runtime_root(&layout, home).join("bin/fixture"))
+        );
+        assert_eq!(
+            after.entries
+                [Path::new("Library/Application Support/Fixture/install/runtime/bin/fixture")],
+            CapturedEntry::Copy
+        );
+        assert_eq!(
+            after.entries[Path::new("providers/fixture")],
+            CapturedEntry::Link(install_root(&layout, home).join("current/share/chancery"))
+        );
+    }
+
+    #[test]
+    fn restoring_a_legacy_archive_uses_runtime_and_cleans_new_files() {
+        let (layout, mut first) = fixture();
+        first.format = "cell-install-v3".to_owned();
+        let home = Path::new("/operator");
+        let prior = InstallSnapshot {
+            current: Some(first.clone()),
+            previous: None,
+            entries: expected_view(&layout, home, Some(&first), false),
+        };
+        let mut second = first.clone();
+        second.release_id = "second-archive".to_owned();
+        second.format = TRANSACTION_FORMAT.to_owned();
+        second.files.insert(
+            "libexec/companion".to_owned(),
+            FileEntry {
+                sha256: String::new(),
+                mode: 0o555,
+                code_identifier: None,
+            },
+        );
+        let changed = publication_view(&layout, home, &prior, &second);
+        let restored = restoration_view(&layout, home, &prior, &changed);
+        assert_eq!(restored.current, prior.current);
+        assert_eq!(restored.previous, prior.previous);
+        assert_eq!(
+            restored.entries[Path::new(".local/bin/fixture")],
+            CapturedEntry::Link(runtime_root(&layout, home).join("bin/fixture"))
+        );
+        assert_eq!(
+            restored.entries[Path::new(
+                "Library/Application Support/Fixture/install/runtime/libexec/companion"
+            )],
+            CapturedEntry::Absent
+        );
+        assert!(matches_view(
+            &restored.entries,
+            &expected_view(&layout, home, Some(&first), true)
+        ));
+    }
+
+    #[test]
+    fn snapshot_comparison_ignores_absent_cleanup_paths_but_checks_live_paths() {
+        let (layout, release) = fixture();
+        let empty = InstallSnapshot {
+            current: None,
+            previous: None,
+            entries: BTreeMap::new(),
+        };
+        let mut snapshot = publication_view(&layout, Path::new("/operator"), &empty, &release);
+        let expected = snapshot.clone();
+        snapshot
+            .entries
+            .insert(PathBuf::from("retired/path"), CapturedEntry::Absent);
+        assert_eq!(snapshot, expected);
+        snapshot
+            .entries
+            .insert(PathBuf::from("retired/path"), CapturedEntry::Copy);
+        assert_ne!(snapshot, expected);
+        assert!(!matches_view(&BTreeMap::new(), &expected.entries));
+    }
+
+    #[test]
+    fn partial_upgrade_attribution_includes_candidate_only_runtime_files() -> Result<()> {
+        let (layout, mut first) = fixture();
+        first.format = "cell-install-v3".to_owned();
+        let home = Path::new("/operator");
+        let prior = InstallSnapshot {
+            current: Some(first.clone()),
+            previous: None,
+            entries: expected_view(&layout, home, Some(&first), false),
+        };
+        let mut candidate = first.clone();
+        candidate.release_id = "second-archive".to_owned();
+        candidate.files.insert(
+            "libexec/companion".to_owned(),
+            FileEntry {
+                sha256: String::new(),
+                mode: 0o555,
+                code_identifier: None,
+            },
+        );
+        let target = publication_view(&layout, home, &prior, &candidate);
+        let companion =
+            PathBuf::from("Library/Application Support/Fixture/install/runtime/libexec/companion");
+        let mut actual = prior.clone();
+        actual
+            .entries
+            .insert(companion.clone(), CapturedEntry::Copy);
+        prove_recovery_view(&actual, &prior, &target)?;
+        let restored = restoration_view(&layout, home, &prior, &target);
+        assert_eq!(restored.entries[&companion], CapturedEntry::Absent);
+        actual
+            .entries
+            .insert(companion, CapturedEntry::Link(PathBuf::from("/foreign")));
+        assert!(prove_recovery_view(&actual, &prior, &target).is_err());
+        Ok(())
+    }
 
     #[test]
     fn retained_release_keeps_inventory_checks_without_byte_hashes() -> Result<()> {

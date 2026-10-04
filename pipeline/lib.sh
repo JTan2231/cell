@@ -1,13 +1,7 @@
 #!/bin/sh
 
 # Shared helpers for the checked-in Cell pipeline descriptors. This file is
-# sourced by the CI, release, generator, and self-test entry points.
-
-PIPELINE_EXPECTED_PRODUCT_COUNT=19
-PIPELINE_EXPECTED_PROVIDER_ENTRIES=114
-# Shared infrastructure providers participate in source catalog validation but
-# are not deployable product release units.
-PIPELINE_SHARED_PROVIDERS='ci-manager|ci_manager/chancery|2'
+# sourced by the release and generator entry points.
 
 pipeline_products() {
     for descriptor in "$PIPELINE_ROOT"/pipeline/products/*.sh; do
@@ -23,12 +17,10 @@ pipeline_fail() {
 
 pipeline_clear_descriptor() {
     unset PIPELINE_SCHEMA PRODUCT_ID PRODUCT_NAME PRODUCT_DIR PRODUCT_ALIASES
-    unset CI_GATE_ID
-    unset CI_RESOURCE_CLASS RELEASE_BRANCH DEPLOY_PROFILE DEPLOY_CONFLICT_KEYS
+    unset RELEASE_BRANCH
     unset CARGO_MANIFEST CARGO_PACKAGES CARGO_OFFLINE CARGO_PATH_PREFIX
-    unset CLIPPY_KEEP_GOING TEST_NO_FAIL_FAST
+    unset CLIPPY_KEEP_GOING
     unset CI_SHELL_CHECKS CI_PLIST_CHECKS
-    unset CI_PROVIDER_VALIDATION_PHASE
     unset RELEASE_UNITS RELEASE_ALLOW_EXPLICIT_UNIT RELEASE_USAGE
     unset RELEASE_COMPANION_MANIFESTS
     unset RELEASE_METADATA_NO_DEPS RELEASE_BINARY_CHECKS PROVIDERS
@@ -47,7 +39,7 @@ pipeline_load_descriptor() {
 
     pipeline_clear_descriptor
     # Descriptors are trusted, checked-in shell data. Keeping them sourceable
-    # avoids adding a parser, binary, or dependency to bootstrap CI.
+    # lets the generator and manual release command load the same declarations.
     . "$descriptor_path"
 
     [ "${PIPELINE_SCHEMA:-}" = 1 ] \
@@ -56,15 +48,12 @@ pipeline_load_descriptor() {
         || pipeline_fail "descriptor identity mismatch: $requested_product"
 
     PRODUCT_ALIASES=${PRODUCT_ALIASES:-}
-    CI_GATE_ID=${CI_GATE_ID:-$PRODUCT_ID}
     CARGO_MANIFEST=${CARGO_MANIFEST:-Cargo.toml}
     CARGO_OFFLINE=${CARGO_OFFLINE:-0}
     CARGO_PATH_PREFIX=${CARGO_PATH_PREFIX:-}
     CLIPPY_KEEP_GOING=${CLIPPY_KEEP_GOING:-1}
-    TEST_NO_FAIL_FAST=${TEST_NO_FAIL_FAST:-1}
     CI_SHELL_CHECKS=${CI_SHELL_CHECKS:-}
     CI_PLIST_CHECKS=${CI_PLIST_CHECKS:-}
-    CI_PROVIDER_VALIDATION_PHASE=${CI_PROVIDER_VALIDATION_PHASE:-before-rust}
     RELEASE_ALLOW_EXPLICIT_UNIT=${RELEASE_ALLOW_EXPLICIT_UNIT:-0}
     RELEASE_USAGE=${RELEASE_USAGE:-Usage: ./release.sh --patch|--minor|--major}
     RELEASE_METADATA_NO_DEPS=${RELEASE_METADATA_NO_DEPS:-1}
@@ -145,49 +134,11 @@ pipeline_bootstrap_cargo() {
     fi
 }
 
-pipeline_target_file() {
-    target_relative_path=$1
-    if [ -n "${CARGO_TARGET_DIR:-}" ]; then
-        printf '%s/%s\n' "$CARGO_TARGET_DIR" "$target_relative_path"
-        return
-    fi
-
-    git_common_dir=$(git -C "$PIPELINE_ROOT" rev-parse --git-common-dir 2>/dev/null) \
-        || pipeline_fail 'unable to resolve the Git common directory'
-    case "$git_common_dir" in
-        /*) ;;
-        *) git_common_dir="$PIPELINE_ROOT/$git_common_dir" ;;
-    esac
-    git_common_dir=$(CDPATH='' cd "$git_common_dir" && pwd)
-    primary_checkout=$(dirname "$git_common_dir")
-    printf '%s/target/%s\n' "$primary_checkout" "$target_relative_path"
-}
-
-pipeline_should_run() {
-    run_condition=$1
-    case "$run_condition" in
-        always) return 0 ;;
-        darwin) [ "$(uname -s)" = Darwin ] ;;
-        darwin-if-tool:*)
-            required_tool=${run_condition#darwin-if-tool:}
-            [ "$(uname -s)" = Darwin ] \
-                && command -v "$required_tool" >/dev/null 2>&1
-            ;;
-        *) pipeline_fail "unsupported run condition: $run_condition" ;;
-    esac
-}
-
 pipeline_validate_descriptor() {
     [ -n "${PRODUCT_NAME:-}" ] || pipeline_fail "$PRODUCT_ID has no display name"
     [ -n "${PRODUCT_DIR:-}" ] || pipeline_fail "$PRODUCT_ID has no directory"
-    case "${CI_RESOURCE_CLASS:-}" in heavy|light) ;; \
-        *) pipeline_fail "$PRODUCT_ID has invalid CI resource class" ;; esac
     [ "${RELEASE_BRANCH:-}" = main ] \
         || pipeline_fail "$PRODUCT_ID has unsupported release branch: ${RELEASE_BRANCH:-}"
-    case "${DEPLOY_PROFILE:-}" in selector-only-v1|rust-install-v1|custom) ;; \
-        *) pipeline_fail "$PRODUCT_ID has invalid deployment profile" ;; esac
-    [ -n "${DEPLOY_CONFLICT_KEYS:-}" ] \
-        || pipeline_fail "$PRODUCT_ID declares no deployment conflict keys"
     [ -d "$PIPELINE_ROOT/$PRODUCT_DIR" ] \
         || pipeline_fail "$PRODUCT_ID directory is missing: $PRODUCT_DIR"
     [ -f "$PIPELINE_ROOT/$CARGO_MANIFEST" ] \

@@ -411,7 +411,13 @@ impl State<'_> {
             "launch":launch,
             "environment":{"HOME":self.home,"USER":self.operator,"LOGNAME":self.operator,"ANNALS_CONFIG":self.target.join("config.toml")},
             "output":{"stdout":self.target.join("log/inbox.stdout.log"),"stderr":self.target.join("log/inbox.stderr.log")}});
-        if actual["schema_version"] == 1 {
+        if actual["schema_version"] == 3 {
+            let mut manifest: clockwork::api::Manifest = serde_json::from_value(expected)?;
+            manifest
+                .use_runtime_paths()
+                .map_err(|error| failure(&error.to_string()))?;
+            expected = serde_json::to_value(manifest)?;
+        } else if actual["schema_version"] == 1 {
             expected["schema_version"] = json!(1);
         }
         if actual != expected {
@@ -683,7 +689,9 @@ impl State<'_> {
             let public = self.home.join(".local/bin").join(name);
             if exists(&public) {
                 let target = fs::read_link(&public)?;
-                if target != self.target.join("install/current").join(artifact) {
+                if target != self.target.join("install/current").join(artifact)
+                    && target != self.target.join("install/runtime").join(artifact)
+                {
                     return Err(failure(
                         "migration rollback refuses a foreign public command",
                     ));

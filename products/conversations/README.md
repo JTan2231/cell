@@ -22,7 +22,7 @@ Commit the intended changes, then submit them from the Cell root:
 ./ci.sh submit COMMIT
 ```
 
-The [CI manager](../../ci_manager/README.md) integrates, validates, attempts bounded
+The [Telete](../../infrastructure/telete/README.md) integrates, validates, attempts bounded
 repairs, deploys, and emails the outcome.
 
 ## Further documentation

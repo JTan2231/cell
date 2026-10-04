@@ -2,6 +2,7 @@
 //! Definition decoding checks structure; registration also validates local artifacts.
 
 use std::collections::BTreeMap;
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -328,19 +329,55 @@ pub fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> 
 }
 
 impl Manifest {
-    /// Decode the strict schema-one TOML structure. Registration separately verifies artifacts.
+    /// Decode a supported strict TOML structure. Registration separately verifies artifacts.
     ///
     /// # Errors
     /// Returns an error for malformed TOML or an unsupported schema version.
     pub fn from_toml(source: &str) -> Result<Self, Error> {
         let manifest: Self = toml::from_str(source).map_err(|e| Error(e.to_string()))?;
-        if !matches!(manifest.schema_version, 1 | 2) {
+        if !matches!(manifest.schema_version, 1..=3) {
             return Err(Error(format!(
                 "unsupported Clockwork manifest schema {}",
                 manifest.schema_version
             )));
         }
         Ok(manifest)
+    }
+
+    /// Select the product's fixed runtime image while retaining the exact release and hashes.
+    ///
+    /// # Errors
+    /// Rejects a release outside an installation or a launch image outside that release/runtime.
+    pub fn use_runtime_paths(&mut self) -> Result<(), Error> {
+        let release = Path::new(&self.release_root);
+        let runtime = runtime_root(release)?;
+        let path = match &mut self.launch {
+            LaunchImage::Direct { program, .. } => program,
+            LaunchImage::Interpreted { script, .. } => script,
+        };
+        let source = Path::new(path);
+        let relative = source
+            .strip_prefix(release)
+            .or_else(|_| source.strip_prefix(&runtime))
+            .map_err(|_| {
+                Error("launch image must belong to its product release or runtime".into())
+            })?;
+        if relative.as_os_str().is_empty()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(Error(
+                "launch image must name a file within its product runtime".into(),
+            ));
+        }
+        *path = runtime
+            .join(relative)
+            .to_str()
+            .ok_or_else(|| Error("runtime path must be UTF-8".into()))?
+            .into();
+        self.schema_version = 3;
+        Ok(())
     }
 
     /// Encode a definition for the existing registration command.
@@ -362,12 +399,42 @@ impl Manifest {
     }
 }
 
+/// Locate the fixed runtime tree paired with a retained installation release.
+///
+/// # Errors
+/// Rejects paths other than an absolute `install/releases/RELEASE_ID` location.
+pub fn runtime_root(release: &Path) -> Result<PathBuf, Error> {
+    let releases = release
+        .parent()
+        .filter(|path| path.file_name().is_some_and(|name| name == "releases"));
+    let install = releases
+        .and_then(Path::parent)
+        .filter(|path| path.file_name().is_some_and(|name| name == "install"));
+    if !release.is_absolute()
+        || release
+            .components()
+            .any(|component| matches!(component, Component::CurDir | Component::ParentDir))
+        || !release
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(cell_install::valid_release_id)
+    {
+        return Err(Error(
+            "runtime images require an absolute install/releases/RELEASE_ID archive".into(),
+        ));
+    }
+    install.map(|path| path.join("runtime")).ok_or_else(|| {
+        Error("runtime images require an install/releases/RELEASE_ID archive".into())
+    })
+}
+
 /// A client for an explicitly selected Clockwork executable.
 /// Each method has the same effects as its corresponding CLI operation.
 #[derive(Debug, Clone)]
 pub struct Client {
     executable: std::path::PathBuf,
     state_root: Option<std::path::PathBuf>,
+    home: Option<std::path::PathBuf>,
 }
 
 #[allow(clippy::missing_errors_doc)]
@@ -377,6 +444,7 @@ impl Client {
         Self {
             executable: executable.into(),
             state_root: None,
+            home: None,
         }
     }
 
@@ -387,18 +455,33 @@ impl Client {
         self
     }
 
-    fn invoke<T: serde::de::DeserializeOwned>(
-        &self,
-        arguments: &[&std::ffi::OsStr],
-    ) -> Result<T, Error> {
+    /// Use the explicitly selected installation home for all invoked Clockwork operations.
+    #[must_use]
+    pub fn with_home(mut self, home: impl Into<std::path::PathBuf>) -> Self {
+        self.home = Some(home.into());
+        self
+    }
+
+    fn command(&self, arguments: &[&std::ffi::OsStr]) -> std::process::Command {
         let mut command = std::process::Command::new(&self.executable);
         command.env("CHANCERY_USAGE_INTERNAL", "1");
+        if let Some(home) = &self.home {
+            command.env("HOME", home);
+        }
         command.arg("--json");
         if let Some(state_root) = &self.state_root {
             command.arg("--state-root").arg(state_root);
         }
-        let output = command
-            .args(arguments)
+        command.args(arguments);
+        command
+    }
+
+    fn invoke<T: serde::de::DeserializeOwned>(
+        &self,
+        arguments: &[&std::ffi::OsStr],
+    ) -> Result<T, Error> {
+        let output = self
+            .command(arguments)
             .output()
             .map_err(|e| Error(format!("unable to invoke Clockwork: {e}")))?;
         if output.status.success() {
@@ -670,4 +753,34 @@ pub fn report_abend(code: &str, occurrence: &str) -> Result<bool, Error> {
         occurrence.as_ref(),
     ])?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod client_tests {
+    use super::Client;
+    use std::ffi::OsStr;
+
+    #[test]
+    fn explicit_installation_home_is_forwarded_without_changing_default_clients() {
+        let client = Client::new("/fixture/bin/clockwork");
+        assert!(
+            !client
+                .command(&[])
+                .get_envs()
+                .any(|(name, _)| name == "HOME")
+        );
+        let command = client
+            .with_home("/fixture/operator")
+            .command(&["binding".as_ref(), "list".as_ref()]);
+        assert!(
+            command
+                .get_envs()
+                .any(|(name, value)| name == "HOME"
+                    && value == Some(OsStr::new("/fixture/operator")))
+        );
+        assert_eq!(
+            command.get_args().collect::<Vec<_>>(),
+            ["--json", "binding", "list"]
+        );
+    }
 }

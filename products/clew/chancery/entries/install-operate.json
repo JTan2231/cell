@@ -44,6 +44,10 @@
       {
         "status": "declared",
         "statement": "An authorized explicit product selection and required Milieu, Email and Clockwork interfaces are available. Migration of a nonempty schema-one ledger also requires the Platter opportunity reader. Product setup uses ordinary admission; an existing hold can refuse it. The executor adds no dependencies or maintenance holds."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install and recovery require clew/daily-email disabled. They reject an enabled binding and run its disable transition to wait for active processes before runtime publication. They do not select a new definition; select the matching definition before enabling a recovered or updated program."
       }
     ],
     "inputs": [
@@ -86,6 +90,10 @@
       {
         "status": "declared",
         "statement": "Each file-selector replacement is atomic. Failed deployment retains completed file, ledger and schedule changes without automatic retry, rollback or recovery. The product command uses ordinary admission, migrates or initializes state, and retargets the owned daily definition directly while preserving saved or explicit enabled intent and failure incidents. Migration excludes ledger writers and commits schema four, reference associations, aliases and exact write requests in one transaction. Old writers are rejected; frozen email bytes, keys and receipts remain intact."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Clew/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [
@@ -97,7 +105,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one through three. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
+        "statement": "New releases use cell-install-v4; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary use. Contract four supports guarded conversion from ledger schemas one through three. Ordinary commands and direct installation do not migrate state. Recovery requires a matching program and ledger pair; there is no automatic downgrade. Preserve email delivery records."
       },
       {
         "status": "declared",
@@ -173,8 +181,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "use_when": [
@@ -186,7 +194,9 @@
   "outcome": "Installed Clew commands and provider, with product-owned state setup or migration.",
   "effects": [
     "Program deployment selects files and initializes a missing ledger or converts schema one through three to schema four transactionally in place. Existing entry identity, content and exact retry requests remain intact; no thread is invented.",
-    "The product command updates its daily definition directly and preserves captured or explicitly supplied enabled intent and failure incidents. Deployment creates no hold, drains no send and temporarily disables no binding."
+    "The product command updates its daily definition directly and preserves captured or explicitly supplied enabled intent and failure incidents. Deployment creates no hold, waits for owned scheduled activations before runtime publication, and preserves prior enabled intent.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Clew/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Direct install and recovery require clew/daily-email disabled. They reject an enabled binding and run its disable transition to wait for active processes before runtime publication. They do not select a new definition; select the matching definition before enabling a recovered or updated program."
   ],
   "authority": [
     "Clew owns its installation and ledger; the shared coordinator owns deployment ordering.",

@@ -11,7 +11,7 @@
       "Email owns use of a generated or caller-supplied idempotency key for the frozen Resend request and reports the message identifier returned on Resend acceptance.",
       "Email owns synchronous bounded reads of one receiving page or one received message from the configured Resend account and returns provider metadata and available content without local retention.",
       "Email owns explicit private local credential and receiving-domain setup, and bounded receiving-domain discovery without mail reads.",
-      "Email owns immutable current-user program releases, matching published documentation, selector integrity, and verified program installation and recovery. Private account settings remain separate from release selection."
+      "Email owns retained current-user program archives, fixed runtime executable paths, matching published documentation, selector integrity, and program installation and recovery. Private account settings remain separate from release selection."
     ],
     "not_authoritative_for": [
       "The caller owns send authorization, message meaning, product occurrence state, rendering, scheduling, and any supplied idempotency-key identity.",

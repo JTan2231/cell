@@ -16,7 +16,9 @@
   "outcome": "An interpreted Clew state or installation observation and its supported lifecycle and recovery boundaries.",
   "effects": [
     "Init creates empty ledger schema four or checks existing compatible state. Installer inspection reads release metadata; ordinary doctor checks local integrity without reports.",
-    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one, schema-two, or schema-three ledger state to schema four while preserving schedule intent."
+    "Program installation selects immutable programs and the matching provider. Coordinated deployment can initialize or migrate supported schema-one, schema-two, or schema-three ledger state to schema four while preserving schedule intent.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Clew/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Direct install and recovery require clew/daily-email disabled. They reject an enabled binding and run its disable transition to wait for active processes before runtime publication. They do not select a new definition; select the matching definition before enabling a recovered or updated program."
   ],
   "authority": [
     "Clew owns its installation, ledger schema, migration and email admission maintenance. The current user owns access and authorization; the coordinator owns shared deployment ordering.",
@@ -67,8 +69,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "promise": {
@@ -82,6 +84,10 @@
       {
         "status": "declared",
         "statement": "Local state must be private and compatible. Direct installation selects supplied program and provider files. Product deployment setup uses ordinary admission; an existing hold can refuse it. A nonempty schema-one migration additionally requires exact Platter mappings. Deployment creates no hold and drains no email."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install and recovery require clew/daily-email disabled. They reject an enabled binding and run its disable transition to wait for active processes before runtime publication. They do not select a new definition; select the matching definition before enabling a recovered or updated program."
       }
     ],
     "inputs": [
@@ -105,7 +111,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque UUIDs identify immutable cell-install-v3 releases. Package version, feature contract version, ledger schema four and email schema one are independent identities. Maintenance owners are deployment run IDs."
+        "statement": "Opaque UUIDs identify immutable cell-install-v4 releases. Package version, feature contract version, ledger schema four and email schema one are independent identities. Maintenance owners are deployment run IDs."
       }
     ],
     "completeness_and_freshness": [
@@ -124,6 +130,10 @@
       {
         "status": "declared",
         "statement": "Individual file-selector replacements are atomic; failed deployment retains completed changes. The product command initializes or migrates state and selects its daily definition directly under ordinary admission while preserving saved or explicit enabled intent and failure halts. Older-ledger migration excludes writers and commits schema four, application associations, aliases and exact write requests in one transaction. Old writers are rejected afterward. Explicit email maintenance retains its separate owner and admission rules."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Clew/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [
@@ -143,7 +153,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "New releases use cell-install-v3; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one through three. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
+        "statement": "New releases use cell-install-v4; retained earlier formats remain readable. Only ledger schema four, and email schema one are supported for ordinary operations. Coordinated deployment alone migrates ledger schema one through three. Schema-two conversion requires no external reader; schema-one conversion preserves exact legacy mappings. Program recovery preserves state and requires a matching program and ledger pair; no automatic schema downgrade is supported."
       },
       {
         "status": "unspecified",

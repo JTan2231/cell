@@ -1,22 +1,13 @@
 # Operate Telete
 
 Telete is Cell's Rust CI system. Root and product `ci.sh` wrappers select the
-installed `telete` command. Source
-installation does not replace or operate the existing CI manager. Telete uses
-`refs/telete/accepted` and `refs/telete/jobs/` and does not advance development
-`main` or `refs/ci/accepted`.
-
-For the handoff from Python CI, pause and settle its work through `cell-ci`,
-then stop its service. Initialize Telete from the exact final
-`refs/ci/accepted` commit. The Git commit ID identifies the accepted source
-used for merges and change selection. Preserve the Python journal, refs, and
-receipts separately. Telete does not import them. Keep the Python worker
-stopped while Telete owns new delivery work.
+installed `telete` command. Telete uses `refs/telete/accepted` and
+`refs/telete/jobs/`. It does not advance development `main`.
 
 ## Set up the host
 
-Use the built Telete executable for first setup. Installation itself requires
-configured storage, an initialized queue, and a usable signing identity.
+Use the built Telete executable for first setup. Installation requires configured
+storage, an initialized queue, and a usable signing identity:
 
 ```sh
 telete storage configure --volume /Volumes/CellWork
@@ -25,68 +16,21 @@ telete signing create-local
 telete signing status
 ```
 
-Storage setup runs before queue paths are opened. It writes the shared
-current-user `~/Library/Application Support/Cell/workspace.json`, with
-`schema_version: 1`, the exact mount path and `volume_uuid`, and
-`directory: "cell"`. The account database selects the home directory; `HOME`
-and `--state` do not redirect this host file. The volume must be mounted,
-external, writable APFS with ownership enabled. Setup creates a private
-mode-0700 `cell` directory and publishes the mode-0600 selector without
-replacing an existing file. Repeating an identical valid selection succeeds
-without rewriting it. A different selection fails. Status reads the selection
-and current volume observation without creating queue state.
+The selected volume must be mounted, external, writable APFS with ownership
+enabled. Storage publication is create-only. An unavailable volume never
+selects another queue. Restore the selected volume and identity.
 
-Before first storage selection, pause and drain the legacy CI queue, release its
-maintenance owners, stop its service, and settle its deployment. Rust setup
-checks the service and reads its schema-one journal under the existing admission
-and worker locks. It holds the legacy deployment lock and refuses retained
-deployment recovery. It does not run Python, change the legacy journal, move
-data, import job history, or select another accepted baseline. An unavailable
-volume never selects a new queue. Restore the selected volume and its identity.
+Signing uses the shared host policy unless the selected Telete state has an
+explicit override. Keep the exact selected certificate and Keychain identity.
+Before changing signing, pause and drain the queue, stop the worker, and settle
+release publication and Telete and manual deployment recovery. Configuration
+does not do those
+operations for the operator. Failed preflight preserves the policy; interrupted
+initial creation can leave Keychain effects that require explicit inspection
+and selection of that exact identity.
 
-Initial signing creates the same shared Cell identity as Python setup. It writes
-`~/Library/Application Support/Cell/signing.json`, not a Telete state override.
-Creation requires configured storage but no initialized queue. It refuses an
-existing shared or selected Telete policy, or an existing `Cell Local Signing`
-certificate in the login Keychain. An invalid selection is not permission to
-create a replacement.
-
-The certificate uses RSA 3072, SHA-256, 3,650-day validity, and critical
-`CA:FALSE`, digital-signature, and code-signing extensions. Setup imports the
-certificate and key into the current user's login Keychain, authorizes
-`/usr/bin/codesign` for key use, and adds user code-signing trust. Native user
-authorization can be required. The SHA-1 fingerprint selects the exact
-certificate; it is not the certificate signature algorithm. The schema-one
-policy uses the `local` profile and `local.cell` namespace.
-
-Shared signing writers hold the host setup lock, the selected Telete state's
-admission, worker, and deployment locks, and the existing Cell queue admission
-and deployment locks. Both queues must be paused and settled when present.
-Stop the Telete worker before maintenance. Release publication and retained
-deployment recovery must be settled. Settle any other independently configured
-Telete states before changing a shared selection; these commands check the
-selected state and the shared Cell queue, not an inventory of all consumers.
-The commands do not pause, stop, cancel, or recover work for the operator.
-
-Private generation files are removed on ordinary completion or failure. Only
-Keychain retains the key. Setup preflights the identity before publishing the
-policy. Keychain changes and file publication are not one transaction: a failure
-or timeout can leave an imported certificate or key without configuration.
-Inspect the reported fingerprint and Keychain effects. Do not delete or
-regenerate the identity to repeat creation. Once that exact key is usable,
-select it explicitly with:
-
-```sh
-telete signing configure --host --certificate-sha1 FINGERPRINT \
-  --keychain /absolute/login.keychain-db --identifier-namespace local.cell
-```
-
-This command also supports deliberate shared identity changes under the same
-maintenance guards. A failed preflight preserves the prior policy. If key
-import did not complete, configuration alone cannot restore the missing key.
-An abrupt process termination can also leave private generation staging for
-explicit inspection and cleanup. No automatic renewal, identity replacement,
-volume formatting, mounting, ownership change, or journal migration is supplied.
+Read `telete.signing.operate` for the complete shared storage and signing promise,
+configuration format, initial creation, identity selection, and rotation limits.
 
 ## Initialize and control a queue
 
@@ -114,10 +58,29 @@ new claims. Use `telete cancel JOB` for an intended stop at a safe boundary. Use
 60` to observe the same job without resubmission. Status is a CLI observation;
 it is not an Iatreion probe or public CI client.
 
+Use `telete cancel JOB` to abandon one paused blocked validation after its
+bounded dispatcher timed out without an aggregate report. The command requires
+the exact timed-out dispatcher receipt, terminal child evidence, exclusive
+compiler and deployment resources, unchanged accepted base and private source,
+an accepted failure notice, and no other queued work, preparation, acceptance,
+deployment, or unresolved model work. It records the original operation in
+`validation-N.abandoned.json`, clears its unresolved intent, and sets the job
+phase to `cancelled`. The original failed outcome, notification, and process
+records remain retained. Cancellation does not replay validation or claim a
+pass. Submit the intended source with a new request ID for another delivery job.
+
 Reuse `--request-id KEY` only for the same frozen submission. A changed input,
 test policy, deployment selection, repair policy, or notification policy needs
 a new key. New jobs skip tests unless `--run-tests` is supplied. `--no-repair`,
 `--no-deploy`, and `--no-notify` freeze explicit choices for that job.
+
+New jobs with notifications require the public Email command to resolve to the
+regular file at `~/Library/Application Support/Email/install/runtime/bin/email`.
+Telete saves that fixed path in the job policy. Email updates replace the file
+at that path; the policy does not freeze Email release bytes. Install Email with
+fixed runtime support before submitting these jobs. Existing jobs retain their
+saved command paths, including archive paths. Reusing an existing request ID
+returns its original job without selecting a new Email path.
 
 Use `telete maintenance hold --owner OWNER`, `maintenance status`, and
 `maintenance release --owner OWNER` to coordinate requester maintenance. Release
@@ -132,8 +95,8 @@ produce new private candidates. Validation compares each candidate to the same
 base, including deletions and both rename paths.
 
 The validator loads literal product descriptors and Cargo metadata. Telete's
-own descriptor is `infrastructure/telete/product.sh`; it does not register Telete
-with the existing CI inventory. Product, provider, package, and executable
+own descriptor is `infrastructure/telete/product.sh`. Other product descriptors
+remain in `pipeline/products/`. Product, provider, package, and executable
 identities remain separate.
 
 Product changes select their owner. Explicit prompt and shared platform inputs
@@ -161,8 +124,13 @@ directory. Candidate code owns validation. Host Telete code owns promotion,
 production preparation, and signing. Missing candidate support fails explicitly.
 The validator runs native structure, provider, shell syntax, formatting, Clippy,
 selected nextest, and release checks. Deferred release checks run in trusted
-production preparation. No existing Python CI helper or regression runner is
-invoked. Receipts state when tests were skipped.
+production preparation. Receipts state when tests were skipped.
+
+The candidate validator dispatcher has no whole-validation deadline. Individual
+commands retain their positive time limits. Unbounded dispatchers use distinct
+gate identities; retained bounded dispatchers keep their recorded requests and
+deadlines. Process completion and the aggregate validation report remain separate
+requirements for validation success.
 
 Install the pinned nextest runner explicitly with `telete prepare-tools` before
 jobs that run tests. Validation does not download a missing runner.
@@ -258,13 +226,16 @@ retained; settled worktree cleanup does not remove their records.
 Build Telete and invoke `telete install` only when installation is intended. The
 queue must be initialized, paused, and settled first. The
 installer publishes the executing binary and matching embedded provider in its
-own immutable release. It selects `~/.local/bin/telete`, its own Chancery provider,
-and its own `org.cell.telete` user service. Operational state stays external.
-Telete does not install or replace `cell-ci` or its service.
+own retained release archive. It publishes regular executable files at the fixed
+`~/Library/Application Support/Telete/install/runtime/bin/telete` path. Both the
+public `~/.local/bin/telete` command and the `org.cell.telete` user service use
+that runtime file. Updates preserve its actual executable path. Each runtime
+file replacement is atomic; the complete tree is not one atomic update.
+The matching provider directory selector follows the selected retained archive.
+Operational state stays external.
 
 Installation leaves the Telete service stopped. Start it explicitly, then
-resume queue admission. `cell-ci` remains the interface for retained Python
-records; root and product `ci.sh` wrappers do not route to that manager.
+resume queue admission.
 
 Use `telete service status`, `service start`, and `service stop` for this service.
 Service stop requires paused, drained work. It also permits one blocked deployment
@@ -272,8 +243,19 @@ whose exact successful receipt matches its unchanged accepted source and product
 scope, with settled notification and no queued work, unresolved model, active
 operation, or live compiler or deployment child. The stop holds exclusive settled
 resource ownership and preserves the job and receipts for `telete recover JOB`;
-it does not repeat deployment. Program
-replacement and signing maintenance still require paused, drained work. Installation,
+it does not repeat deployment.
+
+Service stop also permits one paused blocked validation with matching job and
+canonical `autofix` reports. The command requires the exact successful unbounded
+dispatcher, the exact retained `autofix.patch`, unchanged accepted base and
+private candidate, a clean worktree, and an accepted settled failure notice.
+It requires no queued work, preparation, acceptance, deployment, unresolved model
+work, or live compiler or deployment child. The stop holds exclusive settled
+resources and preserves the unresolved job, operation, failure, and receipts.
+Use `telete recover JOB` after the service stops to reconcile the retained job.
+Stopping does not settle the job or replay validation.
+
+Program replacement and signing maintenance still require paused, drained work. Installation,
 Semantics project registration, prompt import, queue resume, and live delivery
 are separate operations. A source participation marker does not prove project
-registration. No migration from existing CI journals is supplied.
+registration. No cross-release journal migration window is supplied.

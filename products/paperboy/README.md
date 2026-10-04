@@ -24,4 +24,4 @@ enable JOB_ID`.
 
 - [Manifest, rendering, email, and limits](chancery/manuals/report-send.md)
 - [Installation and schedule control](chancery/manuals/install-operate.md)
-- [CI submission](../../ci_manager/README.md)
+- [CI submission](../../infrastructure/telete/README.md)

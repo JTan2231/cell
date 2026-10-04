@@ -17,7 +17,9 @@
   "effects": [
     "Installation selects a immutable executable and matching complete provider bundle; it initializes no state or schedule.",
     "Definition generation writes a new immutable definition and private logs directory without registration or activation.",
-    "Explicit maintenance holds durable admission. The deploy instruction publishes programs, initializes absent state or updates the Annals path and publishes each selected runner with its intended enabled state under ordinary admission and runner locks."
+    "Explicit maintenance holds durable admission. The deploy instruction publishes programs, initializes absent state or updates the Annals path and publishes each selected runner with its intended enabled state under ordinary admission and runner locks.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Direct install and recovery require both owned Clockwork bindings disabled. They reject enabled bindings and run the disable transition for each retained disabled binding to wait for active processes before runtime publication. They do not select new definitions; select the matching definition before enabling a recovered or updated program."
   ],
   "authority": [
     "Conatus owns installation selection, product maintenance, generated definitions and output. Clockwork owns registration, activation and incidents. Annals and Email own their domain readiness and outcomes."
@@ -69,8 +71,8 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "promise": {
@@ -84,6 +86,10 @@
       {
         "status": "declared",
         "statement": "Installation requires exact candidate binary and matching bundle, the expected current selection and current-user owned paths. Definition generation requires selected installed release, existing state and output parent and a new output file. Activation separately needs initialized product state, ready dependencies and intended schedule authority."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install and recovery require both owned Clockwork bindings disabled. They reject enabled bindings and run the disable transition for each retained disabled binding to wait for active processes before runtime publication. They do not select new definitions; select the matching definition before enabling a recovered or updated program."
       }
     ],
     "inputs": [
@@ -142,6 +148,10 @@
       {
         "status": "declared",
         "statement": "Optional settings state_dir, decisions_config and annals_state_dir are absolute; library and separate enabled/daily_email_enabled select intent. Fresh defaults use installed Annals state, decisions/config.toml and library conatus. An absent binding remains absent unless its enabled setting is supplied; omitted email intent preserves prior selection and intent. Failure leaves completed effects in place. Interruption requires inspection and an explicit next operation, without automatic replay, rollback or recovery."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [

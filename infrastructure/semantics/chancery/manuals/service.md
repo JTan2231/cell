@@ -1,5 +1,22 @@
 # Semantics service and installation guarantees
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Semantics/install/runtime. Public commands use that
+runtime tree; current and previous retain immutable UUID archive selections. Code
+signing and runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
 Semantics installs one immutable release for the current macOS user.
 It owns the public command selectors, its Chancery provider selector, private
 SQLite state, and the exact runner definition bound as `semantics/worker`.
@@ -16,7 +33,7 @@ request JSON. Output selection changes no records, effects, or exit statuses.
 ~/.local/bin/semantics
 ~/.local/bin/semantics-install
 ~/Library/Application Support/Semantics/semantics.db
-~/Library/Application Support/Semantics/install/{current,previous,releases/}
+~/Library/Application Support/Semantics/install/{current,previous,releases/,runtime/}
 ~/Library/Application Support/Semantics/{.clockwork-maintenance,.deployment-maintenance.json}
 ~/Library/Application Support/Annals/decisions/config.toml
 ~/Library/Application Support/Chancery/providers/semantics
@@ -81,9 +98,9 @@ A completely absent installation with no Nucleus database has no jobs to drain.
 
 The immutable `semantics/worker` definition requests one one-shot pass every
 60 seconds, with no run-at-load, overlap `skip`, and no activation timeout.
-It pins `/bin/sh` and the release-local runner by SHA-256 and uses a scrubbed,
-key-free environment. The runner selects only its sibling payload in that
-immutable release, never `current` or the public CLI. A cross-process worker
+It pins `/bin/sh` and the runtime runner by SHA-256 and uses a scrubbed,
+key-free environment. The definition retains the source archive identity. The
+runner selects its sibling payload in `install/runtime`. A cross-process worker
 flock serializes scheduled and manual work. An overlap performs no domain work.
 
 The interval is a scheduling request, not a wake-up deadline. Semantics promises
@@ -113,7 +130,7 @@ Nucleus job. Clockwork owns the resulting halt and notification through Email. O
 INCIDENT_ID` release that incident halt. Deployment, definition switches, project
 resume, and intake retry preserve it. Resume of scheduling creates no domain
 retry and cannot authorize a new request while the prior job remains uncertain.
-Schema-one definitions keep their historical policy until a schema-two definition
+Schema-one definitions keep their historical policy until a schema-two or schema-three definition
 is explicitly selected.
 
 ## Run-owned command maintenance
@@ -158,7 +175,7 @@ files with mode `0600`, no symlink, and one hard link. A receipt requires its ga
 
 The installer records release metadata without candidate/provider version or
 artifact-integrity checks.
-The staged `cell-install-v3` inventory covers payload, installer, static frontend
+The staged `cell-install-v4` inventory covers payload, installer, static frontend
 and worker, unrendered schedule template, and the complete provider bundle.
 Bundle bytes belong to the immutable release.
 The provider selector follows `current` and rolls back with the product.
@@ -166,9 +183,11 @@ Retained format-one and format-two release metadata remains readable.
 
 Release identity includes the unrendered template and runner. Absolute release
 paths and interpreter/runner hashes are rendered after the release identity exists.
-The installer registers the inactive candidate definition, checks the selected
-binding against the current release's exact runner and schedule, disables the
-prior binding, stops any owned legacy LaunchAgent, and suspends public selectors.
+The manual installer computes the candidate definition digest, checks the
+selected binding against the current release's exact runner and schedule,
+disables the prior binding, stops any owned legacy LaunchAgent, and suspends
+public selectors. It publishes the runtime files before it registers and selects
+the candidate definition.
 The selected-definition check is a point-in-time observation; Clockwork supplies
 no compare-and-swap. Concurrent direct mutation of that binding is unsupported.
 
@@ -263,8 +282,10 @@ literal product settings. The command prepares and places release files,
 initializes or migrates the database, registers the worker definition, and
 selects it directly. Native write and publication locks protect those changes.
 
-The command does not acquire application maintenance, drain live or durable
-work, suspend the worker, check dependency readiness, or recover automatically.
+The command suspends its owned worker and waits for active processes before
+publishing runtime files. It restores saved enabled intent after registration.
+It does not acquire application maintenance, drain durable work, check
+dependency readiness, or recover automatically.
 An interrupted command can leave completed effects in place. Inspect its
 retained command log and current selections before a further operation.
 Explicit manual install, recovery and legacy feed cutover keep their documented

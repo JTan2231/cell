@@ -2,16 +2,11 @@ PIPELINE_SCHEMA=1
 PRODUCT_ID=bazaar
 PRODUCT_NAME=Bazaar
 PRODUCT_DIR=infrastructure/bazaar
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='product:bazaar
-chancery-catalog'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES=bazaar
 CARGO_OFFLINE=1
 CI_SHELL_CHECKS='sh|infrastructure/bazaar/release.sh'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='bazaar|Bazaar|package|infrastructure/bazaar/Cargo.toml|bazaar-|1'
 RELEASE_BINARY_CHECKS='bazaar|target/release/bazaar|bazaar
 bazaar|target/release/bazaar-install|bazaar-install'

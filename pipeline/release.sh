@@ -220,7 +220,7 @@ for tool in awk git grep sort python3 mktemp; do
         || release_fail "required tool not found: $tool"
 done
 pipeline_bootstrap_cargo
-storage_environment=$(python3 "$PIPELINE_ROOT/ci_manager/workspace.py" environment) \
+storage_environment=$(python3 "$PIPELINE_ROOT/deployment/workspace.py" environment) \
     || release_fail 'external work storage is unavailable'
 eval "$storage_environment"
 command -v cargo >/dev/null 2>&1 \

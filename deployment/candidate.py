@@ -20,7 +20,7 @@ sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker.client import git, repository_is_clean, source_commit
+from deployment.runtime import git, repository_is_clean, source_commit
 from deployment import signing
 from deployment.inventory import descriptor, product_root
 

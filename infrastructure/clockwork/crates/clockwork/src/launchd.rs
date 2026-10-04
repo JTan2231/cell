@@ -1205,35 +1205,35 @@ fn exact_current_executable(layout: &Layout) -> Result<PathBuf> {
 }
 
 fn verify_installed_binary(layout: &Layout, binary: &Path) -> Result<()> {
-    let release_root = binary
-        .parent()
-        .filter(|parent| parent.file_name().and_then(|name| name.to_str()) == Some("bin"))
-        .and_then(Path::parent)
-        .ok_or_else(|| {
-            Error::new(
-                "clockwork_binary_uninstalled",
-                "binding changes require an installed Clockwork release binary",
-            )
-        })?;
-    let installed_releases = layout.state_root().join("install/releases");
-    if release_root.parent() != Some(installed_releases.as_path()) {
+    let install = layout.state_root().join("install");
+    if binary != install.join("runtime/bin/clockwork") {
         return Err(Error::new(
             "clockwork_binary_uninstalled",
-            "binding changes require a Clockwork binary beneath the installed releases directory",
+            "binding changes require the fixed installed Clockwork runtime binary",
         ));
     }
-    let release_id = release_root
-        .file_name()
-        .and_then(|value| value.to_str())
+    manifest::exact_artifact(binary, "Clockwork runtime", true)?;
+    let spec = clockwork::installation::specification();
+    let selected =
+        cell_install::transaction::inspect_installation(&spec.layout(), layout.home(), &|root| {
+            spec.read_legacy(root)
+        })
+        .map_err(|_| {
+            Error::new(
+                "clockwork_binary_uninstalled",
+                "Clockwork installation selection is unavailable",
+            )
+        })?
+        .current
         .ok_or_else(|| {
             Error::new(
                 "clockwork_binary_uninstalled",
-                "installed Clockwork release directory has no release identity",
+                "Clockwork has no selected release",
             )
         })?;
-    let spec = clockwork::installation::specification();
+    let release_root = install.join("releases").join(&selected.release_id);
     let release =
-        cell_install::transaction::verify_release_at(&spec.layout(), release_root, &|root| {
+        cell_install::transaction::verify_release_at(&spec.layout(), &release_root, &|root| {
             spec.legacy(root)
         })
         .map_err(|_| {
@@ -1242,13 +1242,25 @@ fn verify_installed_binary(layout: &Layout, binary: &Path) -> Result<()> {
                 "Clockwork installed release verification failed",
             )
         })?;
-    if release.release_id != release_id
-        || binary != release_root.join("bin/clockwork")
-        || !release.files.contains_key("bin/clockwork")
-    {
+    if release.release_id != selected.release_id || !release.files.contains_key("bin/clockwork") {
         return Err(Error::new(
             "clockwork_binary_tampered",
             "Clockwork executable does not match its installed release inventory",
+        ));
+    }
+    let runtime_digest = cell_install::file_digest(binary)
+        .map_err(|_| Error::new("clockwork_binary_tampered", "cannot hash Clockwork runtime"))?;
+    let retained_digest =
+        cell_install::file_digest(&release_root.join("bin/clockwork")).map_err(|_| {
+            Error::new(
+                "clockwork_binary_tampered",
+                "cannot hash retained Clockwork image",
+            )
+        })?;
+    if runtime_digest != retained_digest {
+        return Err(Error::new(
+            "clockwork_binary_tampered",
+            "Clockwork runtime does not match the selected retained release",
         ));
     }
     Ok(())

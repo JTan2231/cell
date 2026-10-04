@@ -1,28 +1,29 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 3,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Operate the independent Rust Telete queue",
+  "title": "Operate the Rust Cell CI queue",
   "summary": "Configure shared Cell host storage and signing, then submit committed source to Telete for native validation, repair, signed preparation, deployment, and notification.",
   "use_when": [
     "Operate an explicitly initialized Telete installation.",
     "Configure the shared external work volume or explicitly create or select the shared Cell signing identity through Rust host setup."
   ],
   "do_not_use_when": [
-    "Operate or mutate retained Python CI jobs, records, or service."
+    "Infer product health or final inbox delivery from CI completion."
   ],
   "outcome": "Telete records the selected host configuration or retains the exact source delivery outcome and its separate deployment and notification observations.",
   "effects": [
     "Creates private Git candidates and advances refs/telete/accepted.",
     "Runs selected gates, provider calls, native signing, and explicitly selected product deployment instructions.",
-    "Explicit storage and signing commands publish shared current-user Cell host settings; initial signing imports one certificate and private key and adds user code-signing trust."
+    "Explicit storage and signing commands publish shared current-user Cell host settings; initial signing imports one certificate and private key and adds user code-signing trust.",
+    "Guarded cancellation retains a timed-out validation operation in an abandonment record before clearing unresolved intent and setting the job phase to cancelled; the original failure and notification remain retained."
   ],
   "authority": [
     "Telete records and runtime correlation checks decide source acceptance.",
     "Each provider and product retains its own execution, transport, installation, and domain authority.",
-    "Host setup checks existing CI state under its compatible locks without operating that manager or changing its journal."
+    "Telete owns the shared current-user storage and signing selectors; Keychain retains private-key authority."
   ],
   "success": [
     "The retained job reaches its terminal outcome with all required operations settled.",
@@ -31,14 +32,16 @@
   "failure_and_recovery": [
     "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
     "Service stop also permits a paused blocked deployment with an exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources; the job remains retained for explicit recovery without deployment replay.",
-    "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection."
+    "Service stop permits one paused blocked validation with exact completed Autofix evidence and settled resources; it preserves the unresolved job for explicit recovery without validator replay.",
+    "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection.",
+    "Cancellation may abandon one paused blocked validation without an aggregate report only after exact timed-out dispatcher and terminal child evidence, exclusive resources, unchanged accepted base and private source, a settled accepted failure notice and absence of preparation, acceptance, deployment or unresolved model work. It does not replay validation or claim a pass."
   ],
   "privacy": [
     "Private source and diagnostics can reach the selected Nucleus model; frozen outcome text can reach Email's configured provider and recipient.",
     "Signing policy retains only the public fingerprint, Keychain path, profile and namespace. Private external generation files are removed on ordinary completion; Keychain retains the key."
   ],
   "does_not_authorize": [
-    "Mutation or import of legacy CI records, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
+    "Remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
   ],
   "interfaces": [
     {
@@ -87,6 +90,11 @@
       "id": "usher.recognition.inspect",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.signing.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "promise": {
@@ -103,7 +111,11 @@
       },
       {
         "status": "declared",
-        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled and a stopped, paused, drained legacy CI service and queue with settled deployment. Signing requires configured storage, usable current-user Keychain access, paused settled queues, stopped selected Telete worker, and settled release publication and deployment."
+        "statement": "New notifying jobs require the public Email command to resolve to the regular Email/install/runtime/bin/email file. Install Email with fixed runtime support before submitting these jobs."
+      },
+      {
+        "status": "declared",
+        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled. Signing requires configured storage, usable current-user Keychain access, paused drained Telete work, a stopped selected worker, and settled release publication and Telete and manual deployment recovery."
       }
     ],
     "inputs": [
@@ -148,6 +160,10 @@
       {
         "status": "declared",
         "statement": "Volume UUID and mount path identify storage. Certificate SHA-1 selects the certificate, whose signature uses SHA-256; initial validity is 3650 days with an RSA 3072-bit key."
+      },
+      {
+        "status": "declared",
+        "statement": "Telete retains program archives with opaque release identities. Its regular runtime executable stays at Telete/install/runtime/bin/telete across install and update; the public command and service use that same file."
       }
     ],
     "completeness_and_freshness": [
@@ -173,7 +189,15 @@
       },
       {
         "status": "declared",
-        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses setup, legacy admission/deployment, and selected Telete state locks; configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+        "statement": "A paused service may stop with one blocked validation only after matching job and canonical Autofix reports, its exact successful unbounded dispatcher, exact retained patch, unchanged accepted base and private candidate, clean worktree and settled accepted failure notice are proved. Preparation, acceptance, deployment, unresolved model work and other queued work are absent. Stop holds exclusive settled compiler and deployment resources and changes no job or receipt; installation and signing still require a drained queue."
+      },
+      {
+        "status": "declared",
+        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the shared manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+      },
+      {
+        "status": "declared",
+        "statement": "Timed-out validation abandonment retains the original Operation before clearing unresolved intent. It preserves the original failed outcome, accepted notification, process identities and receipts, advances no accepted source and requires a new request ID for another delivery job."
       }
     ],
     "operational_limits": [
@@ -187,25 +211,41 @@
       },
       {
         "status": "declared",
-        "statement": "Host setup does not format or mount volumes, enable ownership, migrate or import journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state and Cell queue; the operator must settle other independently configured consumers."
+        "statement": "Host setup does not format or mount volumes, enable ownership, migrate journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state; the operator must settle other independently configured consumers."
+      },
+      {
+        "status": "declared",
+        "statement": "The candidate validator dispatcher has no whole-validation deadline. Individual commands retain positive time limits; validation success still requires correlated process completion and an aggregate report."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Telete state and receipts use explicitly checked schema versions independent of existing CI."
+        "statement": "Telete state and receipts use explicitly checked schema versions."
       },
       {
         "status": "declared",
         "statement": "Contract 2 narrows product selection and adds shared platform tests. Validation receipts remain schema 1; retained receipts keep their recorded scope without migration or reinterpretation."
       },
       {
+        "status": "declared",
+        "statement": "Contract 6 saves the fixed Email runtime path for new notifying jobs without freezing Email release bytes. Existing jobs retain their saved command paths and policies, including archive paths; request-ID replay returns the original job without selecting a new provider path."
+      },
+      {
         "status": "unspecified",
-        "statement": "No old-CI journal import or cross-release migration window is supplied."
+        "statement": "No cross-release journal migration window is supplied."
       },
       {
         "status": "declared",
-        "statement": "The Rust host setup uses the existing Cell host formats and schema-one legacy queue maintenance checks. Unknown legacy schemas stop setup without migration. Existing Telete signing overrides retain precedence; configure without --host retains its state-specific behavior."
+        "statement": "Shared workspace.json and signing.json retain their schema-one host formats. Existing Telete signing overrides retain precedence; configure without --host writes a state-specific policy."
+      },
+      {
+        "status": "declared",
+        "statement": "Unbounded dispatcher requests use distinct gate identities. Retained bounded dispatcher requests preserve their recorded deadlines and exact command correlation; a timed-out validation is abandoned only through guarded cancellation."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 7 adds guarded service stop for a blocked completed Autofix without changing journal schemas, settling the job or replaying validation."
       }
     ],
     "reliances": [
@@ -258,15 +298,16 @@
       },
       {
         "status": "declared",
-        "statement": "Host setup relies on compatible Cell schema-one queue records and existing admission, worker, release-publication and deployment locks to preserve the Python setup maintenance boundaries without executing Python.",
-        "target": "ci-manager",
-        "kind": "data"
-      },
-      {
-        "status": "declared",
         "statement": "Initial certificate generation and fingerprint extraction use the installed OpenSSL command.",
         "target": "openssl",
         "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Shared Cell host setup and exact native signing policy use Telete storage and signing commands.",
+        "target": "telete",
+        "kind": "control",
+        "contract": "telete.signing.operate"
       }
     ]
   },

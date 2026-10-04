@@ -125,9 +125,14 @@ and shared schemas remain unchanged. This is not a general pruning API.
 
 The Rust `nucleus-install` executable packages the CLI, daemon, installer, and
 Chancery bundle. Its `install --binary ABS --daemon ABS --codex ABS --bundle ABS`
-command selects a `cell-install-v3` package and invokes the Nucleus service
-installer. Public CLI and daemon copies remain service-owned. `inspect` reads
-release metadata. There are no installer `verify` or `verify-release` commands.
+command selects a `cell-install-v4` package and invokes the Nucleus service
+installer. Public CLI and daemon copies remain service-owned regular files at
+`~/.local/bin/nucleus` and `~/.local/libexec/nucleusd`. Updates preserve those
+actual executable paths. The installer uses the fixed
+`~/Library/Application Support/Nucleus/install/runtime/` tree. The provider
+directory selector uses the selected retained archive; archive UUIDs identify
+retained releases. Each runtime file replacement is atomic; the
+complete tree is not one atomic update. `inspect` reads release metadata. There are no installer `verify` or `verify-release` commands.
 
 Packaging signs the native programs under Cell's configured host identity.
 The service installer copies the CLI and daemon, replaces the LaunchAgent,

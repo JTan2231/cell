@@ -7,24 +7,18 @@ STATUS_COMMAND=krisis
 STATUS_UNITS='krisis/observer|active|krisis/observer|krisis.install.operate
 decisions/observer|retired|decisions/observer|decisions.lifecycle.consume
 decisions/daily-email|retired|decisions/daily-email|decisions.lifecycle.consume'
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='global'
 PRODUCT_ALIASES='krisis decisions'
-CI_GATE_ID=krisis
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES='decisions
 krisis-api'
 CARGO_OFFLINE=0
 CARGO_PATH_PREFIX=/Users/joey/.cargo/bin
 CLIPPY_KEEP_GOING=0
-TEST_NO_FAIL_FAST=0
 CI_SHELL_CHECKS='sh|products/decisions/release.sh
 sh|products/decisions/packaging/macos/krisis
 sh|products/decisions/packaging/macos/krisis-observer'
 CI_PLIST_CHECKS='always|convert|products/decisions/packaging/macos/hooks.json'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='krisis|Krisis|package|products/decisions/crates/decisions/Cargo.toml|krisis-|1'
 RELEASE_COMPANION_MANIFESTS='krisis|products/decisions/crates/krisis-api/Cargo.toml'
 RELEASE_METADATA_NO_DEPS=1

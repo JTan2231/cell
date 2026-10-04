@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Independent Rust CI orchestration for Cell"
+description = "Rust CI orchestration for Cell"
 
 [dependencies]
 anyhow = "1.0"

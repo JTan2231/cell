@@ -59,7 +59,7 @@ The import file must contain UTF-8 JSON with schema version 1, a nonempty
 
 Each entry contains one unique exact `id` and complete string `content`.
 The ID's first dot-separated segment must be `annals`, `conatus`, `krisis`,
-`semantics`, `platter`, `weaver`, `emt`, or `ci-manager`. Duplicate IDs and
+`semantics`, `platter`, `weaver`, `emt`, or `telete`. Duplicate IDs and
 unknown owners fail before state initialization. The example shows the input
 shape; import a complete set for every supplied owner. A partial set removes
 omitted component keys from that owner's next selection.
