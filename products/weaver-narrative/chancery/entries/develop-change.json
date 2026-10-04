@@ -52,9 +52,9 @@
       "max_contract_exclusive": 6
     },
     {
-      "id": "ci-manager.queue.operate",
-      "min_contract": 10,
-      "max_contract_exclusive": 12
+      "id": "telete.queue.operate",
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "semantics.repository.explore",
@@ -148,9 +148,9 @@
       {
         "status": "declared",
         "statement": "The installed CI manager owns serial integration, validation, bounded repair, exact-source deployment and the deterministic outcome email.",
-        "target": "ci-manager",
+        "target": "telete",
         "kind": "control",
-        "contract": "ci-manager.queue.operate"
+        "contract": "telete.queue.operate"
       }
     ]
   },

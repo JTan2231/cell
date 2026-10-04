@@ -25,7 +25,7 @@ work. Program recovery does not restore Milieu data.
 
 ## Install the candidate
 
-Use `cell-ci submit COMMIT` for ordinary CI delivery. The manager integrates,
+Use `telete submit COMMIT` for ordinary CI delivery. The manager integrates,
 validates, attempts bounded repairs, deploys, and emails the outcome. For an
 explicitly authorized manual installation or recovery:
 

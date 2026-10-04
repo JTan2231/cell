@@ -40,7 +40,7 @@ agent. Protect private stored content outside source and release files.
 Use ordinary CI delivery when a committed change is ready:
 
 ```sh
-cell-ci submit COMMIT
+telete submit COMMIT
 ```
 
 Verify the retained manager outcome. The manager integrates, validates, attempts

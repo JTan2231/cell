@@ -353,8 +353,6 @@ fn select(
     }
     for path in operational {
         if path.starts_with("pipeline/")
-            || path.starts_with("ci_manager/")
-            || path.starts_with("ci_broker/")
             || path.starts_with("infrastructure/telete/")
             || path == "ci.sh"
         {
@@ -367,7 +365,6 @@ fn select(
             && Path::new(path)
                 .extension()
                 .is_some_and(|extension| extension == "json")
-            || path == "pipeline/integrated.sh"
             || (path.starts_with("pipeline/products/")
                 && Path::new(path)
                     .extension()
@@ -830,17 +827,12 @@ fn catalog(paths: &Paths, repo: &Path, inventory: &Inventory, executable: &Path)
         .tempdir_in(paths.root.join("scratch"))?;
     let mut entries = Vec::new();
     let mut ids = BTreeSet::new();
-    let mut bundles: Vec<_> = inventory
+    let bundles: Vec<_> = inventory
         .products
         .iter()
         .flat_map(|product| &product.providers)
         .map(|provider| (provider.id.to_string(), repo.join(&provider.path)))
         .collect();
-    // Existing product contracts refer to this shared source declaration.
-    // Reading its bundle does not operate the old queue or its Python code.
-    if repo.join("ci_manager/chancery/provider.json").is_file() {
-        bundles.push(("ci-manager".into(), repo.join("ci_manager/chancery")));
-    }
     for (id, bundle) in bundles {
         ensure!(ids.insert(id.clone()), "duplicate catalog provider: {id}");
         std::os::unix::fs::symlink(&bundle, registry.path().join(&id))?;

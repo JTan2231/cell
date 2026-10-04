@@ -2,15 +2,11 @@
 
 Semantics-Project: telete
 
-Keep Telete's delivery workflow independent of the installed Cell CI manager.
-Host setup may write the shared Cell workspace and signing selections. Preserve
-the Python setup guards by reading its schema-one queue under its existing locks
-and checking its service, release-publication locks, and retained deployment.
-Do not mutate its journal or operate its service. Other work uses only Telete's
-state, refs, worktrees, service identity, and executable. Do not import Python
-CI modules or invoke the existing manager, broker, validator, or deployment
-wrappers. Do not submit this implementation to CI or install it without a new
-user request.
+Telete is Cell's CI authority. Use its state, refs, worktrees, service identity,
+and executable for delivery. Host setup owns Cell's shared workspace and signing
+selections. Preserve those formats, the selected volume and certificate identity,
+and Telete's admission, worker, deployment, and release-publication maintenance
+boundaries. Product installation instructions retain their own authority.
 
 Use ordinary Rust data types and runtime correlation checks. Do not add checked
 evidence types, a public CI client, or an Iatreion status integration.

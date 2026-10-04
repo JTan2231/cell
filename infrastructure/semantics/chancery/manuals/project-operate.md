@@ -53,7 +53,7 @@ whose retained recovery requires its contract.
 
 ## Install or update
 
-Use `cell-ci submit COMMIT` for ordinary delivery. For a separately authorized
+Use `telete submit COMMIT` for ordinary delivery. For a separately authorized
 manual installation, select the binary, installer, provider bundle, and Clockwork:
 
 ```sh

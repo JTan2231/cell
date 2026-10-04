@@ -1,6 +1,6 @@
 {
   "id": "bazaar.prompts.import",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -79,7 +79,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The CLI accepts one import JSON path and global --database, defaulting to ~/.local/share/bazaar/bazaar.sqlite3. Rust import takes database and input Paths. Each entry has id and complete content; allowed first ID segments are annals, conatus, krisis, semantics, platter, weaver, emt, and ci-manager. Unknown fields, duplicate IDs, unknown owners, and unsupported or empty imports fail."
+        "statement": "The CLI accepts one import JSON path and global --database, defaulting to ~/.local/share/bazaar/bazaar.sqlite3. Rust import takes database and input Paths. Each entry has id and complete content; allowed first ID segments are annals, conatus, krisis, semantics, platter, weaver, emt, and telete. Unknown fields, duplicate IDs, unknown owners, and unsupported or empty imports fail."
       }
     ],
     "outputs": [

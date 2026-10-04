@@ -1,17 +1,17 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Operate the independent Rust Telete queue",
+  "title": "Operate the Rust Cell CI queue",
   "summary": "Configure shared Cell host storage and signing, then submit committed source to Telete for native validation, repair, signed preparation, deployment, and notification.",
   "use_when": [
     "Operate an explicitly initialized Telete installation.",
     "Configure the shared external work volume or explicitly create or select the shared Cell signing identity through Rust host setup."
   ],
   "do_not_use_when": [
-    "Operate or mutate retained Python CI jobs, records, or service."
+    "Infer product health or final inbox delivery from CI completion."
   ],
   "outcome": "Telete records the selected host configuration or retains the exact source delivery outcome and its separate deployment and notification observations.",
   "effects": [
@@ -22,7 +22,7 @@
   "authority": [
     "Telete records and runtime correlation checks decide source acceptance.",
     "Each provider and product retains its own execution, transport, installation, and domain authority.",
-    "Host setup checks existing CI state under its compatible locks without operating that manager or changing its journal."
+    "Telete owns the shared current-user storage and signing selectors; Keychain retains private-key authority."
   ],
   "success": [
     "The retained job reaches its terminal outcome with all required operations settled.",
@@ -38,7 +38,7 @@
     "Signing policy retains only the public fingerprint, Keychain path, profile and namespace. Private external generation files are removed on ordinary completion; Keychain retains the key."
   ],
   "does_not_authorize": [
-    "Mutation or import of legacy CI records, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
+    "Remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
   ],
   "interfaces": [
     {
@@ -87,6 +87,11 @@
       "id": "usher.recognition.inspect",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.signing.operate",
+      "min_contract": 1,
+      "max_contract_exclusive": 2
     }
   ],
   "promise": {
@@ -103,7 +108,7 @@
       },
       {
         "status": "declared",
-        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled and a stopped, paused, drained legacy CI service and queue with settled deployment. Signing requires configured storage, usable current-user Keychain access, paused settled queues, stopped selected Telete worker, and settled release publication and deployment."
+        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled. Signing requires configured storage, usable current-user Keychain access, paused drained Telete work, a stopped selected worker, and settled release publication and Telete and manual deployment recovery."
       }
     ],
     "inputs": [
@@ -173,7 +178,7 @@
       },
       {
         "status": "declared",
-        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses setup, legacy admission/deployment, and selected Telete state locks; configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the shared manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
       }
     ],
     "operational_limits": [
@@ -187,13 +192,13 @@
       },
       {
         "status": "declared",
-        "statement": "Host setup does not format or mount volumes, enable ownership, migrate or import journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state and Cell queue; the operator must settle other independently configured consumers."
+        "statement": "Host setup does not format or mount volumes, enable ownership, migrate journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state; the operator must settle other independently configured consumers."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Telete state and receipts use explicitly checked schema versions independent of existing CI."
+        "statement": "Telete state and receipts use explicitly checked schema versions."
       },
       {
         "status": "declared",
@@ -201,11 +206,11 @@
       },
       {
         "status": "unspecified",
-        "statement": "No old-CI journal import or cross-release migration window is supplied."
+        "statement": "No cross-release journal migration window is supplied."
       },
       {
         "status": "declared",
-        "statement": "The Rust host setup uses the existing Cell host formats and schema-one legacy queue maintenance checks. Unknown legacy schemas stop setup without migration. Existing Telete signing overrides retain precedence; configure without --host retains its state-specific behavior."
+        "statement": "Shared workspace.json and signing.json retain their schema-one host formats. Existing Telete signing overrides retain precedence; configure without --host writes a state-specific policy."
       }
     ],
     "reliances": [
@@ -258,15 +263,16 @@
       },
       {
         "status": "declared",
-        "statement": "Host setup relies on compatible Cell schema-one queue records and existing admission, worker, release-publication and deployment locks to preserve the Python setup maintenance boundaries without executing Python.",
-        "target": "ci-manager",
-        "kind": "data"
-      },
-      {
-        "status": "declared",
         "statement": "Initial certificate generation and fingerprint extraction use the installed OpenSSL command.",
         "target": "openssl",
         "kind": "external"
+      },
+      {
+        "status": "declared",
+        "statement": "Shared Cell host setup and exact native signing policy use Telete storage and signing commands.",
+        "target": "telete",
+        "kind": "control",
+        "contract": "telete.signing.operate"
       }
     ]
   },

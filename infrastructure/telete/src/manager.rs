@@ -1,4 +1,4 @@
-//! Independent serial CI orchestration, with intent retained before effects.
+//! Serial CI orchestration, with intent retained before effects.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -361,7 +361,9 @@ pub(crate) fn require_service_stoppable(paths: &Paths) -> Result<()> {
     }
     let (store, config) = configured(paths)?;
     ensure!(store.paused()?, "pause Telete before stopping its service");
-    let job = store.active()?.context("Telete has unsettled queued work")?;
+    let job = store
+        .active()?
+        .context("Telete has unsettled queued work")?;
     ensure!(
         job.phase == Phase::Blocked
             && job.stopped_phase == Some(Phase::Deploying)

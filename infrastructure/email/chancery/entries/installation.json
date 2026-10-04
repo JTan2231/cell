@@ -130,7 +130,7 @@
       {
         "status": "declared",
         "statement": "Ordinary committed-candidate delivery uses the Cell CI manager; explicit authorized manual installation uses matching tested artifacts. The manager owns its integration, validation, repair, deployment and outcome-email semantics.",
-        "target": "ci-manager",
+        "target": "telete",
         "kind": "control"
       }
     ]

@@ -34,7 +34,7 @@ behavior.
 
 ## Deliver programs
 
-Use `cell-ci submit COMMIT` for ordinary committed-source delivery. The manager
+Use `telete submit COMMIT` for ordinary committed-source delivery. The manager
 owns integration, validation, deployment, and its outcome email. Inspect the
 retained manager result. Manual installation and recovery use the supplied
 program artifacts under the applicable user authority.

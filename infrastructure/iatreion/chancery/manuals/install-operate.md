@@ -35,7 +35,7 @@ behavior.
 Installation creates no database, service, schedule, cache, or report. It does
 not invoke product status probes or register a semantic project.
 
-Use `cell-ci submit COMMIT` for ordinary delivery and inspect the retained manager
+Use `telete submit COMMIT` for ordinary delivery and inspect the retained manager
 outcome. For manual installation, use supplied absolute binary and bundle paths.
 Run `iatreion --register-usage` separately after selection.
 

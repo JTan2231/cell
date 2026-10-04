@@ -19,7 +19,7 @@ library configuration and schema; and `annals.inbox` for dispatch and recovery.
    provisioning owns only the separate
    decisions state and `annals/decisions-inbox`.
 2. Select binaries and both provider bundles from a validated source candidate.
-   Ordinary delivery uses `cell-ci submit COMMIT`; its manager integrates,
+   Ordinary delivery uses `telete submit COMMIT`; its manager integrates,
    validates, attempts bounded repairs, deploys, and emails the outcome.
    Use the commands below for separately authorized manual operations.
 3. Check the reachable Nucleus binary and socket, compatible Clockwork, and the

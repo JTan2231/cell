@@ -338,7 +338,6 @@ for selection, provider authority, receipts, and recovery.
 New jobs skip tests by default. Use `--run-tests` to run selected Rust tests,
 and prepare the pinned runner with `telete prepare-tools` first. Native
 structure, provider, shell, formatting, lint, build, and signing checks remain.
-Telete does not invoke the Python CI helpers or regression runner.
 
 Telete compiles selected production packages together before acceptance and
 signs declared native commands with the frozen host identity. Deployment
@@ -475,8 +474,7 @@ Conatus, and Semantics use readable text by default. The flag selects each
 product's structured output. Export files and internal installation interfaces
 retain their documented formats.
 
-The retained Python CI manager must request Bazaar `--json` when parsing
-readable-default releases. Telete uses the supported Rust reader. Milieu installation uses the
+Telete uses the supported Bazaar Rust reader. Milieu installation uses the
 native store interface so recovery can retain an older CLI.
 
 ## Serial CI delivery
@@ -518,18 +516,9 @@ explicitly. For Nucleus maintenance, quiesce Telete through its requester
 maintenance controls and preserve exact hold ownership. Telete does not operate
 or recover other requesters.
 
-The retained Python manager remains available as `cell-ci` for its own records.
-Keep its queue paused and service stopped while Telete owns new work. Preserve
-`refs/ci/accepted`, job refs, journal, and receipts. Telete has no journal or
-request-key import. Initial handoff selects an exact accepted Git commit;
-initialization does not validate that source. Do not rewind either accepted
-history or bypass unresolved operations with another state directory.
-
 Read [Telete queue operation](/Users/joey/rust/cell/infrastructure/telete/chancery/manuals/queue-operate.md)
-for current controls and outcomes. Read the
-[retained Python CI contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
-for old job inspection and recovery. Manual release and deployment tooling
-retain their separate interfaces and Python requirements.
+for current controls and outcomes. Manual release and deployment tooling retain
+their separate interfaces and Python requirements.
 
 ## Shared command usage
 

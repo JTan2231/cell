@@ -20,7 +20,7 @@ grant no note, mail, or status authority.
 ## Deploy through the instruction executor
 
 1. Select a validated committed candidate on local main. Use
-   `cell-ci submit COMMIT` for ordinary delivery. The manager integrates,
+   `telete submit COMMIT` for ordinary delivery. The manager integrates,
    validates, attempts bounded repairs, deploys, and emails the outcome.
 2. Preview a separately authorized manual deployment with `./deploy.sh plan clew`.
    Confirm the explicit product selection and instruction order. Add any required

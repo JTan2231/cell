@@ -51,9 +51,9 @@ fn layout() -> InstallLayout {
     }
 }
 
-fn legacy(_: &Path) -> cell_install::Result<cell_install::ReleaseInfo> {
+fn unsupported_format(_: &Path) -> cell_install::Result<cell_install::ReleaseInfo> {
     Err(cell_install::Error::new(
-        "Telete has no legacy installation format",
+        "unsupported Telete installation format",
     ))
 }
 
@@ -91,7 +91,8 @@ fn installed(paths: &Paths) -> Result<cell_install::InstallSnapshot> {
         receipt["state"].as_str() == paths.root.to_str(),
         "installed Telete service belongs to another state selection"
     );
-    let snapshot = cell_install::inspect_installation(&layout(), &signing::home()?, &legacy)?;
+    let snapshot =
+        cell_install::inspect_installation(&layout(), &signing::home()?, &unsupported_format)?;
     ensure!(
         snapshot.current.is_some(),
         "Telete program selection is absent"
@@ -207,7 +208,7 @@ pub(crate) fn install(paths: &Paths) -> Result<Value> {
     )]);
     // The documentation is compiled into the running binary. Publication never
     // discovers provider bytes through the changing source checkout.
-    let assets: [(&str, &[u8]); 4] = [
+    let assets: [(&str, &[u8]); 6] = [
         ("provider.json", include_bytes!("../chancery/provider.json")),
         ("overview.md", include_bytes!("../chancery/overview.md")),
         (
@@ -217,6 +218,14 @@ pub(crate) fn install(paths: &Paths) -> Result<Value> {
         (
             "manuals/queue-operate.md",
             include_bytes!("../chancery/manuals/queue-operate.md"),
+        ),
+        (
+            "entries/signing-operate.json",
+            include_bytes!("../chancery/entries/signing-operate.json"),
+        ),
+        (
+            "manuals/signing-operate.md",
+            include_bytes!("../chancery/manuals/signing-operate.md"),
         ),
     ];
     for (name, bytes) in assets {
@@ -268,13 +277,13 @@ pub(crate) fn install(paths: &Paths) -> Result<Value> {
         )]),
     };
     let layout = layout();
-    let before = cell_install::inspect_detached_installation(&layout, &home, &legacy)?;
+    let before = cell_install::inspect_detached_installation(&layout, &home, &unsupported_format)?;
     let prepared = cell_install::prepare_release(&layout, &home, &plan)?;
     ensure!(
         signing::selected(paths)? == policy,
         "signing selection changed during Telete installation"
     );
-    let mut transaction = cell_install::lock_installation(&layout, &home, &legacy)?;
+    let mut transaction = cell_install::lock_installation(&layout, &home, &unsupported_format)?;
     transaction.recheck(&before)?;
     let receipt = transaction.publish(&prepared, &before, |_| Ok(()))?;
     let result = json!({"schema":1,"state":paths.root,"label":LABEL,"release_id":prepared.info.release_id,"selection":receipt,"service_started":false,"paused":true});
@@ -332,7 +341,6 @@ mod tests {
         assert!(text.contains(
             "<string>--state</string><string>/Volumes/Work/telete-x</string><string>worker</string>"
         ));
-        assert!(!text.contains("cell-ci"));
         assert!(plist(Path::new("relative"), Path::new("/state")).is_err());
     }
     #[test]

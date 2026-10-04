@@ -75,9 +75,9 @@
   ],
   "dependencies": [
     {
-      "id": "ci-manager.signing.operate",
+      "id": "telete.signing.operate",
       "min_contract": 1,
-      "max_contract_exclusive": 4
+      "max_contract_exclusive": 2
     }
   ],
   "promise": {
@@ -207,9 +207,9 @@
       {
         "status": "declared",
         "statement": "Build packaging relies on Cell signing instructions for exact certificate selection and permanent product/artifact identifiers. Service installation does not read or change that policy.",
-        "target": "ci-manager",
+        "target": "telete",
         "kind": "authority",
-        "contract": "ci-manager.signing.operate"
+        "contract": "telete.signing.operate"
       },
       {
         "status": "declared",

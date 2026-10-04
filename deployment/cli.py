@@ -25,9 +25,9 @@ sys.dont_write_bytecode = True
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ci_broker import client as ci_client
-from ci_broker.broker import MINIMAL_ENVIRONMENT, process_token
-from ci_manager import workspace
+from deployment import runtime
+from deployment.runtime import MINIMAL_ENVIRONMENT, process_token
+from deployment import workspace
 from deployment import candidate, manifest
 from deployment.inventory import descriptor, product_directory
 
@@ -151,7 +151,7 @@ def deployment_busy(storage: Path) -> bool:
 
 
 def git(root: Path, *arguments: str) -> str:
-    return ci_client.git(root, *arguments).decode().strip()
+    return runtime.git(root, *arguments).decode().strip()
 
 
 def source_commit(root: Path, selected: str | None = None) -> str:
@@ -299,7 +299,7 @@ def canonical_request(root: Path, products: Sequence[str], selected_commit: str 
                       prepared_build_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
     chosen = plan(root, products, selected_commit)
     request = {"source_commit": chosen["source_commit"], "products": chosen["products"],
-               "repository": str(ci_client.common_git_directory(root)), "settings": settings or {},
+               "repository": str(runtime.common_git_directory(root)), "settings": settings or {},
                "signing_policy": signing_policy}
     if prepared_build is not None:
         snapshot = read_json(prepared_build)
@@ -638,7 +638,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         elif parsed.command in ("reconcile", "acknowledge"):
             result = reconcile_request(state_root(), parsed.request_id, acknowledge=parsed.command == "acknowledge")
         else:
-            root = ci_client.repository_root(Path(__file__).resolve().parent.parent)
+            root = runtime.repository_root(Path(__file__).resolve().parent.parent)
             if parsed.command == "plan":
                 result = plan(root, parsed.products, parsed.source_commit)
             else:

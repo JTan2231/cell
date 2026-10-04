@@ -6,21 +6,16 @@ STATUS_SCHEMA=1
 STATUS_COMMAND=annals
 STATUS_UNITS='annals/inbox|active|annals/inbox|annals.inbox.operate
 annals/decisions-inbox|active|annals/decisions-inbox|annals.inbox.operate'
-CI_RESOURCE_CLASS=heavy
 RELEASE_BRANCH=main
-DEPLOY_PROFILE=rust-install-v1
-DEPLOY_CONFLICT_KEYS='global'
 CARGO_MANIFEST=Cargo.toml
 CARGO_PACKAGES='annals
 annals-api
 annals-usage'
 CARGO_OFFLINE=0
 CLIPPY_KEEP_GOING=1
-TEST_NO_FAIL_FAST=1
 CI_SHELL_CHECKS='sh|products/annals/release.sh'
 CI_PLIST_CHECKS='darwin-if-tool:plutil|lint|products/annals/packaging/launchd/org.annals.inbox.plist
 darwin-if-tool:plutil|lint|products/annals/packaging/launchd/org.annals.inbox.agent.plist'
-CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='annals|Annals|package|products/annals/crates/annals/Cargo.toml|annals-|1
 annals-usage|Annals Usage|package|products/annals/crates/annals-usage/Cargo.toml|annals-usage-|0'
 RELEASE_ALLOW_EXPLICIT_UNIT=1

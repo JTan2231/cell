@@ -137,7 +137,7 @@
     {
       "id": "bazaar.prompts.import",
       "min_contract": 1,
-      "max_contract_exclusive": 2
+      "max_contract_exclusive": 3
     }
   ],
   "does_not_authorize": [

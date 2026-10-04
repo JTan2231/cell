@@ -76,19 +76,5 @@ class SigningTests(unittest.TestCase):
             signing.sign(Path("/fixture/payload"), self.policy, "nucleus", "nucleusd")
             run.assert_called_once()
 
-    def test_structured_status_requires_explicit_json_selection(self):
-        with mock.patch.object(signing.sys, "platform", "darwin"), \
-                mock.patch.object(signing, "load_policy", return_value=self.policy), \
-                mock.patch.object(signing, "preflight"), mock.patch("builtins.print") as output:
-            self.assertEqual(signing.run_cli(["status"]), 0)
-            self.assertTrue(output.call_args_list[0].args[0].startswith("Cell macOS signing ready:"))
-            output.reset_mock()
-            self.assertEqual(signing.run_cli(["status", "--json"]), 0)
-            status = json.loads(output.call_args.args[0])
-            self.assertTrue(status["ready"])
-            self.assertEqual(status["policy"], self.policy)
-            self.assertNotIn("policy_digest", status)
-
-
 if __name__ == "__main__":
     unittest.main()

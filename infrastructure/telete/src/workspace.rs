@@ -172,11 +172,10 @@ fn publish(path: &Path, selection: &Workspace) -> Result<()> {
     Ok(())
 }
 
-fn configure_at<G>(
+fn configure_at(
     path: &Path,
     volume: &Path,
     probe: impl Fn(&Path) -> Result<String>,
-    cutover_guard: impl FnOnce() -> Result<G>,
 ) -> Result<Value> {
     let volume = std::path::absolute(volume)?;
     nonsymbolic_path(&volume)?;
@@ -195,8 +194,6 @@ fn configure_at<G>(
         return Ok(serde_json::to_value(existing)?);
     }
 
-    // Retain the legacy admission, worker, and deployment locks through publication.
-    let _guard = cutover_guard()?;
     paths::ensure_private(&selection.volume.join("cell"))?;
     selected_root(&selection, &probe(&selection.volume)?)?;
     publish(path, &selection)?;
@@ -205,12 +202,7 @@ fn configure_at<G>(
 
 pub(crate) fn configure(volume: &Path) -> Result<Value> {
     let _setup = host_setup::setup_lock()?;
-    configure_at(
-        &config_path()?,
-        volume,
-        probe,
-        host_setup::storage_cutover_guard,
-    )
+    configure_at(&config_path()?, volume, probe)
 }
 
 #[cfg(test)]
@@ -268,7 +260,7 @@ mod tests {
     #[test]
     fn selects_once_and_preserves_the_existing_file_and_workspace() {
         let (_directory, path, volume) = fixture();
-        let configured = configure_at(&path, &volume, fake_probe, || Ok(())).unwrap();
+        let configured = configure_at(&path, &volume, fake_probe).unwrap();
         assert_eq!(configured["schema_version"], 1);
         assert_eq!(configured["directory"], "cell");
         assert_eq!(configured["volume_uuid"], "volume-uuid");
@@ -279,10 +271,7 @@ mod tests {
             0o700
         );
         fs::write(volume.join("cell/retained"), "journal").unwrap();
-        let repeated = configure_at(&path, &volume, fake_probe, || -> Result<()> {
-            panic!("an unchanged selection must not operate the legacy queue")
-        })
-        .unwrap();
+        let repeated = configure_at(&path, &volume, fake_probe).unwrap();
         assert_eq!(configured, repeated);
         assert_eq!(before.ino(), fs::metadata(&path).unwrap().ino());
         assert_eq!(
@@ -290,48 +279,8 @@ mod tests {
             "journal"
         );
         let original = fs::read(&path).unwrap();
-        assert!(configure_at(&path, &volume, |_| Ok("replacement".into()), || Ok(())).is_err());
+        assert!(configure_at(&path, &volume, |_| Ok("replacement".into())).is_err());
         assert_eq!(original, fs::read(&path).unwrap());
-    }
-
-    #[test]
-    fn runs_cutover_guard_before_creating_external_state_and_retains_it() {
-        struct Guard<'a>(&'a Cell<bool>, PathBuf);
-        impl Drop for Guard<'_> {
-            fn drop(&mut self) {
-                assert!(self.1.exists());
-                self.0.set(false);
-            }
-        }
-        let (_directory, path, volume) = fixture();
-        assert!(
-            configure_at(&path, &volume, fake_probe, || -> Result<()> {
-                anyhow::bail!("legacy queue is active")
-            })
-            .is_err()
-        );
-        assert!(!path.exists());
-        assert!(!volume.join("cell").exists());
-
-        let held = Cell::new(false);
-        let probes = Cell::new(0);
-        configure_at(
-            &path,
-            &volume,
-            |_| {
-                if probes.get() > 0 {
-                    assert!(held.get());
-                }
-                probes.set(probes.get() + 1);
-                fake_probe(&volume)
-            },
-            || {
-                held.set(true);
-                Ok(Guard(&held, path.clone()))
-            },
-        )
-        .unwrap();
-        assert!(!held.get());
     }
 
     #[test]
@@ -339,25 +288,20 @@ mod tests {
         let (_directory, path, volume) = fixture();
         let probes = Cell::new(0);
         assert!(
-            configure_at(
-                &path,
-                &volume,
-                |_| {
-                    probes.set(probes.get() + 1);
-                    Ok(if probes.get() == 1 {
-                        "original"
-                    } else {
-                        "replaced"
-                    }
-                    .into())
-                },
-                || Ok(()),
-            )
+            configure_at(&path, &volume, |_| {
+                probes.set(probes.get() + 1);
+                Ok(if probes.get() == 1 {
+                    "original"
+                } else {
+                    "replaced"
+                }
+                .into())
+            })
             .is_err()
         );
         assert!(!path.exists());
         assert!(volume.join("cell").is_dir());
-        configure_at(&path, &volume, fake_probe, || Ok(())).unwrap();
+        configure_at(&path, &volume, fake_probe).unwrap();
     }
 
     #[test]
@@ -371,7 +315,7 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
         assert!(read_selection(&path).is_err());
         fs::remove_file(&path).unwrap();
-        configure_at(&path, &volume, fake_probe, || Ok(())).unwrap();
+        configure_at(&path, &volume, fake_probe).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
         assert!(read_selection(&path).is_err());
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();

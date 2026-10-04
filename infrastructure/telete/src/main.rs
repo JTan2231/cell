@@ -20,7 +20,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "telete", version, about = "Independent Rust CI for Cell")]
+#[command(name = "telete", version, about = "Rust Cell CI")]
 struct Cli {
     /// Separate Telete directory inside the configured external workspace.
     #[arg(long, global = true)]
@@ -38,7 +38,7 @@ enum Command {
         #[command(subcommand)]
         command: Storage,
     },
-    /// Create a paused independent queue with an explicitly selected baseline.
+    /// Create a paused queue with an explicitly selected baseline.
     Init {
         #[arg(long)]
         repo: PathBuf,
@@ -110,7 +110,7 @@ enum Command {
     },
     /// Install the pinned native test runner on the external workspace.
     PrepareTools,
-    /// Inspect Telete gate records without calling the existing broker.
+    /// Inspect Telete gate records.
     Gates,
     #[command(hide = true)]
     InternalValidate {

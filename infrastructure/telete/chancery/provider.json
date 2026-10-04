@@ -8,10 +8,10 @@
   "promise_scope": {
     "authoritative_for": [
       "Telete queue records, private candidates, and guarded advancement of refs/telete/accepted.",
-      "Explicit shared Cell external-workspace and signing setup under compatible maintenance guards."
+      "Shared Cell external-workspace selection and native signing policy under Telete maintenance guards."
     ],
     "not_authoritative_for": [
-      "Existing Cell CI state, provider runtime outcomes, product domain state, and final inbox delivery."
+      "Provider runtime outcomes, product domain state, and final inbox delivery."
     ],
     "inventory": {
       "covers": [
@@ -20,7 +20,7 @@
       ],
       "completeness": "complete",
       "excludes": [
-        "A public Rust CI client, Iatreion status probes, checked evidence types, remote Git publication, and mutation or import of legacy CI records."
+        "A public Rust CI client, Iatreion status probes, checked evidence types, and remote Git publication."
       ]
     },
     "shared_access_and_trust": [
@@ -31,7 +31,7 @@
       "Retained source, prompts, diagnostics, requests, and receipts are private operational records."
     ],
     "compatibility_and_retirement": [
-      "Telete journal and receipt schemas are independent from the existing CI manager."
+      "Telete journal and receipt schemas are checked explicitly; the shared host workspace and signing formats remain schema one."
     ],
     "operational_limits": [
       "One delivery lifecycle, one heavy gate, two light gates; no completion-time guarantee."
@@ -39,6 +39,7 @@
   },
   "overview": "overview.md",
   "entries": [
-    "entries/queue-operate.json"
+    "entries/queue-operate.json",
+    "entries/signing-operate.json"
   ]
 }

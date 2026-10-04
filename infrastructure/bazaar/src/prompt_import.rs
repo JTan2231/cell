@@ -51,7 +51,7 @@ pub fn import(database: &Path, input: &Path) -> Result<ImportReport> {
                 | "platter"
                 | "weaver"
                 | "emt"
-                | "ci-manager"
+                | "telete"
         ) || !seen.insert(entry.id.clone())
         {
             return Err(Error::Invalid(

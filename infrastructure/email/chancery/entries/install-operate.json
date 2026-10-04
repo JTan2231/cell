@@ -141,7 +141,7 @@
       {
         "status": "declared",
         "statement": "Ordinary delivery relies on the installed serial CI manager contract and its retained outcome; this procedure does not perform its workflow.",
-        "target": "ci-manager",
+        "target": "telete",
         "kind": "control"
       }
     ]
