@@ -46,11 +46,24 @@ pub(crate) fn select(repair: bool, notify: bool) -> Result<(Selection, Option<Pr
     );
     ensure!(database.is_absolute(), "Bazaar database must be absolute");
     let email_executable = if notify {
-        let path = home.join(".local/bin/email");
-        Some(
-            path.canonicalize()
-                .context("installed Email wrapper is unavailable")?,
+        let path = home
+            .join(".local/bin/email")
+            .canonicalize()
+            .context("installed Email wrapper is unavailable")?;
+        let runtime = cell_install::runtime_root(
+            &email::installation::specification().layout(),
+            &home.canonicalize().context("HOME is unavailable")?,
         )
+        .join("bin/email");
+        ensure!(
+            path == runtime,
+            "install Email at its fixed runtime path before submitting a notifying Telete job"
+        );
+        ensure!(
+            std::fs::symlink_metadata(&path)?.is_file(),
+            "installed Email runtime must be a regular file"
+        );
+        Some(path)
     } else {
         None
     };

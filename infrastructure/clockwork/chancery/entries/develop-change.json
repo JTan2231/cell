@@ -81,13 +81,13 @@
     },
     {
       "id": "clockwork.definitions",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.bindings",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clockwork.activations",
@@ -106,8 +106,8 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "does_not_authorize": [

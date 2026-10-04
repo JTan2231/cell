@@ -245,7 +245,7 @@ pub(crate) fn install(paths: &Paths) -> Result<Value> {
         },
     );
     let home = signing::home()?;
-    let executable = home.join("Library/Application Support/Telete/install/current/bin/telete");
+    let executable = home.join("Library/Application Support/Telete/install/runtime/bin/telete");
     let launchagent = stage.path().join("launchagent.plist");
     fs::write(&launchagent, plist(&executable, &paths.root)?)?;
     files.insert(
@@ -323,12 +323,12 @@ mod tests {
     #[test]
     fn launchagent_has_separate_identity_and_literal_state_arguments() {
         let text = plist(
-            Path::new("/home/a&b/Telete/bin/telete"),
+            Path::new("/home/a&b/Telete/install/runtime/bin/telete"),
             Path::new("/Volumes/Work/telete-x"),
         )
         .unwrap();
         assert!(text.contains("<string>org.cell.telete</string>"));
-        assert!(text.contains("/home/a&amp;b/Telete/bin/telete"));
+        assert!(text.contains("/home/a&amp;b/Telete/install/runtime/bin/telete"));
         assert!(text.contains(
             "<string>--state</string><string>/Volumes/Work/telete-x</string><string>worker</string>"
         ));

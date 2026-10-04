@@ -40,6 +40,35 @@ pub fn apply_with(
     email_binary: &Path,
     executable: &Path,
 ) -> Result<Value> {
+    apply_with_prior(
+        root,
+        manifest,
+        clockwork_binary,
+        email_binary,
+        executable,
+        None,
+    )
+}
+
+/// Stop owned scheduled activations before changing the fixed runtime image.
+pub fn suspend_for_deployment(clockwork_binary: &Path) -> Result<BTreeMap<String, BindingRecord>> {
+    let client = Client::new(clockwork_binary);
+    let prior = bindings(&client)?;
+    for binding in prior.values() {
+        client.disable(&binding.key, None)?;
+    }
+    Ok(prior)
+}
+
+/// Apply candidate definitions with intent captured before deployment suspension.
+pub fn apply_with_prior(
+    root: &Path,
+    manifest: &Manifest,
+    clockwork_binary: &Path,
+    email_binary: &Path,
+    executable: &Path,
+    saved: Option<BTreeMap<String, BindingRecord>>,
+) -> Result<Value> {
     manifest.validate()?;
     if !manifest.jobs.is_empty() {
         crate::runtime::executable(email_binary).context("installed Email wrapper unavailable")?;
@@ -50,7 +79,10 @@ pub fn apply_with(
     }
     let _lock = mutation_lock(root)?;
     let client = Client::new(clockwork_binary);
-    let prior = bindings(&client)?;
+    let prior = match saved {
+        Some(prior) => prior,
+        None => bindings(&client)?,
+    };
     let definitions = manifest
         .jobs
         .iter()
@@ -139,10 +171,15 @@ pub fn definition(
     job.validate(id)?;
     let root = fs::canonicalize(root).context("Paperboy state directory unavailable")?;
     let executable = fs::canonicalize(executable).context("installed Paperboy unavailable")?;
-    let release = executable
-        .parent()
-        .and_then(Path::parent)
-        .context("installed Paperboy release directory missing")?;
+    let home = crate::home()?;
+    let release =
+        fs::canonicalize(home.join("Library/Application Support/Paperboy/install/current"))
+            .context("installed Paperboy release directory missing")?;
+    ensure!(
+        executable
+            == home.join("Library/Application Support/Paperboy/install/runtime/bin/paperboy"),
+        "schedule application requires the stable installed Paperboy executable"
+    );
     let release_id = release
         .file_name()
         .and_then(|name| name.to_str())
@@ -153,7 +190,6 @@ pub fn definition(
     );
     let logs = root.join("logs");
     private_directory(&logs)?;
-    let home = crate::home()?;
     let environment = BTreeMap::from([
         ("HOME".to_string(), path_string(&home)?.to_string()),
         (
@@ -161,11 +197,11 @@ pub fn definition(
             format!("{PATH}:{}", home.join(".local/bin").display()),
         ),
     ]);
-    Ok(Definition {
+    let mut definition = Definition {
         schema_version: 2,
         key: key(id)?,
         release_id: release_id.to_string(),
-        release_root: path_string(release)?.to_string(),
+        release_root: path_string(&release)?.to_string(),
         authority: Authority::CurrentUserBackground,
         overlap: OverlapPolicy::Skip,
         failure: FailurePolicy {
@@ -177,15 +213,17 @@ pub fn definition(
         cwd: path_string(&root)?.to_string(),
         schedule: schedule(&job.schedule),
         launch: LaunchImage::Direct {
-            program: path_string(&executable)?.to_string(),
-            sha256: cell_install::file_digest(&executable)?,
+            program: path_string(&release.join("bin/paperboy"))?.to_string(),
+            sha256: cell_install::file_digest(&release.join("bin/paperboy"))?,
         },
         environment,
         output: Output {
             stdout: path_string(&logs.join(format!("{id}.stdout.log")))?.to_string(),
             stderr: path_string(&logs.join(format!("{id}.stderr.log")))?.to_string(),
         },
-    })
+    };
+    definition.use_runtime_paths()?;
+    Ok(definition)
 }
 
 fn installed_client() -> Result<Client> {
@@ -212,7 +250,11 @@ fn select(
     if let Some(prior) = prior
         && prior.definition_digest.as_deref() == Some(digest)
     {
-        return Ok(prior.clone());
+        let current = client.binding(key)?;
+        if current.definition_digest == prior.definition_digest && current.enabled == prior.enabled
+        {
+            return Ok(current);
+        }
     }
     if prior.is_some_and(|binding| binding.enabled) {
         Ok(client.switch(key, digest)?)

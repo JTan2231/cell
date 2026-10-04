@@ -1,5 +1,27 @@
 # Private state and installation lifecycle
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Clew/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
+Direct install and recovery require clew/daily-email disabled. They reject an enabled
+binding and run its disable transition to wait for active processes before runtime
+publication. They do not select a new definition; select the matching definition before
+enabling a recovered or updated program.
+
 Clew owns its private ledger, retained email occurrences, program selection,
 and email admission maintenance. This feature explains their lifecycle and
 compatibility. Use `chancery show clew.install.operate` for ordered installation,
@@ -71,14 +93,14 @@ package version, feature contract version, and database schema are separate
 identities. Provider pages and overview participate in release identity and
 release selection.
 
-The shared `cell-install-v3` helper selects public commands and the Clew provider
+The shared `cell-install-v4` helper selects public commands and the Clew provider
 with atomic replacements of individual selectors. Failed publication retains
 completed changes. Foreign selectors and stale expected selections stop
 publication. The installer accepts `--home ABSOLUTE_PATH` and
 `--expected-current absent|releases/ID`. Direct installation selects program
 files only. It does not initialize or migrate state.
 
-Program recovery selects a retained `cell-install-v3` release and
+Program recovery selects a retained `cell-install-v4` release and
 preserves separate ledger and email state. It does not restore, delete, or rewrite
 rows, retry uncertain mail, or approve a scheduling incident. No older
 installation format or automatic schema downgrade is supported. Preserve
@@ -90,7 +112,7 @@ The deployment command captures `clew/daily-email`, selects program files, and
 enters ordinary admission. It initializes empty schema-four state, migrates
 supported schema-one, schema-two, or schema-three state, or opens compatible state. It then
 retargets and selects the owned daily definition directly. Deployment creates no
-hold, drains no send, and temporarily disables no binding.
+hold, waits for owned scheduled activations before runtime publication, and preserves prior enabled intent.
 
 Omitted `daily_email_enabled` preserves saved intent; an absent binding stays
 absent. Explicit true grants standing authority for the `clew.digest.email`

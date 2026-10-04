@@ -56,7 +56,7 @@ config to Annals; it never chooses a library by fallback or `--library`.
 ## Prepare and final cutover
 
 Preparation is the default. It installs the immutable release,
-registers its Clockwork definition, prepares private logs,
+computes its Clockwork definition digest, prepares private logs,
 and deliberately leaves the maintenance marker in place. It does not change
 the current release, command, provider, hook, database, baseline, or any
 Clockwork binding.
@@ -91,7 +91,7 @@ executable. The deployer selects the active binding, retires owned legacy schedu
 and removes its maintenance marker.
 
 The observer definition runs every 60 seconds with `run_at_load = false`, pins
-the exact release-local runner and interpreter digest, records the selected
+the exact runtime runner and interpreter digest, retains the source archive ID, records the selected
 Codex executable as `CONVERSATIONS_CODEX`, and uses a scrubbed environment. The
 scheduled wrapper refuses a missing, relative, symbolic, or non-executable
 Codex path. It suppresses detailed child errors and emits only a fixed failure
@@ -107,9 +107,11 @@ selects `krisis/observer` directly. Activation preserves an existing write-once
 baseline. The command pins the installed Annals decisions library; it does not
 choose a legacy Semantics activation watermark.
 
-The command does not acquire application maintenance, drain live or durable
-work, suspend scheduling, retire legacy schedules, check readiness, or recover
-automatically. Native state and publication locks protect actual writes.
+The command disables its owned observer and waits for active processes before
+publishing fixed runtime files. It registers the candidate definition after
+publication and restores saved enabled intent. It does not acquire application
+maintenance, drain durable work, retire legacy schedules, check readiness, or
+recover automatically. Native state and publication locks protect actual writes.
 An interrupted command can leave completed effects in place. Inspect its
 retained log, hook, receipt and current selection before a further operation.
 Explicit manual final cutover and recovery keep their documented procedures.

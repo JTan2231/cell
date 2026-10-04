@@ -1,6 +1,6 @@
 {
   "id": "ci-manager.queue.operate",
-  "contract_version": 11,
+  "contract_version": 12,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -250,6 +250,10 @@
       {
         "status": "declared",
         "statement": "The certificate SHA-1 fingerprint selects one signing certificate, not an executable hash algorithm. Cell compares normalized policy objects directly. Stable code identifiers combine the configured namespace, canonical product key, and declared executable key; source version and build path do not enter them."
+      },
+      {
+        "status": "declared",
+        "statement": "Manager recipe schema 3 retains opaque archive UUIDs separately from fixed regular runtime files. The public command, launchd command, and Python bootstrap use ~/.local/share/cell-ci/runtime; updates preserve those actual paths. Recipe schemas 1 and 2 remain readable for migration and recovery."
       }
     ],
     "completeness_and_freshness": [
@@ -299,7 +303,7 @@
       },
       {
         "status": "declared",
-        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation selects immutable program and matching provider bytes, refuses foreign owned paths, and attempts restoration on failure. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its own release bytes."
+        "statement": "Installation normally requires paused admission and no active job. Service stop always requires both conditions. Installation retains an archive, replaces regular wrapper and Python module files at fixed actual paths beneath ~/.local/share/cell-ci/runtime, and selects the matching archived provider. Each runtime file replacement is atomic; the complete product is not one atomic update. It refuses foreign owned paths and attempts to restore prior runtime files, selectors, archive selection and LaunchAgent on failure. An uncatchable crash can leave incomplete runtime files. Service operations and source installation fail closed when those files do not match the selected archive; source installation does not repair the runtime automatically or restart an incoherent runtime. Legacy archive-based executable selectors and services remain readable for migration. After stopping its owned service during installation or rollback, the installer waits up to 10 seconds for the worker lock, refuses to proceed if it remains held, and retains all required checks under the lock after acquisition. The repository wrapper always runs init and install from source and dispatches other manager commands to the installed cell-ci; an installed install command selects its current runtime bytes."
       },
       {
         "status": "declared",
@@ -311,7 +315,7 @@
       },
       {
         "status": "declared",
-        "statement": "For new jobs, confined passing validation enters a supervised preparing phase using signing and build modules pinned in the installed manager release. Deferred release checks compile every selected descriptor package's default library and binary targets in one Cargo invocation with locked dependencies, denied warnings and offline mode when required by a selected product. It prepares checked plus explicitly requested deployment products, runs the declared packaging and native signing instructions under the frozen policy, retains the production receipt, and checks source, product and candidate reference correlation plus policy before accepted-ref compare-and-swap. For deferred checks, the trusted helper retains the preparation result object and the manager compares saved result.json with that snapshot before acceptance. Source compilation failures in a deferred release check use ordinary bounded repair and revalidation against the fixed base. Signing and other preparation failures remain terminal. Tests may be skipped, but this phase may not. The Keychain retains the key; the manager supplies repair agents no private-key material or signing configuration writer."
+        "statement": "For new jobs, confined passing validation enters a supervised preparing phase using signing and build modules selected in the installed manager runtime and replaced only through explicit manager installation. Deferred release checks compile every selected descriptor package's default library and binary targets in one Cargo invocation with locked dependencies, denied warnings and offline mode when required by a selected product. It prepares checked plus explicitly requested deployment products, runs the declared packaging and native signing instructions under the frozen policy, retains the production receipt, and checks source, product and candidate reference correlation plus policy before accepted-ref compare-and-swap. For deferred checks, the trusted helper retains the preparation result object and the manager compares saved result.json with that snapshot before acceptance. Source compilation failures in a deferred release check use ordinary bounded repair and revalidation against the fixed base. Signing and other preparation failures remain terminal. Tests may be skipped, but this phase may not. The Keychain retains the key; the manager supplies repair agents no private-key material or signing configuration writer."
       },
       {
         "status": "declared",
@@ -351,7 +355,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manager release 0.8.2 uses journal schema 1, queue contract 11, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
+        "statement": "Manager release 0.8.3 uses journal schema 1, queue contract 12, committed-range aggregate CI receipt schema 1, production receipt schema 1, signing policy schema 1, and the declared dependency bounds. Installation preserves all frozen job policies. New jobs freeze policy.manifest_executor=1 and consume deployment receipt schema 2. Settled schema-1 outcomes remain readable; an unfinished legacy deployment protocol is unsupported for execution or automatic recovery. Retained jobs without signing_policy do not gain a signing phase; jobs without the refund, test or release_builds_deferred fields preserve their earlier behavior. Drain legacy work before signing adoption or rotation."
       },
       {
         "status": "declared",

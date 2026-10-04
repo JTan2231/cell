@@ -1,5 +1,26 @@
 # EMT worker and installation state
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/EMT/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
+Direct install remains limited to uninitialized EMT state. It rejects an enabled worker
+binding and runs the disable transition for a retained disabled binding to wait for
+active processes before runtime publication.
+
 EMT owns its current-user private configuration, incident and exchange state,
 worker admission, maintenance holds, matched program publication.
 Clockwork owns `emt/worker` scheduling and failure halts. Nucleus owns agent
@@ -106,7 +127,7 @@ content. No future support lifetime or retention horizon is promised.
 ## Matched installation instructions
 
 The installer stages the binary, matching installer and Chancery bundle in an
-immutable `cell-install-v3` release. Before initialization, `emt-install install`
+immutable `cell-install-v4` release. Before initialization, `emt-install install`
 accepts `--binary ABS`, `--bundle ABS`, `--home` and `--expected-current`.
 This installs bytes without initializing state or selecting a schedule. The
 product selector publishes the bundle with its release.

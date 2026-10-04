@@ -119,6 +119,14 @@ test policy, deployment selection, repair policy, or notification policy needs
 a new key. New jobs skip tests unless `--run-tests` is supplied. `--no-repair`,
 `--no-deploy`, and `--no-notify` freeze explicit choices for that job.
 
+New jobs with notifications require the public Email command to resolve to the
+regular file at `~/Library/Application Support/Email/install/runtime/bin/email`.
+Telete saves that fixed path in the job policy. Email updates replace the file
+at that path; the policy does not freeze Email release bytes. Install Email with
+fixed runtime support before submitting these jobs. Existing jobs retain their
+saved command paths, including archive paths. Reusing an existing request ID
+returns its original job without selecting a new Email path.
+
 Use `telete maintenance hold --owner OWNER`, `maintenance status`, and
 `maintenance release --owner OWNER` to coordinate requester maintenance. Release
 only the owner acquired by that operation. A release does not clear operator
@@ -258,8 +266,12 @@ retained; settled worktree cleanup does not remove their records.
 Build Telete and invoke `telete install` only when installation is intended. The
 queue must be initialized, paused, and settled first. The
 installer publishes the executing binary and matching embedded provider in its
-own immutable release. It selects `~/.local/bin/telete`, its own Chancery provider,
-and its own `org.cell.telete` user service. Operational state stays external.
+own retained release archive. It publishes regular executable files at the fixed
+`~/Library/Application Support/Telete/install/runtime/bin/telete` path. Both the
+public `~/.local/bin/telete` command and the `org.cell.telete` user service use
+that runtime file. Updates preserve its actual executable path. Each runtime
+file replacement is atomic; the complete tree is not one atomic update.
+The matching provider directory selector follows the selected retained archive. Operational state stays external.
 Telete does not install or replace `cell-ci` or its service.
 
 Installation leaves the Telete service stopped. Start it explicitly, then

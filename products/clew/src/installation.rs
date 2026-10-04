@@ -147,7 +147,7 @@ fn definition(home: &Path, root: &Path) -> Result<Manifest> {
             && metadata.permissions().mode() & 0o777 == 0o700,
         "Clew logs must be a private regular directory"
     );
-    Ok(serde_json::from_value(json!({
+    let mut manifest: Manifest = serde_json::from_value(json!({
         "schema_version":2,"key":KEY,"release_id":release.release_id,"release_root":release_root,
         "authority":"current-user-background","overlap":"skip",
         "failure":{"on_abend":"halt-until-approved"},"timeout_seconds":180,
@@ -156,7 +156,9 @@ fn definition(home: &Path, root: &Path) -> Result<Manifest> {
         "launch":{"kind":"direct","program":binary,"sha256":binary_hash},
         "environment":{"HOME":home,"PATH":"/usr/bin:/bin:/usr/sbin:/sbin"},
         "output":{"stdout":logs.join("daily-email.out.log"),"stderr":logs.join("daily-email.err.log")}
-    }))?)
+    }))?;
+    manifest.use_runtime_paths()?;
+    Ok(manifest)
 }
 
 pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
@@ -195,20 +197,25 @@ fn deploy_inner(context: &Context) -> Result<()> {
     )?;
     let root = crate::state_dir(&context.home);
     let schedule = ScheduleState::capture_installed(&context.home, KEY)?;
+    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+        .with_home(&context.home);
+    schedule.suspend(&clockwork, KEY)?;
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     let _admission = crate::gate(&root).enter()?;
     migrate_if_needed(&root, &context.home)?;
     crate::store::Store::initialize(&root)?;
     if schedule.binding.is_some() || settings.daily_email_enabled.is_some() {
-        let clockwork = Client::new(context.dependency_binary("clockwork")?);
+        let clockwork =
+            Client::new(context.dependency_binary("clockwork")?).with_home(&context.home);
         let executable = fs::canonicalize(context.home.join(".local/bin/clew"))?;
-        let release = executable
-            .parent()
-            .and_then(Path::parent)
-            .context("Clew release missing")?;
+        let release = fs::canonicalize(
+            context
+                .home
+                .join("Library/Application Support/Clew/install/current"),
+        )?;
         let manifest = schedule.retarget(
             definition(&context.home, &root)?,
-            release,
+            &release,
             &executable,
             cell_install::file_digest(&executable)?,
         )?;

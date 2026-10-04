@@ -1,6 +1,6 @@
 {
   "id": "bazaar.install.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -55,7 +55,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque UUID release IDs select immutable program files. Database schema, release version and string versions are independent."
+        "statement": "Opaque UUID release IDs select retained program archives. Executable files run at fixed actual paths beneath Bazaar/install/runtime. Database schema, release version and string versions are independent."
       }
     ],
     "access": [
@@ -77,7 +77,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Bazaar accepts database schema one. New releases use cell-install-v3; retained earlier formats remain readable. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
+        "statement": "Bazaar accepts database schema one. New releases use cell-install-v4; retained earlier formats remain readable. Foreign, nonempty uninitialized, and unsupported databases are refused without migration. Program rollback does not restore older data."
       }
     ],
     "reliances": [
@@ -113,7 +113,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Shared cell-install-v3 file transactions select matching programs and provider. Init preserves existing versions and can complete interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. No daemon or scheduler is installed."
+        "statement": "Shared cell-install-v4 file transactions select matching programs and provider. Init preserves existing versions and can complete interrupted empty initialization. Compatible program upgrade and recovery preserve the separate database. No daemon or scheduler is installed."
       }
     ]
   },
@@ -145,8 +145,8 @@
   "dependencies": [
     {
       "id": "bazaar.installation",
-      "min_contract": 3,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     }
   ],
   "runtime": "interactive_agent",

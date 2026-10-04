@@ -1,6 +1,6 @@
 {
   "id": "clockwork.definitions",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -71,11 +71,15 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Supported manifest schemas one and two supply stable owner/name key, exact caller-published release ID and canonical release root, direct or interpreted pinned launch images, literal arguments, scrubbed non-secret environment, canonical cwd, private distinct outputs, interval or daily local-calendar trigger, current-user-background authority, skip overlap, optional timeout, and schema-two failure configuration."
+        "statement": "Supported manifest schemas one, two, and three supply stable owner/name key, exact caller-published release ID and canonical release root, direct or interpreted pinned launch images, literal arguments, scrubbed non-secret environment, canonical cwd, private distinct outputs, interval or daily local-calendar trigger, current-user-background authority, skip overlap, optional timeout, and schema-two failure configuration."
       },
       {
         "status": "unsupported",
         "statement": "PATH lookup, shell strings, mutable selectors, interpolation, inherited environment, implicit shebang choice, literal -c, secrets, and caller runtime argv are unsupported."
+      },
+      {
+        "status": "declared",
+        "statement": "Schema three keeps release_root at install/releases/RELEASE_ID and admits only the exact sibling install/runtime image at the same relative artifact path. Runtime and retained archive images must match the frozen SHA-256, and current must select that exact archive. Both runtime tree and image are canonical owned paths without symbolic links."
       }
     ],
     "outputs": [
@@ -124,6 +128,10 @@
       {
         "status": "declared",
         "statement": "Identical normalized registration is idempotent; changed meaning creates a new definition and requires explicit binding selection. Existing definitions and history are not rewritten."
+      },
+      {
+        "status": "declared",
+        "statement": "Replacing runtime bytes requires a new definition and exact selected release. A stale schema-three definition refuses activation even when its runner hash is unchanged. Recovery publishes retained release bytes to the fixed runtime before selecting the old definition. Schemas one and two retain archive-local launch paths and original identity."
       }
     ],
     "operational_limits": [
@@ -139,7 +147,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Manifest schemas one and two, SQLite schema two, provider release, product release identity and definition digest are independent. Schema-one definitions retain digest and legacy behavior after storage migration."
+        "statement": "Manifest schemas one, two, and three, SQLite schema two, provider release, product release identity and definition digest are independent. Schema-one definitions retain digest and legacy behavior after storage migration."
       },
       {
         "status": "unspecified",

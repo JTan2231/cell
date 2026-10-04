@@ -35,7 +35,7 @@
     "A failed observation is durably retained on its first processing error. Saved conversation read failures (document_source_unavailable) return zero and permit later scheduled work. Other observation failures return nonzero and begin a pending Clockwork failure episode; the shared service-health threshold governs the scheduling halt. Historical failure counts do not determine current worker health or create new incidents."
   ],
   "failure_and_recovery": [
-    "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
+    "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "The full frozen conversation must fit the prompt bound. Oversized sources fail without truncation; no context expansion or content-fitness check is imposed.",
     "An observation fails on its first returned processing error. Explicit retry resumes an ambiguous request or acknowledgement with the same frozen run and job; saved results remain valid after later runtime failure.",
     "An Annals delivery error marks its observation failed and retains exact pending bytes. Failed observations and their documents are excluded from automatic work until explicit retry; other scheduled work waits for Clockwork continuation.",
@@ -64,8 +64,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "bazaar.string.read",
@@ -225,7 +225,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Product-owned schema-two schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
+        "statement": "Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned."
       },
       {
         "status": "declared",

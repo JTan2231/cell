@@ -60,7 +60,8 @@ are added. Use the retained manager outcome to distinguish delivery stages.
    /Users/joey/.local/bin/chancery resolve mantic.forecast.calculate
    ```
 
-Successful selection reports the intended release. `mantic config list` verifies
+Successful selection reports the intended archive and publishes its bytes at
+fixed runtime paths. `mantic config list` verifies
 that the selected database can be read. Catalog checks verify publication only;
 they do not prove a forecast or authorize adding definitions.
 

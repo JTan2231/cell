@@ -2,7 +2,7 @@
 
 Mantic is a short-lived local Rust CLI. It has no daemon, LaunchAgent, automatic
 schedule, credential, model, or network integration. Installation selects one
-immutable program release and its matching provider bundle. Definitions live
+retained program archive and its matching provider bundle. Definitions live
 outside that release in `~/Library/Application Support/Mantic/mantic.db`.
 
 ## Installation interfaces
@@ -31,12 +31,17 @@ retained runtime database override.
 The installer retains releases beneath
 `~/Library/Application Support/Mantic/install/releases/UUID`. Each release
 contains its programs, recorded file inventory and modes, and provider bundle
-under `share/chancery/mantic`. It selects the owned `current` release and owns
+under `share/chancery/mantic`. It copies selected files into the fixed
+`~/Library/Application Support/Mantic/install/runtime/` tree. Runtime executables
+are regular files; update and recovery replace them at the same actual paths.
+Each file replacement is atomic; the complete tree is not one atomic update.
+`current` records the selected archive and `previous` retains the prior archive.
+The installer owns
 `~/.local/bin/mantic` and `~/.local/bin/mantic-install`.
 
 The single Mantic provider selector is
 `~/Library/Application Support/Chancery/providers/mantic`. It follows Mantic's
-current release. Installation rejects a pre-existing selector owned by something
+current retained archive. Installation rejects a pre-existing selector owned by something
 else. Product and provider bytes remain useful when the Chancery reader is absent.
 Mantic does not call the catalog to execute a forecast or edit a config.
 

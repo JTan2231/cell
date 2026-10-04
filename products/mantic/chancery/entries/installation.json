@@ -1,11 +1,11 @@
 {
   "id": "mantic.installation",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Understand Mantic installation and private state",
-  "summary": "Inspect matched immutable program and provider selection, explicit empty-state initialization, schema-one compatibility, and retained-release recovery that preserves configs.",
+  "summary": "Inspect matched program archives, fixed runtime paths and provider publication, explicit empty-state initialization, schema-one compatibility, and retained-release recovery that preserves configs.",
   "use_when": [
     "The caller needs Mantic program, provider, state ownership, compatibility, or recovery guarantees."
   ],
@@ -91,7 +91,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Opaque release UUID identifies retained files beneath Mantic/install/releases. Persistent schema, output schema, provider schema, release version, and entry versions are independent."
+        "statement": "Opaque release UUID identifies retained files beneath Mantic/install/releases; executable files run at fixed actual paths beneath Mantic/install/runtime. Persistent schema, output schema, provider schema, release version, and entry versions are independent."
       }
     ],
     "completeness_and_freshness": [
@@ -109,7 +109,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Matched programs and provider move together. Provider selector follows the current Mantic release. Failed instructions preserve completed changes for inspection; recover does not restore configs."
+        "statement": "Matched programs and provider move together. Provider directory selector follows the selected retained archive; public executable selectors use fixed runtime files. Failed instructions preserve completed changes for inspection; recover does not restore configs."
       }
     ],
     "operational_limits": [

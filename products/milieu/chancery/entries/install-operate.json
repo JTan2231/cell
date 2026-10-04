@@ -1,6 +1,6 @@
 {
   "id": "milieu.install.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -104,6 +104,10 @@
       {
         "status": "declared",
         "statement": "Verify exact release selection, selected state directory, and enrolled source identity. milieu.discovery.explore owns stable record identities and current revisions."
+      },
+      {
+        "status": "declared",
+        "statement": "Program archives retain release identities. Running executable files are regular files beneath Milieu/install/runtime and keep the same actual path across install and recovery."
       }
     ],
     "completeness_and_freshness": [
@@ -180,8 +184,8 @@
   "dependencies": [
     {
       "id": "milieu.installation",
-      "min_contract": 4,
-      "max_contract_exclusive": 5
+      "min_contract": 5,
+      "max_contract_exclusive": 6
     },
     {
       "id": "milieu.state",

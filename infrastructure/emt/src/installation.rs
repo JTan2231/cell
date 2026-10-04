@@ -52,7 +52,7 @@ fn require_standard_root(root: &Path) -> Result<PathBuf> {
 }
 
 fn client(home: &Path) -> Client {
-    Client::new(home.join(".local/bin/clockwork"))
+    Client::new(home.join(".local/bin/clockwork")).with_home(home)
 }
 
 fn binding(client: &Client) -> Result<Option<BindingRecord>> {
@@ -118,6 +118,14 @@ fn manifest(root: &Path, release: &ReleaseInfo) -> Result<Manifest> {
     })
 }
 
+fn runtime_manifest(root: &Path, release: &ReleaseInfo) -> Result<Manifest> {
+    let mut definition = manifest(root, release)?;
+    definition
+        .use_runtime_paths()
+        .map_err(|error| fail(error.to_string()))?;
+    Ok(definition)
+}
+
 fn require_owned_binding(root: &Path, client: &Client, binding: &BindingRecord) -> Result<()> {
     let Some(digest) = binding.definition_digest.as_deref() else {
         if binding.enabled {
@@ -141,7 +149,13 @@ fn require_owned_binding(root: &Path, client: &Client, binding: &BindingRecord) 
     let mut expected = manifest(root, &release)?;
     // A retained schema-one selection remains owned and can be upgraded. Its
     // immutable bytes and Clockwork incident state must not be rewritten.
-    expected.schema_version = definition.manifest.schema_version;
+    if definition.manifest.schema_version == 3 {
+        expected
+            .use_runtime_paths()
+            .map_err(|error| fail(error.to_string()))?;
+    } else {
+        expected.schema_version = definition.manifest.schema_version;
+    }
     if definition.digest != digest || definition.manifest != expected {
         return Err(fail(
             "emt/worker does not match EMT's supported worker definition",
@@ -210,7 +224,7 @@ pub fn schedule(root: &Path, operation: &str) -> Result<Value> {
     // a database or silently fill missing configuration.
     crate::store::Store::open(root)?.config()?.validate()?;
     let release = selected_release(root)?;
-    let manifest = manifest(root, &release)?;
+    let manifest = runtime_manifest(root, &release)?;
     let digest = manifest.digest()?;
     let source = manifest.to_toml()?;
     crate::store::private_directory(&root.join("logs"))?;
@@ -306,10 +320,14 @@ fn require_schedule_disabled(home: &Path) -> Result<()> {
         }
         return Ok(());
     }
-    if binding(&client(home))?.is_some_and(|binding| binding.enabled) {
-        return Err(fail(
-            "disable emt/worker with emt schedule disable before changing the installed release",
-        ));
+    let client = client(home);
+    if let Some(binding) = binding(&client)? {
+        if binding.enabled {
+            return Err(fail(
+                "disable emt/worker with emt schedule disable before changing the installed release",
+            ));
+        }
+        client.disable(WORKER_KEY, None)?;
     }
     Ok(())
 }
@@ -389,22 +407,28 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
         .try_exists()?
         || context.home.join(".local/bin/clockwork").try_exists()?
     {
-        binding(&Client::new(context.dependency_binary("clockwork")?))?
+        binding(&Client::new(context.dependency_binary("clockwork")?).with_home(&context.home))?
     } else {
         None
     };
 
+    let client = Client::new(context.dependency_binary("clockwork")?).with_home(&context.home);
+    if observed.is_some() {
+        client.disable(WORKER_KEY, None)?;
+    }
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     let _admission = crate::gate(&root).enter()?;
     let _runner = crate::store::runner_lock(&root)?;
     crate::store::Store::initialize(&root)?;
     config.save(&root)?;
-    let client = Client::new(context.dependency_binary("clockwork")?);
-    Client::new(&config.clockwork_executable).configure_emt(if config.paused {
-        None
-    } else {
-        Some(&config.receiving_domain)
-    })?;
+    let client = Client::new(context.dependency_binary("clockwork")?).with_home(&context.home);
+    Client::new(&config.clockwork_executable)
+        .with_home(&context.home)
+        .configure_emt(if config.paused {
+            None
+        } else {
+            Some(&config.receiving_domain)
+        })?;
     let activate = enabled.unwrap_or_else(|| {
         observed
             .as_ref()
@@ -414,7 +438,7 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
         return Ok(());
     }
     let selected = selected_release_metadata(&root)?;
-    let definition = manifest(&root, &selected)?;
+    let definition = runtime_manifest(&root, &selected)?;
     crate::store::private_directory(&root.join("logs"))?;
     private_log(&root.join("logs/worker.stdout.log"))?;
     private_log(&root.join("logs/worker.stderr.log"))?;

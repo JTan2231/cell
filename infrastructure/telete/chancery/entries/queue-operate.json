@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -103,6 +103,10 @@
       },
       {
         "status": "declared",
+        "statement": "New notifying jobs require the public Email command to resolve to the regular Email/install/runtime/bin/email file. Install Email with fixed runtime support before submitting these jobs."
+      },
+      {
+        "status": "declared",
         "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled and a stopped, paused, drained legacy CI service and queue with settled deployment. Signing requires configured storage, usable current-user Keychain access, paused settled queues, stopped selected Telete worker, and settled release publication and deployment."
       }
     ],
@@ -148,6 +152,10 @@
       {
         "status": "declared",
         "statement": "Volume UUID and mount path identify storage. Certificate SHA-1 selects the certificate, whose signature uses SHA-256; initial validity is 3650 days with an RSA 3072-bit key."
+      },
+      {
+        "status": "declared",
+        "statement": "Telete retains program archives with opaque release identities. Its regular runtime executable stays at Telete/install/runtime/bin/telete across install and update; the public command and service use that same file."
       }
     ],
     "completeness_and_freshness": [
@@ -198,6 +206,10 @@
       {
         "status": "declared",
         "statement": "Contract 2 narrows product selection and adds shared platform tests. Validation receipts remain schema 1; retained receipts keep their recorded scope without migration or reinterpretation."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 saves the fixed Email runtime path for new notifying jobs without freezing Email release bytes. Existing jobs retain their saved command paths and policies, including archive paths; request-ID replay returns the original job without selecting a new provider path."
       },
       {
         "status": "unspecified",

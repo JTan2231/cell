@@ -1,6 +1,6 @@
 {
   "id": "clockwork.install.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -22,11 +22,11 @@
     "Direct installation may create missing current-user shared parent directories without changing the modes of existing parents; it writes only `~/.local/bin/clockwork`, `~/.local/bin/clockwork-install`, `providers/clockwork`, and Clockwork's installation tree, does not create or open the runtime database, and does not touch `org.clockwork.*` product plists.",
     "Doctor initializes only an empty unversioned private schema-two Clockwork store, refuses foreign or unsupported schemas, runs SQLite `quick_check`, resolves the current executable, checks `/bin/launchctl`, and marks a retained `running` activation `lost` only after its recorded broker and any child are demonstrably absent.",
     "Uninstall detaches only owned command, installer, provider, current, and previous selectors after refusing remaining Clockwork plists; when needed it may create an empty private Clockwork state root solely to share the deployment lock path, but it creates no runtime database and retains releases, database, runtime locks, logs, history, and product artifacts.",
-    "The Clockwork deployment command selects program files and, when its runtime database exists, refreshes each currently enabled binding through the selected broker using its existing definition digest. Disabled bindings remain disabled. It creates no hold and temporarily disables no binding; it preserves failure incidents.",
+    "The Clockwork deployment command records complete prior binding intent, disables and drains each binding, publishes fixed runtime files, and restores only previously enabled selections with their exact definition digests. Disabled intent and failure incidents remain intact.",
     "Direct installation copies release files and prepares resource directories without opening runtime state or running doctor. It performs no artifact-integrity, version-alignment, provider-discovery, or runtime-readiness validation."
   ],
   "authority": [
-    "Clockwork's packaging owns its immutable releases, current and previous selectors, stable command and installer selectors, and only `providers/clockwork`.",
+    "Clockwork packaging owns retained releases, fixed runtime files, current and previous archive selectors, public command and installer selectors, and only providers/clockwork.",
     "Clockwork owns file placement and its explicit binding-refresh command. The Cell executor owns instruction order and process completion; it has no application-state or recovery authority.",
     "The operator owns the choice to deploy, diagnose, roll back, or detach selectors and separately owns any destructive retained-state operation.",
     "Product installers own definition and binding changes through the schedule contract. The Clockwork product command refreshes existing enabled broker plists without changing selected definition digests or approving incidents."
@@ -39,7 +39,8 @@
     "Inspect current selectors and retained execution evidence after failure. Completed changes remain; no automatic restoration, detachment or application recovery follows.",
     "If an installed program regression requires rollback, preserve its evidence and use a trusted tested clockwork-install recover --release with the canonical owned previous-release directory and an explicit Chancery reader; program rollback does not roll back a product binding.",
     "Before detach, disable every binding and prove quiescence; the uninstaller's plist refusal does not prove that no manual child is already running.",
-    "An interrupted instruction has unknown effects. Inspect current Clockwork state and complete authorized product recovery separately from executor reconciliation and acknowledgement. Preserve binding intent and failure incidents."
+    "An interrupted instruction has unknown effects. Inspect current Clockwork state and complete authorized product recovery separately from executor reconciliation and acknowledgement. Preserve binding intent and failure incidents.",
+    "An interrupted broker replacement retains clockwork-binding-intent.json in the deployment run and leaves unrestored schedules disabled. Inspect completed effects before explicitly restoring intent; no automatic recovery or incident approval occurs."
   ],
   "privacy": [
     "Release and provider bytes contain no definitions, product output, secrets, or activation history.",
@@ -80,13 +81,13 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "interfaces": [
@@ -146,7 +147,7 @@
       },
       {
         "status": "declared",
-        "statement": "Deployment publishes one immutable release through stable command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."
+        "statement": "Deployment retains an immutable release, replaces regular executable files at fixed runtime paths, and publishes command and provider selectors, doctor returns bounded local evidence plus a lost-recovery count, and uninstall removes only validated Clockwork-owned public selectors."
       }
     ],
     "data_semantics": [
@@ -192,13 +193,17 @@
       },
       {
         "status": "declared",
-        "statement": "Direct program installation and rollback never mutate product definitions or bindings; doctor may initialize only an empty unversioned schema-two store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."
+        "statement": "Direct program installation and recovery require disabled bindings and settle admitted activations without changing selected definitions or halt state; doctor may initialize only an empty unversioned schema-two store and recover only demonstrably stale running rows; uninstall detaches selectors only after plist absence and retains program releases and runtime state."
+      },
+      {
+        "status": "declared",
+        "statement": "Cell-install-v4 publishes regular runtime files with atomic per-file replacements. Public executable symlinks target runtime; directory/provider symlinks follow current. Current and previous retain archive selections. Recovery republishes compatible retained bytes at the same runtime paths; existing fixed broker plists keep that path, while legacy archive-bound plists require refresh."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private immutable program-release tree; it starts no daemon. Coordinated deployment separately refreshes existing enabled broker plists."
+        "statement": "Installation manages one current-user product command selector, one installer selector, one provider selector, and one private immutable program-release tree and one fixed runtime tree of regular files; it starts no daemon. Coordinated deployment retains binding intent, disables and drains all bindings, publishes runtime files, then restores only previously enabled selections."
       }
     ],
     "compatibility_and_evolution": [
@@ -209,6 +214,10 @@
       {
         "status": "unspecified",
         "statement": "No automatic release pruning, retention horizon, cross-version state migration window, or deprecation period is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Pre-runtime Clockwork installation metadata remains readable. Direct recovery rejects targets older than cell-install-v4 because their broker requires an archive execution path and cannot admit schema-three definitions. Historical behavior requires a runtime-aware rebuilt candidate."
       }
     ],
     "reliances": [

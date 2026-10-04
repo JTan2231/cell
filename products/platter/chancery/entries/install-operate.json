@@ -66,7 +66,8 @@
     "The declared product command selects program and provider files through owned selectors. It starts no packet preparation or email.",
     "Durable owner holds fence new mutations while exact admitted work drains. Explicit migration preserves retained identities and removes only hashed legacy files after transactional import.",
     "Separately requested read-only checks inspect installation, state and dependency readiness without domain work. Explicit supplied setup can initialize missing templates or activation intent. The product command retargets existing schedules directly and preserves saved or explicit enabled intent and incidents.",
-    "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, drains no requester and temporarily disables no binding. Runtime diagnostics and explicit maintenance remain separate."
+    "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, does not drain durable requester work. It disables its enabled Clockwork bindings and waits for their current activations before runtime publication. Runtime diagnostics and explicit maintenance remain separate.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Platter/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
@@ -109,8 +110,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "annals.corpus.explore",
@@ -178,7 +179,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, drains no requester and temporarily disables no binding. Runtime diagnostics and explicit maintenance remain separate."
+        "statement": "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, does not drain durable requester work. It disables its enabled Clockwork bindings and waits for their current activations before runtime publication. Runtime diagnostics and explicit maintenance remain separate."
       }
     ],
     "access": [
@@ -190,7 +191,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, drains no requester and temporarily disables no binding. Runtime diagnostics and explicit maintenance remain separate. A failed instruction retains completed file, migration, configuration and schedule changes. The executor stops and performs no automatic retry, rollback or product recovery. Interrupted commands have unknown effects. Inspect current product state and complete authorized recovery separately from executor reconciliation and acknowledgement. Preserve separately acquired holds."
+        "statement": "The product deployment command selects program and provider files, then migrates or initializes state, imports explicitly supplied templates, updates executable references and selects its owned daily definition under ordinary admission and activity locks. It invokes no doctor, creates no hold, does not drain durable requester work. It disables its enabled Clockwork bindings and waits for their current activations before runtime publication. Runtime diagnostics and explicit maintenance remain separate. A failed instruction retains completed file, migration, configuration and schedule changes. The executor stops and performs no automatic retry, rollback or product recovery. Interrupted commands have unknown effects. Inspect current product state and complete authorized recovery separately from executor reconciliation and acknowledgement. Preserve separately acquired holds."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Platter/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [
@@ -241,7 +246,7 @@
       },
       {
         "status": "declared",
-        "statement": "The product-owned schema-two definition declares halt-until-approved. Clockwork owns activation, the shared service-health delay before a new durable halt, incident email and exact continuation approval; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
+        "statement": "The product-owned schema-three definition declares halt-until-approved. Clockwork owns activation, the shared service-health delay before a new durable halt, incident email and exact continuation approval; Platter owns expected readiness outcomes, date selection and preserved preparation/delivery recovery.",
         "target": "clockwork",
         "kind": "control",
         "contract": "clockwork.schedule.operate"

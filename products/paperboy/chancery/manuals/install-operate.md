@@ -1,5 +1,22 @@
 # Install Paperboy and select renderer schedules
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Paperboy/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
 Use this operation to install Paperboy, prepare its manifest, and control exact
 job schedules through Clockwork. Installation, schedule activation, and script
 execution are separate effects. Read `paperboy.report.send` for the manifest,

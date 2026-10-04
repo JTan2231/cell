@@ -60,7 +60,9 @@
     }
   ],
   "effects": [
-    "Configuration, admission, scheduling, maintenance, installation and activation are separate effects. Worker activation can read accounts, start authorized agent work and submit mail. Installation before initialization only installs bytes."
+    "Configuration, admission, scheduling, maintenance, installation and activation are separate effects. Worker activation can read accounts, start authorized agent work and submit mail. Installation before initialization only installs bytes.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/EMT/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
+    "Direct install remains limited to uninitialized EMT state. It rejects an enabled worker binding and runs the disable transition for a retained disabled binding to wait for active processes before runtime publication."
   ],
   "authority": [
     "EMT owns private configuration, incident and exchange state, admission, holds, matched publication. Clockwork owns scheduling and failure halts; Nucleus owns jobs; Email owns credentials and transport."
@@ -80,8 +82,8 @@
   "dependencies": [
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     },
     {
       "id": "nucleus.execution.operate",
@@ -114,6 +116,10 @@
       {
         "status": "declared",
         "statement": "New assignments require valid configured receiving domain and paths, Nucleus invocation policy two with workspace-unrestricted, and the prompt preparation prerequisites owned by emt.incident.respond."
+      },
+      {
+        "status": "declared",
+        "statement": "Direct install remains limited to uninitialized EMT state. It rejects an enabled worker binding and runs the disable transition for a retained disabled binding to wait for active processes before runtime publication."
       }
     ],
     "inputs": [
@@ -168,6 +174,10 @@
       {
         "status": "declared",
         "statement": "Explicit emt migrate checks drained schema-one state or initializes absent paused state. It copies no database or configuration. Deployment retains no migration-completion receipt and performs no automatic recovery; initialized direct selector recovery remains unsupported."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/EMT/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [
@@ -179,7 +189,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Only EMT schema one is accepted. The matched cell-install-v3 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
+        "statement": "Only EMT schema one is accepted. The matched cell-install-v4 release includes binary, installer and Chancery bundle. Old pinned Clockwork brokers must be replaced before routing or running with claims."
       },
       {
         "status": "unspecified",

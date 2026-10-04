@@ -427,6 +427,33 @@ pub fn template(paths: &Paths, release: &Path, pins: &Pins, name: &str) -> Resul
     Manifest::from_toml(&input).map_err(|_| Error::new("owned Clockwork template is invalid"))
 }
 
+pub fn runtime_template(
+    paths: &Paths,
+    release: &Path,
+    pins: &Pins,
+    name: &str,
+) -> Result<Manifest> {
+    let mut manifest = template(paths, release, pins, name)?;
+    manifest
+        .use_runtime_paths()
+        .map_err(|error| Error::new(error.to_string()))?;
+    Ok(manifest)
+}
+
+pub fn retained_template(
+    paths: &Paths,
+    release: &Path,
+    pins: &Pins,
+    name: &str,
+    actual: &Manifest,
+) -> Result<Manifest> {
+    if actual.schema_version == 3 {
+        runtime_template(paths, release, pins, name)
+    } else {
+        template(paths, release, pins, name)
+    }
+}
+
 pub fn switch(
     paths: &Paths,
     clockwork: &Path,

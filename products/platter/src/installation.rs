@@ -37,7 +37,7 @@ pub fn schedule_definition(home: &Path, root: &Path) -> Result<clockwork::api::M
         std::fs::canonicalize(home.join("Library/Application Support/Platter/install/current"))?;
     let release =
         cell_install::verify_release_at(&spec.layout(), &selected, &|path| spec.legacy(path))?;
-    let executable = selected.join("bin/platter");
+    let executable = home.join("Library/Application Support/Platter/install/runtime/bin/platter");
     ensure!(
         std::fs::canonicalize(std::env::current_exe()?)? == executable,
         "schedule-definition requires the selected installed Platter executable"
@@ -78,7 +78,7 @@ fn schedule_manifest(
             environment.insert(name.into(), text(&path)?);
         }
     }
-    Ok(Manifest {
+    let mut manifest = Manifest {
         schema_version: 2,
         key: "platter/daily".into(),
         release_id: release.release_id,
@@ -106,7 +106,9 @@ fn schedule_manifest(
             stdout: text(&root.join("daily.stdout.log"))?,
             stderr: text(&root.join("daily.stderr.log"))?,
         },
-    })
+    };
+    manifest.use_runtime_paths()?;
+    Ok(manifest)
 }
 
 /// Run this product's deployment recipe.
@@ -162,6 +164,9 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
     )?;
     let root = crate::default_state_dir(&context.home)?;
     let state = ScheduleState::capture_installed(&context.home, "platter/daily")?;
+    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+        .with_home(&context.home);
+    state.suspend(&clockwork, "platter/daily")?;
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     {
         let (_admission, _runner) = crate::maintenance::install_admission(&context.home, &root)?;
@@ -187,18 +192,21 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
         }
     }
     if state.binding.is_some() || settings.enabled.is_some() {
-        let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?);
+        let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+            .with_home(&context.home);
         let executable = std::fs::canonicalize(context.home.join(".local/bin/platter"))?;
-        let release = executable
-            .parent()
-            .and_then(Path::parent)
-            .context("Platter release missing")?;
+        let release = std::fs::canonicalize(
+            context
+                .home
+                .join("Library/Application Support/Platter/install/current"),
+        )?;
         let spec = specification();
-        let metadata =
-            cell_install::read_release_at(&spec.layout(), release, &|path| spec.read_legacy(path))?;
+        let metadata = cell_install::read_release_at(&spec.layout(), &release, &|path| {
+            spec.read_legacy(path)
+        })?;
         let mut definition = state.retarget(
-            schedule_manifest(&context.home, &root, release, metadata)?,
-            release,
+            schedule_manifest(&context.home, &root, &release, metadata)?,
+            &release,
             &executable,
             cell_install::file_digest(&executable)?,
         )?;

@@ -605,6 +605,21 @@ pub(super) fn definition(paths: &Paths, release: &Path) -> Result<Value> {
     Ok(serde_json::to_value(value)?)
 }
 
+fn runtime_definition(paths: &Paths, release: &Path) -> Result<Value> {
+    let mut manifest: clockwork::api::Manifest =
+        serde_json::from_value(definition(paths, release)?)?;
+    manifest.use_runtime_paths()?;
+    Ok(serde_json::to_value(manifest)?)
+}
+
+fn retained_definition(paths: &Paths, release: &Path, actual: &Value) -> Result<Value> {
+    if actual["schema_version"] == 3 {
+        runtime_definition(paths, release)
+    } else {
+        definition(paths, release)
+    }
+}
+
 pub(super) fn binding(paths: &Paths, current: Option<&str>) -> Result<Binding> {
     let output = paths.command(&paths.clockwork, &["--json", "binding", "show", KEY], None)?;
     let value: Value = serde_json::from_slice(&output.stdout)
@@ -635,7 +650,7 @@ pub(super) fn binding(paths: &Paths, current: Option<&str>) -> Result<Binding> {
         let actual = paths.clock(&["definition", "show", digest])?;
         if actual["digest"] != *digest
             || actual["key"] != KEY
-            || actual["manifest"] != definition(paths, &release)?
+            || actual["manifest"] != retained_definition(paths, &release, &actual["manifest"])?
         {
             return fail(
                 "Clockwork definition differs from the complete Semantics-owned definition",
@@ -827,6 +842,17 @@ fn rollback(
         );
     }
     require_compatible_database(paths, transaction)?;
+    let release = paths.install.join("releases").join(
+        transaction
+            .candidate_release
+            .as_ref()
+            .ok_or("missing recovery candidate")?,
+    );
+    let prepared = PreparedRelease {
+        info: read_release(&release)?,
+        root: release,
+    };
+    tx.recover(&transaction.baseline, &prepared, false, |_| Ok(()))?;
     if transaction.legacy_plist {
         write_private(
             &paths.plist(),
@@ -865,17 +891,6 @@ fn rollback(
             return fail("could not restore the owned legacy Semantics scheduler");
         }
     }
-    let release = paths.install.join("releases").join(
-        transaction
-            .candidate_release
-            .as_ref()
-            .ok_or("missing recovery candidate")?,
-    );
-    let prepared = PreparedRelease {
-        info: read_release(&release)?,
-        root: release,
-    };
-    tx.recover(&transaction.baseline, &prepared, false, |_| Ok(()))?;
     if let Some(hold) = &transaction.prior_receipt {
         write_private(&paths.receipt(), &serde_json::to_vec(hold)?)?;
     } else if transaction.hold_owned && exists(&paths.receipt()) {
@@ -939,11 +954,15 @@ pub(super) fn deploy(args: &Candidate, enabled: Option<bool>) -> Result<()> {
     } else {
         return fail("Clockwork could not read the selected worker binding");
     };
+    if binding_output.status.success() {
+        paths.clock(&["binding", "disable", KEY])?;
+    }
     paths.initialize(&prepared.root.join("libexec/semantics"), None)?;
     let manifest: clockwork::api::Manifest =
-        serde_json::from_value(definition(&paths, &prepared.root)?)?;
+        serde_json::from_value(runtime_definition(&paths, &prepared.root)?)?;
     let instruction = tempfile::NamedTempFile::new_in(&paths.install)?;
     fs::write(instruction.path(), manifest.to_toml()?)?;
+    transaction.publish(&prepared, &prior, |_| Ok(()))?;
     let definition = paths.clock(&[
         "definition",
         "register",
@@ -955,7 +974,6 @@ pub(super) fn deploy(args: &Candidate, enabled: Option<bool>) -> Result<()> {
     let digest = definition["digest"]
         .as_str()
         .ok_or("Clockwork returned no definition reference")?;
-    transaction.publish(&prepared, &prior, |_| Ok(()))?;
     if enabled.unwrap_or(captured) {
         paths.clock(&["binding", "switch", KEY, digest])?;
     } else {
@@ -1060,20 +1078,12 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
                 fs::set_permissions(log, fs::Permissions::from_mode(0o600))?;
             }
         }
-        let definition = definition(&paths, &prepared.root)?;
+        let definition = runtime_definition(&paths, &prepared.root)?;
         let toml = toml::to_string(&definition)?;
         let definition_path = evidence.join("worker.toml");
         write_private(&definition_path, toml.as_bytes())?;
-        let registered = paths.clock(&[
-            "definition",
-            "register",
-            definition_path.to_str().ok_or("invalid definition path")?,
-        ])?;
-        let digest = registered["digest"]
-            .as_str()
-            .filter(|v| valid_hash(v))
-            .ok_or("Clockwork omitted registered digest")?
-            .to_owned();
+        let manifest: clockwork::api::Manifest = serde_json::from_value(definition)?;
+        let digest = manifest.digest()?;
         transaction.candidate_digest = Some(digest.clone());
         transaction.scheduler_changed = true;
         save(&transaction, &evidence)?;
@@ -1116,6 +1126,14 @@ pub(super) fn install(args: &Candidate) -> Result<Value> {
         transaction.publication = Some(tx.publish(&prepared, &suspended.after, |_| Ok(()))?);
         transaction.candidate_selected = true;
         save(&transaction, &evidence)?;
+        let registered = paths.clock(&[
+            "definition",
+            "register",
+            definition_path.to_str().ok_or("invalid definition path")?,
+        ])?;
+        if registered["digest"] != digest {
+            return fail("Clockwork registered a different definition");
+        }
         if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
             paths.clock(&["binding", "disable", KEY, "--select", &digest])?;
         } else {
@@ -1213,13 +1231,26 @@ pub(super) fn recover(home: &HomeArgs, evidence: &Path, forward: bool) -> Result
             .candidate_digest
             .as_ref()
             .ok_or("missing candidate recovery definition")?;
-        let definition = paths.clock(&["definition", "show", digest])?;
-        if definition["manifest"] != self::definition(&paths, &prepared.root)? {
+        let definition_path = evidence.join("worker.toml");
+        private_file(&definition_path, paths.uid, true)?;
+        let manifest = clockwork::api::Manifest::from_toml(&fs::read_to_string(&definition_path)?)?;
+        let definition = serde_json::to_value(&manifest)?;
+        if manifest.digest()? != *digest
+            || definition != retained_definition(&paths, &prepared.root, &definition)?
+        {
             return fail("forward recovery definition differs from exact retained candidate");
         }
         forward_hold(&paths, &transaction, &prepared.info.release_id, digest)?;
         paths.initialize(&prepared.root.join("libexec/semantics"), None)?;
         tx.recover(&transaction.baseline, &prepared, true, |_| Ok(()))?;
+        let registered = paths.clock(&[
+            "definition",
+            "register",
+            definition_path.to_str().ok_or("invalid definition path")?,
+        ])?;
+        if registered["digest"] != *digest {
+            return fail("Clockwork registered a different recovery definition");
+        }
         let selection = if std::env::var_os("CELL_DEPLOYMENT_RUN_ID").is_some() {
             paths.clock(&["binding", "disable", KEY, "--select", digest])
         } else {
@@ -1281,7 +1312,8 @@ pub(super) fn uninstall(home: &HomeArgs) -> Result<()> {
     // Public selectors may already be absent after a previous uninstall.
     for entry in layout().public {
         if let Some(target) = read_link(&paths.home.join(entry.path))?
-            && target != paths.install.join("current").join(entry.artifact)
+            && target != paths.install.join("current").join(&entry.artifact)
+            && target != paths.install.join("runtime").join(entry.artifact)
         {
             return fail("Semantics public selector has foreign ownership");
         }

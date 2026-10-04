@@ -54,7 +54,7 @@ pub fn deploy() -> Result<Value> {
         annals: std::fs::canonicalize(
             context
                 .home
-                .join("Library/Application Support/Annals/install/current/libexec/annals"),
+                .join("Library/Application Support/Annals/install/runtime/libexec/annals"),
         )?,
         annals_config: config,
         annals_library_id: library.into(),

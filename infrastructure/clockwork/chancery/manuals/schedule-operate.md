@@ -21,13 +21,14 @@ schemas and the private broker output are unchanged.
 1. Obtain the product's exact supported runner contract and authorization for
    its scheduled work. Stage and validate its immutable release. Retain its
    prior binding, enabled intent, and rollback basis.
-2. Prepare a regular current-user-owned, non-symbolic UTF-8 TOML manifest of
-   at most 1 MiB using the definition feature's closed schema. Use canonical
-   absolute paths, pinned images and hashes, literal non-secret context,
+2. Publish the product payload as regular files at its fixed runtime path.
+   Prepare a schema-three current-user-owned, non-symbolic UTF-8 TOML manifest of
+   at most 1 MiB using the definition feature's closed schema. Retain its exact archive release root and ID. Use canonical
+   fixed runtime paths, pinned images and hashes, literal non-secret context,
    private distinct output files, and an interval or local daily trigger.
    Keep group and other write permission absent. Do not supply a mutable
    selector, shell string, inherited environment, or secret.
-3. Declare schema-two failure policy. Omission selects the shared service-health
+3. Declare the inherited schema-two failure policy. Omission selects the shared service-health
    delay before a halt that requires explicit approval. The first abnormal attempt
    still ends its current run. `continue-next-activation` must be an intentional
    product exception. Keep

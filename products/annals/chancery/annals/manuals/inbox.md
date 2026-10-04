@@ -538,7 +538,7 @@ the one missing child, without widening the event or duplicating an attempt.
 ## Scheduled failure policy
 
 Both `annals/inbox` and `annals/decisions-inbox` use Clockwork definition schema
-2 with `[failure] on_abend = "halt-until-approved"`. The release-local runner
+3 with `[failure] on_abend = "halt-until-approved"`. The fixed runtime runner
 selects `inbox run --stop-on-failure`. This batch option stops after its first
 failed job, including an item-local source failure, and returns nonzero before
 claiming a successor. It does not create an Annals scheduling-pause record.
