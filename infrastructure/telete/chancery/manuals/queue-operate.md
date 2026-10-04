@@ -1,9 +1,17 @@
 # Operate Telete
 
-Telete is a separate Rust implementation of Cell CI orchestration. Source
+Telete is Cell's Rust CI system. Root and product `ci.sh` wrappers select the
+installed `telete` command. Source
 installation does not replace or operate the existing CI manager. Telete uses
 `refs/telete/accepted` and `refs/telete/jobs/` and does not advance development
 `main` or `refs/ci/accepted`.
+
+For the handoff from Python CI, pause and settle its work through `cell-ci`,
+then stop its service. Initialize Telete from the exact final
+`refs/ci/accepted` commit. The Git commit ID identifies the accepted source
+used for merges and change selection. Preserve the Python journal, refs, and
+receipts separately. Telete does not import them. Keep the Python worker
+stopped while Telete owns new delivery work.
 
 ## Set up the host
 
@@ -99,7 +107,8 @@ telete submit COMMIT --repo /absolute/cell --run-tests
 telete worker --once
 ```
 
-Run `telete worker` to keep the serial worker active. Use `telete pause` to prevent
+After installation, run `telete service start` to start the installed worker.
+Run `telete worker` for a directly operated worker. Use `telete pause` to prevent
 new claims. Use `telete cancel JOB` for an intended stop at a safe boundary. Use
 `telete recover JOB` to reconcile retained work. Use `telete wait JOB --timeout
 60` to observe the same job without resubmission. Status is a CLI observation;
@@ -109,6 +118,14 @@ Reuse `--request-id KEY` only for the same frozen submission. A changed input,
 test policy, deployment selection, repair policy, or notification policy needs
 a new key. New jobs skip tests unless `--run-tests` is supplied. `--no-repair`,
 `--no-deploy`, and `--no-notify` freeze explicit choices for that job.
+
+New jobs with notifications require the public Email command to resolve to the
+regular file at `~/Library/Application Support/Email/install/runtime/bin/email`.
+Telete saves that fixed path in the job policy. Email updates replace the file
+at that path; the policy does not freeze Email release bytes. Install Email with
+fixed runtime support before submitting these jobs. Existing jobs retain their
+saved command paths, including archive paths. Reusing an existing request ID
+returns its original job without selecting a new Email path.
 
 Use `telete maintenance hold --owner OWNER`, `maintenance status`, and
 `maintenance release --owner OWNER` to coordinate requester maintenance. Release
@@ -257,8 +274,18 @@ file replacement is atomic; the complete tree is not one atomic update.
 The matching provider directory selector follows the selected retained archive. Operational state stays external.
 Telete does not install or replace `cell-ci` or its service.
 
+Installation leaves the Telete service stopped. Start it explicitly, then
+resume queue admission. `cell-ci` remains the interface for retained Python
+records; root and product `ci.sh` wrappers do not route to that manager.
+
 Use `telete service status`, `service start`, and `service stop` for this service.
-Service stop and program replacement require paused, drained work. Installation,
+Service stop requires paused, drained work. It also permits one blocked deployment
+whose exact successful receipt matches its unchanged accepted source and product
+scope, with settled notification and no queued work, unresolved model, active
+operation, or live compiler or deployment child. The stop holds exclusive settled
+resource ownership and preserves the job and receipts for `telete recover JOB`;
+it does not repeat deployment. Program
+replacement and signing maintenance still require paused, drained work. Installation,
 Semantics project registration, prompt import, queue resume, and live delivery
 are separate operations. A source participation marker does not prove project
 registration. No migration from existing CI journals is supplied.

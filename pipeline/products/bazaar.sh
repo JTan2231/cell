@@ -15,4 +15,4 @@ CI_PROVIDER_VALIDATION_PHASE=before-rust
 RELEASE_UNITS='bazaar|Bazaar|package|infrastructure/bazaar/Cargo.toml|bazaar-|1'
 RELEASE_BINARY_CHECKS='bazaar|target/release/bazaar|bazaar
 bazaar|target/release/bazaar-install|bazaar-install'
-PROVIDERS='bazaar|bazaar|infrastructure/bazaar/chancery|4'
+PROVIDERS='bazaar|bazaar|infrastructure/bazaar/chancery|6'

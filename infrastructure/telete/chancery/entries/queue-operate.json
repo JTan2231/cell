@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 3,
+  "contract_version": 4,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -11,7 +11,7 @@
     "Configure the shared external work volume or explicitly create or select the shared Cell signing identity through Rust host setup."
   ],
   "do_not_use_when": [
-    "Operate or replace the existing Cell CI manager."
+    "Operate or mutate retained Python CI jobs, records, or service."
   ],
   "outcome": "Telete records the selected host configuration or retains the exact source delivery outcome and its separate deployment and notification observations.",
   "effects": [
@@ -30,6 +30,7 @@
   ],
   "failure_and_recovery": [
     "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
+    "Service stop also permits a paused blocked deployment with an exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources; the job remains retained for explicit recovery without deployment replay.",
     "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection."
   ],
   "privacy": [
@@ -37,7 +38,7 @@
     "Signing policy retains only the public fingerprint, Keychain path, profile and namespace. Private external generation files are removed on ordinary completion; Keychain retains the key."
   ],
   "does_not_authorize": [
-    "Replacement of existing CI, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
+    "Mutation or import of legacy CI records, remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
   ],
   "interfaces": [
     {
@@ -99,6 +100,10 @@
       {
         "status": "declared",
         "statement": "Queue work requires a configured writable external APFS workspace, initialized Telete queue, supported native tools, and required provider state."
+      },
+      {
+        "status": "declared",
+        "statement": "New notifying jobs require the public Email command to resolve to the regular Email/install/runtime/bin/email file. Install Email with fixed runtime support before submitting these jobs."
       },
       {
         "status": "declared",
@@ -172,6 +177,10 @@
       },
       {
         "status": "declared",
+        "statement": "A paused service may stop with one blocked deployment only after its exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources are proved. The job and receipts remain unchanged for explicit recovery; installation and signing still require a drained queue."
+      },
+      {
+        "status": "declared",
         "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses setup, legacy admission/deployment, and selected Telete state locks; configuration preflights before atomic publication. Keychain and file effects are not one transaction."
       }
     ],
@@ -197,6 +206,10 @@
       {
         "status": "declared",
         "statement": "Contract 2 narrows product selection and adds shared platform tests. Validation receipts remain schema 1; retained receipts keep their recorded scope without migration or reinterpretation."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 4 saves the fixed Email runtime path for new notifying jobs without freezing Email release bytes. Existing jobs retain their saved command paths and policies, including archive paths; request-ID replay returns the original job without selecting a new provider path."
       },
       {
         "status": "unspecified",

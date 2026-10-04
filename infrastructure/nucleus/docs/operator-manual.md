@@ -323,37 +323,28 @@ Commit the intended changes, then submit that commit from the Cell root:
 ./ci.sh submit COMMIT
 ```
 
-`cell-ci submit COMMIT` uses the same installed manager. The manager queues the
-commit, integrates it privately, validates it, attempts bounded repairs, deploys
-the accepted source, and emails the outcome. Root and product `ci.sh` wrappers
-provide manager commands only. There is no direct check-only CI path.
+`telete submit COMMIT` uses the same installed program. Root and product
+`ci.sh` wrappers select Telete. It queues the commit, integrates it privately,
+validates it, applies bounded repairs, prepares signed production candidates,
+deploys the exact selected source, and emails the outcome. There is no direct
+check-only CI path.
 
-The manager selects validation coverage from the fixed accepted base and each
-committed candidate, including deletions and both paths of renames. Selective
-success does not establish full repository validation. Source changes during
-validation are stale. Linked worktrees share the CI broker and compiler
-resources. See [CI submission](/Users/joey/rust/cell/ci_manager/README.md),
-[validation selection](/Users/joey/rust/cell/pipeline/README.md), and
-[the CI broker](/Users/joey/rust/cell/ci_broker/README.md).
+Telete compares each candidate with the accepted base captured when the job
+is claimed. Selection includes deletions and both rename paths. A selective
+pass does not establish full repository coverage. Read
+[Telete queue operation](/Users/joey/rust/cell/infrastructure/telete/chancery/manuals/queue-operate.md)
+for selection, provider authority, receipts, and recovery.
 
-New CI jobs build selected release packages together in trusted production
-preparation before acceptance. Packaging signs declared native executables with
-the selected host identity. Deployment reuses the referenced packages. Neither
-phase executes program version probes or audits package inventories and native
-signatures. The combined build unifies the selected packages' dependency features.
-Compilation failures use the bounded repair path. Signing and other preparation
-failures stop the job. Retained jobs keep their frozen policies. Read the
-[queue contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
-for receipt meaning and interruption handling.
+New jobs skip tests by default. Use `--run-tests` to run selected Rust tests,
+and prepare the pinned runner with `telete prepare-tools` first. Native
+structure, provider, shell, formatting, lint, build, and signing checks remain.
+Telete does not invoke the Python CI helpers or regression runner.
 
-Selected Rust tests run through one parallel nextest stage between the selected
-products' checks before and after tests. The broker retains one compiler writer;
-the test stage has a separate configurable test-process limit. CI does not run
-doctests. Shared infrastructure Python suites remain separate checks. Install
-the pinned runner on the external work volume before submitting a candidate
-that uses it. An active job keeps its committed candidate. Updating validation
-source does not replace the installed manager; manager replacement still requires
-the maintenance procedure below.
+Telete compiles selected production packages together before acceptance and
+signs declared native commands with the frozen host identity. Deployment
+uses exactly the selected manifests and retained candidates. Instruction
+completion does not establish product health. Compilation failures can use
+repair; signing and other preparation failures stop the job.
 
 Git publication remains separate. A product release command changes versions,
 commits, tags, and pushes. CI makes private candidate commits and advances
@@ -484,48 +475,41 @@ Conatus, and Semantics use readable text by default. The flag selects each
 product's structured output. Export files and internal installation interfaces
 retain their documented formats.
 
-Install the CI manager consumer that requests Bazaar `--json` before selecting
-a Bazaar release with readable default output. Follow the paused, drained
-manager replacement procedure. Milieu installation uses the
+The retained Python CI manager must request Bazaar `--json` when parsing
+readable-default releases. Telete uses the supported Rust reader. Milieu installation uses the
 native store interface so recovery can retain an older CLI.
 
 ## Serial CI delivery
 
-Cell's CI manager, broker, compiler targets, release cache, and deployment
-working state use one configured external APFS volume. CI bodies and release
-compiler processes cannot write generated material to the host. Source Git
-metadata, installed programs, configuration, and live product state retain
-their existing owners. Provider runtime records remain provider-owned.
-Read [external work storage](/Users/joey/rust/cell/ci_manager/STORAGE.md) before
-storage cutover or cleanup. A missing drive stops work; it never selects a
-fresh local queue. Resolve interrupted work before resetting any journal.
+Telete owns Cell's active serial delivery queue, gate broker, private worktrees,
+and deployment records. Root and product `ci.sh` wrappers select installed
+Telete. Development remains on `main`; Telete owns `refs/telete/accepted` and
+`refs/telete/jobs/`. Its CLI and embedded provider come from one fixed installed
+release rather than the changing checkout.
 
-The installed `cell-ci` manager owns one durable FIFO queue for one configured
-Cell Git common directory. Linked worktrees submit immutable commits to this
-queue. Development continues on `main`. The manager owns `refs/ci/accepted`,
-private input and candidate refs, and its private worktrees. `./ci.sh submit COMMIT`
-and `cell-ci submit COMMIT` submit to this manager. Bare `./ci.sh` does not
-validate; the manager invokes the internal validator for each candidate.
+The configured external APFS workspace holds Telete state, compiler targets,
+Cargo downloads, caches, and temporary files. Host storage and signing settings
+remain shared Cell selections. Keychain owns the private signing key. Drive
+loss stops work and never selects a new queue or internal-disk fallback.
 
-The manager removes each settled job's complete worktree and Git registration
-before notification. Unresolved operations keep their worktrees for recovery.
-The worker also cleans settled historical jobs and retries failed cleanup.
-Journal records, private refs, candidate commits, logs and receipts remain
-retained. Read the CI operation contract for cleanup status and recovery.
+At claim, Telete freezes the accepted base and creates a private merge candidate.
+Repairs create private child commits, which are validated against that same
+base. Promotion uses an expected-old ref update after validation and required
+production preparation. Acceptance remains recorded if later deployment fails.
 
-New submissions skip tests by default and retain other checks. Use
-`./ci.sh submit COMMIT --run-tests` to run the selected tests. Existing jobs
-retain their frozen test policy. Validation receipts and outcome emails state
-when tests were skipped.
+Nucleus owns repair execution and credentials. Telete retains exact requests
+and provider identities before admission. Bazaar supplies the dedicated
+`cell.prompts.telete` selection. Publish its component versions before the
+complete selection. Only the model's final response supplies the raw Git patch.
+Git decides whether it applies. A recorded candidate refunds the repair budget
+point; rejected or failed attempts stay charged. Refunds preserve invocation
+history and provide no total-invocation ceiling.
 
-New macOS jobs freeze the persistent host signing policy. Packaging signs native
-production executables before source acceptance, including when tests are skipped.
-Builds and repair preserve the selected certificate and stable product identifiers.
-Installation and cache reuse do not audit native signatures. Configure or rotate signing only
-with paused, settled CI and settled deployment and release operations. Read
-`chancery show ci-manager.signing.operate` for setup, exact certificate selection,
-key recovery and coverage; Python and standalone scripts retain their existing
-runtime identities. Jobs without a signing snapshot keep their earlier path.
+Deployment performs the exact selected product manifests in order. Products
+own their program selection, state, configuration, schedules, and recovery.
+Interrupted effects remain uncertain and require the retained recovery
+procedure. Notification has its own frozen text, Email identity, and outcome.
+Email acceptance means provider submission rather than inbox delivery.
 
 Production candidates and installed releases use opaque UUID identities. Cell
 compares normalized signing-policy objects directly and lets Cargo manage build
@@ -549,85 +533,25 @@ protocol when those limits prevent recovery.
 Clockwork runtime launch pins and product data-migration checks retain their
 separate protocols. New release formats require a current trusted installer for
 recovery; older installers cannot read them.
+For Telete replacement, pause and settle its work, stop its worker, and run
+`telete install` from the intended fixed executable. Installation preserves
+state and leaves the service stopped. Start the service and resume admission
+explicitly. For Nucleus maintenance, quiesce Telete through its requester
+maintenance controls and preserve exact hold ownership. Telete does not operate
+or recover other requesters.
 
-At dequeue, the manager records the current accepted commit as the job's base.
-It merges the submitted commit into a private candidate. Each repair produces
-a new commit before validation. Every validation compares the same accepted
-base with the current candidate and retains aggregate gate receipts. Acceptance
-uses a guarded ref update. Deployment selects that exact accepted candidate,
-with a stable caller request ID and a retained operation receipt. Development
-changes made after submission do not change the job.
+The retained Python manager remains available as `cell-ci` for its own records.
+Keep its queue paused and service stopped while Telete owns new work. Preserve
+`refs/ci/accepted`, job refs, journal, and receipts. Telete has no journal or
+request-key import. Initial handoff selects an exact accepted Git commit;
+initialization does not validate that source. Do not rewind either accepted
+history or bypass unresolved operations with another state directory.
 
-For candidates with `pipeline/autofix.py`, the installed manager requests
-deterministic fixes during validation. The validator uses the existing Clippy
-diagnostics and one formatter pass to prepare a retained patch without changing
-the committed candidate. The manager applies it to a private index, records a
-private candidate and revalidates against the same base. This path invokes no
-Nucleus model and consumes no model repair point. Remaining failures use the
-bounded model path. Older candidates retain check-only validation. Enable the
-new manager release through the paused, drained replacement procedure below;
-changing the checkout does not replace the worker.
-
-Only one delivery lifecycle is active. The manager does not hold a CI broker
-slot while it waits for a model, deployment, or email. Individual gates still
-use the existing broker. A surviving model or deployment remains associated
-with the active job after a manager restart. Unknown execution or lost-process
-ownership blocks admission; a timeout does not prove termination.
-
-CI is an ordinary Nucleus requester. It uses read-only workspace access and
-built-in shell execution, with no requester tools or response schema. The
-agent is asked to return only a raw Git patch in its final response. The manager
-retains the exact response and adds a missing final LF to the application input.
-Git applies it to a private parent index with `--cached --recount
---whitespace=nowarn`; the manager adds no patch acceptance rules. It commits the
-result and runs the ordinary CI loop. New jobs freeze the refund policy: a
-recorded private candidate refunds its repair attempt before the next validation
-result. The default budget permits three unrefunded `gpt-5.6-terra` medium
-attempts, then one unrefunded `gpt-5.6-sol` high attempt. Failed or rejected
-attempts remain charged for the whole job. Accepted patches can exceed four
-total invocations; no total-invocation ceiling applies. Retained jobs without
-the refund flag keep their original limit on all invocations.
-
-Attempt identities and history remain unique and complete after refunds. Job
-status reports the budget mode, total, used, remaining, refunded, and total
-invocations. Quota deferral preserves the same request identity without another
-charge. Explicit recovery observes a blocked repair's retained identity even
-when the failure occurred before admission. Authoritative `not_found` permits
-the same frozen request to continue without another budget point. Unavailable
-observation or lost execution remains blocked. Infrastructure failures do not
-select a stronger model. Bazaar supplies
-the `cell.prompts.ci-manager` selection; import its components before activation.
-
-Deployment does not hold the installed manager's Nucleus admission. The manager
-supervises the instruction process independently of application maintenance.
-Known command or file failures fail the job and pause the queue. An interrupted
-command retains unknown effects and requires an explicit decision before another
-submission. The manager does not infer application recovery or repeat deployment.
-
-Email receives a retained program-authored outcome and idempotency key. The
-manager permits two transport invocations, at least five minutes apart and
-within 23 hours. Provider acceptance completes notification; uncertain delivery
-blocks the queue. An email failure never restarts deployment. Validation,
-acceptance, installation, cleanup, and notification retain separate outcomes.
-
-Manager replacement uses explicit maintenance, outside its own delivery queue.
-Pause admission and finish or recover the active job before replacement. The
-installer selects a fixed release and compatible journal schema under exclusive
-ownership. It preserves queued jobs and starts the replacement paused. It does
-not load worker code from mutable development source or clear existing holds.
-Installation also permits the CI contract's two proved inactive exceptions:
-an explicitly cancelled validation with matching terminal supervisor evidence,
-or a blocked pre-admission repair with matching validation completion evidence
-and an exact Nucleus `not_found` observation. The installer checks the proof
-before stopping its owned service and again under the worker lock. It preserves
-the active job and requires supported recovery afterward. Service stop still
-requires no active job.
-The CI manager is shared infrastructure; the product deployment inventory does
-not deploy the manager itself.
-
-Use the [CI operation contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
-for initialization, controls, Git patch application, retained evidence, and
-recovery outcomes. Installation and queue activation are separate operations.
+Read [Telete queue operation](/Users/joey/rust/cell/infrastructure/telete/chancery/manuals/queue-operate.md)
+for current controls and outcomes. Read the
+[retained Python CI contract](/Users/joey/rust/cell/ci_manager/chancery/manuals/queue-operate.md)
+for old job inspection and recovery. Manual release and deployment tooling
+retain their separate interfaces and Python requirements.
 
 ## Shared command usage
 

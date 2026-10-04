@@ -2,6 +2,36 @@
 
 Semantics-Project: cell
 
+## Installed capability discovery
+
+Chancery is solely for Cell. Apply this workflow to requests about Cell or its
+products.
+
+- When a Cell request may map to an installed local capability, administrative or
+  development operation, or cross-system operational manual—and the relevant
+  contract is not already established in the current session—run
+  `/Users/joey/.local/bin/chancery list` and compare the request semantically
+  with the complete installed catalog's titles and summaries.
+- Read every plausible entry's complete installed contract with
+  `/Users/joey/.local/bin/chancery show <ENTRY_ID>` before choosing or invoking
+  a represented interface. Use the contracts to decide among plausible
+  entries, and ask only when a material choice remains. If no listed entry
+  fits, proceed normally.
+- After selecting an exact entry, run
+  `/Users/joey/.local/bin/chancery resolve <ENTRY_ID>` when the request concerns
+  the system's complete outward promise or a design reliance. Preserve
+  unsupported, unspecified, not-applicable, undeclared, dependency, and
+  readiness outcomes as reported; never fill a gap from schemas or
+  implementation code.
+- Chancery is read-only documentation and discovery. Catalog presence is not live
+  readiness, user authorization, execution, or domain success. Invoke any
+  selected CLI, skill, browser, computer-use surface, or service separately and
+  follow its installed authority, effects, privacy, and recovery contract.
+- Do not substitute historical notes, source-tree research, or generic keyword
+  assumptions for an available installed Chancery contract. If Chancery itself
+  is unavailable, report that discovery failure rather than guessing a local
+  system route.
+
 ## Repository work
 
 - Before analysis, review, or changes, read `semantics.repository.explore`
@@ -14,10 +44,11 @@ Semantics-Project: cell
   playbooks and documentation update rules.
 - Preserve the product instructions in nested `AGENTS.md` files.
 - Commit each code change and submit it with `./ci.sh submit COMMIT` from the
-  Cell root, or `cell-ci submit COMMIT`. Verify the retained job outcome before
-  considering the change complete. The installed manager owns integration,
+  Cell root, or `telete submit COMMIT`. Verify the retained job outcome before
+  considering the change complete. Installed Telete owns integration,
   validation, bounded repair, deployment, and the outcome email. See
-  [CI submission](ci_manager/README.md) and [validation selection](pipeline/README.md).
+  [CI submission](infrastructure/telete/README.md) and
+  [queue operation](infrastructure/telete/chancery/manuals/queue-operate.md).
   Root and product `ci.sh` wrappers use this same path; there is no direct
   check-only CI entry point. Focused tests can support development, but they do
   not replace the manager job.

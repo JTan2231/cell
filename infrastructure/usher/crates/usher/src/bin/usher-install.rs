@@ -219,7 +219,7 @@ fn expected(before: &InstallSnapshot, value: Option<&str>) -> cell_install::Resu
 fn install(
     home: &Path,
     binary: PathBuf,
-    provider_dir: PathBuf,
+    provider_dir: &Path,
     expected_current: Option<&str>,
 ) -> Result<Installation> {
     if !binary.is_absolute() || !provider_dir.is_absolute() {
@@ -261,7 +261,7 @@ fn install(
             },
         ),
     ]);
-    for relative in cell_install::provider_inventory(&provider_dir, &SPEC)?.keys() {
+    for relative in cell_install::provider_inventory(provider_dir, &SPEC)?.keys() {
         files.insert(
             format!("share/chancery/usher/{relative}"),
             SourceFile {
@@ -328,7 +328,7 @@ fn run(command: Command) -> Result<Value> {
             json!(install(
                 &home,
                 args.binary,
-                args.bundle,
+                &args.bundle,
                 args.expected_current.as_deref()
             )?)
         }
@@ -355,7 +355,7 @@ fn run(command: Command) -> Result<Value> {
             json!(install(
                 &context.home,
                 context.binary("usher")?,
-                context
+                &context
                     .request
                     .source_root
                     .join("infrastructure/usher/chancery"),
