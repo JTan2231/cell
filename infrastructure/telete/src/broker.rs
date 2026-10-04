@@ -185,9 +185,14 @@ pub(crate) fn status(paths: &Paths) -> Result<serde_json::Value> {
 // The caller holds worker and admission ownership. This only inspects evidence;
 // terminal command failure is settled, but missing evidence is never repaired.
 pub(crate) fn require_settled(paths: &Paths) -> Result<()> {
+    let _guards = settled_guards(paths)?;
+    Ok(())
+}
+
+pub(crate) fn settled_guards(paths: &Paths) -> Result<Vec<crate::paths::FileLock>> {
     let directory = paths.root.join("broker");
     let slots = ["heavy-0", "light-0", "light-1"];
-    let _guards = slots
+    let guards = slots
         .iter()
         .map(|slot| lock(&directory.join(format!("slot-{slot}.lock")), false))
         .collect::<Result<Vec<_>>>()?;
@@ -243,7 +248,7 @@ pub(crate) fn require_settled(paths: &Paths) -> Result<()> {
             execution.key
         );
     }
-    Ok(())
+    Ok(guards)
 }
 
 #[cfg(test)]

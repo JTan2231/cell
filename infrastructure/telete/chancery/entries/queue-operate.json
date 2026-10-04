@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -30,6 +30,7 @@
   ],
   "failure_and_recovery": [
     "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
+    "Service stop also permits a paused blocked deployment with an exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources; the job remains retained for explicit recovery without deployment replay.",
     "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection."
   ],
   "privacy": [
@@ -165,6 +166,10 @@
       {
         "status": "declared",
         "statement": "One delivery job is active; effect intent is retained before execution and recovery preserves exact identities."
+      },
+      {
+        "status": "declared",
+        "statement": "A paused service may stop with one blocked deployment only after its exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources are proved. The job and receipts remain unchanged for explicit recovery; installation and signing still require a drained queue."
       },
       {
         "status": "declared",

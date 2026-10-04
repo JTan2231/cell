@@ -267,7 +267,13 @@ resume queue admission. `cell-ci` remains the interface for retained Python
 records; root and product `ci.sh` wrappers do not route to that manager.
 
 Use `telete service status`, `service start`, and `service stop` for this service.
-Service stop and program replacement require paused, drained work. Installation,
+Service stop requires paused, drained work. It also permits one blocked deployment
+whose exact successful receipt matches its unchanged accepted source and product
+scope, with settled notification and no queued work, unresolved model, active
+operation, or live compiler or deployment child. The stop holds exclusive settled
+resource ownership and preserves the job and receipts for `telete recover JOB`;
+it does not repeat deployment. Program
+replacement and signing maintenance still require paused, drained work. Installation,
 Semantics project registration, prompt import, queue resume, and live delivery
 are separate operations. A source participation marker does not prove project
 registration. No migration from existing CI journals is supplied.
