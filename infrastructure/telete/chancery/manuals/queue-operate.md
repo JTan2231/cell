@@ -243,8 +243,19 @@ whose exact successful receipt matches its unchanged accepted source and product
 scope, with settled notification and no queued work, unresolved model, active
 operation, or live compiler or deployment child. The stop holds exclusive settled
 resource ownership and preserves the job and receipts for `telete recover JOB`;
-it does not repeat deployment. Program
-replacement and signing maintenance still require paused, drained work. Installation,
+it does not repeat deployment.
+
+Service stop also permits one paused blocked validation with matching job and
+canonical `autofix` reports. The command requires the exact successful unbounded
+dispatcher, the exact retained `autofix.patch`, unchanged accepted base and
+private candidate, a clean worktree, and an accepted settled failure notice.
+It requires no queued work, preparation, acceptance, deployment, unresolved model
+work, or live compiler or deployment child. The stop holds exclusive settled
+resources and preserves the unresolved job, operation, failure, and receipts.
+Use `telete recover JOB` after the service stops to reconcile the retained job.
+Stopping does not settle the job or replay validation.
+
+Program replacement and signing maintenance still require paused, drained work. Installation,
 Semantics project registration, prompt import, queue resume, and live delivery
 are separate operations. A source participation marker does not prove project
 registration. No cross-release journal migration window is supplied.

@@ -489,7 +489,7 @@ pub(crate) fn require_quiescent(paths: &Paths) -> Result<()> {
     Ok(())
 }
 
-// Service stop holds broker and deployment ownership for this recovery case.
+// Service stop holds broker and deployment ownership for these recovery cases.
 // Installation and signing retain the stricter quiescent queue requirement.
 pub(crate) fn require_service_stoppable(paths: &Paths) -> Result<()> {
     if require_quiescent(paths).is_ok() {
@@ -500,6 +500,9 @@ pub(crate) fn require_service_stoppable(paths: &Paths) -> Result<()> {
     let job = store
         .active()?
         .context("Telete has unsettled queued work")?;
+    if job.stopped_phase == Some(Phase::Checking) {
+        return require_blocked_autofix_stoppable(paths, &store, &config, &job);
+    }
     ensure!(
         job.phase == Phase::Blocked
             && job.stopped_phase == Some(Phase::Deploying)
@@ -536,6 +539,109 @@ pub(crate) fn require_service_stoppable(paths: &Paths) -> Result<()> {
         "service stop requires the blocked deployment to have completed successfully"
     );
     Ok(())
+}
+
+// A completed autofix can be recovered after stop; this guard changes no journal state.
+#[allow(clippy::too_many_lines)]
+fn require_blocked_autofix_stoppable(
+    paths: &Paths,
+    store: &Store,
+    config: &Config,
+    job: &Job,
+) -> Result<()> {
+    ensure!(
+        job.phase == Phase::Blocked
+            && job.stopped_phase == Some(Phase::Checking)
+            && job.outcome == Some(Phase::Failed)
+            && job.unresolved
+            && !job.model_unresolved
+            && !job.accepted
+            && job.preparation.is_none()
+            && job.preparation_generation == 0
+            && job.production_diagnostics.is_none()
+            && job.deployment_request.is_none()
+            && job.deployment_result.is_none()
+            && job.options.notify
+            && job
+                .notification
+                .as_ref()
+                .is_some_and(|notice| notice.accepted && !notice.uncertain)
+            && store.jobs()?.iter().all(|other| {
+                other.id == job.id
+                    || (other.phase.terminal() && !other.unresolved && !other.model_unresolved)
+            }),
+        "service stop requires one unaccepted blocked autofix with a settled failure notice"
+    );
+    let operation = job
+        .operation
+        .as_ref()
+        .context("blocked autofix has no retained operation")?;
+    let base = job.base.as_ref().context("fixed base absent")?;
+    let candidate = job.candidate.as_ref().context("candidate absent")?;
+    let directory = paths.job(&job.id.0);
+    let name = format!("validation-{}", job.validations.len());
+    ensure!(
+        operation.phase == Phase::Checking
+            && operation.name == name
+            && operation.candidate == *candidate
+            && operation.result == directory.join(format!("{name}.json"))
+            && !paths.root.join("deployments/active.json").try_exists()?
+            && git::ref_value(paths, &config.repository, git::ACCEPTED)?.as_ref() == Some(base)
+            && git::ref_value(
+                paths,
+                &config.repository,
+                &git::private_ref(&job.id.0, "candidate")?,
+            )?
+            .as_ref()
+                == Some(candidate),
+        "blocked autofix intent, source or deployment ownership changed"
+    );
+    let canonical = validation::receipt_path(paths, base, candidate, job.options.run_tests, true);
+    let bytes = fs::read(&operation.result)?;
+    let report: ValidationReport = serde_json::from_slice(&bytes)?;
+    ensure!(
+        report.state == ValidationState::Autofix
+            && serde_json::from_slice::<Value>(&bytes)?
+                == serde_json::from_slice::<Value>(&fs::read(&canonical)?)?,
+        "blocked autofix has no matching terminal aggregate reports"
+    );
+    validation::verify_report(&report, base, candidate, job.options.run_tests, true)?;
+    let patch = report
+        .autofix_patch
+        .as_ref()
+        .context("autofix receipt has no patch")?;
+    ensure!(
+        *patch
+            == canonical
+                .parent()
+                .context("validation receipt directory absent")?
+                .join("autofix.patch")
+            && !fs::read_to_string(patch)?.is_empty(),
+        "blocked autofix has no exact retained patch"
+    );
+    let worktree = directory.join("worktree");
+    ensure!(
+        git::common(paths, &worktree)? == config.common_git_dir,
+        "validation worktree belongs to another repository"
+    );
+    git::clean_candidate(paths, &worktree, candidate)?;
+    let names = Inventory::load(&worktree)?
+        .select(&report.products)?
+        .iter()
+        .map(|product| product.id.to_string())
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        names.len() == report.products.len() && names == report.products.iter().cloned().collect(),
+        "validation selection is not a canonical product scope"
+    );
+    validation::require_completed_dispatcher(
+        paths,
+        &worktree,
+        base,
+        candidate,
+        job.options.run_tests,
+        true,
+    )
 }
 
 // Keep the authoritative recovery decisions together before the state transition.
@@ -1157,14 +1263,16 @@ impl Worker<'_> {
             report.schema == 1 && report.base == base && report.candidate == candidate,
             "validation receipt names another source"
         );
-        if matches!(
-            report.state,
-            ValidationState::Passed | ValidationState::Autofix
-        ) {
+        if report.state == ValidationState::Passed {
             ensure!(
                 report.tests_run == job.options.run_tests,
                 "validation receipt has another test policy"
             );
+        }
+        if matches!(
+            report.state,
+            ValidationState::Passed | ValidationState::Autofix
+        ) {
             ensure!(
                 report.release_builds_deferred,
                 "validation receipt has another release policy"
@@ -2334,6 +2442,216 @@ mod tests {
             diagnostics: String::new(),
             autofix_patch: None,
         }
+    }
+
+    #[test]
+    fn autofix_before_requested_tests_advances_but_cannot_pass() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        let worker = worker(&paths)?;
+        for (id, state) in [
+            ("autofix-before-tests", ValidationState::Autofix),
+            ("pass-without-tests", ValidationState::Passed),
+        ] {
+            let mut job = job(&paths, &base, id)?;
+            job.base = Some(base.clone());
+            job.candidate = Some(base.clone());
+            job.phase = Phase::Checking;
+            job.options.run_tests = true;
+            let directory = worker.directory(&job)?;
+            git::ensure_worktree(&paths, &repo, &worker.worktree(&job), &base)?;
+            let receipt = directory.join("validation-0.json");
+            job.operation = Some(Operation {
+                phase: Phase::Checking,
+                name: "validation-0".into(),
+                candidate: base.clone(),
+                result: receipt.clone(),
+                started: 1,
+            });
+            let mut report = report(&base, &base, &["alpha"]);
+            report.state = state.clone();
+            let raw = "diff --git a/file.txt b/file.txt\n--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-base\n+fixed\n";
+            if state == ValidationState::Autofix {
+                let patch = directory.join("autofix.patch");
+                store::atomic_bytes(&patch, raw.as_bytes())?;
+                report.autofix_patch = Some(patch);
+            }
+            store::atomic_json(&receipt, &report)?;
+            let mut job = worker.store.insert(&job)?;
+
+            if state == ValidationState::Autofix {
+                worker.checking(&mut job)?;
+                let saved = worker.store.job(id)?;
+                assert_eq!(saved.phase, Phase::Autofixing);
+                assert!(saved.operation.is_none());
+                assert_eq!(saved.validations.len(), 1);
+                assert!(!saved.validations[0].report.tests_run);
+                assert_eq!(saved.validations[0].patch_content.as_deref(), Some(raw));
+                assert_eq!(saved.candidate, Some(base.clone()));
+            } else {
+                let error = worker.checking(&mut job).expect_err("tests are required");
+                assert!(error.to_string().contains("frozen tests"));
+                let saved = worker.store.job(id)?;
+                assert_eq!(saved.phase, Phase::Checking);
+                assert!(saved.operation.is_some());
+                assert!(saved.validations.is_empty());
+            }
+        }
+        assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
+        Ok(())
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn blocked_autofix_stop_requires_exact_completion_and_preserves_job() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        let store = Store::open(&paths.root, false)?;
+        let mut blocked = job(&paths, &base, "stop-autofix")?;
+        blocked.base = Some(base.clone());
+        blocked.candidate = Some(base.clone());
+        blocked.phase = Phase::Blocked;
+        blocked.stopped_phase = Some(Phase::Checking);
+        blocked.outcome = Some(Phase::Failed);
+        blocked.outcome_message = Some("retained validation policy failure".into());
+        blocked.last_error = blocked.outcome_message.clone();
+        blocked.unresolved = true;
+        blocked.cancel_requested = true;
+        blocked.options.run_tests = true;
+        blocked.options.notify = true;
+        blocked.notification = Some(Notification {
+            message: email::api::Message {
+                subject: "retained failure".into(),
+                body: "retained body".into(),
+                idempotency_key: Some("retained-failure-key".into()),
+            },
+            accepted: true,
+            uncertain: false,
+            attempts: Vec::new(),
+            created: 1_700_000_003,
+        });
+        let directory = paths.job(&blocked.id.0);
+        let worktree = directory.join("worktree");
+        git::ensure_worktree(&paths, &repo, &worktree, &base)?;
+        git::advance(
+            &paths,
+            &repo,
+            &git::private_ref(&blocked.id.0, "candidate")?,
+            None,
+            &base,
+        )?;
+        let receipt = directory.join("validation-0.json");
+        blocked.operation = Some(Operation {
+            phase: Phase::Checking,
+            candidate: base.clone(),
+            name: "validation-0".into(),
+            result: receipt.clone(),
+            started: 1_700_000_002,
+        });
+        let mut blocked = store.insert(&blocked)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        let output = validation::receipt_path(&paths, &base, &base, true, true);
+        let mut report = report(&base, &base, &["alpha"]);
+        report.state = ValidationState::Autofix;
+        let patch = output
+            .parent()
+            .context("validation receipt directory")?
+            .join("autofix.patch");
+        store::atomic_bytes(&patch, b"retained patch")?;
+        report.autofix_patch = Some(patch);
+        store::atomic_json(&receipt, &report)?;
+        store::atomic_json(&output, &report)?;
+        assert!(require_service_stoppable(&paths).is_err());
+
+        let mut env = paths.environment();
+        env.insert("CARGO_BUILD_JOBS".into(), "2".into());
+        let dispatcher = crate::process::CommandSpec {
+            program: paths
+                .targets()
+                .join("candidate-validator")
+                .join(base.to_string())
+                .join("debug/telete"),
+            args: vec![
+                "--state".into(),
+                paths.root.display().to_string(),
+                "internal-validate".into(),
+                "--repo".into(),
+                worktree.display().to_string(),
+                "--base".into(),
+                base.to_string(),
+                "--candidate".into(),
+                base.to_string(),
+                "--receipt".into(),
+                output.display().to_string(),
+                "--run-tests".into(),
+                "--defer-release-builds".into(),
+            ],
+            cwd: worktree.clone(),
+            env,
+            timeout_seconds: None,
+            stdin: None,
+            confined: false,
+        };
+        let key = format!("validation/{base}/{base}/dispatcher-unbounded-tests-1-defer-1");
+        let record = paths
+            .root
+            .join("broker")
+            .join(format!("{}.json", key.replace('/', "_")));
+        let process = record.with_extension("process");
+        let retain = |exit_code| -> Result<()> {
+            let result = crate::process::ProcessResult {
+                exit_code: Some(exit_code),
+                stdout: String::new(),
+                stderr: String::new(),
+                timed_out: false,
+            };
+            store::atomic_json(
+                &record,
+                &json!({"schema":1,"key":key,"class":"supervisor","command":dispatcher,
+                    "state":"finished","owner_pid":1,"result":result}),
+            )?;
+            store::atomic_json(&process.join("request.json"), &dispatcher)?;
+            store::atomic_json(
+                &process.join("result.json"),
+                &json!({"schema":1,"request":dispatcher,"result":result}),
+            )
+        };
+        retain(1)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        retain(0)?;
+        report.products = vec!["beta".into()];
+        store::atomic_json(&output, &report)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        report.products = vec!["alpha".into()];
+        store::atomic_json(&output, &report)?;
+        blocked.notification.as_mut().context("notice")?.uncertain = true;
+        store.save(&mut blocked)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        blocked.notification.as_mut().context("notice")?.uncertain = false;
+        blocked.preparation_generation = 1;
+        store.save(&mut blocked)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        blocked.preparation_generation = 0;
+        store.save(&mut blocked)?;
+        fs::write(worktree.join("file.txt"), "changed source\n")?;
+        assert!(require_service_stoppable(&paths).is_err());
+        fs::write(worktree.join("file.txt"), "base\n")?;
+        store.set("paused", &false)?;
+        assert!(require_service_stoppable(&paths).is_err());
+        store.set("paused", &true)?;
+
+        let before = serde_json::to_value(store.job(&blocked.id.0)?)?;
+        let receipt_before = fs::read(&receipt)?;
+        let dispatcher_before = fs::read(process.join("result.json"))?;
+        let _resources = crate::broker::settled_guards(&paths)?;
+        let _deployment = store::lock(&paths.root.join("deployments/deployment.lock"), false)?;
+        let _worker = store::lock(&paths.root.join("worker.lock"), false)?;
+        require_service_stoppable(&paths)?;
+        assert_eq!(serde_json::to_value(store.job(&blocked.id.0)?)?, before);
+        assert_eq!(fs::read(&receipt)?, receipt_before);
+        assert_eq!(fs::read(&output)?, receipt_before);
+        assert_eq!(fs::read(process.join("result.json"))?, dispatcher_before);
+        assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
+        assert!(require_quiescent(&paths).is_err());
+        Ok(())
     }
 
     fn repair(job: &Job, paths: &Paths, number: u64, raw: &str) -> Result<RepairAttempt> {

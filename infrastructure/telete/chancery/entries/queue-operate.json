@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -32,6 +32,7 @@
   "failure_and_recovery": [
     "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
     "Service stop also permits a paused blocked deployment with an exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources; the job remains retained for explicit recovery without deployment replay.",
+    "Service stop permits one paused blocked validation with exact completed Autofix evidence and settled resources; it preserves the unresolved job for explicit recovery without validator replay.",
     "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection.",
     "Cancellation may abandon one paused blocked validation without an aggregate report only after exact timed-out dispatcher and terminal child evidence, exclusive resources, unchanged accepted base and private source, a settled accepted failure notice and absence of preparation, acceptance, deployment or unresolved model work. It does not replay validation or claim a pass."
   ],
@@ -188,6 +189,10 @@
       },
       {
         "status": "declared",
+        "statement": "A paused service may stop with one blocked validation only after matching job and canonical Autofix reports, its exact successful unbounded dispatcher, exact retained patch, unchanged accepted base and private candidate, clean worktree and settled accepted failure notice are proved. Preparation, acceptance, deployment, unresolved model work and other queued work are absent. Stop holds exclusive settled compiler and deployment resources and changes no job or receipt; installation and signing still require a drained queue."
+      },
+      {
+        "status": "declared",
         "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the shared manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
       },
       {
@@ -237,6 +242,10 @@
       {
         "status": "declared",
         "statement": "Unbounded dispatcher requests use distinct gate identities. Retained bounded dispatcher requests preserve their recorded deadlines and exact command correlation; a timed-out validation is abandoned only through guarded cancellation."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 7 adds guarded service stop for a blocked completed Autofix without changing journal schemas, settling the job or replaying validation."
       }
     ],
     "reliances": [

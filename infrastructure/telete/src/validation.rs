@@ -1676,6 +1676,28 @@ fn dispatcher_spec(
     command
 }
 
+pub(crate) fn require_completed_dispatcher(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+) -> Result<()> {
+    let result = broker::completed(
+        paths,
+        &format!(
+            "validation/{base}/{candidate}/dispatcher-unbounded-tests-{}-defer-{}",
+            u8::from(run_tests),
+            u8::from(defer_release)
+        ),
+        ResourceClass::Supervisor,
+        &dispatcher_spec(paths, repo, base, candidate, run_tests, defer_release, None),
+    )?;
+    ensure!(result.success(), "validation dispatcher did not succeed");
+    Ok(())
+}
+
 pub(crate) fn require_timed_out_dispatcher(
     paths: &Paths,
     repo: &Path,

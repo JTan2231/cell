@@ -44,14 +44,7 @@ pub fn import(database: &Path, input: &Path) -> Result<ImportReport> {
         let owner = entry.id.split('.').next().unwrap_or("");
         if !matches!(
             owner,
-            "annals"
-                | "conatus"
-                | "krisis"
-                | "semantics"
-                | "platter"
-                | "weaver"
-                | "emt"
-                | "telete"
+            "annals" | "conatus" | "krisis" | "semantics" | "platter" | "weaver" | "emt" | "telete"
         ) || !seen.insert(entry.id.clone())
         {
             return Err(Error::Invalid(

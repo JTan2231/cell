@@ -40,7 +40,7 @@ pub(crate) fn run(
         &CommandSpec {
             program: PathBuf::from("/usr/bin/git"),
             args: arguments,
-            cwd: repo.to_path_buf(),
+            cwd: repo.clone(),
             env: environment,
             timeout_seconds: Some(120),
             stdin,
