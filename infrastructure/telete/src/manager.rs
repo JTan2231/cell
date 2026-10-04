@@ -2488,7 +2488,10 @@ mod tests {
                 assert_eq!(saved.validations[0].patch_content.as_deref(), Some(raw));
                 assert_eq!(saved.candidate, Some(base.clone()));
             } else {
-                let error = worker.checking(&mut job).expect_err("tests are required");
+                let error = match worker.checking(&mut job) {
+                    Ok(()) => bail!("tests are required"),
+                    Err(error) => error,
+                };
                 assert!(error.to_string().contains("frozen tests"));
                 let saved = worker.store.job(id)?;
                 assert_eq!(saved.phase, Phase::Checking);
