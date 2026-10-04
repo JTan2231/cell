@@ -45,8 +45,10 @@ explicitly authorized manual installation or recovery:
    `chancery show milieu.installation` when Chancery is available.
 5. Run `milieu --register-usage` after installation or update.
 
-Installation selects a retained payload, frontend, installer, and exact
-provider bundle through one atomic `current` release. Direct installation
+Installation publishes payload, frontend, and installer files at fixed runtime
+paths. The provider directory selector follows the selected retained archive.
+Each runtime file replacement is atomic; the complete product is not one atomic
+update. Direct installation
 creates no database or schedule and sends no provider request. A failed
 switch retains completed selector changes for explicit recovery. Catalog
 presence and release metadata do not prove usable local state.

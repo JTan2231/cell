@@ -113,11 +113,23 @@ jobs, maintenance owners, or unresolved effects.
 Installation normally requires paused admission and no active job. Service stop
 always requires both conditions. Installation permits the two exceptions below
 when evidence establishes that execution has stopped or was not admitted.
-Installation keeps the queue paused and loads the service. It pins a
-immutable release under `~/.local/share/cell-ci/releases/` and selects
-the matching executable and provider through `current`. It refuses foreign
-selectors or LaunchAgent files and attempts to restore the prior selection if
-installation fails. A failed restoration leaves an explicit recovery error.
+Installation keeps the queue paused and loads the service. It retains an archive
+under `~/.local/share/cell-ci/releases/`. It publishes regular wrapper and Python
+module files beneath the fixed `~/.local/share/cell-ci/runtime/` directory.
+The public command, launchd command, and Python bootstrap use that runtime tree.
+Updates keep the same actual program paths. The `current` selector records the
+archive and selects its matching provider bundle. Each runtime file replacement
+is atomic; the complete product is not one atomic update.
+
+Installation refuses foreign selectors, runtime files, or LaunchAgent files.
+A failed update attempts to restore the prior runtime files, public selectors,
+archive selection, and LaunchAgent before restarting the prior service. A failed
+restoration leaves an explicit recovery error. First installation failure
+removes only the newly published runtime tree and owned selectors.
+An uncatchable crash during publication can leave an incomplete runtime tree.
+Service operations and source installation fail closed when the runtime does
+not match the selected archive. Source installation does not repair that tree
+automatically, and it does not restart an incoherent runtime.
 After stopping its owned service during installation or rollback, the installer
 waits up to 10 seconds for the worker lock. It refuses to proceed if the lock
 remains held, and retains all required checks under the lock after acquisition.
@@ -133,12 +145,12 @@ cell-ci status
 cell-ci resume
 ```
 
-Calling `cell-ci install` from an installed release selects that release's own
+Calling `cell-ci install` from the installed runtime selects its current
 bytes; it does not find newer source automatically. The repository's
 `./ci.sh install` selects that checkout's manager package.
 
-Production preparation uses the build, candidate, and inventory modules pinned
-in the installed manager release. Product descriptors can declare canonical
+Production preparation uses the build, candidate, and inventory modules from
+the installed manager runtime. Only explicit manager installation replaces them. Product descriptors can declare canonical
 checkout-relative roots such as `clew` or `products/clew`. Install a manager that
 supports the new source paths before submitting a directory relocation. Keep
 the current layout while validating that compatibility change, then use the
@@ -186,7 +198,7 @@ Install this manager before submitting a commit with the manager-only wrappers.
 Workers older than 0.2.0 invoke the public root wrapper for validation and
 cannot validate that commit. This worker invokes the candidate's internal
 `pipeline/select_changes.py run` with the fixed base, candidate, and JSON receipt
-arguments. Manager release 0.8.2 uses queue contract 11 and retains journal
+arguments. Manager release 0.8.3 uses queue contract 12 and retains journal
 schema 1. New submissions freeze `policy.refund_accepted_patches = true` and
 `policy.manifest_executor = 1`. The latter selects deployment receipt schema 2.
 Retained schema-1 deployment outcomes remain readable. The new manager does
@@ -591,7 +603,7 @@ mode 0700 and private files use mode 0600. The journal is `queue.sqlite3` with
 schema 1. Private worktrees, diagnostics and operation artifacts are below
 `jobs/JOB/`.
 
-Launchd starts the worker from its installed release with output directed to
+Launchd starts the worker from its fixed installed runtime with output directed to
 `/dev/null`. The worker validates storage and opens its own external stdout and
 stderr logs. Launchd does not open removable-volume paths before process startup.
 
@@ -641,7 +653,9 @@ provider. The manager does not copy Nucleus credentials or load Email's
 credential. Read-only inspection and
 catalog discovery do not authorize these disclosures or start a job.
 
-Production candidates use opaque UUID IDs. Installed manager and product releases
-also use opaque UUID directory names. Retained hash-named releases remain
+Production candidates use opaque UUID IDs. Retained manager and product archives
+also use opaque UUID directory names. Executables use fixed runtime paths.
+Manager recipe schema 3 records the runtime root; earlier schemas 1 and 2
+remain readable for migration and recovery. Retained hash-named releases remain
 readable without recomputing their hashes. Native signing remains a packaging instruction. CI and deployment do not
 reverify retained artifacts or apply custom content-hash checks.

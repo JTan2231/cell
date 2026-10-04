@@ -24,7 +24,7 @@ they do not load Email credentials, probe external providers, or access mail.
 | `email.message.send` | Fixed-address submission, local or byte attachments, reply fields, idempotency, acceptance, bounded retries, and ambiguous failures. |
 | `email.message.receive` | One-page account metadata reads, selected content, provider identities and timestamps, untrusted input, limits, and caller retention. |
 | `email.account` | Private credential selection, atomic local settings, receiving-domain discovery, domain observations, and account-access limits. |
-| `email.installation` | Immutable current-user program releases, wrapper boundaries, matching documentation, selector recovery, and retained settings separation. |
+| `email.installation` | Retained program archives, fixed runtime paths, wrapper boundaries, matching documentation, selector recovery, and retained settings separation. |
 
 ## Operations
 
@@ -45,8 +45,8 @@ returns one provider observation without changing account mail. Neither route
 creates a queue, scheduler, daemon, or local mail history.
 
 Account settings retain only selected credentials and domain configuration.
-Program installation publishes the complete documentation with its immutable
-release and selects both together. Program recovery and private settings
+Program installation publishes programs at fixed runtime paths and selects
+matching documentation from a retained archive. Program recovery and private settings
 selection have separate boundaries. An installed program or selected domain
 does not establish live account readiness.
 

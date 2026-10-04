@@ -26,9 +26,11 @@ The Rust installer accepts the binary, installer, and provider files at absolute
 paths. It places those files and publishes their selectors without comparing
 versions, validating provider contents, or probing runtime readiness.
 
-Direct installation creates no runtime database, registers no product
-schedule, changes no binding, writes no `org.clockwork.*` plist, and runs no
-product. It can create missing current-user `.local/bin` and Chancery parent
+Direct installation and recovery require every existing binding disabled.
+They use the ordinary disable boundary to wait for admitted activations and
+refuse unknown process state. They preserve selected definitions, disabled
+intent, and halts. They create no runtime database or product schedule and run
+no product. Do not start manual activations during replacement. It can create missing current-user `.local/bin` and Chancery parent
 directories. It validates existing shared parents without changing their modes
 and changes modes only within Clockwork's owned installation/state tree.
 Root or system installation, remote installation, and foreign-path takeover
@@ -40,20 +42,23 @@ explicit absolute home option; runtime isolation is not a new production owner.
 The installer copies the exact binary, Rust installer, public layout, and
 complete provider tree into one immutable UUID release under
 `$HOME/Library/Application Support/Clockwork/install/releases`. Its
-`cell-install-v3` manifest is `manifest.json`. The retained installer appears
+`cell-install-v4` manifest is `manifest.json`. The retained installer appears
 at `bin/clockwork-install` and `package/install`. The installer reads retained release metadata when selecting an existing
 installation or recovering a retained release.
 
 Provider files are copied with the release. Installation does not invoke a
 Chancery reader or validate discovery. No runtime state belongs in the release.
 
-One atomic current selector connects both public views:
+The installer copies executable payloads to regular files in the fixed
+`install/runtime` tree. Each file replacement is atomic. Public executable
+selectors use this tree; the provider selector uses the selected retained
+release. `current` and `previous` preserve archive selection metadata:
 
 ```text
 ~/.local/bin/clockwork
-  -> .../Clockwork/install/current/bin/clockwork
+  -> .../Clockwork/install/runtime/bin/clockwork
 ~/.local/bin/clockwork-install
-  -> .../Clockwork/install/current/bin/clockwork-install
+  -> .../Clockwork/install/runtime/bin/clockwork-install
 .../Chancery/providers/clockwork
   -> .../Clockwork/install/current/share/chancery/clockwork
 ```
@@ -70,25 +75,38 @@ There is no automatic selector restoration or detachment. Inspect current
 selectors and use an explicitly selected recovery operation when authorized.
 Replacing a foreign path is unsupported.
 
-After commit, recovery reads metadata and selects an owned retained release.
-Select the retained installer explicitly. Program rollback changes program/provider
-selection but leaves product bindings and generated plists unchanged. Each
-plist pins an exact immutable broker; releases cannot be pruned while
-any plist or running activation may refer to them.
+Recovery reads metadata and republishes an owned retained release into the
+fixed runtime. Use a compatible trusted installer. Program rollback preserves
+product bindings and plist bytes; plists with the fixed runtime path then use
+the restored broker. Legacy plists retain their archive path until an explicit
+binding refresh. Do not prune an archive while a definition, legacy plist, or
+running activation can refer to it.
+
+Pre-runtime Clockwork releases remain readable as installation and history
+metadata, but are not recovery candidates. Their brokers require an archive
+execution path and cannot operate from the fixed runtime or admit schema-three
+definitions. `clockwork-install recover` rejects a target older than
+`cell-install-v4` before publication. Rebuild historical source with fixed-runtime
+support when compatible historical behavior is required.
 
 ## Coordinated broker refresh
 
-Manifest `./deploy.sh clockwork` selects program files, then refreshes existing
-enabled bindings through the selected broker when a runtime database exists.
-Each binding keeps its selected definition digest. The generated plist pins the
-selected broker path. Disabled bindings stay disabled. There is no temporary
-disable-all step, maintenance hold, product expansion, or activation phase order.
+Manifest `./deploy.sh clockwork` first records the complete binding inventory
+in the deployment run's private `clockwork-binding-intent.json`. It disables
+every retained binding through the installed broker. Disable waits for an
+admitted broker and child to finish; unproved child exit stops replacement.
+This includes a manual activation of a disabled binding.
 
-Binding refresh preserves failure incidents and retries no product work. A
-run-at-load definition can start work when its enabled binding is refreshed.
-An interrupted instruction has unknown effects. Completed changes remain, and
-the executor performs no automatic retry, rollback, or Clockwork recovery.
-Inspect the product state before an explicit recovery or new attempt.
+After drain, deployment publishes the fixed runtime files and selects the
+same definition for each previously enabled binding through the new broker.
+Previously disabled bindings remain disabled. The generated plist uses the
+fixed physical broker path. Definitions and incidents are preserved. A
+run-at-load definition can start work when enabled intent is restored.
+
+Failure retains completed changes and the captured intent. Unrestored bindings
+stay disabled; the executor does not infer retry or recovery. Inspect the
+private intent file, current selection, and process evidence before an explicit
+recovery. Do not start manual activations during replacement.
 
 ## Detach and retained-state scope
 
@@ -160,7 +178,8 @@ Ordinary product reports retain the canonical installed state and Email default.
 Shared checks require installed `$HOME/.local/bin/iatreion` and a stable Cell
 checkout, default `$HOME/rust/cell`. Notification policy selects another
 absolute checkout. Active pinned brokers must understand check eligibility
-and EMT handoff; stable CLI replacement alone does not refresh them. Additive
+and EMT handoff; legacy archive-bound plists require a binding refresh; replacing the fixed
+runtime updates the broker used by already converted plists. Additive
 incident feed and routing metadata leave SQLite schema two unchanged.
 
 `failure-checks.json`, `notification-checks.json`, `notification-routing.json`,

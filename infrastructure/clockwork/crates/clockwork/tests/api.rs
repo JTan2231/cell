@@ -48,3 +48,77 @@ fn schema_one_digest_keeps_its_original_canonical_bytes() -> Result<(), Box<dyn 
     );
     Ok(())
 }
+
+#[test]
+fn runtime_definitions_keep_exact_release_identity_and_closed_paths()
+-> Result<(), Box<dyn std::error::Error>> {
+    use clockwork::api::LaunchImage;
+    let release = "/fixture/install/releases/6ce29a62-15b0-4e71-b5c0-4c5db83bb38d";
+    let source = serde_json::json!({
+        "schema_version":2,"key":"example/worker",
+        "release_id":"6ce29a62-15b0-4e71-b5c0-4c5db83bb38d","release_root":release,
+        "authority":"current-user-background","overlap":"skip","arguments":[],
+        "cwd":"/fixture/state","schedule":{"kind":"interval","seconds":60,"run_at_load":false},
+        "launch":{"kind":"direct","program":format!("{release}/bin/worker"),"sha256":"a".repeat(64)},
+        "environment":{},"output":{"stdout":"/fixture/out","stderr":"/fixture/err"}
+    });
+    let mut manifest: Manifest = serde_json::from_value(source)?;
+    let old = manifest.clone();
+    let old_digest = old.digest()?;
+    manifest.use_runtime_paths()?;
+    assert_eq!(manifest.schema_version, 3);
+    assert_eq!(manifest.release_root, old.release_root);
+    assert_eq!(manifest.release_id, old.release_id);
+    assert!(
+        matches!(&manifest.launch, LaunchImage::Direct { program, sha256 }
+        if program == "/fixture/install/runtime/bin/worker" && sha256 == &"a".repeat(64))
+    );
+    assert_ne!(manifest.digest()?, old_digest);
+    let runtime_digest = manifest.digest()?;
+    manifest.use_runtime_paths()?;
+    assert_eq!(manifest.digest()?, runtime_digest);
+    assert_eq!(Manifest::from_toml(&manifest.to_toml()?)?, manifest);
+    assert_eq!(Manifest::from_toml(&old.to_toml()?)?, old);
+
+    for program in [
+        "/foreign/bin/worker".to_owned(),
+        format!("{release}/../other/bin/worker"),
+        "/fixture/install/runtime/../foreign".to_owned(),
+    ] {
+        let mut invalid = old.clone();
+        invalid.launch = LaunchImage::Direct {
+            program,
+            sha256: "a".repeat(64),
+        };
+        assert!(invalid.use_runtime_paths().is_err());
+    }
+
+    manifest = old;
+    manifest.launch = LaunchImage::Interpreted {
+        interpreter: "/bin/sh".into(),
+        interpreter_sha256: "b".repeat(64),
+        script: format!("{release}/bin/worker"),
+        script_sha256: "c".repeat(64),
+    };
+    manifest.use_runtime_paths()?;
+    assert!(
+        matches!(manifest.launch, LaunchImage::Interpreted { interpreter, interpreter_sha256, script, script_sha256 }
+        if interpreter == "/bin/sh" && interpreter_sha256 == "b".repeat(64)
+        && script == "/fixture/install/runtime/bin/worker" && script_sha256 == "c".repeat(64))
+    );
+    Ok(())
+}
+
+#[test]
+fn runtime_mapping_requires_the_owned_installation_shape() {
+    use clockwork::api::runtime_root;
+    use std::path::Path;
+    for root in [
+        "/fixture/releases/6ce29a62-15b0-4e71-b5c0-4c5db83bb38d",
+        "/fixture/install/releases/not-a-release",
+        "/fixture/install/releases/../6ce29a62-15b0-4e71-b5c0-4c5db83bb38d",
+        "install/releases/6ce29a62-15b0-4e71-b5c0-4c5db83bb38d",
+    ] {
+        assert!(runtime_root(Path::new(root)).is_err());
+    }
+}

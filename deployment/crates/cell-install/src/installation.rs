@@ -589,6 +589,9 @@ fn detach(paths: &Paths, before: &View, after: &View) -> Disposition {
 /// Returns an error for unsafe or stale installation state, invalid candidates,
 /// unavailable locks, or failed publication. A publication failure retains completed
 /// selector changes and reports uncertainty.
+#[deprecated(
+    note = "use prepare_release and lock_installation publication for fixed runtime paths"
+)]
 pub fn install(
     spec: &InstallSpec,
     home: &Path,
@@ -632,6 +635,7 @@ pub fn install(
 /// Returns an error for foreign or stale selections, invalid retained content,
 /// unavailable locks, or failed publication checks. Mutation failures carry an
 /// explicit restoration/detachment/uncertainty disposition.
+#[deprecated(note = "use InstallTransaction::restore for fixed runtime paths")]
 pub fn restore(
     spec: &InstallSpec,
     home: &Path,
@@ -661,6 +665,7 @@ pub fn restore(
 /// Returns an error when the selection cannot be attributed to the supplied
 /// prior/candidate, when paths or releases are unsafe, or when locks, repair,
 /// or publication checks fail. It never replaces an unknown selection.
+#[deprecated(note = "use InstallTransaction::recover for fixed runtime paths")]
 pub fn recover_installation(
     spec: &InstallSpec,
     home: &Path,

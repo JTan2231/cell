@@ -1,5 +1,22 @@
 # Install and operate Krisis
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Decisions/install/runtime. Public commands use that
+runtime tree; current and previous retain immutable UUID archive selections. Code
+signing and runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
 The public binary and provider are `krisis`. The compatibility provider is
 `decisions`, the active Clockwork key is `krisis/observer`, and the schema is 6.
 Existing Decisions application-support and log paths are retained for
@@ -14,8 +31,10 @@ the observer does not discover another Codex installation at runtime.
 Interactive source-reading commands must receive that same path through
 `CONVERSATIONS_CODEX` because the installed command does not inherit
 Clockwork's observer environment; doctor and process also require the complete
-explicit Annals configuration. The default operation prepares a immutable release and Clockwork definition while retaining the
-maintenance gate; it does not select or activate them. After the outer cutover
+explicit Annals configuration. The default operation prepares an immutable release and the exact Clockwork
+definition digest while retaining the maintenance gate. It does not register,
+select or activate that candidate. Final cutover publishes the runtime files
+before it registers the definition. After the outer cutover
 has separately proved its Annals and semantic prerequisites, `--final-cutover`
 performs writer shutdown, quiescence, migration, baseline activation, selector/hook publication, and schedule handoff. Clockwork process state
 is not cross-system proof.
@@ -45,8 +64,8 @@ selects `krisis/observer` directly. Activation preserves an existing write-once
 baseline. The command pins the installed Annals decisions library; it does not
 choose a legacy Semantics activation watermark.
 
-The command does not acquire application maintenance, drain live or durable
-work, suspend scheduling, retire legacy schedules, check readiness, or recover
+The command does not acquire application maintenance, drain durable
+work, retire legacy schedules, check readiness, or recover
 automatically. Native state and publication locks protect actual writes.
 An interrupted command can leave completed effects in place. Inspect its
 retained log, hook, receipt and current selection before a further operation.
@@ -116,7 +135,7 @@ unchanged schema. Recover forward with the retained candidate after a schema cha
 
 ## Scheduled failure policy
 
-Krisis configures Clockwork definition schema 2 for `krisis/observer` with
+Krisis configures Clockwork definition schema 3 for `krisis/observer` with
 `[failure] on_abend = "halt-until-approved"`. A conversation read failure
 (`document_source_unavailable`), including a timeout or protocol error, is a
 handled outcome after Krisis saves the failed observation. It returns zero,
@@ -142,7 +161,7 @@ exact documents, target identity, and idempotent Annals acceptance.
 Definition switches and deployment preserve the Clockwork incident. Existing
 failed observations remain terminal history; cutover does not re-alert or retry
 them. The retired Decisions schedules remain disabled. Schema-one definitions
-keep their old policy until a schema-two definition is explicitly selected.
+keep their old policy until a schema-two or schema-three definition is explicitly selected.
 
 Coordinated recovery restores the exact recorded product transaction before it releases its hold. Its private journal binds the deployment owner, home, prior
 selection and candidate release to the prior database schema, hook and schedule state.

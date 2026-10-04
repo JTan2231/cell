@@ -120,6 +120,7 @@ struct Output {
 ///
 /// # Errors
 /// Rejects an absent or unproved release, nonabsolute paths, and existing output.
+#[allow(clippy::too_many_lines)]
 pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
     let home = args
         .home
@@ -206,6 +207,8 @@ pub fn schedule_definition(args: ScheduleDefinitionArgs) -> Result<Value> {
             stderr: logs.join(format!("{log_name}.err.log")),
         },
     };
+    let mut definition = clockwork::api::Manifest::from_toml(&toml::to_string(&definition)?)?;
+    definition.use_runtime_paths()?;
     let mut output = OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -283,6 +286,10 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
     }
     let schedule = ScheduleState::capture_installed(&context.home, "conatus/update")?;
     let email_schedule = ScheduleState::capture_installed(&context.home, "conatus/daily-email")?;
+    let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+        .with_home(&context.home);
+    schedule.suspend(&clockwork, "conatus/update")?;
+    email_schedule.suspend(&clockwork, "conatus/daily-email")?;
     cell_install::simple::deploy_program(&specification(), env!("CARGO_PKG_VERSION"), context)?;
     {
         let _admission = crate::gate(&root).enter()?;
@@ -326,7 +333,8 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
         if saved.binding.is_none() && enabled.is_none() {
             continue;
         }
-        let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?);
+        let clockwork = clockwork::api::Client::new(context.dependency_binary("clockwork")?)
+            .with_home(&context.home);
         let path = context.request.run_dir.join(filename);
         schedule_definition(ScheduleDefinitionArgs {
             state_dir: root.clone(),
@@ -336,13 +344,14 @@ fn deploy_inner(context: &cell_install::adapter::Context) -> Result<()> {
         })?;
         let fallback = clockwork::api::Manifest::from_toml(&fs::read_to_string(&path)?)?;
         fs::remove_file(&path)?;
-        let release = executable
-            .parent()
-            .and_then(std::path::Path::parent)
-            .context("Conatus release missing")?;
+        let release = fs::canonicalize(
+            context
+                .home
+                .join("Library/Application Support/Conatus/install/current"),
+        )?;
         let definition = saved.retarget(
             fallback,
-            release,
+            &release,
             &executable,
             cell_install::file_digest(&executable)?,
         )?;

@@ -1,6 +1,10 @@
 # Clockwork
 
 Clockwork starts scheduled non-agent programs for the current macOS user.
+New product launch images use fixed regular files in the product
+`install/runtime` tree. Clockwork uses a fixed broker executable there, while
+retained releases preserve recovery bytes and definition identity.
+
 A product registers an immutable definition and selects it with a stable
 `owner/name` binding. launchd invokes a short-lived broker. Clockwork checks
 admission and pinned top-level images, supervises one child, and retains

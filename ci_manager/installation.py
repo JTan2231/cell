@@ -1,4 +1,4 @@
-"""Explicit installation of pinned CI-manager code and its paused user service."""
+"""Explicit installation of fixed-path CI-manager code and its paused user service."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from ci_manager.integrations import IntegrationError, NucleusClient
 
 LABEL = "dev.cell.ci-manager"
 PROVIDER = "ci-manager"
-FORMAT = 2
+FORMAT = 3
 STOP_LOCK_TIMEOUT = 10.0
 
 
@@ -37,6 +37,7 @@ def _paths() -> dict[str, Path]:
     return {
         "programs": programs,
         "current": programs / "current",
+        "runtime": programs / "runtime",
         "wrapper": home() / ".local/bin/cell-ci",
         "provider": home() / "Library/Application Support/Chancery/providers" / PROVIDER,
         "plist": home() / "Library/LaunchAgents" / f"{LABEL}.plist",
@@ -91,14 +92,15 @@ def _link(path: Path, target: str) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _launcher(python: str, release: Path) -> bytes:
+def _launcher(python: str, release: Path, *, stable: bool = False) -> bytes:
     bootstrap = (
         "import runpy,sys; "
         f"sys.path.insert(0,{str(release)!r}); "
         f"runpy.run_path({str(release / 'ci_manager/client.py')!r},run_name='__main__')"
     )
+    description = "fixed runtime path" if stable else "pinned immutable release"
     return (
-        "#!/bin/sh\n# Cell CI manager: pinned immutable release.\n"
+        f"#!/bin/sh\n# Cell CI manager: {description}.\n"
         f"exec {shlex.quote(python)} -I -B -c {shlex.quote(bootstrap)} \"$@\"\n"
     ).encode("utf-8")
 
@@ -113,12 +115,13 @@ def _verify_release(release: Path) -> dict:
         recipe = manifest["recipe"]
         files = recipe["files"]
         version = recipe["schema_version"]
-        if (version not in {1, FORMAT} or recipe["product"] != "cell-ci"
+        if (version not in {1, 2, FORMAT} or recipe["product"] != "cell-ci"
                 or recipe["program_root"] != str(program_root())
                 or recipe["entry"] != "ci_manager/client.py"
                 or len(release.name) != (64 if version == 1 else 32)
                 or not isinstance(files, dict)
-                or not Path(recipe["python"]).is_absolute()):
+                or not Path(recipe["python"]).is_absolute()
+                or (version == FORMAT and recipe.get("runtime_root") != str(program_root() / "runtime"))):
             raise ValueError("invalid release recipe")
         for relative, record in files.items():
             path = Path(relative)
@@ -139,7 +142,9 @@ def _verify_release(release: Path) -> dict:
                     record = files[relative]
                     if stat.S_IMODE(path.stat().st_mode) != record["mode"]:
                         raise ValueError("changed release content")
-        wrapper = _launcher(recipe["python"], release)
+        runtime = program_root() / "runtime"
+        wrapper = _launcher(recipe["python"], runtime if version == FORMAT else release,
+                            stable=version == FORMAT)
         if (observed != expected or (release / "bin/cell-ci").read_bytes() != wrapper
                 or stat.S_IMODE((release / "bin/cell-ci").stat().st_mode) != 0o555):
             raise ValueError("changed release inventory")
@@ -161,9 +166,9 @@ def _selected_release(paths: dict[str, Path]) -> Path | None:
     return release
 
 
-def _check_selector(path: Path, expected: Path) -> None:
+def _check_selector(path: Path, expected: Path, legacy: Path | None = None) -> None:
     if path.is_symlink():
-        if os.readlink(path) != str(expected):
+        if os.readlink(path) not in {str(expected), str(legacy) if legacy is not None else str(expected)}:
             raise ManagerError(f"foreign CI manager selector: {path}")
     elif path.exists():
         raise ManagerError(f"foreign CI manager selector: {path}")
@@ -186,7 +191,10 @@ def _check_plist(path: Path) -> bytes | None:
             raise ValueError("unexpected LaunchAgent")
         wrapper = Path(arguments[0])
         release = wrapper.parent.parent
-        if arguments != _launch_arguments(release):
+        if (arguments != _launch_arguments(release)
+                or (release != program_root() / "runtime"
+                    and (release.parent != program_root() / "releases"
+                         or not re.fullmatch(r"(?:[0-9a-f]{32}|[0-9a-f]{64})", release.name)))):
             raise ValueError("unexpected LaunchAgent command")
     except (ValueError, TypeError, KeyError, plistlib.InvalidFileException) as error:
         raise ManagerError("foreign CI manager LaunchAgent") from error
@@ -323,6 +331,7 @@ def _prepare_release(source: Path, python: Path) -> Path:
     recipe = {
         "schema_version": FORMAT, "product": "cell-ci", "entry": "ci_manager/client.py",
         "program_root": str(program_root()), "python": str(python), "files": records,
+        "runtime_root": str(program_root() / "runtime"),
     }
     identity = uuid.uuid4().hex
     releases = program_root() / "releases"
@@ -335,7 +344,7 @@ def _prepare_release(source: Path, python: Path) -> Path:
     try:
         for name, content in contents.items():
             _write_file(stage / name, content, records[name]["mode"])
-        wrapper = _launcher(str(python), release)
+        wrapper = _launcher(str(python), program_root() / "runtime", stable=True)
         _write_file(stage / "bin/cell-ci", wrapper, 0o555)
         _write_file(stage / "manifest.json", _json({"recipe": recipe}), 0o444)
         for directory in sorted((path for path in stage.rglob("*") if path.is_dir()), reverse=True):
@@ -349,6 +358,84 @@ def _prepare_release(source: Path, python: Path) -> Path:
                 os.chmod(directory, 0o700)
             shutil.rmtree(stage)
     return release
+
+
+def _runtime_files(release: Path) -> dict[str, int]:
+    recipe = _verify_release(release)["recipe"]
+    return {**{name: record["mode"] for name, record in recipe["files"].items()},
+            "manifest.json": 0o444, "bin/cell-ci": 0o555}
+
+
+def _verify_runtime(release: Path, runtime: Path) -> None:
+    expected = _runtime_files(release)
+    observed = set()
+    if runtime.is_symlink() or not runtime.is_dir() or runtime.stat().st_uid != os.getuid():
+        raise ManagerError("foreign CI manager runtime directory")
+    for path in runtime.rglob("*"):
+        if path.is_symlink() or path.stat().st_uid != os.getuid():
+            raise ManagerError("foreign CI manager runtime content")
+        if path.is_file():
+            name = path.relative_to(runtime).as_posix()
+            observed.add(name)
+            if name not in expected or stat.S_IMODE(path.stat().st_mode) != expected[name]:
+                raise ManagerError("changed CI manager runtime inventory")
+        elif not path.is_dir():
+            raise ManagerError("foreign CI manager runtime content")
+    recipe = _verify_release(release)["recipe"]
+    try:
+        manifest = json.loads((runtime / "manifest.json").read_bytes())
+    except (OSError, ValueError) as error:
+        raise ManagerError("changed CI manager runtime selection") from error
+    if (observed != set(expected) or manifest != {"recipe": recipe}
+            or (runtime / "bin/cell-ci").read_bytes() != _launcher(recipe["python"], runtime, stable=True)):
+        raise ManagerError("changed CI manager runtime selection")
+
+
+def _runtime_snapshot(runtime: Path, release: Path | None) -> dict[str, tuple[bytes, int]] | None:
+    if not runtime.exists() and not runtime.is_symlink():
+        return None
+    if release is None:
+        raise ManagerError("CI manager runtime has no owned release selection")
+    _verify_runtime(release, runtime)
+    return {name: ((runtime / name).read_bytes(), mode)
+            for name, mode in _runtime_files(release).items()}
+
+
+def _publish_runtime(release: Path, runtime: Path) -> None:
+    files = _runtime_files(release)
+    previous = {path.relative_to(runtime).as_posix() for path in runtime.rglob("*") if path.is_file()}
+    _owned_directory(runtime)
+    for name, mode in files.items():
+        _write_file(runtime / name, (release / name).read_bytes(), mode)
+    recipe = _verify_release(release)["recipe"]
+    # Compatible prior archives carry launchers that name their archive path.
+    _write_file(runtime / "bin/cell-ci", _launcher(recipe["python"], runtime, stable=True), 0o555)
+    for name in previous - set(files):
+        (runtime / name).unlink()
+    _sync_directory(runtime)
+
+
+def _restore_runtime(runtime: Path, snapshot: dict[str, tuple[bytes, int]] | None) -> None:
+    if snapshot is None:
+        if runtime.exists():
+            shutil.rmtree(runtime)
+        return
+    for name, (contents, mode) in snapshot.items():
+        _write_file(runtime / name, contents, mode)
+    for path in runtime.rglob("*"):
+        if path.is_file() and path.relative_to(runtime).as_posix() not in snapshot:
+            path.unlink()
+    _sync_directory(runtime)
+
+
+def _verify_service_target(plist: bytes, release: Path | None, runtime: Path) -> None:
+    target = Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent
+    if target == runtime:
+        if release is None:
+            raise ManagerError("CI manager runtime has no selected archive")
+        _verify_runtime(release, runtime)
+    else:
+        _verify_release(target)
 
 
 def _plist(release: Path) -> bytes:
@@ -386,43 +473,55 @@ def install() -> dict:
         try:
             _require_idle(store, allow_install=True)
             previous = _selected_release(paths)
-            wrapper_target = paths["current"] / "bin/cell-ci"
+            runtime = paths["runtime"]
+            wrapper_target = runtime / "bin/cell-ci"
             provider_target = paths["current"] / "ci_manager/chancery"
-            _check_selector(paths["wrapper"], wrapper_target)
+            _check_selector(paths["wrapper"], wrapper_target, paths["current"] / "bin/cell-ci")
             _check_selector(paths["provider"], provider_target)
             old_plist = _check_plist(paths["plist"])
-            had_wrapper = paths["wrapper"].is_symlink()
-            had_provider = paths["provider"].is_symlink()
+            old_wrapper = os.readlink(paths["wrapper"]) if paths["wrapper"].is_symlink() else None
+            old_provider = os.readlink(paths["provider"]) if paths["provider"].is_symlink() else None
             was_loaded = _stop_if_loaded(old_plist)
             switched = False
+            runtime_changed = False
+            runtime_before = None
             try:
                 with _worker_lock_after_stop(root):
                     _require_idle(store, allow_install=True)
+                    runtime_before = _runtime_snapshot(runtime, previous)
                     release = _prepare_release(source, python)
+                    runtime_changed = True
+                    _publish_runtime(release, runtime)
                     _link(paths["current"], f"releases/{release.name}")
                     switched = True
                     _link(paths["wrapper"], str(wrapper_target))
                     _link(paths["provider"], str(provider_target))
-                    _write_file(paths["plist"], _plist(release))
+                    _write_file(paths["plist"], _plist(runtime))
                 _launchctl("bootstrap", f"gui/{os.getuid()}", str(paths["plist"]))
             except Exception as error:
                 try:
-                    if switched:
+                    if switched or runtime_changed:
                         _stop_if_loaded(_check_plist(paths["plist"]))
                         with _worker_lock_after_stop(root):
+                            _restore_runtime(runtime, runtime_before)
                             if previous is None:
                                 paths["current"].unlink(missing_ok=True)
                             else:
                                 _link(paths["current"], f"releases/{previous.name}")
-                            if not had_wrapper:
+                            if old_wrapper is None:
                                 paths["wrapper"].unlink(missing_ok=True)
-                            if not had_provider:
+                            else:
+                                _link(paths["wrapper"], old_wrapper)
+                            if old_provider is None:
                                 paths["provider"].unlink(missing_ok=True)
+                            else:
+                                _link(paths["provider"], old_provider)
                             if old_plist is None:
                                 paths["plist"].unlink(missing_ok=True)
                             else:
                                 _write_file(paths["plist"], old_plist)
                     if was_loaded:
+                        _verify_service_target(old_plist, previous, runtime)
                         _launchctl("bootstrap", f"gui/{os.getuid()}", str(paths["plist"]))
                 except Exception as recovery:
                     raise ManagerError(
@@ -447,7 +546,7 @@ def service(action: str) -> dict:
         _verify_release(release)
     plist = _check_plist(paths["plist"])
     if plist is not None:
-        _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
+        _verify_service_target(plist, release, paths["runtime"])
     if action == "status":
         return {"installed": release is not None, "release": release.name if release else None,
                 "loaded": _loaded(), "service": LABEL}
@@ -459,7 +558,7 @@ def service(action: str) -> dict:
             _verify_release(release)
         plist = _check_plist(paths["plist"])
         if plist is not None:
-            _verify_release(Path(plistlib.loads(plist)["ProgramArguments"][0]).parent.parent)
+            _verify_service_target(plist, release, paths["runtime"])
         if release is None or plist is None:
             raise ManagerError("CI manager service is not installed")
         store = Store(state_root())
@@ -470,7 +569,8 @@ def service(action: str) -> dict:
                 with _worker_lock_after_stop(state_root()):
                     _require_idle(store)
             elif not _loaded():
-                if plistlib.loads(plist)["ProgramArguments"] != _launch_arguments(release):
+                arguments = plistlib.loads(plist)["ProgramArguments"]
+                if arguments not in [_launch_arguments(release), _launch_arguments(paths["runtime"])]:
                     raise ManagerError("CI manager installation is interrupted; run install to recover")
                 _launchctl("bootstrap", f"gui/{os.getuid()}", str(paths["plist"]))
             return {"installed": True, "release": release.name, "loaded": _loaded(), "service": LABEL}

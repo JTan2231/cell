@@ -57,7 +57,8 @@
   ],
   "effects": [
     "Installation selects matching program and provider files, initializes only a missing default manifest, and applies configured schedule snapshots. It does not execute renderers or send their output.",
-    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email."
+    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Paperboy/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
   ],
   "authority": [
     "Paperboy owns its manifest and schedule selection. Clockwork owns atomic per-key transitions, runtime history, overlap and failure halts. Cell deployment owns instruction execution and retained receipts; renderer and Email success remain separate."
@@ -86,8 +87,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ],
   "does_not_authorize": [
@@ -150,6 +151,10 @@
       {
         "status": "declared",
         "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; multi-job apply retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new job."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Paperboy/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [

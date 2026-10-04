@@ -27,9 +27,46 @@ fn main() -> std::process::ExitCode {
         );
         return std::process::ExitCode::SUCCESS;
     }
+    if let Err(error) = require_inactive_schedules(&arguments) {
+        println!(
+            "{}",
+            serde_json::json!({"ok":false,"error":{"detail":error.to_string()}})
+        );
+        return std::process::ExitCode::FAILURE;
+    }
     cell_install::simple::main_with_deployment(
         &clew::installation::specification(),
         env!("CARGO_PKG_VERSION"),
         clew::installation::deploy,
     )
+}
+
+fn require_inactive_schedules(arguments: &[String]) -> anyhow::Result<()> {
+    if !arguments
+        .first()
+        .is_some_and(|operation| matches!(operation.as_str(), "install" | "recover"))
+    {
+        return Ok(());
+    }
+    let home = arguments[1..]
+        .windows(2)
+        .find(|pair| pair[0] == "--home")
+        .map(|pair| std::path::PathBuf::from(&pair[1]))
+        .or_else(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+        .ok_or_else(|| anyhow::anyhow!("HOME or --home is required"))?;
+    anyhow::ensure!(home.is_absolute(), "installer home must be absolute");
+    let client = clockwork::api::Client::new(home.join(".local/bin/clockwork")).with_home(&home);
+    let key = "clew/daily-email";
+    let schedule = clockwork::deployment::ScheduleState::capture_installed(&home, key)?;
+    anyhow::ensure!(
+        !schedule
+            .binding
+            .as_ref()
+            .is_some_and(|binding| binding.enabled),
+        "disable {key} before file-only installation or recovery"
+    );
+    if schedule.binding.is_some() {
+        schedule.suspend(&client, key)?;
+    }
+    Ok(())
 }

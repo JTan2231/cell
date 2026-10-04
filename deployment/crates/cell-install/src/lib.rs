@@ -16,6 +16,7 @@ pub use artifact::{
     FileEntry, Manifest, ReleaseInput, file_digest, provider_inventory, read_release,
     valid_release_id,
 };
+#[allow(deprecated)] // Retained callers can read and recover the former layout.
 pub use installation::{inspect, install, recover_installation, restore};
 
 use serde::{Deserialize, Serialize};

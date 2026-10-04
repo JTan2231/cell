@@ -1,5 +1,22 @@
 # Maintenance and release
 
+Program publication copies the selected release into fixed regular files beneath
+~/Library/Application Support/Platter/install/runtime. Public commands use that runtime
+tree; current and previous retain immutable UUID archive selections. Code signing and
+runtime path identity are separate from release identity.
+
+New Clockwork definitions use schema 3: they retain the archive release ID, root and
+exact hashes, and execute the fixed runtime image. Publication precedes registration.
+
+Before publication, deployment runs the disable transition for owned Clockwork bindings
+and waits for their active processes, including an active manual run on a disabled
+binding. It restores saved enabled intent after registration; a failed instruction can
+leave the owned bindings disabled.
+
+Existing history, delivery records, enabled intent and incident halts retain their
+meaning. Retained definitions and wrapper bytes from before this change keep their
+legacy execution paths until a new installation or definition selects the runtime image.
+
 Use this feature to understand Platter's installed identity, canonical state,
 readiness, admission holds, drain, migration, and recovery guarantees. Use
 `platter.install.operate` for installation and maintenance procedures. Read
@@ -48,12 +65,12 @@ authenticated Nucleus remain separate prerequisites.
 
 Immutable installation files and prior releases remain beneath
 `~/Library/Application Support/Platter/install/releases/ID`. The
-`cell-install-v3` manifest records exact executable and provider versions,
+`cell-install-v4` manifest records exact executable and provider versions,
 file modes and public entry mappings. An opaque UUID identifies each prepared
 release. `package/install` retains the
-installer. The owned `current` selector publishes the matching
-`~/.local/bin/platter`, `~/.local/bin/platter-install` and Chancery
-`providers/platter` selector together. Manifests contain no private domain
+installer. Publication updates the fixed runtime files used by
+`~/.local/bin/platter` and `~/.local/bin/platter-install`. The owned `current`
+selector identifies their source archive and matching Chancery provider. Manifests contain no private domain
 content. Deployment does not prune retained product releases.
 Foreign selectors stop publication; installation does not audit release bytes.
 Product and catalog writer locks serialize individual atomic selector changes.

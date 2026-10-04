@@ -4,14 +4,14 @@ unsetopt VERBOSE XTRACE
 
 case "${1-}" in
     --help|-h|--version|-V|--register-usage)
-        exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+        exec "$HOME/Library/Application Support/Email/install/runtime/libexec/email" "$@"
         ;;
 esac
 
 case "${1-}:${2-}:${3-}:${4-}" in
     receive:--help:*|receive:-h:*|receive:--version:*|receive:-V:*|\
     receive:list:--help:*|receive:list:-h:*|receive:get:--help:*|receive:get:-h:*)
-        exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+        exec "$HOME/Library/Application Support/Email/install/runtime/libexec/email" "$@"
         ;;
 esac
 
@@ -37,5 +37,5 @@ IFS= read -r RESEND_API_KEY
 export RESEND_API_KEY
 exec 0<&3
 exec 3<&-
-exec "$HOME/Library/Application Support/Email/install/current/libexec/email" "$@"
+exec "$HOME/Library/Application Support/Email/install/runtime/libexec/email" "$@"
 ' email "$@"

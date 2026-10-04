@@ -1,6 +1,6 @@
 {
   "id": "clockwork.schedule.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -13,7 +13,7 @@
   ],
   "do_not_use_when": [
     "A caller needs arbitrary argv execution, a shell command, an agent, a workflow, dependency fan-out, retries, secret storage, output capture, a system/root service, or a product-domain scheduler.",
-    "The executable or script is selected through PATH, a mutable selector, an implicit shebang, or bytes outside an exact immutable release.",
+    "The executable or script is selected through PATH, a mutable selector, an implicit shebang, or bytes unrelated to the exact retained release.",
     "A process exit should be treated as proof that the product completed its domain work."
   ],
   "outcome": "One immutable registered definition, one coherent stable binding selection or disabled state, one directly supervised activation, or a current Clockwork-owned operational report without claiming timer or product-domain success.",
@@ -189,7 +189,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Registration requires a current-user-owned non-group/world-writable regular non-symbolic schema-one or schema-two TOML manifest of at most 1 MiB, a stable lowercase `owner/name` key, an absolute current-user-owned non-symbolic immutable release root whose final path component is the product's exact caller-supplied 64-lowercase-hex content identity, valid pinned product artifacts beneath it, and for interpreted launches the exact separately hashed root-owned `/bin/sh` profile; every path ancestor is root- or current-user-owned and not group- or world-writable."
+        "statement": "Registration requires a current-user-owned non-group/world-writable regular non-symbolic supported TOML manifest of at most 1 MiB, a stable lowercase owner/name key, and a canonical retained release root ending in its declared UUID or retained hash identity. Schema three pins the exact sibling fixed runtime artifact and selected archive; schemas one and two keep archive-local launch paths. All image hashes and path ownership checks remain mandatory."
       },
       {
         "status": "declared",
@@ -247,7 +247,7 @@
       },
       {
         "status": "declared",
-        "statement": "A binding is a stable key with one nullable selected definition and internal exact generated-plist digest, while a generated plist contains the manifest-checked content-addressed installed Clockwork binary and stable key but no product executable or secret."
+        "statement": "A binding is a stable key with one nullable selected definition and internal exact generated-plist digest, while a generated plist contains the verified fixed physical Clockwork runtime binary and stable key but no product executable or secret."
       },
       {
         "status": "declared",
@@ -331,7 +331,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Capability contract version 5, schema-one and schema-two TOML definition formats, SQLite schema two, schema-one failure-check sidecar, provider release, product release identity, and each immutable definition remain separate compatibility axes. Existing incidents remain halted with their current notification-check and exact approval rules; schema-one definitions keep their historical policy."
+        "statement": "Capability contract version 6, schema-one, schema-two, and schema-three TOML definition formats, SQLite schema two, schema-one failure-check sidecar, provider release, product release identity, and each immutable definition remain separate compatibility axes. Existing incidents remain halted with their current notification-check and exact approval rules; schema-one definitions keep their historical policy."
       },
       {
         "status": "declared",
@@ -384,13 +384,13 @@
     },
     {
       "id": "clockwork.definitions",
-      "min_contract": 2,
-      "max_contract_exclusive": 4
+      "min_contract": 4,
+      "max_contract_exclusive": 5
     },
     {
       "id": "clockwork.bindings",
-      "min_contract": 2,
-      "max_contract_exclusive": 3
+      "min_contract": 3,
+      "max_contract_exclusive": 4
     },
     {
       "id": "clockwork.activations",
@@ -409,8 +409,8 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ]
 }

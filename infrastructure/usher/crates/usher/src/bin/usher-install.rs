@@ -2,10 +2,14 @@
 
 use std::collections::BTreeMap;
 use std::io;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use cell_install::{Disposition, InstallSpec, ReleaseInput};
+use cell_install::{
+    Disposition, InstallLayout, InstallSnapshot, InstallSpec, Installation, LockKind, LockSpec,
+    PreparedRelease, ProviderSpec, PublicEntry, PublicKind, ReleaseInfo, ReleasePlan, SourceFile,
+};
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -124,61 +128,222 @@ fn home_path(home: Option<PathBuf>) -> Result<PathBuf> {
     Ok(path)
 }
 
-fn release_input(binary: PathBuf, provider_dir: PathBuf) -> Result<ReleaseInput> {
+fn layout() -> InstallLayout {
+    InstallLayout {
+        product: SPEC.product.to_owned(),
+        application: SPEC.application.to_owned(),
+        product_lock: LockSpec {
+            path: "Library/Application Support/Usher/install/.update-lock".into(),
+            kind: LockKind::Shlock,
+        },
+        catalog_lock: Some(LockSpec {
+            path: "Library/Application Support/Chancery/.catalog-update-lock".into(),
+            kind: LockKind::Shlock,
+        }),
+        public: vec![
+            public_entry(".local/bin/usher", "bin/usher"),
+            public_entry(".local/bin/usher-install", "bin/usher-install"),
+            public_entry(
+                "Library/Application Support/Chancery/providers/usher",
+                "share/chancery/usher",
+            ),
+        ],
+    }
+}
+
+fn public_entry(path: &str, artifact: &str) -> PublicEntry {
+    PublicEntry {
+        path: path.into(),
+        artifact: artifact.into(),
+        kind: PublicKind::Symlink,
+        mode: 0o555,
+    }
+}
+
+// Retain Usher's predecessor readers without using their publication path.
+fn legacy(root: &Path) -> cell_install::Result<ReleaseInfo> {
+    let prior = cell_install::read_release(&SPEC, root)?;
+    let mut public = layout().public;
+    if root.join("manifest.json").try_exists()? {
+        let manifest: cell_install::Manifest =
+            serde_json::from_slice(&std::fs::read(root.join("manifest.json"))?)?;
+        Ok(ReleaseInfo {
+            release_id: prior.release_id,
+            format: prior.format,
+            versions: manifest.versions,
+            files: manifest.files,
+            public,
+        })
+    } else {
+        public.retain(|entry| entry.path != Path::new(".local/bin/usher-install"));
+        let mut info = cell_install::legacy::read(
+            root,
+            &cell_install::legacy::LegacySpec {
+                format: "legacy-usher-v1",
+                manifest: "manifest.txt",
+                metadata: &[],
+                proofs: &[],
+                providers: &[],
+                hash_path_lines: false,
+            },
+            public,
+        )?;
+        info.format = prior.format;
+        info.versions.insert("usher".into(), prior.version);
+        Ok(info)
+    }
+}
+
+fn selected(info: &ReleaseInfo) -> Installation {
+    Installation {
+        current: format!("releases/{}", info.release_id),
+        release_id: info.release_id.clone(),
+        version: info.versions.get("usher").cloned().unwrap_or_default(),
+        format: info.format.clone(),
+    }
+}
+
+fn expected(before: &InstallSnapshot, value: Option<&str>) -> cell_install::Result<()> {
+    let current = before.current.as_ref().map_or_else(
+        || "absent".to_owned(),
+        |info| format!("releases/{}", info.release_id),
+    );
+    if value.is_some_and(|value| value != current) {
+        return Err(cell_install::Error::new(
+            "stale deployment: installed selection changed",
+        ));
+    }
+    Ok(())
+}
+
+fn install(
+    home: &Path,
+    binary: PathBuf,
+    provider_dir: PathBuf,
+    expected_current: Option<&str>,
+) -> Result<Installation> {
     if !binary.is_absolute() || !provider_dir.is_absolute() {
         return Err(Failure::input("candidate paths must be absolute"));
     }
+    let layout = layout();
+    let before = cell_install::inspect_installation(&layout, home, &legacy)?;
+    expected(&before, expected_current)?;
     let installer = std::env::current_exe()?;
-    Ok(ReleaseInput {
-        binaries: BTreeMap::from([
-            ("usher".to_owned(), binary),
-            ("usher-install".to_owned(), installer.clone()),
+    for source in [&binary, &installer] {
+        let metadata = std::fs::symlink_metadata(source).map_err(cell_install::Error::from)?;
+        if !metadata.is_file() || metadata.nlink() != 1 || metadata.mode() & 0o111 == 0 {
+            return Err(cell_install::Error::new(
+                "candidate must be an absolute executable regular file",
+            )
+            .into());
+        }
+    }
+    let mut files = BTreeMap::from([
+        (
+            "bin/usher".into(),
+            SourceFile {
+                source: binary,
+                mode: 0o555,
+            },
+        ),
+        (
+            "bin/usher-install".into(),
+            SourceFile {
+                source: installer.clone(),
+                mode: 0o555,
+            },
+        ),
+        (
+            "package/install".into(),
+            SourceFile {
+                source: installer,
+                mode: 0o555,
+            },
+        ),
+    ]);
+    for relative in cell_install::provider_inventory(&provider_dir, &SPEC)?.keys() {
+        files.insert(
+            format!("share/chancery/usher/{relative}"),
+            SourceFile {
+                source: provider_dir.join(relative),
+                mode: 0o444,
+            },
+        );
+    }
+    let version = env!("CARGO_PKG_VERSION").to_owned();
+    let plan = ReleasePlan {
+        files,
+        versions: BTreeMap::from([
+            ("usher".into(), version.clone()),
+            ("usher-install".into(), version.clone()),
         ]),
-        provider_dir,
-        installer,
-    })
+        providers: BTreeMap::from([(
+            "usher".into(),
+            ProviderSpec {
+                path: "share/chancery/usher".into(),
+                version,
+            },
+        )]),
+    };
+    let prepared = cell_install::prepare_release(&layout, home, &plan)?;
+    let mut transaction = cell_install::lock_installation(&layout, home, &legacy)?;
+    transaction.recheck(&before)?;
+    transaction.publish(&prepared, &before, |_| Ok(()))?;
+    Ok(selected(&prepared.info))
 }
 
-fn retained_selector(home: &Path, release: &Path) -> Result<String> {
-    if !release.is_absolute() {
-        return Err(Failure::input("retained release path must be absolute"));
-    }
-    let parent = home.join("Library/Application Support/Usher/install/releases");
-    if release.parent() != Some(parent.as_path()) {
+fn recover(home: &Path, release: PathBuf, expected_current: Option<&str>) -> Result<Installation> {
+    if !release.is_absolute()
+        || release.parent()
+            != Some(
+                home.join("Library/Application Support/Usher/install/releases")
+                    .as_path(),
+            )
+    {
         return Err(Failure::input(
             "recovery release must belong to this Usher installation",
         ));
     }
-    let release = cell_install::read_release(&SPEC, release)?;
-    Ok(release.current)
+    let layout = layout();
+    let info = cell_install::read_release_at(&layout, &release, &legacy)?;
+    let before = cell_install::inspect_detached_installation(&layout, home, &legacy)?;
+    expected(&before, expected_current)?;
+    let mut transaction = cell_install::lock_installation(&layout, home, &legacy)?;
+    transaction.recheck(&before)?;
+    transaction.publish(
+        &PreparedRelease {
+            root: release,
+            info: info.clone(),
+        },
+        &before,
+        |_| Ok(()),
+    )?;
+    Ok(selected(&info))
 }
 
 fn run(command: Command) -> Result<Value> {
     let data = match command {
         Command::Install(args) => {
             let home = home_path(args.home.home)?;
-            let input = release_input(args.binary, args.bundle)?;
-            json!(cell_install::install(
-                &SPEC,
+            json!(install(
                 &home,
-                &input,
+                args.binary,
+                args.bundle,
                 args.expected_current.as_deref()
             )?)
         }
-        Command::Inspect(args) => json!(cell_install::inspect(&SPEC, &home_path(args.home)?)?),
+        Command::Inspect(args) => {
+            let snapshot =
+                cell_install::inspect_installation(&layout(), &home_path(args.home)?, &legacy)?;
+            json!(snapshot.current.as_ref().map(selected))
+        }
         Command::Recover {
             release,
             home,
             expected_current,
         } => {
             let home = home_path(home.home)?;
-            let selector = retained_selector(&home, &release)?;
-            json!(cell_install::restore(
-                &SPEC,
-                &home,
-                &selector,
-                expected_current.as_deref()
-            )?)
+            json!(recover(&home, release, expected_current.as_deref())?)
         }
         Command::Deploy => {
             let context = cell_install::adapter::Context::read(
@@ -187,14 +352,15 @@ fn run(command: Command) -> Result<Value> {
                 "usher-install",
                 env!("CARGO_PKG_VERSION"),
             )?;
-            let input = release_input(
+            json!(install(
+                &context.home,
                 context.binary("usher")?,
                 context
                     .request
                     .source_root
                     .join("infrastructure/usher/chancery"),
-            )?;
-            json!(cell_install::install(&SPEC, &context.home, &input, None)?)
+                None,
+            )?)
         }
     };
     Ok(json!({"ok": true, "data": data}))

@@ -67,11 +67,11 @@ pub(crate) fn definition_digest(manifest: &Manifest) -> Result<String> {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
-    if !matches!(manifest.schema_version, 1 | 2) {
+    if !matches!(manifest.schema_version, 1..=3) {
         return Err(Error::new(
             "manifest_version_unsupported",
             format!(
-                "schema_version {} is unsupported; expected 1 or 2",
+                "schema_version {} is unsupported; expected 1, 2, or 3",
                 manifest.schema_version
             ),
         ));
@@ -145,16 +145,43 @@ pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
             "release_root must end with the declared release_id",
         ));
     }
+    let launch_root = if manifest.schema_version == 3 {
+        let runtime = clockwork::api::runtime_root(&release_root)
+            .map_err(|error| Error::new("release_identity_mismatch", error.to_string()))?;
+        let runtime = exact_directory(&runtime, "runtime_root")?;
+        require_not_group_or_world_writable(&runtime, "runtime_root")?;
+        let current = runtime
+            .parent()
+            .ok_or_else(|| {
+                Error::new(
+                    "release_identity_mismatch",
+                    "runtime installation is absent",
+                )
+            })?
+            .join("current");
+        let selected = fs::read_link(current).context(
+            "release_selection_unavailable",
+            "read the product's selected archive",
+        )?;
+        if selected != Path::new("releases").join(&manifest.release_id) {
+            return Err(Error::new(
+                "release_identity_mismatch",
+                "runtime definition must identify the product's selected retained release",
+            ));
+        }
+        runtime
+    } else {
+        release_root.clone()
+    };
     let cwd = exact_directory(Path::new(&manifest.cwd), "cwd")?;
     require_not_group_or_world_writable(&cwd, "cwd")?;
 
     match &manifest.launch {
         LaunchImage::Direct { program, sha256 } => {
             let program = exact_artifact(Path::new(program), "program", true)?;
-            require_beneath(&program, &release_root, "program")?;
+            require_beneath(&program, &launch_root, "program")?;
             require_native_image(&program, "program")?;
-            validate_digest("program sha256", sha256)?;
-            verify_hash(&program, sha256, "program")?;
+            verify_product_image(&program, &release_root, &launch_root, sha256, "program")?;
         }
         LaunchImage::Interpreted {
             interpreter,
@@ -164,19 +191,24 @@ pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
         } => {
             let interpreter = exact_artifact(Path::new(interpreter), "interpreter", false)?;
             let script = exact_artifact(Path::new(script), "script", true)?;
-            require_beneath(&script, &release_root, "script")?;
+            require_beneath(&script, &launch_root, "script")?;
             if interpreter != Path::new("/bin/sh") {
                 return Err(Error::new(
                     "interpreter_unsupported",
-                    "definition schema one supports only the explicit /bin/sh interpreter profile",
+                    "definitions support only the explicit /bin/sh interpreter profile",
                 ));
             }
             require_root_owner(&interpreter, "system interpreter")?;
             require_native_image(&interpreter, "interpreter")?;
             validate_digest("interpreter sha256", interpreter_sha256)?;
-            validate_digest("script sha256", script_sha256)?;
             verify_hash(&interpreter, interpreter_sha256, "interpreter")?;
-            verify_hash(&script, script_sha256, "script")?;
+            verify_product_image(
+                &script,
+                &release_root,
+                &launch_root,
+                script_sha256,
+                "script",
+            )?;
         }
     }
 
@@ -193,6 +225,7 @@ pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
         ("stderr", Path::new(&manifest.output.stderr)),
     ] {
         if output.starts_with(&release_root)
+            || output.starts_with(&launch_root)
             || output.starts_with(layout.state_root())
             || output.starts_with(layout.logs_root())
             || output.starts_with(layout.agents_root())
@@ -202,6 +235,28 @@ pub(crate) fn validate(manifest: &Manifest, layout: &Layout) -> Result<()> {
                 format!("{label} must not target product release bytes or Clockwork-owned state"),
             ));
         }
+    }
+    Ok(())
+}
+
+fn verify_product_image(
+    path: &Path,
+    release_root: &Path,
+    launch_root: &Path,
+    digest: &str,
+    label: &str,
+) -> Result<()> {
+    validate_digest(&format!("{label} sha256"), digest)?;
+    verify_hash(path, digest, label)?;
+    if launch_root != release_root {
+        let relative = path.strip_prefix(launch_root).map_err(|_| {
+            Error::new(
+                "artifact_outside_release",
+                "launch image is outside its product runtime",
+            )
+        })?;
+        let retained = exact_artifact(&release_root.join(relative), label, true)?;
+        verify_hash(&retained, digest, label)?;
     }
     Ok(())
 }
@@ -320,7 +375,11 @@ fn exact_directory(path: &Path, label: &str) -> Result<PathBuf> {
     Ok(canonical)
 }
 
-fn exact_artifact(path: &Path, label: &str, require_current_owner: bool) -> Result<PathBuf> {
+pub(crate) fn exact_artifact(
+    path: &Path,
+    label: &str,
+    require_current_owner: bool,
+) -> Result<PathBuf> {
     require_absolute_normal(path, label)?;
     require_no_symlink_components(path, label)?;
     require_trusted_ancestors(path, label)?;

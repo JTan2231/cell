@@ -53,6 +53,7 @@ class InstallationTests(unittest.TestCase):
         release.rename(legacy)
         manifest = json.loads((legacy / "manifest.json").read_bytes())
         manifest["recipe"]["schema_version"] = 1
+        manifest["recipe"].pop("runtime_root", None)
         for record in manifest["recipe"]["files"].values():
             record["sha256"] = "retained legacy metadata"
         manifest["wrapper_sha256"] = "retained legacy metadata"
@@ -65,7 +66,7 @@ class InstallationTests(unittest.TestCase):
 
     def installed_paths(self):
         previous = self.release()
-        paths = {"programs": self.programs, "current": self.programs / "current",
+        paths = {"programs": self.programs, "current": self.programs / "current", "runtime": self.programs / "runtime",
                  "wrapper": self.root / "bin/cell-ci", "provider": self.root / "providers/ci-manager",
                  "plist": self.root / "agents/manager.plist"}
         installation._link(paths["current"], f"releases/{previous.name}")
@@ -265,13 +266,137 @@ class InstallationTests(unittest.TestCase):
         self.assertEqual(request_path.read_bytes(), retained)
         self.assertTrue(store.get("paused"))
 
+    def install_idle_fixture(self, paths, *, launch_error=None, loaded=False):
+        state = self.root / "idle-state"
+        state.mkdir(mode=0o700, exist_ok=True)
+        store = mock.Mock()
+        store.get.return_value = True
+        store.active.return_value = None
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(installation.sys, "platform", "darwin"))
+            stack.enter_context(mock.patch.object(installation, "__file__", str(self.source / "installation.py")))
+            stack.enter_context(mock.patch.object(installation, "_paths", return_value=paths))
+            stack.enter_context(mock.patch.object(installation, "state_root", return_value=state))
+            stack.enter_context(mock.patch.object(installation, "Store", return_value=store))
+            stack.enter_context(mock.patch.object(installation, "_loaded", return_value=loaded))
+            stack.enter_context(mock.patch.object(installation, "_launchctl", side_effect=launch_error))
+            return installation.install()
+
+    def test_repeated_install_keeps_actual_launcher_and_module_paths(self):
+        _, paths = self.installed_paths()
+        first = self.install_idle_fixture(paths)
+        runtime = paths["runtime"]
+        launcher = runtime / "bin/cell-ci"
+        module = runtime / "ci_manager/client.py"
+        first_launcher = launcher.read_bytes()
+        first_module = module.read_bytes()
+        self.source.joinpath("client.py").write_text("# updated manager\n")
+        second = self.install_idle_fixture(paths)
+        self.assertNotEqual(first["release"], second["release"])
+        self.assertEqual(paths["wrapper"].resolve(), launcher.resolve())
+        self.assertFalse(launcher.is_symlink())
+        self.assertFalse(module.is_symlink())
+        self.assertEqual(launcher.read_bytes(), first_launcher)
+        self.assertNotEqual(module.read_bytes(), first_module)
+        plist = installation.plistlib.loads(paths["plist"].read_bytes())
+        self.assertEqual(plist["ProgramArguments"], [str(launcher), "worker"])
+        self.assertEqual(plist["WorkingDirectory"], str(runtime))
+        self.assertIn(str(runtime / "ci_manager/client.py").encode(), first_launcher)
+        self.assertNotIn(b"/releases/", first_launcher)
+        self.assertEqual(paths["provider"].resolve(),
+                         (self.programs / "releases" / second["release"] / "ci_manager/chancery").resolve())
+        self.assertEqual((self.programs / "releases" / first["release"] / "ci_manager/client.py").read_bytes(),
+                         first_module)
+
+    def test_failed_update_restores_runtime_bytes_and_fixed_selectors(self):
+        _, paths = self.installed_paths()
+        first = self.install_idle_fixture(paths)
+        release = installation._selected_release(paths)
+        before = installation._runtime_snapshot(paths["runtime"], release)
+        old_plist = paths["plist"].read_bytes()
+        old_wrapper = installation.os.readlink(paths["wrapper"])
+        old_provider = installation.os.readlink(paths["provider"])
+        self.source.joinpath("client.py").write_text("# rejected update\n")
+        with self.assertRaisesRegex(ManagerError, "installation failed"):
+            self.install_idle_fixture(paths, launch_error=ManagerError("bootstrap failed"))
+        self.assertEqual(installation._selected_release(paths).name, first["release"])
+        self.assertEqual(installation._runtime_snapshot(paths["runtime"], release), before)
+        self.assertEqual(installation.os.readlink(paths["wrapper"]), old_wrapper)
+        self.assertEqual(installation.os.readlink(paths["provider"]), old_provider)
+        self.assertEqual(paths["plist"].read_bytes(), old_plist)
+
+    def test_partial_runtime_publication_restores_files_before_selector_switch(self):
+        _, paths = self.installed_paths()
+        first = self.install_idle_fixture(paths)
+        release = installation._selected_release(paths)
+        before = installation._runtime_snapshot(paths["runtime"], release)
+        original = installation._write_file
+        copies = 0
+
+        def fail_once(path, contents, mode=0o600):
+            nonlocal copies
+            if path.is_relative_to(paths["runtime"]):
+                copies += 1
+                if copies == 2:
+                    raise ManagerError("runtime file write failed")
+            original(path, contents, mode)
+
+        self.source.joinpath("client.py").write_text("# partial update\n")
+        with mock.patch.object(installation, "_write_file", side_effect=fail_once):
+            with self.assertRaisesRegex(ManagerError, "installation failed"):
+                self.install_idle_fixture(paths)
+        self.assertGreater(copies, 2)
+        self.assertEqual(installation._selected_release(paths).name, first["release"])
+        self.assertEqual(installation._runtime_snapshot(paths["runtime"], release), before)
+
+    def test_service_checks_selected_runtime_and_refuses_partial_files(self):
+        _, paths = self.installed_paths()
+        result = self.install_idle_fixture(paths)
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(installation.sys, "platform", "darwin"))
+            stack.enter_context(mock.patch.object(installation, "_paths", return_value=paths))
+            stack.enter_context(mock.patch.object(installation, "_loaded", return_value=False))
+            status = installation.service("status")
+            self.assertEqual(status["release"], result["release"])
+            self.assertTrue(status["installed"])
+            paths["runtime"].joinpath("ci_manager/client.py").unlink()
+            with self.assertRaisesRegex(ManagerError, "runtime selection"):
+                installation.service("start")
+
+    def test_install_does_not_restart_an_incoherent_runtime(self):
+        _, paths = self.installed_paths()
+        result = self.install_idle_fixture(paths)
+        paths["runtime"].joinpath("ci_manager/client.py").unlink()
+        operations = []
+
+        def launch(*arguments, **_options):
+            operations.append(arguments[0])
+
+        with self.assertRaisesRegex(ManagerError, "paused installation needs recovery"):
+            self.install_idle_fixture(paths, loaded=True, launch_error=launch)
+        self.assertEqual(operations, ["bootout"])
+        self.assertEqual(installation._selected_release(paths).name, result["release"])
+        self.assertFalse(paths["runtime"].joinpath("ci_manager/client.py").exists())
+
+    def test_version_two_archive_remains_readable(self):
+        release = self.release()
+        manifest = json.loads((release / "manifest.json").read_bytes())
+        manifest["recipe"]["schema_version"] = 2
+        manifest["recipe"].pop("runtime_root")
+        self.replace_manifest(release, manifest)
+        wrapper = release / "bin/cell-ci"
+        wrapper.chmod(0o755)
+        wrapper.write_bytes(installation._launcher(str(self.python), release))
+        wrapper.chmod(0o555)
+        self.assertEqual(installation._verify_release(release)["recipe"]["schema_version"], 2)
+
     def test_new_releases_have_independent_opaque_ids_and_mode_inventory(self):
         first, second = self.release(), self.release()
         self.assertNotEqual(first.name, second.name)
         self.assertRegex(first.name, r"^[0-9a-f]{32}$")
         manifest = installation._verify_release(first)
         self.assertEqual(set(manifest), {"recipe"})
-        self.assertEqual(manifest["recipe"]["schema_version"], 2)
+        self.assertEqual(manifest["recipe"]["schema_version"], 3)
         self.assertTrue(all(set(record) == {"mode"}
                             for record in manifest["recipe"]["files"].values()))
         self.assertEqual((first / "ci_manager/client.py").read_bytes(),
@@ -337,7 +462,7 @@ class InstallationTests(unittest.TestCase):
 
     def test_failed_install_restores_legacy_selection_and_keeps_pause(self):
         previous = self.legacy_release()
-        paths = {"programs": self.programs, "current": self.programs / "current",
+        paths = {"programs": self.programs, "current": self.programs / "current", "runtime": self.programs / "runtime",
                  "wrapper": self.root / "bin/cell-ci", "provider": self.root / "providers/ci-manager",
                  "plist": self.root / "agents/manager.plist"}
         installation._link(paths["current"], f"releases/{previous.name}")

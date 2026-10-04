@@ -249,8 +249,12 @@ retained; settled worktree cleanup does not remove their records.
 Build Telete and invoke `telete install` only when installation is intended. The
 queue must be initialized, paused, and settled first. The
 installer publishes the executing binary and matching embedded provider in its
-own immutable release. It selects `~/.local/bin/telete`, its own Chancery provider,
-and its own `org.cell.telete` user service. Operational state stays external.
+own retained release archive. It publishes regular executable files at the fixed
+`~/Library/Application Support/Telete/install/runtime/bin/telete` path. Both the
+public `~/.local/bin/telete` command and the `org.cell.telete` user service use
+that runtime file. Updates preserve its actual executable path. Each runtime
+file replacement is atomic; the complete tree is not one atomic update.
+The matching provider directory selector follows the selected retained archive. Operational state stays external.
 Telete does not install or replace `cell-ci` or its service.
 
 Use `telete service status`, `service start`, and `service stop` for this service.

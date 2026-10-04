@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -147,6 +147,10 @@
       {
         "status": "declared",
         "statement": "Volume UUID and mount path identify storage. Certificate SHA-1 selects the certificate, whose signature uses SHA-256; initial validity is 3650 days with an RSA 3072-bit key."
+      },
+      {
+        "status": "declared",
+        "statement": "Telete retains program archives with opaque release identities. Its regular runtime executable stays at Telete/install/runtime/bin/telete across install and update; the public command and service use that same file."
       }
     ],
     "completeness_and_freshness": [

@@ -45,7 +45,8 @@
     "The manifest command writes release and provider files, publishes owned selectors, initializes or migrates SQLite through native write locks, and registers/selects the worker directly.",
     "Run-owned admission gates fence public commands before state access; installer markers also fence pinned runners and frontends.",
     "Uninstall removes owned public scheduling/command/provider selection and retains state, releases, definitions, history, and logs.",
-    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
+    "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain durable work, check readiness, or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication, then restores saved enabled intent with the new definitions. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate.",
+    "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Semantics/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
   ],
   "authority": [
     "Semantics owns program/provider selection, state migrations, update and worker locks, product holds, readiness checks, and product recovery.",
@@ -126,11 +127,15 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain work, suspend scheduling, check readiness, or recover automatically. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
+        "statement": "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain durable work, check readiness, or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication, then restores saved enabled intent with the new definitions. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate."
       },
       {
         "status": "declared",
         "statement": "A public run hold fences all other public/typed commands before database access, survives exit, and releases only its owner. Installer markers/receipts have separate exact ownership. Group activation preserves captured intent, project pauses, and incident halts."
+      },
+      {
+        "status": "declared",
+        "statement": "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Semantics/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
       }
     ],
     "operational_limits": [
@@ -191,8 +196,8 @@
     },
     {
       "id": "clockwork.schedule.operate",
-      "min_contract": 5,
-      "max_contract_exclusive": 6
+      "min_contract": 6,
+      "max_contract_exclusive": 7
     }
   ]
 }

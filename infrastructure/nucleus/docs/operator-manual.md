@@ -533,6 +533,19 @@ reuse. Build preparation, installation, and program rollback compute no custom
 artifact hashes. Packaging invokes native signing with the configured certificate
 and permanent identifiers; deployment does not audit the signatures.
 Existing hash-named releases remain readable; their recorded hashes are ignored.
+Native product installers publish actual payload files at each product's fixed
+`install/runtime` path. Public executable links resolve to that path. Updates
+and program recovery replace regular files there; a UUID change does not move
+the executable. Nucleus keeps its existing fixed public CLI and daemon files.
+The `current` and `previous` links select retained release archives, and
+provider directory links continue to select a coherent archived bundle.
+Product lifecycle operations must quiesce affected execution before replacing
+runtime files. Each file replacement is atomic; the complete tree is not.
+Recovery still requires a program compatible with the product's state and fixed
+runtime layout. Retained pre-runtime binaries and definitions keep their legacy
+limits; rebuild reviewed historical source with the current installation
+protocol when those limits prevent recovery.
+
 Clockwork runtime launch pins and product data-migration checks retain their
 separate protocols. New release formats require a current trusted installer for
 recovery; older installers cannot read them.

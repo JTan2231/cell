@@ -1,6 +1,6 @@
 {
   "id": "nucleus.service",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -139,6 +139,10 @@
       {
         "status": "declared",
         "statement": "The standard service owns its filesystem-protected socket, mode-0600 database, mode-0700 state directory, LaunchAgent, installed programs, private logs and credential home."
+      },
+      {
+        "status": "declared",
+        "statement": "Service-owned CLI and daemon are regular files at fixed ~/.local/bin/nucleus and ~/.local/libexec/nucleusd paths. The installer uses the fixed Nucleus/install/runtime tree; the provider directory selector uses the selected retained archive; opaque archive UUIDs are not runtime executable paths."
       }
     ],
     "completeness_and_freshness": [
@@ -172,7 +176,7 @@
       },
       {
         "status": "declared",
-        "statement": "The installer atomically selects a package, copies public programs and installs the LaunchAgent. A later failure retains prior completed effects. It performs no automatic product rollback or recovery."
+        "statement": "The installer retains an archive selection, replaces regular runtime and public program files at fixed actual paths, and installs the LaunchAgent. Each file replacement is atomic; the complete tree is not one atomic update. A later failure retains prior completed effects. It performs no automatic product rollback or recovery."
       },
       {
         "status": "declared",

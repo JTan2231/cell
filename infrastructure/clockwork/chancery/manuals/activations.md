@@ -43,7 +43,8 @@ activation row.
 
 The broker enters a shared per-key transition gate, refuses a pending binding
 transition, pins the selected immutable definition, acquires the exclusive
-per-key activation lock, and re-verifies the direct artifacts. It then starts
+per-key activation lock, and re-verifies the direct artifacts. Schema-three launch images are fixed
+runtime files whose bytes must still match the retained archive and definition. It then starts
 the same installed Clockwork binary as a blocked execution gate and new
 process group leader, records that PID, and only then releases a one-byte
 parent pipe.

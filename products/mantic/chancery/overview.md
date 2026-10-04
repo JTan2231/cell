@@ -18,7 +18,7 @@ are not retained. The caller can preserve stdout when needed.
 | --- | --- |
 | `mantic.config.manage` | Database initialization, named configs, item ownership, amounts, recurrence definitions, and config edits. |
 | `mantic.forecast.calculate` | Temporary exclusions and inclusions, inclusive dates, anchored recurrence, composition, totals, details, shortfalls, and output. |
-| `mantic.installation` | Private state, immutable program and provider selection, compatibility, and recovery boundaries. |
+| `mantic.installation` | Private state, retained program archives, fixed runtime paths and provider publication, compatibility, and recovery boundaries. |
 
 Use `mantic.install.operate` for installation and retained-release recovery.
 Its required feature contract explains selection and state behavior.
