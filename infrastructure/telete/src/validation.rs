@@ -530,7 +530,7 @@ fn spec(
         args,
         cwd: repo.to_owned(),
         env,
-        timeout_seconds: 1800,
+        timeout_seconds: Some(1800),
         stdin: None,
         confined,
     }
@@ -545,7 +545,7 @@ fn git(paths: &Paths, repo: &Path, args: &[&str]) -> Result<ProcessResult> {
         false,
     );
     command.env.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
-    command.timeout_seconds = 120;
+    command.timeout_seconds = Some(120);
     process::run(paths, &command)
 }
 
@@ -1637,6 +1637,75 @@ pub(crate) fn verify_report(
     Ok(())
 }
 
+fn dispatcher_spec(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+    timeout_seconds: Option<u64>,
+) -> CommandSpec {
+    let output = receipt_path(paths, base, candidate, run_tests, defer_release);
+    let mut args = vec![
+        "--state".into(),
+        paths.root.display().to_string(),
+        "internal-validate".into(),
+        "--repo".into(),
+        repo.display().to_string(),
+        "--base".into(),
+        base.to_string(),
+        "--candidate".into(),
+        candidate.to_string(),
+        "--receipt".into(),
+        output.display().to_string(),
+    ];
+    if run_tests {
+        args.push("--run-tests".into());
+    }
+    if defer_release {
+        args.push("--defer-release-builds".into());
+    }
+    let program = paths
+        .targets()
+        .join("candidate-validator")
+        .join(candidate.to_string())
+        .join("debug/telete");
+    let mut command = spec(paths, repo, &program.display().to_string(), args, false);
+    command.timeout_seconds = timeout_seconds;
+    command
+}
+
+pub(crate) fn require_timed_out_dispatcher(
+    paths: &Paths,
+    repo: &Path,
+    base: &CommitId,
+    candidate: &CommitId,
+    run_tests: bool,
+    defer_release: bool,
+) -> Result<()> {
+    let result = broker::completed(
+        paths,
+        &format!(
+            "validation/{base}/{candidate}/dispatcher-tests-{}-defer-{}",
+            u8::from(run_tests),
+            u8::from(defer_release)
+        ),
+        ResourceClass::Supervisor,
+        &dispatcher_spec(
+            paths,
+            repo,
+            base,
+            candidate,
+            run_tests,
+            defer_release,
+            Some(1800),
+        ),
+    )?;
+    ensure!(result.timed_out, "validation dispatcher did not time out");
+    Ok(())
+}
+
 pub(crate) fn run_candidate(
     paths: &Paths,
     repo: &Path,
@@ -1676,42 +1745,17 @@ pub(crate) fn run_candidate(
         "candidate changed during Rust validator bootstrap"
     );
     let output = receipt_path(paths, base, candidate, run_tests, defer_release);
-    let mut args = vec![
-        "--state".into(),
-        paths.root.display().to_string(),
-        "internal-validate".into(),
-        "--repo".into(),
-        repo.display().to_string(),
-        "--base".into(),
-        base.to_string(),
-        "--candidate".into(),
-        candidate.to_string(),
-        "--receipt".into(),
-        output.display().to_string(),
-    ];
-    if run_tests {
-        args.push("--run-tests".into());
-    }
-    if defer_release {
-        args.push("--defer-release-builds".into());
-    }
     // Dispatch supervision retains process completion without holding a
     // compiler or light slot while the child admits its actual gates.
     let result = broker::run(
         paths,
         &format!(
-            "validation/{base}/{candidate}/dispatcher-tests-{}-defer-{}",
+            "validation/{base}/{candidate}/dispatcher-unbounded-tests-{}-defer-{}",
             u8::from(run_tests),
             u8::from(defer_release)
         ),
         ResourceClass::Supervisor,
-        &spec(
-            paths,
-            repo,
-            &target.join("debug/telete").display().to_string(),
-            args,
-            false,
-        ),
+        &dispatcher_spec(paths, repo, base, candidate, run_tests, defer_release, None),
     )?;
     ensure!(
         result.success(),

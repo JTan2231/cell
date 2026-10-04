@@ -857,13 +857,15 @@ mod tests {
     }
 
     #[test]
-    fn signing_maintenance_requires_existing_queue_to_be_paused() {
+    fn signing_maintenance_requires_existing_queue_to_be_paused_and_initialized() {
         let fixture = SetupFixture::new();
         let store = crate::store::Store::open(&fixture.paths.root, true).unwrap();
         store.set("paused", &false).unwrap();
-        assert!(configuration_guard(&fixture.paths).is_err());
+        let error = configuration_guard(&fixture.paths).err().unwrap();
+        assert!(error.to_string().contains("pause Telete"));
         store.set("paused", &true).unwrap();
-        assert!(configuration_guard(&fixture.paths).is_ok());
+        let error = configuration_guard(&fixture.paths).err().unwrap();
+        assert!(error.to_string().contains("initialization is incomplete"));
     }
 
     #[test]

@@ -74,7 +74,7 @@ fn spec(
         args,
         cwd: repo.into(),
         env: paths.environment(),
-        timeout_seconds: 1800,
+        timeout_seconds: Some(1800),
         stdin: None,
         confined,
     }
@@ -821,7 +821,7 @@ fn command(
             .transpose()?
             .unwrap_or(worktree),
         env: environment,
-        timeout_seconds: timeout_seconds.unwrap_or(1800),
+        timeout_seconds: Some(timeout_seconds.unwrap_or(1800)),
         stdin: stdin
             .as_ref()
             .map(|text| -> Result<String> {

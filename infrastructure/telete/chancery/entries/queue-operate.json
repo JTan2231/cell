@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -17,7 +17,8 @@
   "effects": [
     "Creates private Git candidates and advances refs/telete/accepted.",
     "Runs selected gates, provider calls, native signing, and explicitly selected product deployment instructions.",
-    "Explicit storage and signing commands publish shared current-user Cell host settings; initial signing imports one certificate and private key and adds user code-signing trust."
+    "Explicit storage and signing commands publish shared current-user Cell host settings; initial signing imports one certificate and private key and adds user code-signing trust.",
+    "Guarded cancellation retains a timed-out validation operation in an abandonment record before clearing unresolved intent and setting the job phase to cancelled; the original failure and notification remain retained."
   ],
   "authority": [
     "Telete records and runtime correlation checks decide source acceptance.",
@@ -31,7 +32,8 @@
   "failure_and_recovery": [
     "Uncertain admitted effects remain retained and block admission until their exact operation is reconciled.",
     "Service stop also permits a paused blocked deployment with an exact successful receipt, unchanged accepted source, settled notification and exclusive settled compiler and deployment resources; the job remains retained for explicit recovery without deployment replay.",
-    "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection."
+    "A different storage selection is refused. Failed signing preflight preserves existing policy; interrupted certificate creation can leave Keychain effects without a policy and requires explicit inspection and selection.",
+    "Cancellation may abandon one paused blocked validation without an aggregate report only after exact timed-out dispatcher and terminal child evidence, exclusive resources, unchanged accepted base and private source, a settled accepted failure notice and absence of preparation, acceptance, deployment or unresolved model work. It does not replay validation or claim a pass."
   ],
   "privacy": [
     "Private source and diagnostics can reach the selected Nucleus model; frozen outcome text can reach Email's configured provider and recipient.",
@@ -179,6 +181,10 @@
       {
         "status": "declared",
         "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the shared manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+      },
+      {
+        "status": "declared",
+        "statement": "Timed-out validation abandonment retains the original Operation before clearing unresolved intent. It preserves the original failed outcome, accepted notification, process identities and receipts, advances no accepted source and requires a new request ID for another delivery job."
       }
     ],
     "operational_limits": [
@@ -193,6 +199,10 @@
       {
         "status": "declared",
         "statement": "Host setup does not format or mount volumes, enable ownership, migrate journals, stop services, renew certificates, or automatically recover Keychain effects. Shared signing guards the selected Telete state; the operator must settle other independently configured consumers."
+      },
+      {
+        "status": "declared",
+        "statement": "The candidate validator dispatcher has no whole-validation deadline. Individual commands retain positive time limits; validation success still requires correlated process completion and an aggregate report."
       }
     ],
     "compatibility_and_evolution": [
@@ -211,6 +221,10 @@
       {
         "status": "declared",
         "statement": "Shared workspace.json and signing.json retain their schema-one host formats. Existing Telete signing overrides retain precedence; configure without --host writes a state-specific policy."
+      },
+      {
+        "status": "declared",
+        "statement": "Unbounded dispatcher requests use distinct gate identities. Retained bounded dispatcher requests preserve their recorded deadlines and exact command correlation; a timed-out validation is abandoned only through guarded cancellation."
       }
     ],
     "reliances": [

@@ -58,6 +58,17 @@ new claims. Use `telete cancel JOB` for an intended stop at a safe boundary. Use
 60` to observe the same job without resubmission. Status is a CLI observation;
 it is not an Iatreion probe or public CI client.
 
+Use `telete cancel JOB` to abandon one paused blocked validation after its
+bounded dispatcher timed out without an aggregate report. The command requires
+the exact timed-out dispatcher receipt, terminal child evidence, exclusive
+compiler and deployment resources, unchanged accepted base and private source,
+an accepted failure notice, and no other queued work, preparation, acceptance,
+deployment, or unresolved model work. It records the original operation in
+`validation-N.abandoned.json`, clears its unresolved intent, and sets the job
+phase to `cancelled`. The original failed outcome, notification, and process
+records remain retained. Cancellation does not replay validation or claim a
+pass. Submit the intended source with a new request ID for another delivery job.
+
 Reuse `--request-id KEY` only for the same frozen submission. A changed input,
 test policy, deployment selection, repair policy, or notification policy needs
 a new key. New jobs skip tests unless `--run-tests` is supplied. `--no-repair`,
@@ -106,6 +117,12 @@ production preparation, and signing. Missing candidate support fails explicitly.
 The validator runs native structure, provider, shell syntax, formatting, Clippy,
 selected nextest, and release checks. Deferred release checks run in trusted
 production preparation. Receipts state when tests were skipped.
+
+The candidate validator dispatcher has no whole-validation deadline. Individual
+commands retain their positive time limits. Unbounded dispatchers use distinct
+gate identities; retained bounded dispatchers keep their recorded requests and
+deadlines. Process completion and the aggregate validation report remain separate
+requirements for validation success.
 
 Install the pinned nextest runner explicitly with `telete prepare-tools` before
 jobs that run tests. Validation does not download a missing runner.

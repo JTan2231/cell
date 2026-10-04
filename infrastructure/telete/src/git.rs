@@ -39,7 +39,7 @@ pub(crate) fn run(
             args: arguments,
             cwd: repo.to_path_buf(),
             env: environment,
-            timeout_seconds: 120,
+            timeout_seconds: Some(120),
             stdin,
             confined: false,
         },
