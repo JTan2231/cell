@@ -47,10 +47,10 @@ certificate; it is not the certificate signature algorithm. The schema-one
 policy uses the `local` profile and `local.cell` namespace.
 
 Shared signing writers hold the host setup lock and the selected Telete state's
-admission, worker, and deployment locks, plus the shared manual-deployment lock.
+admission, worker, and deployment locks, plus the retained legacy manual-deployment lock.
 The queue must be paused and drained
 when present. Stop the worker before maintenance. Release publication and
-retained Telete and manual deployment recovery must be settled. Settle any other
+retained Telete recovery and legacy manual deployment effects must be settled. Settle any other
 independently
 configured Telete states before changing a shared selection; these commands
 check the selected state, not an inventory of all consumers. The commands do
@@ -99,7 +99,7 @@ Prepare a deliberate identity change:
 1. Run `telete pause` to stop new claims.
 2. Inspect `telete status` and settle all active and queued jobs. Pause alone
    does not drain them. Cancel jobs only when abandonment is intended.
-3. Stop the worker and settle Telete and manual deployment recovery and release
+3. Stop the worker and settle Telete recovery, legacy manual deployment effects, and release
    publication.
 4. Unlock the intended Keychain and permit the requested key use through macOS.
 5. Run `telete signing configure --host` with the intended identity.
@@ -180,4 +180,3 @@ private-key escrow, completion deadline, or continual readiness audit is supplie
 The current-user boundary does not isolate the key from hostile code already
 running with that user's authority. Production candidates and installed releases
 use opaque UUID identities.
-

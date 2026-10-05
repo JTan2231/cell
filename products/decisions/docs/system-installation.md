@@ -4,6 +4,12 @@ This document describes the packaged current-user macOS layout. Building a
 candidate does not authorize release, deployment, hook trust, live migration,
 or a live model job.
 
+Use `./ci.sh submit COMMIT --deploy krisis` from the Cell root for Cell deployment.
+CI and Telete are the sole Cell deployment route. Supply explicit product choices
+with `--settings ABSOLUTE_JSON` and verify the retained job and deployment outcome.
+The legacy bootstrap and retained-transaction procedures below remain explicit
+maintenance operations.
+
 ## Installed identities
 
 - runtime executable and public command: `krisis`
@@ -53,7 +59,7 @@ krisis-install install \
 The library ID must contain exactly 32 lowercase hexadecimal characters. Krisis passes the explicit
 config to Annals; it never chooses a library by fallback or `--library`.
 
-## Prepare and final cutover
+## Legacy bootstrap and final cutover
 
 Preparation is the default. It installs the immutable release,
 computes its Clockwork definition digest, prepares private logs,
@@ -114,7 +120,7 @@ maintenance, drain durable work, retire legacy schedules, check readiness, or
 recover automatically. Native state and publication locks protect actual writes.
 An interrupted command can leave completed effects in place. Inspect its
 retained log, hook, receipt and current selection before a further operation.
-Explicit manual final cutover and recovery keep their documented procedures.
+Explicit legacy final cutover and recovery keep their documented procedures.
 
 Settings accept an optional `codex_bin` path and boolean `enabled`. Omission
 preserves the existing Codex pin and enabled intent; a new schedule uses the
@@ -136,7 +142,7 @@ hyphens, underscores or periods and cannot begin with a period. The manifest
 executor neither invokes these commands nor interprets their output.
 
 The package includes `krisis` and `krisis-install`; the latter is retained as
-`package/install`. Explicit manual installation takes exact payload and
+`package/install`. Explicit legacy bootstrap and recovery take exact payload and
 Annals/Codex pins. `--final-cutover`, `--keep-maintenance` and
 `--release-maintenance` remain separate manual operations. Uninstall retains
 state, releases, receipts and history.

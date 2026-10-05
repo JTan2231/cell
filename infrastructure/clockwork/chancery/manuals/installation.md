@@ -14,8 +14,12 @@ Use `clockwork.install.operate` for ordered operating procedures.
 <TRUSTED_CLOCKWORK_INSTALL> uninstall [--home ABSOLUTE_HOME]
 clockwork [--json] doctor
 clockwork [--json] migrate
-./deploy.sh clockwork
+./ci.sh submit COMMIT --deploy clockwork
 ```
+
+Submit deployments from the Cell root through CI and its Telete manager. Verify
+the retained manager outcome. The installer commands are underlying product
+interfaces for setup and explicit recovery.
 
 The `clockwork` CLI prints plain text by default. Pass `--json` for its
 existing compact machine response. Direct installer commands retain their
@@ -91,7 +95,7 @@ support when compatible historical behavior is required.
 
 ## Coordinated broker refresh
 
-Manifest `./deploy.sh clockwork` first records the complete binding inventory
+Telete's Clockwork deployment instruction first records the complete binding inventory
 in the deployment run's private `clockwork-binding-intent.json`. It disables
 every retained binding through the installed broker. Disable waits for an
 admitted broker and child to finish; unproved child exit stops replacement.

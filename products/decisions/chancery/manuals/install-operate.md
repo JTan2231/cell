@@ -55,7 +55,14 @@ integrity, or check dependency readiness. Its setup operations still create and
 migrate state, maintain holds, and publish the requested
 configuration. Ordinary product commands retain their runtime checks.
 
-## Cell manifest command and explicit maintenance
+## Deploy through CI and operate explicit maintenance
+
+Submit `./ci.sh submit COMMIT --deploy krisis` from the Cell root. CI and Telete
+are the sole Cell deployment route. Add required products with another
+`--deploy PRODUCT`. Use `--settings ABSOLUTE_JSON` for a private JSON file whose
+`krisis` object contains explicit product settings. Telete freezes settings,
+validates, prepares signed programs and executes the manifest. Verify its
+retained job and deployment outcome.
 
 The Cell manifest runs `krisis-install deploy` once with a schema-2 request on
 stdin. It places release files, performs observer activation and migration,
@@ -69,7 +76,7 @@ work, retire legacy schedules, check readiness, or recover
 automatically. Native state and publication locks protect actual writes.
 An interrupted command can leave completed effects in place. Inspect its
 retained log, hook, receipt and current selection before a further operation.
-Explicit manual final cutover and recovery keep their documented procedures.
+Explicit legacy final cutover and recovery keep their documented procedures.
 
 Settings accept an optional `codex_bin` path and boolean `enabled`. Omission
 preserves the existing Codex pin and enabled intent; a new schedule uses the
@@ -91,7 +98,7 @@ hyphens, underscores or periods and cannot begin with a period. The manifest
 executor neither invokes these commands nor interprets their output.
 
 The package includes `krisis` and `krisis-install`; the latter is retained as
-`package/install`. Explicit manual installation takes exact payload and
+`package/install`. Explicit legacy bootstrap and recovery take exact payload and
 Annals/Codex pins. `--final-cutover`, `--keep-maintenance` and
 `--release-maintenance` remain separate manual operations. Uninstall retains
 state, releases, receipts and history.

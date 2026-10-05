@@ -1,7 +1,9 @@
 # Operate Telete
 
 Telete is Cell's Rust CI system. Root and product `ci.sh` wrappers select the
-installed `telete` command. Telete uses `refs/telete/accepted` and
+installed `telete` command. This is the sole Cell product deployment route.
+Product installers are underlying interfaces and own explicit recovery.
+Telete uses `refs/telete/accepted` and
 `refs/telete/jobs/`. It does not advance development `main`.
 
 ## Set up the host
@@ -23,7 +25,8 @@ selects another queue. Restore the selected volume and identity.
 Signing uses the shared host policy unless the selected Telete state has an
 explicit override. Keep the exact selected certificate and Keychain identity.
 Before changing signing, pause and drain the queue, stop the worker, and settle
-release publication and Telete and manual deployment recovery. Configuration
+release publication, Telete recovery, and retained legacy manual deployment
+effects. Configuration
 does not do those
 operations for the operator. Failed preflight preserves the policy; interrupted
 initial creation can leave Keychain effects that require explicit inspection
@@ -70,9 +73,37 @@ records remain retained. Cancellation does not replay validation or claim a
 pass. Submit the intended source with a new request ID for another delivery job.
 
 Reuse `--request-id KEY` only for the same frozen submission. A changed input,
-test policy, deployment selection, repair policy, or notification policy needs
+test policy, deployment selection, settings, repair policy, or notification policy needs
 a new key. New jobs skip tests unless `--run-tests` is supplied. `--no-repair`,
 `--no-deploy`, and `--no-notify` freeze explicit choices for that job.
+
+Use an explicit deployment set for an installation or redeployment:
+
+```sh
+telete submit COMMIT --repo /absolute/cell --deploy PRODUCT \
+  --settings /absolute/private/settings.json
+```
+
+The optional settings file must be an absolute regular JSON file that maps
+canonical product IDs to objects. Every key requires an explicit `--deploy`
+selection. Use `krisis` for its settings, including with `--deploy decisions`.
+Telete freezes the values at submission and passes each product's object and the
+selected dependency settings to its installer. Later file changes do not change
+the job. Settings should reference private credential files instead of containing
+credential bytes. Omission uses each product's existing configuration or defaults.
+Product code validates the settings' meaning.
+
+An explicit deployment continues through CI validation, production preparation,
+and deployment when the submitted source is already accepted. Without that
+selection, an accepted submission retains the `already_included` outcome. Telete
+integrates the submission with accepted source; this is not a historical-source
+restore operation. Explicit deployment does not expand product test selection.
+Use a new request ID for each intended new delivery.
+
+Retained jobs and deployment operations without settings remain readable.
+Install the matching Telete before admitting jobs with nonempty settings; older
+Telete cannot read that job option. Telete's own bootstrap and program maintenance
+continue to use its guarded `telete install` procedure below.
 
 New jobs with notifications require the public Email command to resolve to the
 regular file at `~/Library/Application Support/Email/install/runtime/bin/email`.

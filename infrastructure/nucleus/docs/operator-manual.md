@@ -347,36 +347,40 @@ repair; signing and other preparation failures stop the job.
 
 Git publication remains separate. A product release command changes versions,
 commits, tags, and pushes. CI makes private candidate commits and advances
-accepted history; it does not publish remote Git refs. Release and deployment
-preparation build and seal production artifacts; they do not rerun validation
-or turn a build receipt into test evidence.
+accepted history; it does not publish remote Git refs. Release publication changes
+source versions and refs only. It does not build, sign, or deploy. Submit the
+published commit through CI for validation and production delivery.
 
 ### Cell deployment
 
-Preview the instructions, then execute an authorized deployment:
+Submit the committed source through CI for every Cell product deployment:
 
 ```sh
-./deploy.sh plan SYSTEM...
-./deploy.sh SYSTEM...
+./ci.sh submit COMMIT --deploy PRODUCT --settings /absolute/private/settings.json
+./ci.sh status JOB
 ```
 
-The executor selects the exact supplied products and source commit. Annals
-includes Usage; `decisions` aliases `krisis`. Each product declares an ordered
-manifest of `run`, `copy`, and `link` operations. The executor does not add
-products from installed versions, runtime dependencies, or requester discovery.
-Select every product required by the intended change explicitly.
+Omit `--deploy` to use the products selected by the change. Repeat it for an exact
+deployment set, including every affected product. Annals includes Usage;
+`decisions` aliases `krisis`. Telete merges the submission with accepted source.
+An explicit deployment continues through validation and preparation even when
+the source is already accepted. It does not restore an older source tree or
+expand product test selection. Verify the retained job outcome.
 
-The executor builds or reuses the requested packages, then carries out each
-manifest instruction in its declared order. A `run` instruction supplies an
+Telete prepares signed candidates before the executor carries out each manifest
+instruction in its declared order. A `run` instruction supplies an
 executable, arguments, environment, input and timeout. Its output is opaque.
 A zero exit code completes that instruction. File operations complete when the
 requested copy or atomic link replacement succeeds.
 
 Product installation commands own their declared program placement, state setup,
 configuration, runtime pins, schedules, and service operations. Supply missing
-choices through `--settings ABSOLUTE_JSON`. Settings contain credential file
-references rather than credential bytes. Product runtime guards and diagnostics
-retain their own contracts.
+choices through `submit --settings ABSOLUTE_JSON` with an explicit deployment set.
+The file maps canonical product IDs to objects. Telete freezes those values and
+passes them to the product installers. Use `krisis` for its settings. Settings
+contain credential file references rather than credential bytes. Omit the file
+to preserve product defaults and existing configuration. Product runtime guards
+and diagnostics retain their own contracts.
 
 Deployment success means every instruction completed. It does not establish
 application health, integrity, compatibility, trust, or requester admission.
@@ -384,13 +388,13 @@ A failed instruction retains earlier effects. An interrupted instruction has
 unknown effects. The executor does not retry instructions or infer a product
 rollback, maintenance release, or recovery action.
 
-One host lock serializes execution and remains inherited by an executing child.
-The private receipt retains the supplied manifest, source and caller identities,
-step start and completion, child identity, timing, and log references. After an
-interruption, inspect those records and use the product's explicit procedures as
-needed. Acknowledge the interrupted executor only after its process has stopped;
-acknowledgement releases executor admission and makes no application recovery
-claim. Old unfinished lifecycle runs cannot resume under this executor.
+Telete retains the exact manifest, source, frozen settings, process identity, and
+instruction results. After an interruption, inspect the retained deployment and
+use the owning product's recovery interface. Run `telete acknowledge-deployment
+REQUEST` only after those decisions, then `telete recover JOB`. Acknowledgement
+releases the retained operation and makes no application recovery claim. It does
+not undo effects or execute remaining instructions. Legacy manual receipts remain
+retained; their unresolved effects continue to fence shared signing maintenance.
 
 Cleanup removes executor scratch. It does not inventory installed configuration,
 schedule pins, or running applications and does not delete installed releases.
@@ -539,8 +543,9 @@ maintenance controls and preserve exact hold ownership. Telete does not operate
 or recover other requesters.
 
 Read [Telete queue operation](/Users/joey/rust/cell/infrastructure/telete/chancery/manuals/queue-operate.md)
-for current controls and outcomes. Manual release and deployment tooling retain
-their separate interfaces and Python requirements.
+for current controls and outcomes. CI and Telete are the sole Cell product
+deployment route. Source release publication has its own interface and no
+deployment effects.
 
 ## Shared command usage
 
@@ -578,8 +583,8 @@ shared facts or procedures change.
    with `origin/main` and creates the commit and tag.
 4. Read the retained manager deployment result and report requester admission.
    Installation does not establish operational readiness.
-   For a separate manual installation or recovery, quiesce affected work and
-   deploy matching CLI and daemon candidates before restoring admission.
+   For explicit service recovery, quiesce affected work and use the product's
+   matching CLI and daemon recovery procedure before restoring admission.
 
 Read `chancery show nucleus.execution.operate` for the exact installer and
 rollback procedure.

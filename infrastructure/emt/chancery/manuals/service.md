@@ -132,7 +132,10 @@ accepts `--binary ABS`, `--bundle ABS`, `--home` and `--expected-current`.
 This installs bytes without initializing state or selecting a schedule. The
 product selector publishes the bundle with its release.
 
-`./deploy.sh emt` executes the declared `emt-install deploy` instruction.
+`./ci.sh submit COMMIT --deploy emt` from the Cell root delivers the selected
+source through Telete and its declared `emt-install deploy` instruction. Verify
+the retained manager job outcome. The installer remains the underlying product
+interface; CI and Telete own ordinary deployment admission.
 The installer publishes the matched release, initializes or migrates its local
 schema-one state, saves the requested configuration, configures the Clockwork
 EMT route and publishes the intended worker definition. It uses ordinary

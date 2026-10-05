@@ -1,6 +1,6 @@
 {
   "id": "annals.install.operate",
-  "contract_version": 13,
+  "contract_version": 14,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -16,7 +16,7 @@
     "Source development or Git release publication is the intended outcome.",
     "The task requires resetting an existing library or spool."
   ],
-  "outcome": "Completion of the selected placement and setup instructions, or the separately documented explicit manual installation, maintenance or recovery result. Deployment completion does not establish application health.",
+  "outcome": "Completion of the selected placement and setup instructions, or the separately documented explicit legacy bootstrap, maintenance or recovery result. Deployment completion does not establish application health.",
   "effects": [
     "The schema-2 annals-install deploy command places the release, creates or migrates the primary, decisions and registered libraries in place, writes configuration, and selects the two inbox schedules without application holds or durable-work draining. It suspends owned schedules and waits for their active processes before runtime publication.",
     "The maintenance, ownership-proof and compensation procedures for explicitly invoked `annals-install install`, `provision-decisions`, `recover` and `migrate-to-user` do not run from schema-2 `deploy`.",
@@ -69,7 +69,7 @@
     },
     {
       "label": "Deploy or update",
-      "invocation": "/Users/joey/.local/bin/annals-install install --binary <ABSOLUTE_ANNALS_BINARY> --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> --bundle <ABSOLUTE_ANNALS_PROVIDER> --usage-bundle <ABSOLUTE_USAGE_PROVIDER> --nucleus <ABSOLUTE_NUCLEUS_BINARY> --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> --clockwork <ABSOLUTE_CLOCKWORK_BINARY>"
+      "invocation": "./ci.sh submit COMMIT --deploy annals [--settings ABSOLUTE_JSON]"
     },
     {
       "label": "Legacy system migration",
@@ -96,7 +96,7 @@
       "invocation": "/Users/joey/.local/bin/annals-usage doctor"
     },
     {
-      "label": "Cell manifest command",
+      "label": "Product instruction invoked by Telete",
       "invocation": "annals-install deploy"
     }
   ],
@@ -104,7 +104,7 @@
     {
       "id": "annals.installation",
       "min_contract": 6,
-      "max_contract_exclusive": 7
+      "max_contract_exclusive": 8
     },
     {
       "id": "annals.work.integrate",
@@ -140,6 +140,11 @@
       "id": "bazaar.prompts.import",
       "min_contract": 1,
       "max_contract_exclusive": 3
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "does_not_authorize": [
@@ -208,6 +213,10 @@
       {
         "status": "unsupported",
         "statement": "The deployer does not accept release publication, arbitrary cleanup, manual receipt editing, implicit data deletion, or Nucleus replacement as installation inputs."
+      },
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell deployment route. Submit ./ci.sh submit COMMIT --deploy annals from the Cell root and add required product updates explicitly. Telete validates, prepares signed programs, executes product instructions and retains job and deployment outcomes. Product-owned bootstrap, platform package maintenance and explicit recovery keep their separate supported interfaces."
       }
     ],
     "outputs": [
@@ -259,7 +268,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The schema-2 command publishes the staged release after its requested configuration and library setup instructions complete. It does not gate publication on service checks. Explicit manual install and recovery follow their transaction commit rules."
+        "statement": "The schema-2 command publishes the staged release after its requested configuration and library setup instructions complete. It does not gate publication on service checks. Explicit legacy bootstrap and recovery follow their transaction commit rules."
       },
       {
         "status": "declared",
@@ -426,13 +435,13 @@
   "steps": [
     "Select the exact authorized command, candidate and source paths, optional settings and target installation.",
     "For Cell deployment, submit the committed candidate to CI and let the manifest execute its declared placement and setup instructions. Inspect the retained instruction outcome.",
-    "For a separately selected manual install, provision-decisions, recover or migrate-to-user routine, follow its documented ownership, maintenance and transaction procedure.",
+    "For a separately selected legacy bootstrap, provision-decisions, recover or migrate-to-user routine, follow its documented ownership, maintenance and transaction procedure.",
     "Use product diagnostics separately when runtime diagnosis is needed. Preserve existing application maintenance, pauses and incident halts."
   ],
   "checkpoints": [
     "Schema-2 deploy completion means its declared placement and setup instructions returned successfully; application health is separate.",
     "Actual library migration rejects unsupported schemas without resetting data.",
-    "Explicit manual install, provision-decisions and recover retain their ownership and transaction guards; uncertainty can retain their maintenance and evidence."
+    "Explicit legacy bootstrap, provision-decisions and recover retain their ownership and transaction guards; uncertainty can retain their maintenance and evidence."
   ],
   "adaptation": [
     "Choose macOS primary deployment, dedicated decisions provisioning, retained journal recovery, attended legacy migration, or Linux systemd setup by the actual installation boundary.",
@@ -440,7 +449,7 @@
   ],
   "stop_when": [
     "The declared command or a required filesystem, migration or publication operation fails.",
-    "For explicit manual install, provision-decisions, recover or migrate-to-user, required ownership, quiescence or transaction evidence is missing or changed.",
+    "For explicit legacy bootstrap, provision-decisions, recover or migrate-to-user, required ownership, quiescence or transaction evidence is missing or changed.",
     "Authority for data cleanup or reserve reduction is absent."
   ]
 }

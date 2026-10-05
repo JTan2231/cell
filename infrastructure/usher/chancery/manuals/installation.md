@@ -1,5 +1,10 @@
 # Usher program installation
 
+Submit deployments from the Cell root with
+`./ci.sh submit COMMIT --deploy usher` and verify the retained manager job
+outcome. CI and Telete are the deployment route. The installer APIs below are
+underlying product setup and explicit retained-release recovery interfaces.
+
 The installer retains the supplied programs and provider bundle in a release
 archive. It publishes regular executable files beneath
 `~/Library/Application Support/Usher/install/runtime/`. Updates and recovery

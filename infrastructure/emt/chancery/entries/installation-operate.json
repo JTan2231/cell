@@ -1,6 +1,6 @@
 {
   "id": "emt.installation.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -14,6 +14,10 @@
   ],
   "outcome": "An explicitly configured or maintained EMT installation with separate schedule, pause and failure-halt state.",
   "interfaces": [
+    {
+      "label": "Submit Cell deployment",
+      "invocation": "./ci.sh submit COMMIT --deploy emt [--settings ABSOLUTE_PRIVATE_SETTINGS.json]"
+    },
     {
       "label": "Initialize paused state",
       "invocation": "emt init"
@@ -69,7 +73,7 @@
     {
       "id": "emt.service",
       "min_contract": 4,
-      "max_contract_exclusive": 7
+      "max_contract_exclusive": 8
     },
     {
       "id": "emt.quota-notices",
@@ -234,11 +238,11 @@
   "automation": "none",
   "steps": [
     "Establish authority, dependencies, prompt selection, receiving domain and stable paths before maintenance or activation.",
-    "Install matched bytes before initialization, or execute the declared manifest instruction for initialized updates.",
+    "Submit the intended committed source from the Cell root with ./ci.sh submit COMMIT --deploy emt and an optional private --settings file. CI and Telete are the deployment route; product install APIs remain underlying setup interfaces.",
     "Initialize paused state, configure drained work, inspect doctor, then resume and enable only authorized intent.",
     "Inspect separate pause, schedule, holds and exact halt evidence; approve exact failure-halt continuation separately.",
     "Use an exact owner and known drained work for separately requested manual maintenance; preserve private state before release.",
-    "Inspect instruction exit status and log. Inspect completed effects after failure or interruption before an explicit next operation."
+    "Verify the retained manager job outcome and inspect instruction exit status and log. Inspect completed effects after failure or interruption before an explicit next operation."
   ],
   "checkpoints": [
     "The selected EMT binary and provider versions match.",

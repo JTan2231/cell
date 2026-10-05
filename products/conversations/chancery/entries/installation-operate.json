@@ -1,6 +1,6 @@
 {
   "id": "conversations.installation.operate",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -10,14 +10,14 @@
     "Conversations programs should be installed, inspected, or recovered."
   ],
   "do_not_use_when": [
-    "Ordinary CI delivery, release publication, task mutation, authentication, or history retrieval is the request."
+    "Release publication, task mutation, authentication, or history retrieval is the request."
   ],
   "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "effects": [
     "Retain supplied programs and documentation in release archives and publish regular files at fixed runtime paths under installation locks. Public file selectors use runtime paths; provider directory selectors use the selected retained archive. Preserve other product selectors and separate product data."
   ],
   "authority": [
-    "Conversations owns its program installation and provider selector. The operator supplies artifacts and authorizes selection."
+    "Conversations owns its program installation and provider selector. Telete validates and prepares deployment artifacts; the operator authorizes deployment or explicit recovery."
   ],
   "success": [
     "Owned command and provider selectors follow the supplied release. Installation runs no signature audit, executable probe, or operational-readiness gate."
@@ -34,6 +34,11 @@
       "id": "conversations.runtime",
       "min_contract": 4,
       "max_contract_exclusive": 5
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "session_surfaces": [
@@ -43,8 +48,8 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Select the intended supplied binary and provider paths and the installation home.",
-    "Read the current selection and run install with any intended expected-current guard.",
+    "Select the intended committed source and explicit product selection. Submit ./ci.sh submit COMMIT --deploy conversations from the Cell root.",
+    "Verify the retained Telete job and deployment outcome. CI and Telete are the sole deployment route.",
     "Register the installed command inventory separately and read installation metadata.",
     "Recover a retained release when requested; keep diagnostics separate from installation."
   ],
@@ -59,25 +64,25 @@
     "Required files cannot be copied, a selector is foreign, the expected selection changed, or a required setup operation fails."
   ],
   "does_not_authorize": [
-    "Release publication, CI submission, task mutation, transcript disclosure, authentication changes, or removal of foreign paths."
+    "Release publication, task mutation, transcript disclosure, authentication changes, or removal of foreign paths."
   ],
   "promise": {
     "consumers": [
       {
         "status": "declared",
-        "statement": "An operator authorized for manual installation or recovery may select validated Conversations artifacts."
+        "statement": "An operator authorized for CI deployment or explicit retained-release recovery may select owned Conversations programs."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Supplied program and provider paths, an intended installation home, and authority to change owned selectors. Installation does not require a validation receipt."
+        "statement": "Authorized committed source and explicit deployment products, or an owned compatible retained release for recovery. Telete validates and prepares the deployment; the product owns selector changes."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
+        "statement": "Committed source and explicit deployment products through CI and Telete, or an absolute owned retained release path and optional home and expected-current selection for recovery."
       }
     ],
     "outputs": [
@@ -145,8 +150,12 @@
   "manual": "manuals/installation-operate.md",
   "interfaces": [
     {
-      "label": "Run product deployment recipe",
-      "invocation": "conversations-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy conversations"
+    },
+    {
+      "label": "Recover retained programs",
+      "invocation": "conversations-install recover --release ABSOLUTE_RELEASE_DIRECTORY"
     }
   ]
 }

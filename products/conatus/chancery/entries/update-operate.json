@@ -1,6 +1,6 @@
 {
   "id": "conatus.update.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -17,7 +17,7 @@
   "effects": [
     "May create a named general library, append instructions, and persist Conatus configuration and feed intake.",
     "Update enqueues immutable documents and runs Annals automatic integration. Retry and re-examination can use model allowance and apply valid changes.",
-    "Direct installation changes only the packaged release selection; Cell deployment also configures state and manages saved runner intent.",
+    "CI and Telete own deployment and run product setup to configure state and preserve saved runner intent. Explicit retained-release recovery changes program selection separately.",
     "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path, preserving library IDs, cursor, records, instructions and product pause. It publishes each selected schedule with its intended enabled state under ordinary admission and runner locks. It creates no maintenance hold, suspends owned schedules and waits for their active processes before runtime publication; it does not drain durable work or perform a health or signature audit.",
     "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Conatus/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image.",
     "Direct install and recovery require both owned Clockwork bindings disabled. They reject enabled bindings and run the disable transition for each retained disabled binding to wait for active processes before runtime publication. They do not select new definitions; select the matching definition before enabling a recovered or updated program."
@@ -58,6 +58,10 @@
     {
       "label": "Select instructions",
       "invocation": "/Users/joey/.local/bin/conatus instructions set --file <FILE>"
+    },
+    {
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy conatus [--settings ABSOLUTE_JSON]"
     }
   ],
   "does_not_authorize": [
@@ -117,11 +121,11 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "init selects executable, decisions config, optional Annals state root and named library. update consumes new events and pending local handoffs. retry selects an inclusive failed Annals job-ID interval. reexamine selects one Conatus input. instructions set accepts one file. pause/resume selects the local processing gate. Installation and schedule-definition use explicit candidate and output paths."
+        "statement": "init selects executable, decisions config, optional Annals state root and named library. update consumes new events and pending local handoffs. retry selects an inclusive failed Annals job-ID interval. reexamine selects one Conatus input. instructions set accepts one file. pause/resume selects the local processing gate. Installation uses committed source through CI and Telete; schedule-definition uses an explicit new output path."
       },
       {
         "status": "declared",
-        "statement": "Optional deployment settings: state_dir, decisions_config, annals_state_dir, library, enabled and daily_email_enabled. Existing library selections cannot change. config returns only persistent paths and library IDs; separately invoked maintenance exposes owner-scoped holds and drain."
+        "statement": "Submit ./ci.sh submit COMMIT --deploy conatus from the Cell root. CI and Telete are the sole deployment route. --settings ABSOLUTE_JSON supplies private JSON whose conatus object contains state_dir, decisions_config, annals_state_dir, library, enabled and daily_email_enabled; Telete freezes the values. Existing library selections cannot change. Config returns only persistent paths and library IDs; separately invoked maintenance exposes owner-scoped holds and drain."
       }
     ],
     "outputs": [
@@ -167,7 +171,7 @@
       },
       {
         "status": "declared",
-        "statement": "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path and publishes intended schedule selections. Existing library IDs, cursor, records, instructions, pause and incidents remain unchanged. It uses ordinary admission and runner locks without holds, schedule suspension or drain. Failure leaves completed effects in place. Interruption requires inspection before an explicit next operation, without automatic repeat, rollback or recovery."
+        "statement": "The declared deploy instruction publishes programs, initializes absent state or updates the final Annals path and publishes intended schedule selections. Existing library IDs, cursor, records, instructions, pause and incidents remain unchanged. It uses ordinary admission and runner locks without holds or durable-work drain. It suspends owned schedules and waits for their active processes before runtime publication. Failure leaves completed effects in place. Interruption requires inspection before an explicit next operation, without automatic repeat, rollback or recovery."
       },
       {
         "status": "declared",
@@ -282,7 +286,7 @@
     {
       "id": "conatus.service",
       "min_contract": 4,
-      "max_contract_exclusive": 7
+      "max_contract_exclusive": 8
     },
     {
       "id": "conatus.library.explore",
@@ -293,6 +297,11 @@
       "id": "conatus.digest.email",
       "min_contract": 5,
       "max_contract_exclusive": 6
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ]
 }

@@ -40,8 +40,11 @@ behavior.
 Installation creates no database, service, schedule, cache, or report. It does
 not invoke product status probes or register a semantic project.
 
-Use `telete submit COMMIT` for ordinary delivery and inspect the retained manager
-outcome. For manual installation, use supplied absolute binary and bundle paths.
+Submit the selected source from the Cell root with
+`./ci.sh submit COMMIT --deploy iatreion`. CI and its Telete manager are the
+deployment route. Verify the retained manager job outcome. The install command
+above is an underlying product setup interface. Use the recovery command for
+explicit retained-release recovery.
 Run `iatreion --register-usage` separately after selection.
 
 ## Deployment recipe

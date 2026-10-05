@@ -12,7 +12,7 @@
   "do_not_use_when": [
     "The request is only to inspect or recover the installed runtime.",
     "The change belongs entirely to Todo, Annals, or another requester domain.",
-    "Only release publication or deployment outside a submitted CI job is requested."
+    "Only release publication or explicit service recovery is requested."
   ],
   "outcome": "A minimal Nucleus change with the correct compatibility, execution-capacity, managed-authentication, migration, requester, documentation, CI, and recovery obligations satisfied.",
   "effects": [
@@ -101,7 +101,7 @@
     "The primary authority and every cross-system obligation are identified.",
     "Public compatibility, execution-capacity, authentication, and persistent-state consequences are explicit.",
     "The retained manager job records passing validation and the deployment and notification outcomes.",
-    "Deployment is within the submitted manager job; publication and deployment outside that job have separate authorization."
+    "Deployment is within the submitted manager job; CI and Telete are the deployment route. Release publication and explicit service recovery retain their separate authority."
   ],
   "adaptation": [
     "Follow the exact playbook in the installed version-matched manual because store, harness, and requester compatibility facts evolve.",
@@ -131,7 +131,7 @@
       },
       {
         "status": "declared",
-        "statement": "CI submission supplies authority for the manager deployment and outcome email. Separate authority exists before release publication, deployment outside that job, a requester retry, or any destructive migration or credential move."
+        "statement": "CI submission supplies authority for the manager deployment and outcome email. Separate authority exists before release publication, explicit service recovery, a requester retry, or any destructive migration or credential move."
       }
     ],
     "inputs": [
@@ -201,7 +201,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Classify the change and name the authorities and affected requesters. Make the smallest edit in the owning component and update contracts and migrations. Submit the committed change through the CI manager and verify its retained validation, deployment, and notification outcomes. Obtain separate authority for release publication or deployment outside that job."
+        "statement": "Classify the change and name the authorities and affected requesters. Make the smallest edit in the owning component and update contracts and migrations. Submit the committed change through the CI manager and verify its retained validation, deployment, and notification outcomes. Obtain separate authority for release publication or explicit service recovery."
       },
       {
         "status": "declared",

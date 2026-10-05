@@ -1,6 +1,6 @@
 {
   "id": "mantic.installation",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -38,8 +38,8 @@
       "invocation": "/Users/joey/.local/bin/mantic-install inspect [--home ABSOLUTE_PATH]"
     },
     {
-      "label": "Install supplied release",
-      "invocation": "mantic-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--expected-current absent|releases/ID]"
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy mantic"
     },
     {
       "label": "Recover retained release",
@@ -55,6 +55,11 @@
       "id": "chancery.usage.record",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "promise": {
@@ -74,6 +79,10 @@
       {
         "status": "declared",
         "statement": "Install accepts binary and provider bundle paths. Inspect selects a home. Recover accepts an exact retained release. Optional expected-current guards absent or releases/ID selection. Deploy consumes a schema-two request on stdin and initializes default state after publication."
+      },
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell deployment route. Submit ./ci.sh submit COMMIT --deploy mantic from the Cell root and add required product updates explicitly. Telete validates, prepares signed programs, executes product instructions and retains job and deployment outcomes. Product-owned bootstrap, platform package maintenance and explicit recovery keep their separate supported interfaces."
       }
     ],
     "outputs": [

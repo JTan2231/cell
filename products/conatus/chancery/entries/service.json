@@ -1,6 +1,6 @@
 {
   "id": "conatus.service",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -36,8 +36,8 @@
   ],
   "interfaces": [
     {
-      "label": "Install exact program and documentation",
-      "invocation": "conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent"
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy conatus"
     },
     {
       "label": "Inspect selection",
@@ -73,6 +73,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 6,
       "max_contract_exclusive": 7
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "promise": {
@@ -95,7 +100,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Installation selects exact binary, bundle and expected current; --home selects another home. Recovery selects one retained release. Definitions select absolute state and output with optional --daily-email. Maintenance uses an exact owner. Deployment settings select absolute paths, library and independent update/email enabled intent."
+        "statement": "Submit committed source through ./ci.sh submit COMMIT --deploy conatus from the Cell root. CI and Telete are the sole deployment route. --settings ABSOLUTE_JSON supplies private JSON whose conatus object contains absolute paths, library and independent update/email enabled intent; Telete freezes the values for the job. Recovery selects one retained release. Definitions select absolute state and output with optional --daily-email. Maintenance uses an exact owner."
       }
     ],
     "outputs": [

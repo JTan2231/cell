@@ -29,8 +29,8 @@ Semantics-Project: clockwork
   packaging, and documentation entry points together when shared behavior
   changes. CLI, architecture, data-model, and installation guides provide
   navigation; they do not maintain competing explanations.
-- `release.sh` commits, tags, and pushes, and the macOS deployer changes
-  installed selectors and launchd state. Do not invoke either without separate
-  authority.
+- `release.sh` commits, tags, and pushes. Invoke it only with publication
+  authority. CI and Telete are the deployment route; product installer commands
+  remain underlying setup and explicit recovery interfaces.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. Follow the root CI instructions.

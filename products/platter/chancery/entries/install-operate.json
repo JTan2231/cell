@@ -1,6 +1,6 @@
 {
   "id": "platter.install.operate",
-  "contract_version": 16,
+  "contract_version": 17,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -18,12 +18,8 @@
   "outcome": "An installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
   "interfaces": [
     {
-      "label": "Plan coordinated installation",
-      "invocation": "./deploy.sh plan platter"
-    },
-    {
       "label": "Run the committed deployment instructions",
-      "invocation": "./deploy.sh platter"
+      "invocation": "./ci.sh submit COMMIT --deploy platter"
     },
     {
       "label": "Inspect owned installation",
@@ -71,7 +67,7 @@
   ],
   "authority": [
     "Platter owns domain compatibility, admission, drain policy, retained state and success. Nucleus owns execution state and cancellation.",
-    "Cell executes explicit selected product instructions; the shared file helper owns release metadata, selector ownership, writer locks and individual atomic replacements. It performs no automatic selector compensation.",
+    "Telete executes explicit selected product instructions; the shared file helper owns release metadata, selector ownership, writer locks and individual atomic replacements. It performs no automatic selector compensation.",
     "Catalog presence, a successful build or stored delivery time grants no installation, send, recurring-delivery or dependency-upgrade authority."
   ],
   "success": [
@@ -132,6 +128,11 @@
       "id": "bazaar.prompts.prepare",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "does_not_authorize": [
@@ -155,7 +156,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Retain exact source, executor request and artifact path correlation. Supply missing-template, projects-template or activation settings explicitly when intended. Explicit migration can request a private product completion receipt. Use the fixed Vita selection and complete Bazaar prompt prerequisites defined by required runtime features."
+        "statement": "Submit ./ci.sh submit COMMIT --deploy platter from the Cell root. CI and Telete are the sole deployment route. --settings ABSOLUTE_JSON supplies private JSON whose platter object contains explicit resume, projects_template or enabled choices. Telete freezes settings and retains exact source, request and artifact correlation. Explicit migration can request a private product completion receipt. Use the fixed Vita selection and complete Bazaar prompt prerequisites defined by required runtime features."
       }
     ],
     "outputs": [
@@ -185,7 +186,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Use the Cell instruction executor and declared platter-install deploy command, rather than direct install or recover. Operate canonical current-user state with ordinary admission, activity locks and owned selectors."
+        "statement": "Use CI and Telete to run the declared platter-install deploy command. Direct install and recover remain refused. Operate canonical current-user state with ordinary admission, activity locks and owned selectors."
       }
     ],
     "lifecycle_and_consistency": [
@@ -211,7 +212,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 16 removes the Milieu collection prerequisite. It preserves the product deploy command, explicit maintenance interfaces, opaque execution receipts, and product-owned transactional and hashed source-cleanup rules."
+        "statement": "CI and Telete are the sole deployment route. The product deploy command, explicit maintenance interfaces, retained execution receipts, and transactional migration and hashed source-cleanup rules remain supported."
       },
       {
         "status": "declared",
@@ -234,9 +235,10 @@
       },
       {
         "status": "declared",
-        "statement": "Cell prepares artifacts and executes explicitly selected ordered instructions, retaining source and request correlation and process outcomes. Platter owns setup, state, maintenance and application recovery. No independent installed Cell executor contract is declared.",
-        "target": "cell-deployment",
-        "kind": "control"
+        "statement": "Telete validates, prepares signed programs and executes explicitly selected ordered product instructions. It retains source and request correlation and process outcomes. Products own setup, state, maintenance and recovery.",
+        "target": "telete",
+        "kind": "control",
+        "contract": "telete.queue.operate"
       },
       {
         "status": "declared",
@@ -271,7 +273,7 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "session_surfaces": [
-    "Cell checkout and deployment coordinator",
+    "Cell checkout and installed Telete manager",
     "owned Platter release and canonical private state"
   ],
   "steps": [

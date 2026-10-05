@@ -53,8 +53,10 @@ whose retained recovery requires its contract.
 
 ## Install or update
 
-Use `telete submit COMMIT` for ordinary delivery. For a separately authorized
-manual installation, select the binary, installer, provider bundle, and Clockwork:
+Submit the selected source from the Cell root with
+`./ci.sh submit COMMIT --deploy semantics`. CI and its Telete manager are the
+deployment route. Verify the retained manager job outcome. The underlying
+product setup API accepts the binary, installer, provider bundle and Clockwork:
 
 ```sh
 semantics-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE --clockwork ABSOLUTE_CLOCKWORK
@@ -77,6 +79,12 @@ source paths and optional boolean `enabled` setting. The command places files,
 initializes or migrates state, and selects the worker directly. Omission
 preserves the current enabled intent; a new schedule defaults enabled.
 `{"semantics":{"enabled":false}}` selects the new definition disabled.
+
+Save authorized settings in a private JSON file and submit with
+`./ci.sh submit COMMIT --deploy semantics --settings /absolute/private/settings.json`.
+The file maps canonical product IDs to setting objects. Telete freezes the
+settings with the job and passes them to the product instruction. Every product
+with supplied settings requires an explicit `--deploy` selection.
 
 This command does not hold or drain durable work or check readiness,
 or recover automatically. It preserves project pauses, existing application

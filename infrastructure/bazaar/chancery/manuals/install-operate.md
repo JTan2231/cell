@@ -29,36 +29,28 @@ Read-only checks change neither selection nor stored versions.
    installation, or an exact owned retained release for program recovery.
    Stop for foreign selectors, or stale expected selection.
 
-The current user owns Bazaar programs and state. The Cell manifest executor runs
-declared deployment instructions in order; Bazaar owns selection and setup.
-Direct installation works independently. Installation and inspection grant no authority
+The current user owns Bazaar programs and state. Telete runs declared deployment
+instructions in order; Bazaar owns selection and setup. Product installer APIs
+remain available for setup and explicit recovery. Installation and inspection grant no authority
 to append content, migrate callers, delete history, send externally, or run an
 agent. Protect private stored content outside source and release files.
 
 ## Install programs
 
-Use ordinary CI delivery when a committed change is ready:
+Submit the selected committed source from the Cell root:
 
 ```sh
-telete submit COMMIT
+./ci.sh submit COMMIT --deploy bazaar
 ```
 
 Verify the retained manager outcome. The manager integrates, validates, attempts
-bounded repairs, deploys, and emails the outcome. For a separately authorized
-manual deployment, select a validated candidate on local main, then preview and
-run the declared deployment recipes from the Cell root:
-
-```sh
-./deploy.sh plan bazaar
-./deploy.sh bazaar
-```
-
-Inspect the plan before deployment. Bazaar accepts no deployment settings or
+bounded repairs, deploys, and emails the outcome. CI and its Telete manager are
+the deployment route. Bazaar accepts no deployment settings or
 runtime service dependencies. The Bazaar deployment recipe initializes an empty default
 database or checks its existing schema. Installation runs no separate artifact-integrity, database-integrity, or
 readiness gate. Preserve unresolved installation evidence after an I/O failure.
 
-For direct installation, select the candidate:
+The underlying program-selection API accepts a supplied candidate:
 
 ```sh
 bazaar-install install --binary /absolute/candidate/bazaar --bundle /absolute/bazaar/chancery

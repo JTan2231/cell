@@ -1,6 +1,6 @@
 {
   "id": "milieu.installation",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -16,8 +16,8 @@
   "outcome": "The supplied programs and provider are selected together, or an explicit setup failure.",
   "interfaces": [
     {
-      "label": "Install the tested candidate",
-      "invocation": "<TESTED_MILIEU_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]"
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy milieu"
     },
     {
       "label": "Recover a retained release",
@@ -28,7 +28,7 @@
       "invocation": "/Users/joey/.local/bin/milieu --register-usage"
     },
     {
-      "label": "Run product deployment recipe",
+      "label": "Product instruction invoked by Telete",
       "invocation": "milieu-install deploy < SCHEMA_TWO_RECIPE_REQUEST.json"
     }
   ],
@@ -57,6 +57,11 @@
       "id": "milieu.state",
       "min_contract": 3,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "promise": {
@@ -76,6 +81,10 @@
       {
         "status": "declared",
         "statement": "Absolute binary and bundle paths, optional home and expected-current selection, or one retained release path for recovery."
+      },
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell deployment route. Submit ./ci.sh submit COMMIT --deploy milieu from the Cell root and add required product updates explicitly. Telete validates, prepares signed programs, executes product instructions and retains job and deployment outcomes. Product-owned bootstrap, platform package maintenance and explicit recovery keep their separate supported interfaces."
       }
     ],
     "outputs": [

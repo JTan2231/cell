@@ -31,16 +31,18 @@ schedule registration and activation are separate effects.
 ## Installed releases
 
 ```sh
-conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
+./ci.sh submit COMMIT --deploy conatus
 conatus-install inspect
 conatus-install recover --release ABS_RELEASE --expected-current releases/ID
 ```
 
-Packaging commands accept `--home ABS_HOME`. The default installation root is
+Run CI from the Cell root. Product-owned recovery commands accept `--home ABS_HOME`.
+The default installation root is
 `~/Library/Application Support/Conatus/install`. Install stages a
 immutable executable release and its matching Chancery bundle, then
-selects that candidate. Upgrade uses the observed `releases/ID` in place of
-`absent`. The complete provider bundle includes the overview, indexed entries
+selects that candidate. The product installer retains its expected-current
+selection guard for explicit bootstrap and recovery. The complete provider
+bundle includes the overview, indexed entries
 and complete manuals; its bytes participate in release identity.
 The provider selector follows the product's selected release.
 
@@ -127,7 +129,10 @@ Send holds the product admission guard. Deliberate scheduled admission during
 maintenance returns a successful maintenance skip. A hold does not authorize
 release of another owner's hold or approval of a Clockwork incident.
 
-`./deploy.sh conatus` executes the declared `conatus-install deploy` instruction.
+Submit `./ci.sh submit COMMIT --deploy conatus` from the Cell root. CI and Telete
+are the sole deployment route. Telete validates and prepares signed programs,
+then executes the declared `conatus-install deploy` instruction. Verify the
+retained Telete job and deployment outcome.
 The installer publishes programs, initializes absent state or updates the final
 Annals executable path. Existing library identities, cursor, records,
 instructions and product pause remain unchanged. It uses ordinary product
@@ -139,7 +144,9 @@ Settings accept absolute `state_dir`, `decisions_config` and `annals_state_dir`,
 plus `library`, update `enabled` and independent `daily_email_enabled`.
 Existing library selections cannot change during deployment. Fresh defaults use
 the Conatus state root, installed Annals state root and its `decisions/config.toml`,
-and library `conatus`. Other selections must be supplied explicitly.
+and library `conatus`. Supply other selections through
+`--settings /absolute/private/settings.json`. The private JSON file maps
+`conatus` to its settings object; Telete freezes the supplied values for the job.
 
 An absent binding remains absent unless its enabled setting is supplied.
 Omitted email intent preserves the prior daily-email selection and intent.

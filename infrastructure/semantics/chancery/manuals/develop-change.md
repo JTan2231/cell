@@ -3,8 +3,8 @@
 Use this procedure for a scoped Semantics source, schema, effect, worker,
 requester, prompt, CLI, packaging, lifecycle, or documentation change. Semantics
 owns its domain and published contracts. Development does not itself authorize
-release publication, deployment outside a submitted CI manager job, upstream
-mutation, or retained-state deletion.
+release publication, upstream mutation, or retained-state deletion. CI and its
+Telete manager are the deployment route.
 
 ## Establish the change boundary
 
@@ -79,7 +79,7 @@ A requested draft may remain uncommitted until delivery is authorized.
 Stop before a candidate could expose project workspace, body-bearing logs,
 model-authoritative mutations, foreign selectors, or unsupported state access.
 Keep failed transaction evidence and maintenance for product recovery rather
-than forcing progress. Publication and manual deployment remain separate actions.
+than forcing progress. Release publication remains a separate action.
 
 ## Command usage
 

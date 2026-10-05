@@ -1,6 +1,6 @@
 {
   "id": "clockwork.installation",
-  "contract_version": 6,
+  "contract_version": 7,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -63,7 +63,7 @@
     },
     {
       "label": "Deploy and refresh scheduled brokers",
-      "invocation": "./deploy.sh clockwork"
+      "invocation": "./ci.sh submit COMMIT --deploy clockwork"
     },
     {
       "label": "Explicit migration",

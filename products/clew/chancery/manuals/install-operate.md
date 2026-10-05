@@ -17,25 +17,33 @@ and change explicitly supplied schedule intent. It adds no ledger notes or appli
 and performs no preparation or immediate send. Initialize and inspect commands
 grant no note, mail, or status authority.
 
-## Deploy through the instruction executor
+## Deploy through CI
 
-1. Select a validated committed candidate on local main. Use
-   `telete submit COMMIT` for ordinary delivery. The manager integrates,
-   validates, attempts bounded repairs, deploys, and emails the outcome.
-2. Preview a separately authorized manual deployment with `./deploy.sh plan clew`.
-   Confirm the explicit product selection and instruction order. Add any required
-   dependency updates to the selection; the executor does not add products.
-3. Set `daily_email_enabled` only when the intended schedule change is authorized.
+1. Select the intended committed source and explicit product selection. Add any
+   required dependency updates with another `--deploy PRODUCT`; an explicit
+   deployment list does not add dependencies.
+2. Set `daily_email_enabled` in a private settings file only when the intended
+   schedule change is authorized.
    Omit it to preserve existing intent. Explicit true grants standing authority
    for the complete daily digest to Email's fixed personal recipient. Explicit
    false selects disabled intent.
-4. Run `./deploy.sh clew`. The product command selects program and provider files,
+
+   ```json
+   {"clew":{"daily_email_enabled":false}}
+   ```
+
+3. Run `./ci.sh submit COMMIT --deploy clew` from the Cell root. Add
+   `--settings /absolute/private/settings.json` when supplying settings.
+   Telete integrates, validates, prepares signed programs, deploys, and emails
+   the outcome. CI and Telete are the sole deployment route.
+   The product command selects program and provider files,
    enters ordinary admission, initializes or migrates the ledger, and updates its
    daily definition. It preserves the saved schedule policy and enabled intent,
    unless `daily_email_enabled` overrides that intent. An absent binding remains
    absent when the setting is omitted. Deployment creates no maintenance hold,
    waits for owned scheduled activations before runtime publication, and preserves prior enabled intent.
-5. Confirm the retained deployment outcome and captured or explicit schedule intent.
+4. Confirm the retained Telete job, deployment outcome, and captured or explicit
+   schedule intent.
    Deployment does not check artifact integrity, ledger integrity, or the Milieu
    snapshot. Ordinary doctor and application checks remain separate.
 
@@ -45,24 +53,14 @@ after failure. Inspect them through the owning product interfaces before an
 explicit new attempt. The executor performs no automatic retry or recovery.
 Preserve holds and failure incidents.
 
-## Install program files directly
+## Inspect program publication
 
-1. Select a candidate and matching provider bundle. Confirm that
-   any existing ledger is compatible. Direct installation does not migrate it.
-2. Run the installer:
-
-   ```sh
-   clew-install install --binary /absolute/candidate/clew --bundle /absolute/clew/chancery
-   ```
-
-   Use `--home ABSOLUTE_PATH` for an explicit user home and
-   `--expected-current absent|releases/ID` when selection must match an exact
-   prior condition. Stop if selectors belong to another owner .
-3. Run `clew init` to create empty schema-four state or check compatible state.
+1. Submit program changes through CI. Stop if selectors belong to another owner.
+2. Run `clew init` to create empty schema-four state or check compatible state.
    Stop for schema one through three, nonempty foreign state, or unsupported state.
-4. Run `clew-install inspect` to read selected release metadata. Use `clew doctor`
+3. Run `clew-install inspect` to read selected release metadata. Use `clew doctor`
    separately when a ledger diagnostic is needed; installation does not call it.
-5. Run `clew --register-usage` to register command identities without reports.
+4. Run `clew --register-usage` to register command identities without reports.
 
 The default ledger is `~/.local/share/clew/ledger.sqlite3`. Use global
 `--state-dir ABSOLUTE_PATH` to select another private ledger for Clew commands.

@@ -1,6 +1,6 @@
 {
   "id": "clockwork.install.operate",
-  "contract_version": 7,
+  "contract_version": 8,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -86,13 +86,13 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 6,
-      "max_contract_exclusive": 7
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     }
   ],
   "interfaces": [
     {
-      "label": "Deploy candidate",
+      "label": "Underlying program installation",
       "invocation": "<TESTED_CLOCKWORK_INSTALL> install --binary ABSOLUTE_PATH --bundle ABSOLUTE_BUNDLE_PATH --chancery ABSOLUTE_PATH [--home ABSOLUTE_HOME] [--expected-current absent|releases/ID]"
     },
     {
@@ -109,7 +109,7 @@
     },
     {
       "label": "Deploy and refresh scheduled brokers",
-      "invocation": "./deploy.sh clockwork"
+      "invocation": "./ci.sh submit COMMIT --deploy clockwork"
     }
   ],
   "does_not_authorize": [

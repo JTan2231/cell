@@ -33,7 +33,7 @@ Clockwork binding `annals/inbox`. Nucleus remains a separately installed
 execution and credential service; Clockwork remains a separately installed
 activation and process-history service.
 
-The explicit manual installer also discovers registered named libraries in Annals'
+The explicit legacy bootstrap installer also discovers registered named libraries in Annals'
 `catalog.db`. It records identity and paths, fences new command admission,
 drains admitted work, and performs transactional schema migrations in place.
 Program recovery preserves current data and requires compatible prior programs.
@@ -47,7 +47,7 @@ its separate admission and binding authority.
 
 ## Release selection and recovery
 
-The explicit manual installer stages a immutable release without artifact or dependency
+The explicit legacy bootstrap installer stages a immutable release without artifact or dependency
 readiness checks. It starts Annals maintenance, drains
 scheduled work, and performs supported migration. It then switches the release
 and exact Clockwork definition digest, and publishes the installed commands.

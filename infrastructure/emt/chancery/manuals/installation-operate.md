@@ -49,7 +49,7 @@ Stop if authority, dependencies, prompt selection, receiving domain, ownership
 or stable configuration cannot be established. Compatible installed documents
 alone do not prove readiness.
 
-## Install before initialization
+## Underlying installation before initialization
 
 1. Select separately authorized matched program, installer and provider bytes.
 2. Run `emt-install install --binary ABS --bundle ABS`. Use shared `--home` and
@@ -57,7 +57,7 @@ alone do not prove readiness.
 3. Verify that the selected binary and provider release match. Run
    `emt --register-usage` to register command inventory without product work.
 
-This installs bytes without initializing state, starting agents, sending mail
+This product setup interface installs bytes without initializing state, starting agents, sending mail
 or enabling a schedule. Use the manifest procedure below for initialized
 updates; direct initialized selector recovery is unsupported.
 
@@ -125,17 +125,24 @@ old agent processes.
 
 ## Execute installation instructions
 
-1. Read `nucleus manual` and review `./deploy.sh plan emt`. Select each required
-   product explicitly; the executor does not infer dependencies or compatibility.
-2. Supply setup configuration or `enabled` and `paused` intent only when
-   authorized. Omitted settings preserve saved values. Fresh deployment defaults
+1. Read `nucleus manual` and select the committed source. Select each required
+   product explicitly; Telete does not infer runtime dependencies or compatibility.
+2. Save authorized setup configuration or `enabled` and `paused` intent in a
+   private JSON file when these settings must change. Use
+   `{"emt":{"receiving_domain":"DOMAIN","cell_root":"/absolute/cell"}}`
+   for the required setup values. Omitted settings preserve saved values. Fresh deployment defaults
    to activation after configuration. An existing absent binding remains absent
    unless activation is requested. Incoming-mail progress is not a setup input.
-3. Run `./deploy.sh emt`. Its declared installer instruction publishes matched
+3. Run `./ci.sh submit COMMIT --deploy emt` from the Cell root. Add
+   `--settings /absolute/private/settings.json` when settings were selected.
+   The file maps canonical product IDs to setting objects. Telete freezes it
+   with the job; each supplied product requires explicit `--deploy` selection.
+   CI and its Telete
+   manager are the deployment route. Its declared installer instruction publishes matched
    bytes, initializes or migrates local state, saves configuration and selects
    the worker definition with its intended enabled state. It uses ordinary
    admission and runner locks, without creating holds or draining exchanges.
-4. Inspect the retained instruction exit status and log. A successful execution
+4. Verify the retained manager job outcome, instruction exit status and log. A successful execution
    proves completion of the declared instructions. Use ordinary EMT diagnostics
    separately when the authorized endpoint requires product readiness.
 5. Inspect effects after a failed or interrupted instruction before an explicit

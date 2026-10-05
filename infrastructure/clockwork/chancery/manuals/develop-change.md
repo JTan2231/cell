@@ -66,7 +66,7 @@ coherent recovery evidence is missing. Keep every affected contract consistent.
    root. Verify the retained manager outcome. Focused checks do not replace
    manager validation and delivery.
 2. Treat `release.sh` as separate publication authority: it commits, tags, and
-   pushes. Manual deployment outside a submitted job, real binding operation,
+   pushes. CI and Telete are the deployment route. Real binding operation,
    destructive state work, and semantic registration or seeding are separate
    operations with their own authority.
 3. Report the verified endpoint and material remaining limits. If the user

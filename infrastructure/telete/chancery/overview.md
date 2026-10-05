@@ -4,6 +4,10 @@ Telete implements Cell CI orchestration in Rust. Root and product `ci.sh`
 wrappers select installed Telete. Telete owns the executable, journal, worktrees,
 Git references, deployment records, and user service.
 
+CI and Telete are the sole Cell product deployment route. Submission freezes
+product settings and explicit deployment selections. Selected deployments of
+accepted source still pass through validation and signed preparation.
+
 Explicit host setup writes Cell's shared external-volume and signing selections.
 It preserves the selected volume and signing identity. Telete maintenance guards
 coordinate signing changes with queue work, deployment, and release publication.

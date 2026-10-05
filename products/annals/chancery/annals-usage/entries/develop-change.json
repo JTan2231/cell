@@ -1,6 +1,6 @@
 {
   "id": "annals-usage.develop.change",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -54,13 +54,13 @@
     "Read `semantics.repository.explore`, query `semantics repository show annals`, read the owning Annals Usage feature contracts, and identify whether Annals Usage actually owns the requested meaning.",
     "Run `nucleus manual` before changing shared output, account, authentication, compatibility, or deployment behavior.",
     "Implement the smallest projection change and update owning Annals Usage feature contracts and exact coverage tests.",
-    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Login and deployment outside that job require separate authority."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. CI and Telete are the sole Cell deployment route. Login requires separate authority."
   ],
   "checkpoints": [
     "Atomic source authorities remain Annals and Nucleus records rather than a new reporting store.",
     "Every usage total is coverage-qualified and overlapping categories are not double-counted.",
     "Allowance output remains account-global and is not misrepresented as a delivery denominator.",
-    "The manager deployment stays within the submitted job; release publication and deployment outside that job have separate authorization."
+    "CI and Telete are the sole Cell deployment route. Release publication has separate authorization."
   ],
   "adaptation": [
     "Update projection decoding according to the exact supported Nucleus harness records while preserving explicit gaps for unknown forms.",
@@ -114,7 +114,7 @@
     "lifecycle_and_consistency": [
       {"status": "declared", "statement": "Identify the owning product meaning, update the smallest projection and exact coverage tests, version changed interpretation, and update owning Annals Usage feature contracts. Commit the change, submit it through the CI manager, and verify the retained validation, deployment, and notification outcomes."},
       {"status": "declared", "statement": "Atomic Annals and Nucleus records remain the recalculation authorities, and an unreadable upstream fails a live projection rather than causing a stale retained fallback."},
-      {"status": "declared", "statement": "CI submission includes the joint Annals deployment and outcome email. Publication and deployment outside that job remain separately authorized lifecycles."}
+      {"status": "declared", "statement": "CI submission includes the joint Annals deployment and outcome email. CI and Telete are the sole Cell deployment route. Publication remains separately authorized."}
     ],
     "operational_limits": [
       {"status": "declared", "statement": "No telemetry store, aggregate, snapshot, credential copy, UI scrape, offline estimate, or unqualified gap is permitted. Every code change must be committed, submitted through the CI manager, and completed with a verified retained job outcome."},

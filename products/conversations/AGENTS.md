@@ -19,5 +19,5 @@ Semantics-Project: conversations
   when their shared behavior changes.
 - Submit committed code changes through `./ci.sh submit COMMIT` from the Cell
   root and verify the manager job outcome. Follow the root CI instructions.
-- `release.sh` publishes a release and the macOS deployer changes installed
-  selectors; do not invoke either without the corresponding authorization.
+- `release.sh` publishes a release. CI and Telete are the sole deployment route.
+  Explicit retained-release recovery uses the product's supported installer.

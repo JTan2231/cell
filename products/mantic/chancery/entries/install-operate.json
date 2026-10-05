@@ -1,6 +1,6 @@
 {
   "id": "mantic.install.operate",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -33,8 +33,8 @@
   ],
   "interfaces": [
     {
-      "label": "Direct installation",
-      "invocation": "mantic-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--expected-current absent|releases/ID]"
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy mantic"
     },
     {
       "label": "Retained recovery",
@@ -45,7 +45,12 @@
     {
       "id": "mantic.installation",
       "min_contract": 2,
-      "max_contract_exclusive": 3
+      "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "session_surfaces": [
@@ -57,7 +62,7 @@
   "automation": "none",
   "steps": [
     "Inspect target selection with the trusted installer.",
-    "Install matched program/provider paths guarded by expected-current. Initialize empty state explicitly when required.",
+    "Submit ./ci.sh submit COMMIT --deploy mantic from the Cell root. Verify the retained Telete job and deployment outcome. Initialize a separately selected empty database explicitly when required.",
     "Register the selected command inventory, inspect selection, read config list, and verify the installed provider.",
     "For recovery, preserve definitions and select one exact retained compatible release, then repeat relevant checks."
   ],
@@ -67,7 +72,7 @@
     "Treat selection, state initialization, usage registration, catalog verification, and calculation success as separate evidence."
   ],
   "adaptation": [
-    "Use the Cell manager deployment recipe for integrated delivery, or the trusted direct installer for an authorized manual action.",
+    "Use CI and Telete as the sole Cell deployment route. Preserve explicit product-owned retained-release recovery.",
     "Use the same absolute home on isolated installer invocations and select runtime databases separately."
   ],
   "stop_when": [
@@ -83,13 +88,17 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Installation or recovery is authorized. Matched absolute source paths or an exact compatible retained release are available; prior selection and ownership are inspected."
+        "statement": "Deployment or recovery is authorized. The intended committed source or an exact compatible retained release is available; prior selection and ownership are inspected."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "The procedure takes matched program/provider paths, optional isolated home and expected selection, or an exact retained release path."
+        "statement": "Submit committed source and explicit deployment products through CI and Telete. Retained recovery takes an exact compatible retained release path, optional isolated home and expected selection."
+      },
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell deployment route. Submit ./ci.sh submit COMMIT --deploy mantic from the Cell root and add required product updates explicitly. Telete validates, prepares signed programs, executes product instructions and retains job and deployment outcomes. Product-owned bootstrap, platform package maintenance and explicit recovery keep their separate supported interfaces."
       }
     ],
     "outputs": [

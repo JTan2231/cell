@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -44,6 +44,10 @@
     "Remote Git publication, automatic product recovery, unrelated credential changes, or implicit product-health claims."
   ],
   "interfaces": [
+    {
+      "label": "Submit product deployment",
+      "invocation": "telete submit COMMIT --repo /absolute/cell --deploy PRODUCT --settings /absolute/private/settings.json"
+    },
     {
       "label": "Telete command interface",
       "invocation": "telete --help"
@@ -115,13 +119,13 @@
       },
       {
         "status": "declared",
-        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled. Signing requires configured storage, usable current-user Keychain access, paused drained Telete work, a stopped selected worker, and settled release publication and Telete and manual deployment recovery."
+        "statement": "Initial storage selection requires a mounted external writable APFS volume with ownership enabled. Signing requires configured storage, usable current-user Keychain access, paused drained Telete work, a stopped selected worker, and settled release publication, Telete recovery, and retained legacy manual deployment effects."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "Exact committed source, an explicit baseline, frozen job policy, and selected product declarations."
+        "statement": "Exact committed source, an explicit baseline, frozen job policy, selected product declarations, and optional settings from an absolute regular JSON file. Settings map canonical explicitly selected product IDs to objects and are frozen at submission."
       },
       {
         "status": "declared",
@@ -139,6 +143,10 @@
       }
     ],
     "data_semantics": [
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell product deployment route. An explicit --deploy selection continues through validation and signed preparation for source already in accepted history; without it, accepted source reports already_included. Telete integrates the submitted commit with accepted source and does not restore an older source tree. Explicit deployment does not expand product test selection."
+      },
       {
         "status": "declared",
         "statement": "Validation, source acceptance, instruction completion, and Email acceptance have distinct meanings."
@@ -181,6 +189,10 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
+        "statement": "Product settings remain frozen in the submission and deployment request. Each installer receives its own settings and selected dependency settings unchanged. Changed settings require a new submission request ID; later input file changes do not change an admitted job. Empty settings preserve product defaults and saved configuration."
+      },
+      {
+        "status": "declared",
         "statement": "One delivery job is active; effect intent is retained before execution and recovery preserves exact identities."
       },
       {
@@ -193,7 +205,7 @@
       },
       {
         "status": "declared",
-        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the shared manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
+        "statement": "Storage publication is create-only and repeating the same valid selection does not rewrite it. Shared signing uses host setup and selected Telete admission, worker and deployment locks plus the retained legacy manual-deployment lock, and checks release publication. Configuration preflights before atomic publication. Keychain and file effects are not one transaction."
       },
       {
         "status": "declared",
@@ -221,7 +233,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Telete state and receipts use explicitly checked schema versions."
+        "statement": "Telete state and receipts use explicitly checked schema versions. Retained jobs and deployment operations without settings remain readable as empty settings. Install the matching Telete before admitting jobs with nonempty settings; older Telete does not read that job option."
       },
       {
         "status": "declared",

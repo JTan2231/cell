@@ -1,6 +1,6 @@
 {
   "id": "paperboy.install.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -15,12 +15,8 @@
   "outcome": "Matching Paperboy programs and provider bytes are selected; configured jobs have exact Clockwork schedule selections with preserved existing enabled intent and new jobs disabled.",
   "interfaces": [
     {
-      "label": "Plan product deployment",
-      "invocation": "./deploy.sh plan paperboy"
-    },
-    {
       "label": "Deploy committed source",
-      "invocation": "./deploy.sh paperboy"
+      "invocation": "./ci.sh submit COMMIT --deploy paperboy"
     },
     {
       "label": "Inspect maintained installation",
@@ -89,6 +85,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 6,
       "max_contract_exclusive": 7
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "does_not_authorize": [
@@ -104,7 +105,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Select committed source and required dependency updates explicitly. Schedule operations require installed Paperboy and supported Clockwork. Script execution and schedule enable require separate standing authority."
+        "statement": "Submit ./ci.sh submit COMMIT --deploy paperboy from the Cell root. CI and Telete are the sole deployment route. Select required dependency updates explicitly. Schedule operations require installed Paperboy and supported Clockwork. Script execution and schedule enable require separate standing authority."
       }
     ],
     "inputs": [
@@ -197,9 +198,10 @@
       },
       {
         "status": "declared",
-        "statement": "Cell deployment executes explicitly selected product instructions and retains completed or unknown effects. It infers no application recovery or rollback.",
-        "target": "cell-deployment",
-        "kind": "control"
+        "statement": "Telete validates, prepares signed programs and executes explicitly selected ordered product instructions. It retains source and request correlation and process outcomes. Products own setup, state, maintenance and recovery.",
+        "target": "telete",
+        "kind": "control",
+        "contract": "telete.queue.operate"
       }
     ]
   },

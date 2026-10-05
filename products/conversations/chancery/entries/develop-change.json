@@ -1,6 +1,6 @@
 {
   "id": "conversations.develop.change",
-  "contract_version": 4,
+  "contract_version": 5,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -53,12 +53,17 @@
     {
       "id": "conversations.installation.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 5
+      "max_contract_exclusive": 6
     },
     {
       "id": "semantics.repository.explore",
       "min_contract": 2,
       "max_contract_exclusive": 4
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "session_surfaces": [
@@ -71,7 +76,7 @@
     "Read `AGENTS.md`, the registered Semantics repository, and the exact product-owned feature and operation contracts affected by the change.",
     "Consult the current official Codex App Server documentation before changing protocol assumptions.",
     "Implement the smallest change with applicable synthetic in-memory checks and update shared contracts in the same change.",
-    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication and deployment outside that job require separate authority."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. CI and Telete are the sole deployment route; release publication requires separate authority."
   ],
   "checkpoints": [
     "No code reads Codex JSONL or SQLite files.",
@@ -205,7 +210,7 @@
       },
       {
         "status": "declared",
-        "statement": "CI submission includes the manager deployment and outcome email. Release publication and installed deployment outside that job remain separately authorized operations."
+        "statement": "CI submission includes the manager deployment and outcome email. CI and Telete are the sole deployment route; release publication remains separately authorized."
       },
       {
         "status": "unspecified",

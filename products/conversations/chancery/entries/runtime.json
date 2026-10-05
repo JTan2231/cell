@@ -48,7 +48,7 @@
     }
   ],
   "does_not_authorize": [
-    "Task mutation, authentication changes, unrelated process control, transcript disclosure, or manual installation without its applicable authority."
+    "Task mutation, authentication changes, unrelated process control, transcript disclosure, or program publication or recovery without its applicable authority."
   ],
   "dependencies": [],
   "promise": {
@@ -61,7 +61,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A selected executable can launch a compatible App Server; manual installation uses supplied artifacts and authorized product-owned selectors."
+        "statement": "A selected executable can launch a compatible App Server; Cell deployment uses CI and Telete; product-owned bootstrap and recovery use supplied artifacts and authorized selectors."
       }
     ],
     "inputs": [

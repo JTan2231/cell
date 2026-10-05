@@ -23,11 +23,10 @@ they do not read history, establish readiness, or authorize an operation.
 
 ## Operations
 
-Use `conversations.installation.operate` for an authorized installation or
-recovery from validated artifacts. Use `conversations.develop.change` for
-changes to Conversations and its public contracts. Ordinary CI delivery uses
-the installed Cell manager; manual deployment and release publication require
-their applicable authority.
+Use `conversations.installation.operate` for CI deployment or explicit retained
+release recovery. Use `conversations.develop.change` for changes to Conversations
+and its public contracts. CI and Telete are the sole deployment route. Release
+publication requires its applicable authority.
 
 ## How the features work together
 

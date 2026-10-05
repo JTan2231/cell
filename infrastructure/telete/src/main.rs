@@ -58,6 +58,9 @@ enum Command {
         skip_tests: bool,
         #[arg(long, conflicts_with = "no_deploy")]
         deploy: Vec<String>,
+        /// Freeze product settings from an absolute JSON file for explicit deployments.
+        #[arg(long, requires = "deploy", conflicts_with = "no_deploy")]
+        settings: Option<PathBuf>,
         #[arg(long)]
         no_deploy: bool,
         #[arg(long)]
@@ -231,6 +234,7 @@ async fn execute(cli: Cli) -> Result<serde_json::Value> {
             run_tests,
             skip_tests: _,
             deploy,
+            settings,
             no_deploy,
             no_repair,
             no_notify,
@@ -242,6 +246,7 @@ async fn execute(cli: Cli) -> Result<serde_json::Value> {
                 request_id,
                 run_tests,
                 deploy,
+                settings: manager::read_settings(settings.as_deref())?,
                 no_deploy,
                 repair: !no_repair,
                 notify: !no_notify,

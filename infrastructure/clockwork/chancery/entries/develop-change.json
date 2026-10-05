@@ -11,7 +11,7 @@
   ],
   "do_not_use_when": [
     "The request is ordinary installed schedule operation or diagnosis.",
-    "Only release publication, deployment outside a submitted CI job, Semantics registration or seed, or an unrelated product binding change is requested.",
+    "Only release publication, Semantics registration or seed, or an unrelated product binding change is requested.",
     "The proposed feature is an agent runner, arbitrary command surface, workflow, retry engine, secret store, output capture system, or product-domain scheduler without a new boundary review."
   ],
   "outcome": "A minimal tested change with consistent executable, definition, binding, supervision, persistence, packaging, and published contracts. Each product retains its domain authority.",
@@ -51,7 +51,7 @@
     "Read Clockwork's instructions and the owning feature contracts, operation procedures, semantic-seed, and packaging contracts affected by the change.",
     "Identify whether the change alters executable meaning, product authority, persistent state, cutover consistency, process containment, privacy, recovery, or another system reliance.",
     "Implement the smallest change with synthetic in-memory tests and update every affected product-owned contract.",
-    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Release publication, deployment outside that job, Semantics, and unrelated product-binding operations require separate authority."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. CI and Telete are the deployment route. Release publication, Semantics, and unrelated product-binding operations require separate authority."
   ],
   "checkpoints": [
     "Runtime and the private launchd entry accept only a stable key and never caller-supplied executable, arguments, environment, cwd, schedule, timeout, or policy.",
@@ -106,12 +106,12 @@
     },
     {
       "id": "clockwork.installation",
-      "min_contract": 6,
-      "max_contract_exclusive": 7
+      "min_contract": 7,
+      "max_contract_exclusive": 8
     }
   ],
   "does_not_authorize": [
-    "Running `release.sh`, deploying outside the submitted manager job, switching an unrelated product binding, or invoking a product job.",
+    "Running `release.sh`, switching an unrelated product binding, or invoking a product job.",
     "Registering or seeding the Clockwork Semantics project or changing another product.",
     "Using real credentials, private output, production definitions, or retained user state as development fixtures."
   ],
@@ -125,7 +125,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, and identified every changed system boundary. CI submission supplies authority for the manager deployment and outcome email; publication, deployment outside that job, and unrelated real binding effects require separate authority."
+        "statement": "The contributor has read Clockwork instructions and affected contracts, queried the applicable Semantics authority, and identified every changed system boundary. CI submission supplies authority for the manager deployment and outcome email; publication and unrelated real binding effects require separate authority."
       }
     ],
     "inputs": [

@@ -143,7 +143,6 @@ release_lock_kind=
 rollback_version_files=false
 temporary_files=
 release_lock_dir=
-release_build_dir=
 
 release_cleanup() {
     cleanup_status=$?
@@ -156,10 +155,6 @@ release_cleanup() {
         [ -n "$temporary_file" ] && rm -f "$temporary_file"
     done
     IFS=$old_ifs
-    if [ -n "$release_build_dir" ]; then
-        chmod -R u+w "$release_build_dir"
-        rm -rf "$release_build_dir"
-    fi
     if [ "$rollback_version_files" = true ]; then
         release_restore_files
         printf '%s\n' 'release.sh: restored version files after failure' >&2
@@ -215,14 +210,11 @@ tag_prefix=$(pipeline_unit_field "$release_unit" 5)
 lockfile_path=Cargo.lock
 
 cd "$PIPELINE_ROOT"
-for tool in awk git grep sort python3 mktemp; do
+for tool in awk git grep sort; do
     command -v "$tool" >/dev/null 2>&1 \
         || release_fail "required tool not found: $tool"
 done
 pipeline_bootstrap_cargo
-storage_environment=$(python3 "$PIPELINE_ROOT/deployment/workspace.py" environment) \
-    || release_fail 'external work storage is unavailable'
-eval "$storage_environment"
 command -v cargo >/dev/null 2>&1 \
     || release_fail 'required tool not found: cargo'
 
@@ -350,22 +342,14 @@ release_metadata 0 0 || release_fail 'unable to refresh root Cargo.lock'
 release_metadata 1 "$RELEASE_METADATA_NO_DEPS" \
     || release_fail 'the bumped manifest and lockfile are not synchronized'
 
-# Build and seal the versioned candidate once. Publication checks these exact
-# bytes; the shared builder retains them for a later deployment.
-release_build_dir=$(mktemp -d "${TMPDIR:-/tmp}/cell-release-build.XXXXXX")
-release_build_dir=$(CDPATH='' cd "$release_build_dir" && pwd)
-python3 "$PIPELINE_ROOT/deployment/build.py" \
-    --source-root "$PIPELINE_ROOT" --product "$PRODUCT_ID" \
-    --unit "$release_unit" --output "$release_build_dir/preparation"
-
 [ -z "$(git diff --cached --name-only)" ] \
-    || release_fail 'the index changed while running release checks'
+    || release_fail 'the index changed while preparing the source release'
 [ -z "$(git ls-files --others --exclude-standard)" ] \
-    || release_fail 'untracked files appeared while running release checks'
+    || release_fail 'untracked files appeared while preparing the source release'
 changed_files=$(git diff --name-only | LC_ALL=C sort)
 expected_files=$(release_expected_files | LC_ALL=C sort)
 [ "$changed_files" = "$expected_files" ] \
-    || release_fail 'files other than the release version files changed during release checks'
+    || release_fail 'files other than the release version files changed during source release preparation'
 git diff --check
 
 # The lock coordinates Cell release commands. Rechecking the remote here also
@@ -395,4 +379,6 @@ then
     release_fail "push failed; local release commit and tag $tag were preserved"
 fi
 
-printf 'Released %s %s\n' "$release_name" "$new_version"
+printf 'Published source release %s %s\n' "$release_name" "$new_version"
+printf 'Deploy with ./ci.sh submit %s --deploy %s\n' \
+    "$(git rev-parse HEAD)" "$PRODUCT_ID"
