@@ -128,8 +128,8 @@ production preparation. Receipts state when tests were skipped.
 
 The candidate validator dispatcher has no whole-validation deadline. Telete also
 sets no aggregate deadline for Cargo metadata, Clippy, selected tests, formatting,
-tool builds, release builds, or production builds. Git, provider, signing,
-individual probes, and deployment instructions retain their time limits.
+tool builds, release builds, or production builds. Git, provider, signing, and
+individual probes retain their time limits.
 Unbounded dispatchers use distinct gate identities. Retained command requests
 keep their recorded time limits and exact correlation; a different command cannot
 reuse their gate identity. Process completion and the aggregate validation report
@@ -210,6 +210,14 @@ selection, state, configuration, schedules, and service lifecycle. A completed
 instruction does not establish product health or domain success. A failed
 instruction retains earlier effects. An interrupted instruction is uncertain
 and is not automatically repeated or rolled back.
+
+New deployment `run` instructions have no execution deadline when the manifest
+omits `timeout_seconds`. An explicit positive limit remains enforced.
+
+Use the matching executor to reconcile or acknowledge previously interrupted
+runs that used the implicit deadline before replacing that executor. Retained
+process requests keep their recorded limits. Replacement does not migrate those
+requests or resume remaining instructions.
 
 Inspect the retained deployment before using `telete acknowledge-deployment
 REQUEST`. Acknowledgement requires exclusive deployment ownership, records the
