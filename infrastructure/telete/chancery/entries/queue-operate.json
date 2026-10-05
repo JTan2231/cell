@@ -1,6 +1,6 @@
 {
   "id": "telete.queue.operate",
-  "contract_version": 8,
+  "contract_version": 9,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -215,7 +215,7 @@
       },
       {
         "status": "declared",
-        "statement": "The candidate validator dispatcher and aggregate Cargo metadata, Clippy, test, formatter, tool-build, release and production-build commands have no Telete deadline. Git, provider, signing, individual probes and deployment instructions retain their bounds; validation success still requires correlated process completion and an aggregate report."
+        "statement": "The candidate validator dispatcher and aggregate Cargo metadata, Clippy, test, formatter, tool-build, release and production-build commands have no Telete deadline. Git, provider, signing and individual probes retain their bounds; validation success still requires correlated process completion and an aggregate report. Deployment run instructions have no deadline when the manifest omits timeout_seconds; explicitly supplied positive limits remain enforced."
       }
     ],
     "compatibility_and_evolution": [
@@ -250,6 +250,10 @@
       {
         "status": "declared",
         "statement": "Contract 8 removes aggregate Rust validation and production command deadlines. Retained command requests keep their recorded time limits and exact correlation; a different command cannot reuse their gate identity."
+      },
+      {
+        "status": "declared",
+        "statement": "Contract 9 removes the implicit deployment run deadline for new admissions while preserving explicit manifest limits. Previously interrupted runs with the implicit limit must be reconciled or acknowledged with their matching executor before replacement. Retained process requests are not migrated and remaining instructions are not resumed."
       }
     ],
     "reliances": [

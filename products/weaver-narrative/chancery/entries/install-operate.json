@@ -83,7 +83,7 @@
     {
       "id": "telete.queue.operate",
       "min_contract": 4,
-      "max_contract_exclusive": 9
+      "max_contract_exclusive": 10
     }
   ],
   "does_not_authorize": [

@@ -823,7 +823,7 @@ fn command(
             .transpose()?
             .unwrap_or(worktree),
         env: environment,
-        timeout_seconds: Some(timeout_seconds.unwrap_or(1800)),
+        timeout_seconds: *timeout_seconds,
         stdin: stdin
             .as_ref()
             .map(|text| -> Result<String> {
