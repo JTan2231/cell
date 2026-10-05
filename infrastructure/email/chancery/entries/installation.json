@@ -129,7 +129,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Ordinary committed-candidate delivery uses the Cell CI manager; explicit authorized manual installation uses matching tested artifacts. The manager owns its integration, validation, repair, deployment and outcome-email semantics.",
+        "statement": "CI and its Telete manager are the ordinary deployment route. Product install APIs remain underlying setup interfaces; retained-release recovery remains explicit. The manager owns integration, validation, repair, deployment and outcome-email semantics.",
         "target": "telete",
         "kind": "control"
       }

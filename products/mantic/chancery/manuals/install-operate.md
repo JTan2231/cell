@@ -18,7 +18,7 @@ the default database when empty. An initialization failure can occur after
 program selection. Completed changes remain for inspection; no configs or items
 are added. Use the retained manager outcome to distinguish delivery stages.
 
-## Direct installation
+## Deploy through CI
 
 1. Inspect the target selection with the trusted installer:
 
@@ -26,18 +26,17 @@ are added. Use the retained manager outcome to distinguish delivery stages.
    /absolute/path/mantic-install inspect
    ```
 
-2. Select the matched program and bundle. Guard the observed prior selection
-   with `--expected-current absent` for a fresh installation or
-   `--expected-current releases/ID` for an existing release:
+2. Select the intended committed source and submit it from the Cell root:
 
    ```sh
-   /absolute/path/mantic-install install \
-     --binary /absolute/path/mantic \
-     --bundle /absolute/path/chancery \
-     --expected-current absent
+   ./ci.sh submit COMMIT --deploy mantic
    ```
 
-3. Initialize the private config database when needed:
+   CI and Telete are the sole Cell deployment route. Telete validates, prepares
+   signed programs, and runs product setup. Verify the retained job and
+   deployment outcome. Add required products with another `--deploy PRODUCT`.
+
+3. Initialize a separately selected private config database when needed:
 
    ```sh
    /Users/joey/.local/bin/mantic init

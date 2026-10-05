@@ -38,10 +38,23 @@ Cell root from the descriptor's repository-relative `PRODUCT_DIR`.
 ## Publish a product release
 
 Product `release.sh` wrappers invoke `pipeline/release.sh`. This command updates
-the selected release unit's version, builds the release, commits, tags, and
-pushes atomically. It requires publication authority, a clean `main`, a
-configured `origin`, and matching remote history. It is not a build-only or CI
-command.
+the selected release unit's version, commits, tags, and pushes atomically. It
+requires publication authority, a clean `main`, a configured `origin`, and
+matching remote history. It is not a build-only or CI command.
+
+The release command uses the caller's Cargo environment for offline metadata
+reads and lockfile updates. Required dependencies must already be available.
+It publishes source without building, signing, or deploying it. Submit the
+published commit through CI for validation, production preparation, and
+deployment:
+
+```sh
+./ci.sh submit HEAD --deploy PRODUCT
+```
+
+The published tag records source publication. It does not prove validation,
+build, or signing success. Inspect the retained Telete job outcome before
+treating the release as ready. Telete is the sole product deployment route.
 
 `RELEASE_COMPANION_MANIFESTS` lists `release-unit|package-manifest` rows for
 provider-owned libraries released at their owner's version. The release
@@ -53,5 +66,5 @@ The release command holds a lock in Git's common directory and rechecks remote
 `mkdir` fallback fails closed. Confirm that no release is active before
 removing a stale `cell-release-publication.lock.d`.
 
-Read [deployment](../deployment/README.md) for the shared manual release builder,
-candidate preparation, signing, and external workspace requirements.
+Read [Telete queue operation](../infrastructure/telete/chancery/manuals/queue-operate.md)
+for candidate preparation, signing, external storage, and deployment recovery.

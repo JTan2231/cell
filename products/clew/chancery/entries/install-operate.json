@@ -1,6 +1,6 @@
 {
   "id": "clew.install.operate",
-  "contract_version": 9,
+  "contract_version": 10,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
@@ -9,12 +9,8 @@
   "manual": "manuals/install-operate.md",
   "interfaces": [
     {
-      "label": "Plan deployment",
-      "invocation": "./deploy.sh plan clew"
-    },
-    {
       "label": "Deploy Clew",
-      "invocation": "./deploy.sh clew"
+      "invocation": "./ci.sh submit COMMIT --deploy clew"
     },
     {
       "label": "Initialize state",
@@ -37,7 +33,7 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The authorized local installer and Cell deployment coordinator."
+        "statement": "The authorized local installer and Telete deployment manager."
       }
     ],
     "preconditions": [
@@ -53,7 +49,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Use deploy.sh plan clew then deploy.sh clew from committed local main. The boolean daily_email_enabled setting changes daily intent; omission preserves it. Direct install accepts absolute --binary, --bundle and optional --home. schedule-definition requires existing state and a new absolute output file."
+        "statement": "Submit ./ci.sh submit COMMIT --deploy clew from the Cell root. CI and Telete are the sole deployment route. --settings ABSOLUTE_JSON supplies private JSON whose clew object contains daily_email_enabled; omission preserves daily intent. Telete freezes settings and owns validation, signed preparation, deployment and the retained outcome. schedule-definition requires existing state and a new absolute output file."
       }
     ],
     "outputs": [
@@ -183,6 +179,11 @@
       "id": "clockwork.schedule.operate",
       "min_contract": 6,
       "max_contract_exclusive": 7
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "use_when": [

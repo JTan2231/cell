@@ -25,20 +25,19 @@ work. Program recovery does not restore Milieu data.
 
 ## Install the candidate
 
-Use `telete submit COMMIT` for ordinary CI delivery. The manager integrates,
-validates, attempts bounded repairs, deploys, and emails the outcome. For an
-explicitly authorized manual installation or recovery:
-
-1. Run the tested candidate installer with absolute candidate paths:
+1. Select the intended committed source and submit it from the Cell root:
 
    ```sh
-   <TESTED_MILIEU_INSTALL> install --binary <TESTED_MILIEU_BINARY> \
-     --bundle /absolute/path/to/milieu/chancery
+   ./ci.sh submit COMMIT --deploy milieu
    ```
 
-2. Supply `--home PATH` to select another operator home. Supply
-   `--expected-current absent|releases/ID` when the exact prior selection is
-   required.
+   CI and Telete are the sole Cell deployment route. Add required product
+   updates with another `--deploy PRODUCT`. Add
+   `--settings /absolute/private/settings.json` for explicit setup choices;
+   its `milieu` object can contain an absolute `state_dir`. Telete freezes
+   settings, integrates, validates, prepares signed programs, deploys, and
+   emails the outcome.
+2. Verify the retained Telete job and deployment outcome.
 3. Read `milieu-install inspect` for selected release metadata. Run ordinary
    diagnostic commands separately when requested.
 4. Inspect the matching publication with `chancery product milieu` and

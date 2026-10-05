@@ -25,12 +25,15 @@ Public commands are `~/.local/bin/milieu` and
 `~/Library/Application Support/Chancery/providers/milieu`.
 
 ```sh
-milieu-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
+./ci.sh submit COMMIT --deploy milieu
 milieu-install inspect
 milieu-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
 
-Use `--home ABSOLUTE_HOME` for an intentional alternate user home. Recovery
+Run CI from the Cell root. CI and Telete are the sole Cell deployment route.
+Verify the retained Telete job and deployment outcome. Use
+`--settings ABSOLUTE_JSON` to supply a private `milieu` settings object.
+Use `--home ABSOLUTE_HOME` for an intentional alternate user home during recovery. Recovery
 reads retained metadata and selects a release in that home's installation
 directory. It republishes the retained files at the same runtime paths without rebuilding
 the archive or restoring product data. There is no

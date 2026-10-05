@@ -121,10 +121,25 @@ Release only the operation's own hold; other holds remain effective.
 ## Install or update
 
 Select matching tested CLI, daemon, installer, and provider bundle bytes.
-Stage the complete supported Codex runtime before installation:
+Stage the complete supported Codex runtime before CI submission:
 
 ```sh
 <TESTED_NUCLEUS_INSTALL> stage-harness --codex /absolute/release/codex
+```
+
+Submit the selected committed source from the Cell root:
+
+```sh
+./ci.sh submit COMMIT --deploy nucleus
+```
+
+CI and Telete are the deployment route. Verify the retained manager job outcome.
+For explicit setup values, add `--settings /absolute/private/settings.json`
+with a canonical `nucleus` object containing `codex_bin` or `codex_home` paths.
+Telete freezes these settings with the job. The product setup and explicit
+service-recovery API remains:
+
+```sh
 <TESTED_NUCLEUS_INSTALL> install \
   --binary <TESTED_NUCLEUS_BINARY> \
   --daemon <TESTED_NUCLEUS_DAEMON> \
@@ -138,8 +153,9 @@ The operator selects the source release. File digests do not authenticate its
 origin. See `nucleus.invocation` for the exact supported harness and
 `nucleus.service` for staging paths and installation guarantees.
 
-For an initial credential import, add
-`--codex-home /absolute/signed-in-codex-home`. Treat that home as an import source;
+For an initial credential import, select `codex_home` in the submit settings.
+The underlying recovery installer accepts `--codex-home` for that same input.
+Treat the selected authenticated home as an import source;
 Nucleus owns its resulting private credential. Preserve existing owned
 credentials. Never put credential bytes in deployment settings.
 

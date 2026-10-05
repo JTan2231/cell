@@ -151,7 +151,16 @@ without product work. Health and account diagnostics remain separate operations.
 ## Coordinated first installation and interrupted cutover
 
 A fresh coordinated installation accepts `codex_bin` and `codex_home` in
-Nucleus's deployment settings. Both paths are absolute. Runtime execution requires the supported Codex version. `codex_home` identifies an existing authenticated
+Nucleus's deployment settings. Submit the selected commit from the Cell root
+with `./ci.sh submit COMMIT --deploy nucleus`. When setup values are required,
+add `--settings /absolute/private/settings.json` and save them under the canonical
+`nucleus` key, for example
+`{"nucleus":{"codex_bin":"/absolute/runtime/codex","codex_home":"/absolute/authenticated/home"}}`.
+Telete freezes the settings with the job. Verify the retained manager outcome.
+CI and Telete are the deployment route; product installer commands remain
+underlying setup and recovery interfaces.
+
+Both paths are absolute. Runtime execution requires the supported Codex version. `codex_home` identifies an existing authenticated
 home; settings never contain credential bytes. If Nucleus already owns valid
 authentication, installation preserves it. Existing deployments retain a
 compatible configured harness and do not import another credential home.

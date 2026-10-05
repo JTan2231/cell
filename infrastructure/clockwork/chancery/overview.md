@@ -41,10 +41,10 @@ the shared service-health delay before new automatic halts. Its manual owns
 procedure order and action-critical checkpoints; its
 required feature contracts supply the detailed explanations.
 
-Use `clockwork.install.operate` to install and verify program/provider bytes,
+Use `clockwork.install.operate` to deploy through CI and Telete,
 coordinate broker refresh, recover a verified retained release, detach owned
-selectors, or explicitly migrate quiescent state. Direct program installation
-is separate from product definition selection and database migration.
+selectors, or explicitly migrate quiescent state. Underlying program setup APIs
+are separate from product definition selection and database migration.
 
 Use `clockwork.develop.change` to change Clockwork while preserving scope,
 compatibility, privacy, recovery, and validation obligations.

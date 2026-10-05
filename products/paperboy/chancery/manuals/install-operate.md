@@ -24,19 +24,19 @@ renderer output, email result, privacy, and execution limits.
 
 ## Prepare and deploy
 
-Cell deployment uses committed source and an explicitly selected product set.
-Complete the required development checks before publication or deployment.
-Select any required Clockwork or Email update explicitly:
+Cell deployment uses CI and Telete with committed source and an explicit product
+selection. Run from the Cell root:
 
 ```sh
-./deploy.sh plan paperboy
-./deploy.sh paperboy
+./ci.sh submit COMMIT --deploy paperboy
 ```
 
-The shared builder prepares artifacts. The executor runs product-owned setup
+Select any required Clockwork or Email update with another `--deploy PRODUCT`.
+Telete validates and prepares signed artifacts, then runs product-owned setup
 instructions to select matching Paperboy program and Chancery provider bytes.
 Paperboy uses the installed Clockwork and Email interfaces. It invokes neither
-Nucleus nor source-specific products.
+Nucleus nor source-specific products. Verify the retained Telete job and
+deployment outcome. CI and Telete are the sole deployment route.
 
 Installation accepts no product settings. It uses the default manifest;
 an alternate interactive `--manifest` selection does not change this scope.

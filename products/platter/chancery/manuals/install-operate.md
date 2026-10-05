@@ -22,35 +22,25 @@ owns readiness and prompt captures; `platter.editions` owns delivery authority.
 1. Identify the exact intended change and its supported state compatibility.
 2. Inspect the canonical state root, current installation, required dependency
    releases, and maintenance owners.
-3. Select the supported Cell delivery route and applicable installation authority.
+3. Select the committed source and explicit CI deployment products.
 4. Preserve private state outside the source repository.
 
-Use the CI manager for ordinary committed delivery:
+Use CI for deployment from the Cell root:
 
 ```sh
-telete submit COMMIT
+./ci.sh submit COMMIT --deploy platter
 ```
 
-The manager integrates, validates, attempts bounded repairs, deploys, and emails
-the outcome. A separate release build prepares artifacts without installing or
-running domain work:
-
-```sh
-python3 deployment/build.py --source-root /absolute/cell \
-  --product platter --output /absolute/cell-build
-```
-
-For separately authorized installation from committed local `main`:
-
-```sh
-./deploy.sh plan platter
-./deploy.sh platter
-```
-
-`plan` is read-only. Deployment selects the exact local main commit and ignores
-uncommitted edits. Direct `platter-install install` and `recover` are refused;
-use the instruction executor. Select required dependency updates explicitly.
-The committed declarations order selected instructions; the executor adds no
+Telete integrates, validates, attempts bounded repairs, prepares signed programs,
+deploys, and emails the outcome. Verify its retained job and deployment outcome.
+CI and Telete are the sole deployment route. Add
+`--settings /absolute/private/settings.json` when product setup needs explicit
+choices. The private file maps `platter` to its settings object. First setup
+requires an absolute `resume` path; optional `projects_template` and `enabled`
+retain their separate template and activation authority.
+Direct `platter-install install` and `recover` are refused.
+Select required dependency updates explicitly with another `--deploy PRODUCT`.
+The committed declarations order selected instructions; Telete adds no
 dependencies or affected requesters. Unselected products retain their installed
 interfaces. Deployment creates no maintenance hold and drains no requester.
 
@@ -165,8 +155,10 @@ The product command captures an existing `platter/daily` binding and selects its
 updated definition directly. It preserves timer, arguments, environment,
 working directory, output paths, incidents, and saved enabled intent.
 An absent binding stays absent unless explicit activation settings are supplied.
-Optional `enabled` overrides saved activation intent. Deployment temporarily
-disables no binding and never clears a failure halt or reconciles a send.
+Optional `enabled` overrides saved activation intent. Deployment disables owned
+bindings and waits for their active processes before runtime publication. It
+restores saved enabled intent after registration and never clears a failure halt
+or reconciles a send.
 
 For separately authorized daily activation, prepare a private definition:
 
@@ -195,7 +187,7 @@ resume permits future scheduling without retrying preparation or uncertain mail.
 
 ## Complete installation
 
-Read the retained executor outcome for resource placement and product setup.
+Read the retained Telete job and deployment outcome for resource placement and product setup.
 A failed instruction retains completed file, migration, configuration, and
 schedule effects. The executor performs no automatic retry, rollback, or product
 recovery. Inspect current Platter state before an authorized new attempt.

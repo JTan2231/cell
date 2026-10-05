@@ -1,6 +1,6 @@
 {
   "id": "annals.develop.change",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -68,7 +68,7 @@
     {
       "id": "annals.installation",
       "min_contract": 6,
-      "max_contract_exclusive": 7
+      "max_contract_exclusive": 8
     },
     {
       "id": "annals.work.retain",
@@ -101,13 +101,13 @@
     "Read `semantics.repository.explore`, query `semantics repository show annals`, and identify the Annals-owned contract being changed.",
     "If the change crosses Nucleus execution, authentication, compatibility, persistent state, deployment, or requester integration, run `nucleus manual` before design. Read Clockwork schedule contract 4 for scheduled-executable or binding changes.",
     "Implement the smallest change and update the owning feature contract and normalized claims, affected procedures, product overview and navigation in the same change. Validate source bundles and review show, show --full and resolve before publication.",
-    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. Destructive migration and deployment outside that job require separate authority."
+    "Commit the change, submit it with `./ci.sh submit COMMIT` from the Cell root, and verify the retained manager job outcome. CI and Telete are the sole Cell deployment route. Destructive migration requires separate authority."
   ],
   "checkpoints": [
     "Current terminology follows Semantics; product-owned feature contracts explain supported behavior and code/tests verify implementation.",
     "Annals domain state remains authoritative over model prose and Nucleus terminal state.",
     "Migration, rollback, and historical decoding are explicit when persistent meaning changes.",
-    "The manager deployment stays within the submitted job; release publication and deployment outside that job have separate authorization."
+    "CI and Telete are the sole Cell deployment route. Release publication has separate authorization."
   ],
   "adaptation": [
     "Select only the contract documents relevant to the changed domain while always reading the complete Semantics repository first.",
@@ -131,7 +131,7 @@
       },
       {
         "status": "unsupported",
-        "statement": "This operation does not cover ordinary product use, changes owned solely by Nucleus, release publication, or deployment outside the submitted manager job without separate authority."
+        "statement": "This operation does not cover ordinary product use, changes owned solely by Nucleus, release publication, or deployment outside the submitted manager job."
       }
     ],
     "preconditions": [
@@ -227,7 +227,7 @@
       },
       {
         "status": "declared",
-        "statement": "Annals domain results survive later Nucleus runtime failure. CI submission includes the manager deployment; publication and installation outside that job remain separately authorized."
+        "statement": "Annals domain results survive later Nucleus runtime failure. CI submission includes the manager deployment; CI and Telete are the sole Cell deployment route; publication and explicit legacy bootstrap or recovery remain separately authorized."
       }
     ],
     "operational_limits": [

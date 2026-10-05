@@ -1,8 +1,9 @@
 # Install or recover Annals
 
 The Cell manifest command places resources and performs setup without application
-maintenance, work draining, schedule suspension, or readiness checks. Explicit
-manual install and recovery retain the maintenance procedure below. It does not gate completion on persistent-state validation, artifact
+maintenance, durable-work draining, or readiness checks. It suspends owned
+schedules and waits for their active processes before runtime publication. Explicit
+legacy maintenance and recovery retain their product procedures below. It does not gate completion on persistent-state validation, artifact
 integrity audits, or runtime readiness checks. The product's ordinary diagnostics
 and runtime checks remain available separately.
 
@@ -18,10 +19,10 @@ library configuration and schema; and `annals.inbox` for dispatch and recovery.
    active library and spool. The installer has no data reset mode. Decisions
    provisioning owns only the separate
    decisions state and `annals/decisions-inbox`.
-2. Select binaries and both provider bundles from a validated source candidate.
-   Ordinary delivery uses `telete submit COMMIT`; its manager integrates,
-   validates, attempts bounded repairs, deploys, and emails the outcome.
-   Use the commands below for separately authorized manual operations.
+2. Select the intended committed source for CI deployment. Telete integrates,
+   validates, attempts bounded repairs, prepares signed programs, deploys, and
+   emails the outcome. Product-owned bootstrap and retained-transaction recovery
+   keep their separate explicit procedures.
 3. Check the reachable Nucleus binary and socket, compatible Clockwork, and the
    current user's graphical session before macOS activation. Keep Nucleus
    installation and authentication under Nucleus's own procedure.
@@ -58,33 +59,23 @@ library configuration and schema; and `annals.inbox` for dispatch and recovery.
 
 ## Deploy or update on macOS
 
-1. Run the candidate installer from the Cell root with absolute inputs:
+1. Submit the intended committed source from the Cell root:
 
 ```sh
-cd /Users/joey/rust/cell
-./target/release/annals-install install \
-  --binary <ABSOLUTE_ANNALS_BINARY> \
-  --usage-binary <ABSOLUTE_ANNALS_USAGE_BINARY> \
-  --bundle "/Users/joey/rust/cell/products/annals/chancery/annals" \
-  --usage-bundle "/Users/joey/rust/cell/products/annals/chancery/annals-usage" \
-  --nucleus <ABSOLUTE_NUCLEUS_BINARY> \
-  --nucleus-socket <ABSOLUTE_NUCLEUS_SOCKET> \
-  --clockwork <ABSOLUTE_CLOCKWORK_BINARY>
+./ci.sh submit COMMIT --deploy annals
 ```
 
-2. Let the installer stage the release, establish
-   maintenance, drain owned activation, migrate each selected library through
-   supported schemas, switch exact selectors/binding, and publish commands. Preserve operator pauses and pre-existing disabled schedules.
-   Stop if ownership, drain, migration, or restoration is unproved.
-3. Use `ANNALS_UPDATE_WAIT_SECONDS` only for the documented inbox-lock wait
-   when necessary; its default is 3,900 seconds. `--no-start` leaves scheduler
-   state unchanged and does not complete a scheduled installation.
-4. Select only the boolean `enabled` deployment setting when the coordinator
-   needs an override. `{"annals":{"enabled":false}}` keeps both owned inbox
+   CI and Telete are the sole Cell deployment route. Add required dependency
+   products with another `--deploy PRODUCT`.
+2. Select only the boolean `enabled` deployment setting when setup needs an
+   override. Supply a private JSON file with `--settings ABSOLUTE_JSON`.
+   `{"annals":{"enabled":false}}` keeps both owned inbox
    bindings disabled after product setup. Omission preserves captured intent and
    a new schedule defaults enabled; recovery preserves prior intent and ignores
    the override. Preserve incident halts and operator pauses.
-5. Release only the operation's maintenance and pause after setup completes. Do not clear Clockwork incident
+3. Verify the retained Telete job and deployment outcome. Inspect owned state,
+   schedules and explicit maintenance separately when required by the endpoint.
+4. Release only the operation's maintenance and pause after setup completes. Do not clear Clockwork incident
    halts through deployment.
 
 ## Provision the dedicated decisions library
@@ -126,7 +117,8 @@ The Cell manifest runs `annals-install deploy` once with a schema-2 request on
 stdin. Annals places the release, initializes or migrates the primary, decisions and
 registered libraries, writes configuration, and selects
 the two inbox schedules directly. It does not acquire or release application
-holds, wait for admitted work, or suspend schedules. The executor
+holds or drain durable work. It suspends owned schedules and waits for their
+active processes before runtime publication. The executor
 observes command completion and does not interpret Annals state or health.
 
 The request supplies candidate paths, source paths, a run identity, selected

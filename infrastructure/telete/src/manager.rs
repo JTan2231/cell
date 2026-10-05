@@ -32,6 +32,8 @@ pub(crate) struct SubmitOptions {
     pub request_id: Option<String>,
     pub run_tests: bool,
     pub deploy: Vec<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub settings: BTreeMap<String, Value>,
     pub repair: bool,
     pub notify: bool,
     pub no_deploy: bool,
@@ -43,6 +45,7 @@ impl Default for SubmitOptions {
             request_id: None,
             run_tests: false,
             deploy: Vec::new(),
+            settings: BTreeMap::new(),
             repair: true,
             notify: true,
             no_deploy: false,
@@ -133,6 +136,23 @@ pub(crate) fn submit(
     for product in &options.deploy {
         crate::model::ProductId::new(product)?;
     }
+    for (product, settings) in &options.settings {
+        crate::model::ProductId::new(product)?;
+        ensure!(
+            product != "decisions",
+            "use canonical krisis settings for decisions"
+        );
+        ensure!(
+            settings.is_object(),
+            "product settings must be JSON objects"
+        );
+        ensure!(
+            options.deploy.iter().any(|selected| {
+                selected == product || (selected == "decisions" && product == "krisis")
+            }),
+            "settings require an explicit --deploy selection for {product}"
+        );
+    }
     ensure!(
         !options.deploy.iter().any(|product| product == "telete"),
         "Telete installation is separate; use telete install explicitly"
@@ -182,6 +202,19 @@ pub(crate) fn submit(
     )?;
     let admitted = store.transaction(|| store.insert(&job))?;
     admitted.output()
+}
+
+pub(crate) fn read_settings(path: Option<&Path>) -> Result<BTreeMap<String, Value>> {
+    let Some(path) = path else {
+        return Ok(BTreeMap::new());
+    };
+    ensure!(path.is_absolute(), "settings path must be absolute");
+    ensure!(
+        fs::symlink_metadata(path)?.is_file(),
+        "settings must be a regular JSON file"
+    );
+    serde_json::from_slice(&fs::read(path)?)
+        .context("settings must map product IDs to JSON objects")
 }
 
 fn new_job(
@@ -1156,7 +1189,9 @@ impl Worker<'_> {
 
     fn integrating(&self, job: &mut Job) -> Result<()> {
         let base = Self::base(job)?.clone();
-        if git::ancestor(self.paths, &self.config.repository, &job.input, &base)? {
+        if job.options.deploy.is_empty()
+            && git::ancestor(self.paths, &self.config.repository, &job.input, &base)?
+        {
             job.candidate = Some(base);
             return self.finish(
                 job,
@@ -1181,11 +1216,16 @@ impl Worker<'_> {
             );
         }
         let tree = git::value(self.paths, &worktree, &["write-tree"])?;
+        let parents = if base == job.input {
+            vec![base]
+        } else {
+            vec![base, job.input.clone()]
+        };
         let candidate = git::commit_tree(
             self.paths,
             &self.config.repository,
             &tree,
-            &[base, job.input.clone()],
+            &parents,
             &job.id.0,
             job.created,
             "Integrate Telete submission",
@@ -2039,6 +2079,7 @@ impl Worker<'_> {
                 &request.id,
                 &request.prepared,
                 &request.products,
+                &job.options.settings,
             ) {
                 Ok(result) => result,
                 Err(error) => match deployment::observe(self.paths, &request.id)? {
@@ -2767,6 +2808,103 @@ mod tests {
         );
         assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
         assert_eq!(git::commit(&paths, &repo, "HEAD")?, input);
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_deployment_rechecks_source_already_in_accepted_history() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        let worker = worker(&paths)?;
+        let mut ordinary = job(&paths, &base, "already-included")?;
+        ordinary.base = Some(base.clone());
+        ordinary.phase = Phase::Integrating;
+        let mut ordinary = worker.store.insert(&ordinary)?;
+        worker.integrating(&mut ordinary)?;
+        assert_eq!(ordinary.phase, Phase::AlreadyIncluded);
+
+        let mut requested = job(&paths, &base, "explicit-redeployment")?;
+        requested.base = Some(base.clone());
+        requested.phase = Phase::Integrating;
+        requested.options.deploy = vec!["alpha".into()];
+        let mut requested = worker.store.insert(&requested)?;
+        worker.integrating(&mut requested)?;
+        assert_eq!(requested.phase, Phase::Checking);
+        assert!(requested.validations.is_empty());
+        assert!(requested.preparation.is_none());
+        assert!(!requested.accepted);
+        let candidate = requested.candidate.as_ref().context("candidate")?;
+        assert_ne!(candidate, &base);
+        assert_eq!(
+            git::value(
+                &paths,
+                &repo,
+                &["rev-parse", &format!("{candidate}^{{tree}}")]
+            )?,
+            git::value(&paths, &repo, &["rev-parse", &format!("{base}^{{tree}}")])?
+        );
+        assert_eq!(git::ref_value(&paths, &repo, git::ACCEPTED)?, Some(base));
+        Ok(())
+    }
+
+    #[test]
+    fn settings_are_frozen_and_invalid_submission_choices_are_rejected() -> Result<()> {
+        let (_temporary, paths, repo, base) = fixture()?;
+        let file = paths.root.join("settings-input.json");
+        fs::write(&file, br#"{"alpha":{"enabled":true}}"#)?;
+        let settings = read_settings(Some(&file))?;
+        fs::write(&file, br#"{"alpha":{"enabled":false}}"#)?;
+        assert_eq!(settings["alpha"], json!({"enabled":true}));
+        assert!(read_settings(Some(Path::new("relative.json"))).is_err());
+        fs::write(&file, b"[]")?;
+        assert!(read_settings(Some(&file)).is_err());
+        for (deploy, settings) in [
+            (Vec::new(), settings.clone()),
+            (vec!["beta".into()], settings),
+            (
+                vec!["alpha".into()],
+                BTreeMap::from([("alpha".into(), json!(true))]),
+            ),
+            (
+                vec!["decisions".into()],
+                BTreeMap::from([("decisions".into(), json!({}))]),
+            ),
+        ] {
+            assert!(
+                submit(
+                    &paths,
+                    &repo,
+                    &base.0,
+                    SubmitOptions {
+                        deploy,
+                        settings,
+                        ..SubmitOptions::default()
+                    }
+                )
+                .is_err()
+            );
+        }
+        let old = serde_json::to_value(SubmitOptions::default())?;
+        assert!(old.get("settings").is_none());
+        assert!(
+            serde_json::from_value::<SubmitOptions>(old)?
+                .settings
+                .is_empty()
+        );
+
+        let mut frozen = job(&paths, &base, "settings-frozen")?;
+        frozen.options.request_id = Some(frozen.request_id.clone());
+        frozen.options.deploy = vec!["alpha".into()];
+        frozen.options.settings = BTreeMap::from([("alpha".into(), json!({"enabled":true}))]);
+        let store = Store::open(&paths.root, false)?;
+        let frozen = store.insert(&frozen)?;
+        let joined = submit(&paths, &repo, &base.0, frozen.options.clone())?;
+        assert_eq!(joined["id"], serde_json::to_value(&frozen.id)?);
+        let mut changed = frozen.options.clone();
+        changed
+            .settings
+            .insert("alpha".into(), json!({"enabled":false}));
+        assert!(submit(&paths, &repo, &base.0, changed).is_err());
+        assert_eq!(store.job(&frozen.id.0)?.options, frozen.options);
         Ok(())
     }
 

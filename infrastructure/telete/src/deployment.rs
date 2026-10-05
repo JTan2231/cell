@@ -677,6 +677,8 @@ struct FrozenRequest {
     prepared: Preparation,
     products: Vec<String>,
     declarations: Vec<Declaration>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    settings: BTreeMap<String, Value>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct Operation {
@@ -802,8 +804,8 @@ fn command(
         candidate_dir: Some(candidate.candidate_dir.clone()),
         candidate: Some(serde_json::to_value(candidate)?),
         selected_products: operation.result.products.clone(),
-        settings: None,
-        dependency_settings: BTreeMap::new(),
+        settings: operation.request.settings.get(product).cloned(),
+        dependency_settings: operation.request.settings.clone(),
         dependency_candidates: dependencies,
     };
     let args = argv
@@ -1101,6 +1103,7 @@ pub(crate) fn execute(
     request: &str,
     prepared: &Preparation,
     products: &[String],
+    settings: &BTreeMap<String, Value>,
 ) -> Result<DeploymentResult> {
     request_id(request)?;
     paths.require_capacity()?;
@@ -1133,6 +1136,12 @@ pub(crate) fn execute(
         .map(|d| d.product.clone())
         .collect::<Vec<_>>();
     validate_preparation(prepared, &names)?;
+    ensure!(
+        settings
+            .iter()
+            .all(|(product, value)| names.contains(product) && value.is_object()),
+        "settings must contain only selected canonical products and JSON objects"
+    );
     for candidate in prepared.candidates.values() {
         within_workspace(paths, &candidate.candidate_dir)?;
     }
@@ -1141,6 +1150,7 @@ pub(crate) fn execute(
         prepared: prepared.clone(),
         products: names.clone(),
         declarations,
+        settings: settings.clone(),
     };
     let mut index = index(paths)?;
     if let Some(run) = index.get(request) {
@@ -1508,8 +1518,7 @@ mod tests {
         assert!(binary_metadata(&ambiguous, std::slice::from_ref(&product)).is_err());
         assert!(binary_metadata(&metadata, &[product.clone(), product]).is_err());
     }
-    #[test]
-    fn preparation_correlation_rejects_scope_source_policy_and_path_substitution() {
+    fn email_preparation() -> Preparation {
         let source = CommitId::new("a".repeat(40)).unwrap();
         let policy = SigningPolicy {
             schema: 1,
@@ -1537,14 +1546,19 @@ mod tests {
             )]),
             signing_policy: policy.clone(),
         };
-        let prepared = Preparation {
+        Preparation {
             schema: 1,
             source,
             products: vec!["email".into()],
             signing_policy: policy,
             candidates: BTreeMap::from([("email".into(), candidate)]),
             release_check: true,
-        };
+        }
+    }
+
+    #[test]
+    fn preparation_correlation_rejects_scope_source_policy_and_path_substitution() {
+        let prepared = email_preparation();
         assert!(validate_preparation(&prepared, &["email".into()]).is_ok());
         assert!(validate_preparation(&prepared, &["nucleus".into()]).is_err());
         let mut changed = prepared.clone();
@@ -1572,6 +1586,66 @@ mod tests {
         let mut changed = prepared;
         changed.products.push("email".into());
         assert!(validate_preparation(&changed, &["email".into()]).is_err());
+    }
+
+    #[test]
+    fn installer_input_uses_frozen_product_and_dependency_settings() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        fs::set_permissions(temporary.path(), fs::Permissions::from_mode(0o700))?;
+        let paths = Paths::for_test(temporary.path().canonicalize()?)?;
+        let prepared = email_preparation();
+        let instruction: Instruction = serde_json::from_value(json!({
+            "id":"install", "kind":"run", "argv":["{candidate_dir}/bin/email"],
+            "stdin":"deployment_request"
+        }))?;
+        let operation = Operation {
+            request: FrozenRequest {
+                repository: "/source".into(),
+                products: vec!["email".into(), "nucleus".into()],
+                declarations: Vec::new(),
+                settings: BTreeMap::from([
+                    (
+                        "email".into(),
+                        json!({"credential_file":"/private/email-key"}),
+                    ),
+                    ("nucleus".into(), json!({"codex_home":"/private/codex"})),
+                ]),
+                prepared: prepared.clone(),
+            },
+            result: DeploymentResult {
+                schema: 2,
+                request_id: "settings-request".into(),
+                run_id: "settings-run".into(),
+                source: prepared.source,
+                products: vec!["email".into(), "nucleus".into()],
+                state: DeploymentState::Running,
+                exit_code: None,
+                instructions: Vec::new(),
+                diagnostic: None,
+                acknowledged: false,
+            },
+        };
+        let spec = command(&paths, &operation, "email", &instruction)?;
+        let input: Request = serde_json::from_str(spec.stdin.as_deref().unwrap())?;
+        assert_eq!(
+            input.settings,
+            operation.request.settings.get("email").cloned()
+        );
+        assert_eq!(input.dependency_settings, operation.request.settings);
+        let retained = serde_json::to_value(&operation.request)?;
+        let mut changed: FrozenRequest = serde_json::from_value(retained.clone())?;
+        changed
+            .settings
+            .insert("email".into(), json!({"credential_file":"/different"}));
+        assert_ne!(changed, operation.request);
+        let mut legacy = retained;
+        legacy.as_object_mut().unwrap().remove("settings");
+        assert!(
+            serde_json::from_value::<FrozenRequest>(legacy)?
+                .settings
+                .is_empty()
+        );
+        Ok(())
     }
     #[test]
     fn reconciliation_requires_all_instructions_and_does_not_resume_a_prefix() {

@@ -16,7 +16,22 @@ Public `clockwork` commands print plain text by default. Add `--json` when
 a script or typed integration must parse a result. The flagged response
 schemas and the private broker output are unchanged.
 
-## Prepare and install
+## Deploy through CI
+
+1. Select the committed source and submit it from the Cell root:
+
+   ```sh
+   ./ci.sh submit COMMIT --deploy clockwork
+   ```
+
+2. Verify the retained manager job outcome. Telete validates and prepares the
+   selected source before it runs the product's broker-refresh instruction.
+3. Register command inventory with `clockwork --register-usage`.
+
+CI and its Telete manager are the deployment route. Keep explicit migration and
+retained-release recovery separate from ordinary deployment.
+
+## Underlying program installation
 
 1. Disable existing bindings and let their admitted work finish. Exclude
    concurrent manual activations. Select the candidate binary, installer, and
@@ -36,13 +51,14 @@ through `clockwork doctor`; that command's state effects are unchanged.
 
 ## Coordinate broker refresh
 
-1. Authorize Cell deployment separately, then use `./deploy.sh clockwork`.
-   Select any product updates explicitly; the executor adds no products.
+1. Submit the selected commit with `./ci.sh submit COMMIT --deploy clockwork`
+   from the Cell root. Select any other required products explicitly.
 2. Let the product command retain complete prior binding intent in the private
    deployment run, disable all bindings, and wait for admitted activations.
    The command then replaces fixed runtime files and restores only previously
    enabled definitions. Disabled intent and all incidents remain unchanged.
-3. Inspect `clockwork-binding-intent.json` in the retained run after interruption.
+3. Verify Telete's retained deployment result. Inspect
+   `clockwork-binding-intent.json` in the retained run after interruption.
    Completed file and binding changes remain; unrestored bindings stay disabled.
    Reconcile executor admission separately from explicit Clockwork recovery.
 

@@ -1,6 +1,6 @@
 {
   "id": "krisis.develop.change",
-  "contract_version": 2,
+  "contract_version": 3,
   "kind": "operation",
   "mode": "develop",
   "support": "supported",
@@ -62,7 +62,7 @@
     ],
     "preconditions": [
       {"status": "declared", "statement": "The maintainer has read product instructions and resolved current Semantics, Nucleus, Conversations, Annals, and Clockwork contracts affected by the work."},
-      {"status": "declared", "statement": "CI submission supplies authority for the manager deployment and outcome email. Separate authority exists before release publication, deployment outside that job, destructive live migration, external acceptance, retry of existing work, or retained-state deletion."}
+      {"status": "declared", "statement": "CI submission supplies authority for the manager deployment and outcome email. CI and Telete are the sole Cell deployment route. Separate authority exists before release publication, destructive live migration, explicit legacy bootstrap or recovery, external acceptance, retry of existing work, or retained-state deletion."}
     ],
     "inputs": [
       {"status": "declared", "statement": "Inputs are one authorized change plus current source, tests, product contracts, registered meanings, packaging rules, and recovery evidence."},

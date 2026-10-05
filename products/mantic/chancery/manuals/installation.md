@@ -8,12 +8,15 @@ outside that release in `~/Library/Application Support/Mantic/mantic.db`.
 ## Installation interfaces
 
 ```text
-mantic-install install --binary ABSOLUTE_PATH --bundle ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--expected-current absent|releases/ID]
+./ci.sh submit COMMIT --deploy mantic
 mantic-install inspect [--home ABSOLUTE_PATH]
 mantic-install recover --release ABSOLUTE_PATH [--home ABSOLUTE_PATH] [--expected-current absent|releases/ID]
 mantic-install deploy < REQUEST.json
 ```
 
+Run CI from the Cell root and verify the retained Telete job and deployment
+outcome. CI and Telete are the sole Cell deployment route. The product-owned
+`deploy` command is the manifest instruction that Telete invokes.
 Use `mantic.install.operate` for the supported procedure. The deployment request
 on stdin uses schema two. Mantic accepts an empty settings object and has no
 deployment settings. Deployment stages the supplied matched program and provider bytes,

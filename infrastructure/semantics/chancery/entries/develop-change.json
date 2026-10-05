@@ -91,7 +91,7 @@
     "Read Semantics AGENTS.md, registered repository terminology, required product feature contracts, affected upstream contracts, and current Nucleus requester/operator manuals.",
     "Map changes across registry identity, cursor durability, intake state, replay invariants, immutable tool schemas, mailbox idempotency, service privacy, and rollback.",
     "Implement the smallest change with synthetic adapters and synchronized code, tests, docs, packaging, and Chancery contracts.",
-    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job outcome. Publication and deployment outside that job remain separately authorized operations."
+    "Commit the change, submit it with ./ci.sh submit COMMIT from the Cell root, and verify the retained manager job outcome. CI and Telete are the deployment route. Release publication remains separately authorized."
   ],
   "checkpoints": [
     "Repository meaning is always derived by replaying immutable contiguous revisions and typed effects; v1 has no mutable concept projection.",
@@ -138,7 +138,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "The contributor has read Semantics instructions, repository terminology, affected public and upstream contracts, and the Nucleus operator manual. CI submission supplies authority for the manager deployment and outcome email; release publication and deployment outside that job require separate authority."
+        "statement": "The contributor has read Semantics instructions, repository terminology, affected public and upstream contracts, and the Nucleus operator manual. CI submission supplies authority for the manager deployment and outcome email; release publication requires separate authority."
       }
     ],
     "inputs": [

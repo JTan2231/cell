@@ -1,5 +1,10 @@
 # Bazaar installation and private state
 
+Submit deployments from the Cell root with
+`./ci.sh submit COMMIT --deploy bazaar` and verify the retained manager job
+outcome. CI and Telete are the deployment route. The installer APIs below are
+underlying product setup and explicit retained-release recovery interfaces.
+
 This feature owns program publication, database initialization, integrity checks,
 and compatible recovery. Use `chancery show bazaar.install.operate` for the
 procedure. Use `chancery resolve bazaar.install.operate` to read that procedure

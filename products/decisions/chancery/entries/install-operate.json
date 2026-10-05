@@ -1,6 +1,6 @@
 {
   "id": "krisis.install.operate",
-  "contract_version": 12,
+  "contract_version": 13,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -19,8 +19,8 @@
   "effects": [
     "The package builds krisis and krisis-install. The installer is retained as package/install and accepts a schema-2 deploy request on stdin. Static runtime frontend and observer scripts remain release data.",
     "The Cell manifest command places release files, performs observer activation and migration, writes the hook and Annals pin receipt, and selects krisis/observer directly. It preserves the write-once baseline and existing enabled intent unless an explicit setting overrides it.",
-    "Explicit manual install: Default preparation stages an immutable release and computes its exact Clockwork definition digest, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
-    "Explicit manual install: Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
+    "Explicit legacy bootstrap: Default preparation stages an immutable release and computes its exact Clockwork definition digest, including the explicit Codex reader path, while retaining maintenance without selecting or activating public surfaces.",
+    "Explicit legacy bootstrap: Explicit final cutover migrates the database to schema 6, publishes the krisis command and providers, installs the exact hook and target-bound observer ownership receipt, selects krisis/observer, and disables only proven-owned enabled legacy schedules.",
     "Uninstall removes exact owned public Krisis surfaces and disables its observer while retaining the database, releases, logs, legacy history, and Clockwork history unless separately authorized for deletion.",
     "The Cell manifest command performs file placement, configuration, initialization or migration, and schedule selection. It does not acquire application maintenance, drain durable work, check readiness, or recover automatically. It suspends owned schedules and waits for their active processes before runtime publication, then restores saved enabled intent with the new definitions. Actual state mutations retain their native locks. Explicit manual maintenance and recovery commands remain separate.",
     "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Decisions/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
@@ -35,7 +35,7 @@
   "failure_and_recovery": [
     "Saved conversation read failures (document_source_unavailable) return zero and permit later scheduled work; other processing failures end the current run. Product-owned schema-three schedule definitions select halt-until-approved. The first abnormal attempt ends the current run. Clockwork permits later activations before the shared service-health threshold. By default, five consecutive failed read-only checks, at least 60 seconds apart, establish the halt and alert eligibility together. Healthy or inactive checks, including operator pause, clear a pending failure episode. Established halts require exact binding resume approval; definition switches, deployment and product resume/retry preserve them. Product domain state and explicit retries remain product-owned.",
     "The manifest command does not inspect installed maintenance support or perform automatic recovery. An interrupted command leaves completed effects in place; inspect the retained command log and use explicit product procedures when needed.",
-    "Explicit manual install: A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
+    "Explicit legacy bootstrap: A provable failed update restores prior owned selectors, hook bytes and schedule selection when the database schema is unchanged. Data remains in place. A schema change requires retained-candidate forward recovery; unproved recovery retains maintenance and transaction evidence.",
     "Foreign, symbolic, hard-linked, modified, or ambiguous releases, databases, selectors, hooks, paths, selected definitions, ownership receipts, or loaded labels are refused rather than replaced.",
     "Missed hooks recover with observe reconcile; pending Annals delivery retries before classification; terminal observation retry and unavailable-source abandonment require explicit guarded commands."
   ],
@@ -74,6 +74,11 @@
       "id": "bazaar.prompts.prepare",
       "min_contract": 1,
       "max_contract_exclusive": 2
+    },
+    {
+      "id": "telete.queue.operate",
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "session_surfaces": [
@@ -110,6 +115,10 @@
   ],
   "interfaces": [
     {
+      "label": "Deploy committed source",
+      "invocation": "./ci.sh submit COMMIT --deploy krisis [--settings ABSOLUTE_JSON]"
+    },
+    {
       "label": "Inspect deployment admission",
       "invocation": "/Users/joey/.local/bin/krisis --database ABSOLUTE_DATABASE --json maintenance status"
     },
@@ -122,11 +131,11 @@
       "invocation": "/Users/joey/.local/bin/krisis --database ABSOLUTE_DATABASE --json maintenance release RUN_ID"
     },
     {
-      "label": "Prepare",
+      "label": "Legacy bootstrap prepare",
       "invocation": "krisis-install install --source-root ABSOLUTE_DECISIONS_SOURCE --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX"
     },
     {
-      "label": "Final cutover",
+      "label": "Legacy bootstrap final cutover",
       "invocation": "krisis-install install --source-root ABSOLUTE_DECISIONS_SOURCE --binary ABSOLUTE_KRISIS --clockwork ABSOLUTE_CLOCKWORK --codex ABSOLUTE_CODEX --annals ABSOLUTE_ANNALS --annals-config ABSOLUTE_CONFIG --annals-library-id LOWERCASE_32_HEX --final-cutover"
     },
     {
@@ -150,7 +159,7 @@
       "invocation": "/Users/joey/.local/bin/krisis health [--max-idle-seconds N] [--json]"
     },
     {
-      "label": "Cell manifest command",
+      "label": "Product instruction invoked by Telete",
       "invocation": "krisis-install deploy"
     }
   ],
@@ -203,6 +212,10 @@
       {
         "status": "unsupported",
         "statement": "Foreign hook files, ambiguous selectors, direct SQLite edits, arbitrary library fallback, uppercase IDs, and unapproved state deletion are not accepted."
+      },
+      {
+        "status": "declared",
+        "statement": "CI and Telete are the sole Cell deployment route. Submit ./ci.sh submit COMMIT --deploy krisis from the Cell root and add required product updates explicitly. Telete validates, prepares signed programs, executes product instructions and retains job and deployment outcomes. Product-owned bootstrap, platform package maintenance and explicit recovery keep their separate supported interfaces."
       }
     ],
     "outputs": [

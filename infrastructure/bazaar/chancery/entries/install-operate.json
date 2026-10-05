@@ -1,6 +1,6 @@
 {
   "id": "bazaar.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -21,12 +21,8 @@
       "invocation": "bazaar-install inspect"
     },
     {
-      "label": "Plan deployment",
-      "invocation": "./deploy.sh plan bazaar"
-    },
-    {
-      "label": "Deploy when authorized",
-      "invocation": "./deploy.sh bazaar"
+      "label": "Submit Cell deployment",
+      "invocation": "./ci.sh submit COMMIT --deploy bazaar"
     },
     {
       "label": "Run product deployment recipe",
@@ -157,7 +153,7 @@
   ],
   "steps": [
     "Select the intended operation, authorization, absolute private database, and supplied candidate or exact retained release.",
-    "Use the authorized CI delivery, coordinated manual deployment, or direct installation route; inspect the plan and stop for failed setup.",
+    "Submit the selected committed source through CI and Telete with explicit Bazaar deployment selection, then verify the retained manager job outcome. Product installer APIs remain underlying setup and explicit recovery interfaces.",
     "Initialize only intended empty or compatible state, then run doctor and register the installed command inventory separately.",
     "Read program selection metadata; run database doctor only for a separate diagnostic request. When the Chancery reader is installed, inspect overview/show/resolve separately; those views do not establish runtime readiness.",
     "For program recovery select an exact owned compatible release, preserve database history, and read installation metadata."
@@ -165,7 +161,7 @@
   "checkpoints": [
     "The selected database and installation changes are authorized; content updates and caller migration remain separate.",
     "For state operations, existing parent and database paths are regular and private and data is absent, empty, or compatible as required. Program candidates and selectors have established ownership.",
-    "The plan matches intended Bazaar deployment and configure and verification succeed before completion.",
+    "The retained manager job identifies the intended Bazaar deployment and its result; explicit configure and verification operations succeed when they form part of the authorized endpoint.",
     "Program inspection reads selectors and retained metadata and relevant database checks confirm schema-one identity and integrity. Coordinated deployment performs setup without an additional verification gate.",
     "Program recovery retains all string versions."
   ],

@@ -50,7 +50,11 @@ products.
   [CI submission](infrastructure/telete/README.md) and
   [queue operation](infrastructure/telete/chancery/manuals/queue-operate.md).
   Root and product `ci.sh` wrappers use this same path; there is no direct
-  check-only CI entry point. Focused tests can support development, but they do
+  check-only CI entry point. Use this route for every product deployment,
+  including an explicit redeployment with `--deploy PRODUCT`. Supply product
+  setup choices with `--settings ABSOLUTE_JSON`. Product installers are
+  underlying interfaces for Telete and explicit recovery, not alternate delivery
+  entry points. Focused tests can support development, but they do
   not replace the manager job.
   New jobs refund each repair invocation's budget point when Git accepts its
   patch and the manager records the private candidate. Failed or rejected

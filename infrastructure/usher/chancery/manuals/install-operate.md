@@ -39,15 +39,15 @@ behavior.
 
 ## Deliver programs
 
-Use `telete submit COMMIT` for ordinary committed-source delivery. The manager
-owns integration, validation, deployment, and its outcome email. Inspect the
-retained manager result. Manual installation and recovery use the supplied
-program artifacts under the applicable user authority.
-
-1. Select the intended absolute binary and provider paths.
-2. Run the install command above.
+1. Submit the selected source from the Cell root with
+   `./ci.sh submit COMMIT --deploy usher`. CI and its Telete manager own the
+   deployment route, integration, validation and outcome email.
+2. Verify the retained manager job outcome.
 3. Run `usher --register-usage` to register command inventory separately.
 4. Read `usher-install inspect` to see the selected release.
+
+The install command above is an underlying product setup interface. Use the
+retained-release recovery procedure below for explicit program recovery.
 
 ## Recover a release
 

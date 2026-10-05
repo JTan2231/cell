@@ -16,10 +16,10 @@
   "interfaces": [
     {
       "label": "Submit ordinary Cell delivery",
-      "invocation": "./ci.sh submit COMMIT"
+      "invocation": "./ci.sh submit COMMIT --deploy email"
     },
     {
-      "label": "Install tested Email artifacts",
+      "label": "Underlying Email program installation",
       "invocation": "<TESTED_EMAIL_INSTALL> install --binary <TESTED_EMAIL_BINARY> --bundle ABSOLUTE_BUNDLE"
     },
     {
@@ -154,8 +154,8 @@
   "runtime": "interactive_agent",
   "automation": "none",
   "steps": [
-    "Select the intended supplied binary and provider paths and the installation home.",
-    "Read the current selection and run install with any intended expected-current guard.",
+    "Select the intended committed source and submit it from the Cell root with ./ci.sh submit COMMIT --deploy email. CI and Telete are the deployment route.",
+    "Verify the retained manager job outcome. Product installer APIs remain underlying setup and explicit recovery interfaces.",
     "Register the installed command inventory separately and read installation metadata.",
     "Recover a retained release when requested; keep diagnostics separate from installation."
   ],

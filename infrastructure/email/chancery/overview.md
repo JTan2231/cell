@@ -32,8 +32,8 @@ Use `email.account.operate` to select a supplied credential or receiving domain,
 or discover domains without reading mail. Its required `email.account` contract
 owns detailed setting and observation semantics.
 
-Use `email.install.operate` for ordinary Cell delivery and explicitly authorized
-manual installation or retained-release recovery. Account setup and any real-send
+Use `email.install.operate` for Cell delivery through CI and Telete or explicitly
+authorized retained-release recovery. Account setup and any real-send
 check retain their separate authority requirements.
 
 ## How the features work together

@@ -25,7 +25,6 @@ Public commands are `~/.local/bin/conversations` and
 `~/Library/Application Support/Chancery/providers/conversations`.
 
 ```sh
-conversations-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE
 conversations-install inspect
 conversations-install recover --release ABSOLUTE_RELEASE_DIRECTORY
 ```
@@ -39,13 +38,16 @@ behavior.
 
 ## Deliver programs
 
-Use `telete submit COMMIT` for ordinary committed-source delivery. The manager
-owns integration, validation, deployment, and its outcome email. Inspect the
-retained manager result. Manual installation and recovery use the supplied
-program artifacts under the applicable user authority.
+1. Select the intended committed source and submit it from the Cell root:
 
-1. Select the intended absolute binary and provider paths.
-2. Run the install command above.
+   ```sh
+   ./ci.sh submit COMMIT --deploy conversations
+   ```
+
+   CI and Telete are the sole deployment route. Add required dependency updates
+   with another `--deploy PRODUCT`. The manager owns integration, validation,
+   signed preparation, deployment, and its outcome email.
+2. Verify the retained Telete job and deployment outcome.
 3. Run `conversations --register-usage` to register command inventory separately.
 4. Read `conversations-install inspect` to see the selected release.
 
@@ -65,7 +67,7 @@ App Server doctor is a separate diagnostic operation.
 
 `conversations-install deploy` reads one schema-two Cell recipe request from stdin.
 The product command selects supplied programs and its provider.
-The manifest executor runs this instruction and records its exit status. It does
+Telete runs this manifest instruction and records its exit status. It does
 not inspect application output or create a maintenance hold, drain work, or
 recover prior effects. A failed instruction leaves completed changes in place.
 Use the product's explicit recovery operation when recovery is required.

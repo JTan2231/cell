@@ -84,7 +84,7 @@
       },
       {
         "status": "declared",
-        "statement": "Signing maintenance requires paused drained selected Telete work, a stopped worker and settled release publication and Telete and manual deployment recovery. Other independently configured consumers must be settled by the operator."
+        "statement": "Signing maintenance requires paused drained selected Telete work, a stopped worker and settled release publication, Telete recovery, and retained legacy manual deployment effects. Other independently configured consumers must be settled by the operator."
       }
     ],
     "inputs": [
@@ -138,7 +138,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Storage selection is create-only, repeats an identical valid selection without rewriting and never selects an internal fallback. Host setup serializes shared writers. Shared signing holds selected Telete admission, worker and deployment locks and the manual-deployment lock; it checks both retained deployment markers and native release-publication sentinels."
+        "statement": "Storage selection is create-only, repeats an identical valid selection without rewriting and never selects an internal fallback. Host setup serializes shared writers. Shared signing holds selected Telete admission, worker and deployment locks and the retained legacy manual-deployment lock; it checks both retained deployment markers and native release-publication sentinels."
       },
       {
         "status": "declared",

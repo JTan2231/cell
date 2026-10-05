@@ -54,7 +54,10 @@ registration, domain reconciliation, and live readiness.
 
 ## Installation interfaces
 
-The product-owned installation interfaces are:
+Submit deployments from the Cell root with
+`./ci.sh submit COMMIT --deploy semantics` and verify the retained manager job
+outcome. CI and Telete are the deployment route. The underlying product setup,
+explicit recovery and uninstall interfaces are:
 
 ```text
 semantics-install install --binary ABSOLUTE_BINARY --bundle ABSOLUTE_BUNDLE --clockwork ABSOLUTE_CLOCKWORK
@@ -288,7 +291,7 @@ It does not acquire application maintenance, drain durable work, check
 dependency readiness, or recover automatically.
 An interrupted command can leave completed effects in place. Inspect its
 retained command log and current selections before a further operation.
-Explicit manual install, recovery and legacy feed cutover keep their documented
+Explicit product setup, recovery and legacy feed cutover keep their documented
 procedures. An ordinary manifest command never chooses a legacy watermark.
 
 Settings accept only boolean `enabled`. Omission preserves the current binding's

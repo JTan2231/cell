@@ -10,7 +10,7 @@ requester-integration changes.
 Read `chancery resolve conversations.develop.change` for the required contracts.
 `conversations.history.explore` owns query, normalization, and activity behavior.
 `conversations.runtime` owns launch, diagnostics, readiness, and installation
-guarantees. `conversations.installation.operate` owns manual installation and
+guarantees. `conversations.installation.operate` owns CI deployment and
 recovery steps. The overview connects those features and operating routes.
 
 ## Prepare the smallest change
@@ -55,10 +55,10 @@ deploys, and emails the outcome. Verify the retained job outcome before treating
 that delivery as complete. Focused tests support development and do not replace
 the manager job. CI submission includes its deployment and outcome email.
 
-`release.sh` commits, tags, and pushes. Release publication and installed
-manual deployment outside the submitted manager job require their separate
-applicable authority. Use `conversations.installation.operate` for an authorized
-manual deployment or recovery. Rebuild affected embedded consumers when library
+`release.sh` commits, tags, and pushes. Release publication requires its
+applicable authority. CI and Telete are the sole deployment route.
+Use `conversations.installation.operate` for deployment and explicit recovery.
+Rebuild affected embedded consumers when library
 behavior changed; replacing the CLI alone does not update them.
 
 ## Privacy and command usage

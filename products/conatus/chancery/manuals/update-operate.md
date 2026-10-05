@@ -152,22 +152,22 @@ create an open-ended retry or infer failure from runtime status alone.
    revisions and retained work stay unchanged. To roll back new selection,
    append the prior complete selection content; retain historical versions.
 
-## Install or recover a release
+## Deploy or recover a release
 
 1. Read `conatus-install inspect` and preserve the current release and both
    binding selections. Establish maintenance and drain when admitted work cannot
-   tolerate replacement. Select each required product explicitly in the deployment manifest request.
-2. Select a previously validated candidate program and its matching complete
-   provider bundle.
-3. Install with the expected current selection:
+   tolerate replacement. Select each required product explicitly for CI deployment.
+2. Select the intended committed source and submit it from the Cell root:
 
    ```sh
-   conatus-install install --binary ABS_BINARY --bundle ABS_BUNDLE --expected-current absent
+   ./ci.sh submit COMMIT --deploy conatus
    ```
 
-   Use the observed `releases/ID` instead of `absent` for upgrade. Packaging
-   commands accept `--home ABS_HOME`. Installation selects programs and published
-   documentation only; it initializes no runtime state or schedule.
+   Add required products with another `--deploy PRODUCT` and explicit setup
+   choices with `--settings /absolute/private/settings.json`. CI and Telete are
+   the sole deployment route. Telete validates, prepares signed programs, and
+   runs the product setup instruction.
+3. Verify the retained Telete job and deployment outcome.
 4. Run `conatus-install inspect` to read selection metadata. Installation performs
    no artifact-integrity, persistent-state-integrity, or dependency-readiness checks.
 5. Run `conatus --register-usage` to register the installed commands. Product
@@ -268,23 +268,31 @@ no product maintenance holds.
 
 ## Execute installation instructions
 
-1. Read `nucleus manual` and review `./deploy.sh plan conatus`. Select each
-   required product explicitly. The executor infers no dependency or health
+1. Read `nucleus manual` and select the intended committed source. Select each
+   required product explicitly for CI deployment. Telete infers no dependency or
+   health
    requirement from Conatus configuration.
-2. Supply absolute `state_dir`, `decisions_config`, `annals_state_dir` and the
+2. Prepare a private JSON settings file whose `conatus` object supplies absolute
+   `state_dir`, `decisions_config`, `annals_state_dir` and the
    intended `library` when defaults are unsuitable. Fresh defaults use Conatus
    state, installed Annals state and `decisions/config.toml`, and library
    `conatus`. Existing library selections cannot change during deployment.
 3. Supply update `enabled` and `daily_email_enabled` separately only when a
    change is intended. Omission preserves prior intent. An absent binding remains
    absent unless its enabled setting is supplied.
-4. Run `./deploy.sh conatus`. The declared installer instruction publishes
+4. Run `./ci.sh submit COMMIT --deploy conatus` from the Cell root. Add
+   `--settings /absolute/private/settings.json` for the selected settings and
+   another `--deploy PRODUCT` for each required dependency update.
+   Telete validates and prepares signed programs. The declared installer
+   instruction publishes
    programs, initializes absent state or updates the final Annals executable,
    and publishes each selected schedule with its intended enabled state.
    Existing library IDs, cursor, records, instructions, pause and incidents
-   remain unchanged. It uses ordinary admission and runner locks without
-   creating maintenance holds, suspending schedules or draining work.
-5. Inspect the retained instruction exit status and log. Use Conatus diagnostics
+   remain unchanged. It uses ordinary admission and runner locks, creates no
+   maintenance hold, and drains no durable work. It suspends owned schedules
+   and waits for their active processes before runtime publication.
+5. Inspect the retained Telete job, instruction exit status and log. Use Conatus
+   diagnostics
    separately when the authorized endpoint requires application readiness or
    domain evidence. Exit zero proves completion of the declared instruction.
 6. Inspect effects after failure or interruption before an explicit next

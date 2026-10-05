@@ -9,18 +9,15 @@ prompt selection, and exact assignment recovery.
 Weaver reads an existing identity-bound Annals decisions library. It does not
 provision that library. Read the installed `nucleus manual` before coordinated
 maintenance. Keep settings, database, and configuration private.
-Installation and readiness checks create no narrative or model job. Manual
-installation publishes local program bytes; it does not publish Git changes,
+Installation and readiness checks create no narrative or model job.
+Installation publishes local program bytes; it does not publish Git changes,
 publish a narrative, send email, or authorize an authoring retry.
 
 ## Install or update
 
-1. Select the authorized delivery route. For ordinary CI delivery, commit the
-   intended change and submit `telete submit COMMIT`, or `./ci.sh submit COMMIT`
-   from the Cell root. The manager integrates, validates, attempts bounded
-   repairs, deploys, and sends its deterministic outcome email. Verify its
-   retained job outcome. For a separate authorized manual deployment, select
-   a validated candidate on local `main`; the coordinator selects that commit.
+1. Select the intended committed source and explicit deployment products. CI
+   and Telete are the sole deployment route. Add any required dependency updates
+   explicitly; Telete does not add products to an explicit deployment list.
 2. Check the source prerequisites. Select an existing Annals decisions config,
    compatible Annals and Nucleus releases, and initialized Bazaar state with a
    complete `cell.prompts.weaver` selection. Import the reviewed migration seed
@@ -36,22 +33,17 @@ publish a narrative, send email, or authorize an authoring retry.
    {"weaver":{"annals_config":"/absolute/Annals/decisions/config.toml"}}
    ```
 
-4. Preview the explicit selected products and instructions from the Cell root. Add
-   required dependency updates explicitly. Stop if
-   the plan requires a choice or effect outside the authorized endpoint.
-
-   ```sh
-   ./deploy.sh plan weaver
-   ```
-
-5. Invoke the coordinator when deployment is authorized. Use the settings file
+4. Submit the source from the Cell root. Use the settings file
    for first installation or an intended reader change; later deployments can
    reuse existing configuration.
 
    ```sh
-   ./deploy.sh weaver --settings /absolute/weaver-settings.json
+   ./ci.sh submit COMMIT --deploy weaver --settings /absolute/weaver-settings.json
    ```
 
+   Add required products with another `--deploy PRODUCT`. Telete freezes the
+   settings, integrates, validates, attempts bounded repairs, prepares signed
+   programs, deploys, and sends its deterministic outcome email.
    The executor runs Weaver's product command to select program and provider
    files and save reading configuration and state. Setup uses ordinary admission
    and the runner lock. It creates no hold and drains no authoring job. It performs
@@ -59,11 +51,12 @@ publish a narrative, send email, or authorize an authoring retry.
    checks. An existing maintenance hold can refuse ordinary setup.
    Do not invoke direct installer `install` or `recover`; those routes are refused.
 
-6. Read selected release metadata with `weaver-install inspect`. Use `weaver doctor`
+5. Verify the retained Telete job and deployment outcome. Read selected release
+   metadata with `weaver-install inspect`. Use `weaver doctor`
    separately when live state or dependency diagnostics are needed. Doctor is not
    an installation gate. Read the installed Chancery pages for their contracts.
 
-7. Register the installed command inventory with `weaver --register-usage`.
+6. Register the installed command inventory with `weaver --register-usage`.
    Read the retained execution result. Preserve separately acquired maintenance
    holds. Treat a readiness or documentation gap as its reported outcome;
    catalog presence alone does not establish runtime success.

@@ -1,6 +1,6 @@
 {
   "id": "weaver.install.operate",
-  "contract_version": 5,
+  "contract_version": 6,
   "kind": "operation",
   "mode": "operate",
   "support": "supported",
@@ -16,7 +16,7 @@
   "interfaces": [
     {
       "label": "Deploy",
-      "invocation": "./deploy.sh weaver --settings /absolute/settings.json"
+      "invocation": "./ci.sh submit COMMIT --deploy weaver --settings ABSOLUTE_JSON"
     },
     {
       "label": "Initialize",
@@ -52,7 +52,7 @@
     }
   ],
   "effects": [
-    "Install selects immutable program and provider bytes, initializes supported Weaver SQLite state, stores reading configuration, and acquires and releases run-owned admission holds. It creates no narrative, model job, email, or schedule.",
+    "Install selects immutable program and provider bytes, initializes supported Weaver SQLite state and stores reading configuration under ordinary admission and the runner lock. It creates and releases no maintenance hold. It creates no narrative, model job, email, or schedule.",
     "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Weaver/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity."
   ],
   "authority": [
@@ -60,7 +60,7 @@
     "Annals owns accepted source documents. Krisis owns decision identification. Nucleus owns execution, authentication, and its retained history. The agent owns editorial interpretation under the user direction."
   ],
   "success": [
-    "Installed program/provider selection, product initialization/configuration, and release of run-owned holds establish completed setup. Installation does not establish operational readiness."
+    "Installed program/provider selection and product initialization/configuration establish completed setup. Separately acquired maintenance holds keep their own completion rules. Installation does not establish operational readiness."
   ],
   "failure_and_recovery": [
     "Resume an uncertain invocation using the identical saved request and job ID. Terminal jobs receive no automatic replacement. Saved documents survive later runtime failure. Deployment retains completed effects and performs no automatic product recovery. Preserve separately acquired holds."
@@ -82,8 +82,8 @@
     },
     {
       "id": "telete.queue.operate",
-      "min_contract": 4,
-      "max_contract_exclusive": 10
+      "min_contract": 10,
+      "max_contract_exclusive": 11
     }
   ],
   "does_not_authorize": [
@@ -113,7 +113,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "The deployment uses a committed local-main candidate. The only setup setting is annals_config, an absolute existing decisions-library config. Init also accepts an absolute annals_binary. Hold and release take exact owner IDs."
+        "statement": "Submit committed source through ./ci.sh submit COMMIT --deploy weaver from the Cell root. CI and Telete are the sole deployment route. --settings ABSOLUTE_JSON supplies private JSON whose weaver object contains annals_config, an absolute existing decisions-library config; Telete freezes the values for the job. Init also accepts an absolute annals_binary. Hold and release take exact owner IDs."
       }
     ],
     "outputs": [
@@ -147,7 +147,7 @@
     "access": [
       {
         "status": "declared",
-        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Cell deployment coordinator. Keep configuration, sources, and runtime records private."
+        "statement": "Use the current-user CLI, registered Semantics reader, installed manager, and maintained Telete deployment manager. Keep configuration, sources, and runtime records private."
       }
     ],
     "lifecycle_and_consistency": [
@@ -190,9 +190,10 @@
       },
       {
         "status": "declared",
-        "statement": "The Cell executor owns explicit instruction order, command exit status and retained execution evidence. Products own application state and recovery. No dedicated installed Chancery contract covers the executor.",
-        "target": "cell-deployment",
-        "kind": "control"
+        "statement": "Telete validates, prepares signed programs and executes explicitly selected ordered product instructions. It retains source and request correlation and process outcomes. Products own setup, state, maintenance and recovery.",
+        "target": "telete",
+        "kind": "control",
+        "contract": "telete.queue.operate"
       }
     ]
   },
@@ -201,14 +202,14 @@
   "automation": "none",
   "session_surfaces": [
     "Weaver current-user CLI and private configuration",
-    "Cell source tree and installed CI manager",
-    "Cell deployment coordinator and product-owned installation evidence"
+    "Cell source tree and installed Telete manager",
+    "Telete deployment records and product-owned installation evidence"
   ],
   "steps": [
-    "Select the authorized manager delivery or separate validated manual deployment route.",
+    "Select the intended committed source and explicit CI deployment products.",
     "Check explicit Annals reading configuration, compatible providers, supported state and complete Bazaar prompt selection.",
-    "Prepare private first-installation settings and preview the explicitly selected products and ordered instructions.",
-    "Run the declared product command to select program and provider files and write configuration and state under ordinary admission.",
+    "Prepare private first-installation settings and submit ./ci.sh submit COMMIT --deploy weaver --settings ABSOLUTE_JSON from the Cell root. Add required dependency products explicitly.",
+    "Let Telete validate, prepare signed programs, and run the declared product command to select program and provider files and write configuration and state under ordinary admission.",
     "Inspect release metadata and register command inventory. Use doctor separately when live diagnostics are needed.",
     "For attended maintenance, own a hold, settle exact work, prove drain, verify and release only that hold.",
     "Inspect interrupted execution evidence and current product state. Complete any authorized product recovery separately, then acknowledge executor admission after the original execution has stopped."
