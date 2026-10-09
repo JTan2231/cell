@@ -74,7 +74,7 @@
     "Installation failure leaves completed effects in place. Interruption requires inspection before an explicit next operation; no automatic replay, rollback or recovery occurs. Explicit maintenance releases only its exact owned hold. Preserve unknown counts and existing halts; initialized direct selector recovery is unsupported."
   ],
   "privacy": [
-    "Correspondence, Nucleus references and quota records remain private and retained without automatic deletion. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
+    "Correspondence, Nucleus references and frozen quota records remain private and retained without automatic deletion. The private pending quota condition is cleared under the quota eligibility rules. EMT stores no credentials; other providers retain separate copies. Ordinary status and logs omit bodies."
   ],
   "does_not_authorize": [
     "Unrequested activation, account reads, mail, another owner's hold release, implicit failure-halt approval or direct initialized selector recovery."
@@ -97,8 +97,8 @@
     },
     {
       "id": "emt.quota-notices",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     }
   ],
   "promise": {
@@ -173,7 +173,7 @@
       },
       {
         "status": "declared",
-        "statement": "Explicit emt migrate checks drained schema-one state or initializes absent paused state. It copies no database or configuration. Deployment retains no migration-completion receipt and performs no automatic recovery; initialized direct selector recovery remains unsupported."
+        "statement": "Explicit emt migrate checks drained schema-one state or initializes absent paused state. It copies no database or configuration. Preserve quota-notifications/ and version-one quota-notice-pending.json with the database and configuration; the pending condition follows the quota eligibility rules and adds no database migration. Deployment retains no migration-completion receipt and performs no automatic recovery; initialized direct selector recovery remains unsupported."
       },
       {
         "status": "declared",

@@ -1,18 +1,18 @@
 {
   "id": "emt.quota-notices",
-  "contract_version": 1,
+  "contract_version": 2,
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
   "title": "Defer model work and deliver shared quota notices",
-  "summary": "Observe shared Nucleus quota conditions, retain admission deferral and deliver one frozen deterministic condition email without starting an agent.",
+  "summary": "Observe shared Nucleus quota conditions, defer unknown-quota notices for five minutes and deliver eligible frozen condition email without starting an agent.",
   "use_when": [
     "A shared quota condition, deferred model assignment, deterministic quota notice or uncertain notice delivery must be understood."
   ],
   "do_not_use_when": [
     "The goal is to configure Nucleus quota policy, prove billing, or establish product-domain success."
   ],
-  "outcome": "Observe shared Nucleus quota conditions, retain admission deferral and deliver one frozen deterministic condition email without starting an agent.",
+  "outcome": "Observe shared Nucleus quota conditions, retain admission deferral and deliver at most one frozen deterministic email per eligible condition without starting an agent.",
   "interfaces": [
     {
       "label": "Advance worker observations and delivery",
@@ -33,10 +33,10 @@
     "A retained condition notice ends transport when Email returns provider acceptance. This is not a final-delivery or requester-work success assertion."
   ],
   "failure_and_recovery": [
-    "Preserve the frozen record and exact key through restarts. Keep exhausted ambiguity uncertain; do not delete records or create another send identity to retry."
+    "Preserve the frozen record, exact key and pending unknown-condition record through restarts and maintenance. Worker observations clear or restart pending eligibility under the grace rules. Unreadable, malformed or unsupported pending state stops new unknown-notice eligibility; the worker attempts frozen notice delivery and reports unavailable quota progress with admission deferred. Keep exhausted ambiguity uncertain; do not delete frozen records or create another send identity to retry."
   ],
   "privacy": [
-    "Condition notice records are private and retained separately from incident/exchange tables. EMT stores no Email credentials; providers retain independent copies."
+    "Frozen notice and pending condition records are private and separate from incident/exchange tables. The worker clears pending conditions under the eligibility rules; frozen records have no automatic deletion. EMT stores no Email credentials; providers retain independent copies."
   ],
   "does_not_authorize": [
     "Unrequested recipients, account reads or activation, quota-policy changes, product intervention or automatic replacement agent jobs."
@@ -75,7 +75,7 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "Quota deferral retains unadmitted work until recovery or its existing deadline. Each new condition retains a deterministic notice and its acceptance receipt or uncertain submission outcome."
+        "statement": "Quota deferral retains unadmitted work until recovery or its existing deadline. Each eligible condition retains at most one deterministic notice and its acceptance receipt or uncertain submission outcome. Unknown conditions that recover before eligibility produce no notice."
       }
     ],
     "data_semantics": [
@@ -87,13 +87,13 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Private quota-notifications/CONDITION_ID.json records use the Nucleus condition identity and exact Email key emt/quota/CONDITION_ID. Transport bounds use elapsed seconds and a 23-hour window."
+        "statement": "Private quota-notifications/CONDITION_ID.json records use the Nucleus condition identity and exact Email key emt/quota/CONDITION_ID. Private version-one quota-notice-pending.json retains condition_id and unknown_since, EMT's first valid unknown observation time in Unix seconds rather than Nucleus's condition start time. Eligibility uses 300 elapsed seconds; transport bounds use elapsed seconds and a 23-hour window."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "The worker uses a current Nucleus quota observation without launching an agent. Missing or unavailable observations postpone new model work; a legacy quota-endpoint 404 permits rollout without the gate."
+        "statement": "The worker uses a current Nucleus quota observation without launching an agent. Missing, unavailable or unsupported-version observations postpone new model work and clear pending eligibility. Notice creation requires a valid condition ID for blocked quota; open quota needs no condition ID. Low quota requires a finite remaining percentage from 0 through 100. Missing or invalid required notice values clear pending eligibility without freezing new mail; an existing frozen record takes precedence over the percentage check. A legacy quota-endpoint 404 clears pending eligibility and permits rollout without the gate. Elapsed time between observations does not prove uninterrupted unknown quota during worker downtime."
       },
       {
         "status": "unspecified",
@@ -109,7 +109,11 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One deterministic payload is frozen per new condition before transport. A receipt ends sending. Restarts retain the record and exact key; an exhausted ambiguous send remains uncertain without a new identity."
+        "statement": "Confirmed low or exhausted quota is immediately eligible for a new notice. Unknown quota retains its first valid EMT observation and becomes eligible only on a later valid unknown observation for the same condition after at least 300 seconds. Open or disabled quota, failed or invalid reads, and worker passes with discovery disabled clear pending eligibility. A different unknown condition or backward clock movement before unknown_since restarts the waiting period."
+      },
+      {
+        "status": "declared",
+        "statement": "At most one deterministic payload is frozen per eligible condition before transport and before clearing its pending record. An existing frozen record takes precedence and is not cancelled or replaced after recovery. Pending records use private permissions and atomic writes and survive worker invocations and restarts. A receipt ends sending; an exhausted ambiguous send remains uncertain without a new identity."
       },
       {
         "status": "declared",
@@ -119,13 +123,17 @@
     "operational_limits": [
       {
         "status": "declared",
+        "statement": "Unknown-quota eligibility advances on existing worker passes after at least five minutes with no intervening observed recovery or failed read. No new timer or configuration setting is added; five minutes is not an inbox-delivery deadline."
+      },
+      {
+        "status": "declared",
         "statement": "Each frozen notice has at most two transport invocations at least five minutes apart and within 23 hours of the first attempt. Email owns its bounded HTTP retries and external idempotency policy."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "EMT release, schema-one domain state, Nucleus quota endpoint and Email contract versions evolve separately. The exact saved notice and mail identity survive worker recovery."
+        "statement": "EMT release, schema-one domain state, pending-record version, Nucleus quota endpoint and Email contract versions evolve separately. Quota-notice contract two adds an unknown-condition waiting period and permits recovery without a notice. The exact saved notice and mail identity survive worker recovery; the pending record adds no database migration."
       },
       {
         "status": "unspecified",

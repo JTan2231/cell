@@ -77,8 +77,8 @@
     },
     {
       "id": "emt.quota-notices",
-      "min_contract": 1,
-      "max_contract_exclusive": 2
+      "min_contract": 2,
+      "max_contract_exclusive": 3
     },
     {
       "id": "email.account.operate",
@@ -178,7 +178,7 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Only schema-one migration is supported. Configuration changes require paused drained work. Migration retains product and provider histories. Required features retain worker, assignment and transport bounds."
+        "statement": "Only schema-one migration is supported. Configuration changes require paused drained work. Preserve quota-notifications/ and version-one quota-notice-pending.json with retained state; the pending condition follows the quota eligibility rules and adds no database migration. Migration retains product and provider histories. Required features retain worker, assignment and transport bounds."
       }
     ],
     "compatibility_and_evolution": [

@@ -354,7 +354,7 @@ pub fn private_directory(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn private_file(path: &Path, create: bool) -> Result<File> {
+pub(crate) fn private_file(path: &Path, create: bool) -> Result<File> {
     if create && !path.exists() {
         OpenOptions::new()
             .write(true)
