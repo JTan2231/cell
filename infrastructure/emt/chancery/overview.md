@@ -21,7 +21,7 @@ or grant account, email, intervention or installation authority.
 | ID | Read this to understand |
 | --- | --- |
 | `emt.incident.respond` | Incident discovery, initial-alert ownership, recognized replies, agent authority, correspondence, deadlines and exact exchange recovery. |
-| `emt.quota-notices` | Quota deferral, one shared deterministic notice per condition, exact mail identity and uncertain delivery recovery. |
+| `emt.quota-notices` | Quota deferral, the five-minute waiting period for unknown quota, eligible shared notices, exact mail identity and uncertain delivery recovery. |
 | `emt.service` | Configuration, worker admission, scheduling, readiness, maintenance, retained state, matched installation instructions. |
 
 ## Operations

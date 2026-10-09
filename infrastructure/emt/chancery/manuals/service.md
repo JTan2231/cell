@@ -1,25 +1,27 @@
 # EMT worker and installation state
 
 Program publication copies the selected release into fixed regular files beneath
-~/Library/Application Support/EMT/install/runtime. Public commands use that runtime
-tree; current and previous retain immutable UUID archive selections. Code signing and
-runtime path identity are separate from release identity.
+~/Library/Application Support/EMT/install/runtime. Public commands use that
+runtime tree; current and previous retain immutable UUID archive selections.
+Code signing and runtime path identity are separate from release identity.
 
-New Clockwork definitions use schema 3: they retain the archive release ID, root and
-exact hashes, and execute the fixed runtime image. Publication precedes registration.
+New Clockwork definitions use schema 3: they retain the archive release ID,
+root and exact hashes, and execute the fixed runtime image. Publication precedes
+registration.
 
-Before publication, deployment runs the disable transition for owned Clockwork bindings
-and waits for their active processes, including an active manual run on a disabled
-binding. It restores saved enabled intent after registration; a failed instruction can
-leave the owned bindings disabled.
+Before publication, deployment runs the disable transition for owned Clockwork
+bindings and waits for their active processes, including an active manual run
+on a disabled binding. It restores saved enabled intent after registration;
+a failed instruction can leave the owned bindings disabled.
 
-Existing history, delivery records, enabled intent and incident halts retain their
-meaning. Retained definitions and wrapper bytes from before this change keep their
-legacy execution paths until a new installation or definition selects the runtime image.
+Existing history, delivery records, enabled intent and incident halts retain
+their meaning. Retained definitions and wrapper bytes from before this change
+keep their legacy execution paths until a new installation or definition selects
+the runtime image.
 
-Direct install remains limited to uninitialized EMT state. It rejects an enabled worker
-binding and runs the disable transition for a retained disabled binding to wait for
-active processes before runtime publication.
+Direct install remains limited to uninitialized EMT state. It rejects an enabled
+worker binding and runs the disable transition for a retained disabled binding
+to wait for active processes before runtime publication.
 
 EMT owns its current-user private configuration, incident and exchange state,
 worker admission, maintenance holds, matched program publication.
@@ -118,8 +120,11 @@ can finish an interrupted empty schema or missing empty-state configuration.
 It refuses missing configuration when incident or exchange records already exist.
 
 EMT retains correspondence and Nucleus references without automatic deletion.
-Preserve `quota-notifications/` with the database and configuration. Nucleus,
-Resend and the inbox provider retain separate records under their own authority.
+Preserve `quota-notifications/` and `quota-notice-pending.json` with the database
+and configuration. The pending record has version one and retains the unknown
+quota waiting condition between worker passes. `emt.quota-notices` defines when
+the worker clears it; the database remains schema one. Nucleus, Resend and the
+inbox provider retain separate records under their own authority.
 EMT has no activity mirror, operation ledger or credential copy. Ordinary status
 and logs omit bodies; explicit reads, model prompts and email expose selected
 content. No future support lifetime or retention horizon is promised.
@@ -170,7 +175,8 @@ exist. Routing uses a version-one sidecar beside Clockwork's schema-two database
 
 Clockwork's read-only service checks require compatible Iatreion. EMT supplies
 its configured stable Cell root. Preserve Clockwork's `failure-checks.json`,
-`notification-checks.json`, routing metadata and incident database during maintenance.
+`notification-checks.json`, routing metadata and incident database during
+maintenance.
 Refresh enabled pinned brokers to the new failure-check contract; an older
 broker must not run while the new sidecar exists. Clockwork owns check policy,
 notification ownership, scheduling and incident-bound continuation. The shared

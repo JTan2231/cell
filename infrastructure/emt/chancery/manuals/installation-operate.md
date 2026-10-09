@@ -101,6 +101,8 @@ Preserve unknown outcomes. Inspect the saved exchange, Nucleus activity and
 affected product state before repeating an external action. Do not create an
 automatic replacement job or a new mail identity. Keep frozen quota-notice
 records; deleting one to retry delivery is unsupported.
+Preserve `quota-notice-pending.json` through worker recovery. The quota feature
+defines when a worker observation clears or restarts its waiting condition.
 
 ## Maintain and migrate
 
@@ -112,9 +114,9 @@ records; deleting one to retry delivery is unsupported.
    Require `drained` and known outstanding counts; unknown is not zero.
 4. Run `emt migrate` to check drained schema-one state or initialize absent
    paused state. Migration copies no database or configuration.
-5. Preserve `quota-notifications/` and Clockwork's `failure-checks.json`,
-   `notification-checks.json`, routing metadata and incident database. Do not
-   run an older broker while the new sidecar exists.
+5. Preserve `quota-notifications/`, `quota-notice-pending.json` and Clockwork's
+   `failure-checks.json`, `notification-checks.json`, routing metadata and incident
+   database. Do not run an older broker while the new sidecar exists.
 6. Release only this operation's hold with `emt maintenance release OWNER`
    after verification. Recheck the captured operator intent and exact halt.
 
