@@ -319,7 +319,7 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn opportunity_flag_keeps_the_legacy_target_and_conflict_rules() {
+    fn opportunity_flag_keeps_the_legacy_target_and_conflict_rules() -> Result<()> {
         for spelling in ["--milieu-opportunity", "--milieu-job"] {
             let cli = Cli::try_parse_from([
                 "clew",
@@ -331,7 +331,7 @@ mod tests {
                 "--status",
                 "applied",
             ])
-            .expect("supported application argument");
+            ?;
             assert!(matches!(
                 cli.command,
                 Command::Record {
@@ -357,10 +357,11 @@ mod tests {
         }
         let help = Cli::command()
             .find_subcommand_mut("record")
-            .expect("record command")
+            .context("record command")?
             .render_long_help()
             .to_string();
         assert!(help.contains("--milieu-opportunity <OPPORTUNITY_ID>"));
         assert!(!help.contains("--milieu-job"));
+        Ok(())
     }
 }

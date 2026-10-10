@@ -318,10 +318,10 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn opportunity_commands_preserve_legacy_aliases_and_hide_them_in_help() {
+    fn opportunity_commands_preserve_legacy_aliases_and_hide_them_in_help() -> Result<()> {
         for spelling in ["opportunities", "jobs"] {
             let cli = Cli::try_parse_from(["milieu", spelling, "list", "--limit", "7"])
-                .expect("supported list command");
+                ?;
             assert!(matches!(
                 cli.command,
                 Command::Opportunities {
@@ -331,7 +331,7 @@ mod tests {
         }
         for spelling in ["opportunity", "job"] {
             let cli = Cli::try_parse_from(["milieu", spelling, "show", "retained-id"])
-                .expect("supported record command");
+                ?;
             assert!(matches!(
                 cli.command,
                 Command::Opportunity {
@@ -344,5 +344,6 @@ mod tests {
         assert!(help.contains("opportunity"));
         assert!(!help.contains("jobs"));
         assert!(!help.contains("job"));
+        Ok(())
     }
 }
