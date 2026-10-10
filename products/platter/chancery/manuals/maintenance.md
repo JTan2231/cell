@@ -59,7 +59,7 @@ selection. The executor adds no products or requester maintenance. The supported
 CI, build, deployment, and recovery procedures belong to `platter.install.operate`.
 
 Milieu must supply its supported retained export. URL-selected runs require one
-matching retained job. Email must support `--payload-stdin` before Platter can
+matching retained opportunity. Email must support `--payload-stdin` before Platter can
 send database artifacts. Tectonic, Python 3 with pypdf, supported source data and compatible
 authenticated Nucleus remain separate prerequisites.
 
@@ -86,7 +86,7 @@ journals remain beside it. Disposable renderer files and caches are confined
 to that directory and removed after rendering; this is not memory-only LaTeX.
 
 Configuration, original templates, captured inputs, compact execution records,
-accepted artifacts, PDFs, frozen editions, explicit job eligibility, send
+accepted artifacts, PDFs, frozen editions, explicit opportunity eligibility, send
 receipts and hold owners remain in SQLite. Platter retains no second tool-call
 ledger. Nucleus's evidence and credentials remain separately owned.
 
@@ -125,9 +125,9 @@ readiness observation.
 Migration is an explicit one-way schema-one to schema-eight import. It preserves
 packet IDs as run IDs, captured bytes, exact Nucleus requests, frozen subjects,
 bodies, attachment names/order, idempotency keys and acceptance/uncertainty.
-Legacy reserved/sent jobs become ineligible; their preparation runs remain
+Legacy reserved/sent opportunities become ineligible; their preparation runs remain
 ready. Test occurrences become edition rows without a type discriminator and
-do not determine job eligibility. Any remaining owned runtime files are
+do not determine opportunity eligibility. Any remaining owned runtime files are
 retained as imported artifacts. Duplicate tool history is not imported.
 
 The import commits transactionally before filesystem cleanup. It records a
@@ -147,7 +147,7 @@ keep their legacy workflow. The version guard prevents an older binary from
 interpreting a daily brief as a complete tailored packet or deriving packet
 selection from the shared attachment. Migration starts no model work.
 
-Schema-two through schema-seven migration also renames the owned discovery job
+Schema-two through schema-seven migration also renames the owned discovery opportunity
 column and configuration key to Milieu. It selects the Milieu public executable
 path; deployment then pins the selected release. Captured inputs, model requests,
 artifacts, frozen editions, eligibility, and opaque identifiers stay unchanged.
@@ -187,7 +187,7 @@ Milieu/Annals/Email/Weaver executable identities, Email's byte-payload interface
 renderer availability and strict authenticated Nucleus readiness. Renderer
 overrides are absolute `PLATTER_TECTONIC` and
 `PLATTER_PYTHON`; fallback search is `~/.local/bin`, `/usr/local/bin`,
-`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect jobs, read Vita
+`/opt/homebrew/bin`, `/usr/bin`. These checks do not collect opportunities, read Vita
 works, render a PDF, submit a model job or send mail. Milieu/Annals executable
 identity is not proof that their libraries are initialized. `--state-only`
 requires neither rendering nor external service readiness.

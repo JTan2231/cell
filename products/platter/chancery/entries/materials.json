@@ -4,7 +4,7 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Read and select Platter materials and templates",
+  "title": "Read and select Platter production materials and templates",
   "summary": "Understand retained packet artifacts, fixed template boundaries, imports, daily PDF configuration, and explicit private exports.",
   "use_when": [
     "A reader needs artifact or template meaning, fixed versus editable content, immutable selection, daily PDF settings, or export behavior."

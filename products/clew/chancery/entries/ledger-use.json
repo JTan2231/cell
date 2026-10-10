@@ -47,7 +47,7 @@
   ],
   "do_not_use_when": [
     "The outcome requires automatic interpretation, verified completion, execution of work or migrations, external identity resolution, or scheduled monitoring.",
-    "Use clew.application.track for explicit job reports and application views; a plain external job link supplies context only."
+    "Use clew.application.track for explicit opportunity reports and application views; a plain external opportunity link supplies context only."
   ],
   "outcome": "One committed append-only entry, or the complete selected local entry or thread history and correction markers.",
   "effects": [
@@ -108,7 +108,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "A write ID binds immutable request content, thread selection, association set, correction operation, and any original job-target namespace. Thread IDs are stable local identities; names are exact case-sensitive shorthands. Namespace and external_id identify external references. Sequence orders committed appends. recorded_at is UTC RFC3339 recording time, not an event or completion date."
+        "statement": "A write ID binds immutable request content, thread selection, association set, correction operation, and any original opportunity-target namespace. Thread IDs are stable local identities; names are exact case-sensitive shorthands. Namespace and external_id identify external references. Sequence orders committed appends. recorded_at is UTC RFC3339 recording time, not an event or completion date."
       }
     ],
     "completeness_and_freshness": [

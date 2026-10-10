@@ -7,7 +7,7 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Platter owns its canonical SQLite library: captured inputs, preparation runs, immutable content artifacts, explicit job eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation. Platter also owns disposable Ashby board files under the runtime root, shared by preparation and preview for less than 14 days.",
+      "Platter owns its private production material library in canonical SQLite state: captured inputs, preparation runs, immutable content artifacts, explicit opportunity eligibility, frozen editions, recorded delivery outcomes, settings and maintenance holds. Editions share one model; retained-material selection is an operation. Platter also owns disposable Ashby board files under the runtime root, shared by preparation and preview for less than 14 days.",
       "The product owns its schema-three Clockwork schedule definition and declares halt-until-approved. Clockwork owns failure-policy enforcement and retained scheduling incidents; product domain recovery remains separate."
     ],
     "not_authoritative_for": [
@@ -23,7 +23,7 @@
       ]
     },
     "shared_access_and_trust": [
-      "The current-user CLI operates private state. New Platter jobs use captured career reads and draft submission only, with workspace, shell and web disabled. Weaver owns project research and prose. Historical jobs retain their original access policy. Installer selection establishes no send authority. Daily override jobs use the existing brief submission and career-read tools only."
+      "The current-user CLI operates private state. New Platter model executions use captured career reads and draft submission only, with workspace, shell and web disabled. Weaver owns project research and prose. Historical executions retain their original access policy. Installer selection establishes no send authority. Daily override preparations use the existing brief submission and career-read tools only."
     ],
     "shared_privacy_and_retention": [
       "Original and fixed project templates, captured career/posting inputs, Weaver requests and documents, packet artifacts, PDFs and editions remain private. Weaver and Nucleus retain source reads separately. Authorized sends disclose frozen message and attachments through Email.",
@@ -31,10 +31,10 @@
       "CLI usage recording requires a nonempty `CODEX_THREAD_ID`. Chancery's private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded. Recording errors do not change command results."
     ],
     "compatibility_and_retirement": [
-      "URL-selected runs require one retained Milieu job and perform no Milieu collection. Supported packet, edition, state and historical delivery identities remain intact. Schema-eight state retains ordered packet selections separately from attachments."
+      "URL-selected runs require one retained Milieu opportunity and perform no Milieu collection. Supported packet, edition, state and historical delivery identities remain intact. Schema-eight state retains ordered packet selections separately from attachments."
     ],
     "operational_limits": [
-      "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Jobs use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."
+      "Each edition contains up to three new ready packets; run-ad-hoc selects exactly one. There is no candidate or token budget. Platter drafts use gpt-5.6-sol at max effort. Run commands need applicable send authorization and do not resend accepted or uncertain editions. Activation is managed separately through Clockwork; stored 09:00 fields do not schedule work. Check source, runtime and rendering readiness separately."
     ]
   },
   "entries": [

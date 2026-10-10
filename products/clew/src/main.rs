@@ -40,8 +40,12 @@ enum Command {
         /// A retained legacy Platter reference, for old reports and exact retries.
         #[arg(conflicts_with = "milieu_job")]
         reference: Option<String>,
-        /// The exact Milieu job ID to track.
-        #[arg(long)]
+        /// The exact Milieu opportunity ID to track.
+        #[arg(
+            long = "milieu-opportunity",
+            alias = "milieu-job",
+            value_name = "OPPORTUNITY_ID"
+        )]
         milieu_job: Option<String>,
         /// Find or create this named ledger thread.
         #[arg(long)]
@@ -67,9 +71,9 @@ enum Command {
         #[arg(long)]
         notes: Option<String>,
     },
-    /// List the latest supplied status for each currently tracked Milieu job.
+    /// List the latest supplied status for each currently tracked Milieu opportunity.
     List,
-    /// Read history by Milieu job ID or a retained legacy Platter reference.
+    /// Read history by Milieu opportunity ID or a retained legacy Platter reference.
     Show { reference: String },
     /// Preview or explicitly send the daily application snapshot.
     #[command(subcommand)]
@@ -208,7 +212,7 @@ fn execute(cli: Cli) -> Result<serde_json::Value> {
         Command::List => serde_json::to_value(Store::open(&root, false)?.current()?)?,
         Command::Show { reference } => {
             let store = Store::open(&root, false)?;
-            ensure!(store.knows(&reference)?, "job has no Clew history");
+            ensure!(store.knows(&reference)?, "opportunity has no Clew history");
             let job_id = store.canonical_reference(&reference)?;
             json!({"milieu_job_id":job_id,"current":store.current()?.into_iter().find(|item| item.milieu_job_id == job_id),"history":store.history(&reference)?})
         }
@@ -234,13 +238,13 @@ fn append_record(root: &std::path::Path, record: &Record) -> Result<clew::store:
                 clew::milieu_jobs()?
                     .iter()
                     .any(|job| job.milieu_job_id == *job_id),
-                "Milieu job is not retained"
+                "Milieu opportunity is not retained"
             );
         }
     } else if let Some(reference) = &record.platter_job_ref {
         ensure!(
             store.knows(reference)?,
-            "legacy reference has no Clew history; use --milieu-job with a retained Milieu job"
+            "legacy reference has no Clew history; use --milieu-opportunity with a retained Milieu opportunity"
         );
     }
     store.record(record)
@@ -307,4 +311,56 @@ fn find(root: &std::path::Path, query: &str) -> Result<serde_json::Value> {
     Ok(
         json!({"candidates":candidates,"retained_references_without_milieu_record":unmatched,"complete":true}),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn opportunity_flag_keeps_the_legacy_target_and_conflict_rules() {
+        for spelling in ["--milieu-opportunity", "--milieu-job"] {
+            let cli = Cli::try_parse_from([
+                "clew",
+                "record",
+                spelling,
+                "retained-id",
+                "--id",
+                "write-id",
+                "--status",
+                "applied",
+            ])
+            .expect("supported application argument");
+            assert!(matches!(
+                cli.command,
+                Command::Record {
+                    reference: None,
+                    milieu_job: Some(id),
+                    ..
+                } if id == "retained-id"
+            ));
+            assert!(
+                Cli::try_parse_from([
+                    "clew",
+                    "record",
+                    "legacy-ref",
+                    spelling,
+                    "retained-id",
+                    "--id",
+                    "write-id",
+                    "--status",
+                    "applied",
+                ])
+                .is_err()
+            );
+        }
+        let help = Cli::command()
+            .find_subcommand_mut("record")
+            .expect("record command")
+            .render_long_help()
+            .to_string();
+        assert!(help.contains("--milieu-opportunity <OPPORTUNITY_ID>"));
+        assert!(!help.contains("--milieu-job"));
+    }
 }

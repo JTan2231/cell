@@ -12,24 +12,28 @@ Read `platter.preparation` for eligibility and posting freshness, and
 
 ## Selected packets and frozen attachments
 
-An edition stores exact subject and body, a stable idempotency key, delivery
+An edition fixes selected production materials for one delivery occurrence. It
+stores exact subject and body, a stable idempotency key, delivery
 status, and receipt. Its ordered attachments reference immutable PDF artifacts
 and their filenames. Selected packet IDs are independent of attachment IDs.
 It does not copy PDFs to a directory. An ordinary freeze atomically sets every
-selected job ineligible; retained-material selection leaves eligibility intact.
-Delivery history never derives eligibility.
+selected opportunity ineligible. Retained-material selection leaves opportunity
+eligibility intact. Delivery history never derives eligibility.
 
 Each ordinary edition selects up to three ready packets. A URL-selected
 occurrence selects exactly one. Three is a ceiling, not a quota. Existing
 frozen editions return retained contents without another posting fetch.
 
+New editions use the subject `Your opportunities — YYYY-MM-DD`. Previously
+frozen editions keep their exact retained subjects and payloads.
+
 ## Daily shared PDF
 
-A daily edition selects up to three jobs and freezes one shared `resume-override`
-PDF artifact with its original filename. Its body identifies the shared resume.
+A daily edition selects up to three opportunities and freezes one shared
+`resume-override` PDF artifact with its original filename. Its body identifies the shared resume.
 The artifact has no producing run. Selected packet IDs are retained separately
-from attachment IDs, so the freeze sets every selected job ineligible. No selected
-jobs means no edition or email. A prepared tailored packet can supply its brief
+from attachment IDs, so the freeze sets every selected opportunity ineligible.
+No selected opportunities means no edition or email. A prepared tailored packet can supply its brief
 without adding its generated PDF to an override edition.
 
 Already frozen editions retain their exact packet selection, attachments, body
@@ -38,22 +42,22 @@ editions are not resent and uncertain sends remain held. Replacing the file or
 clearing the setting affects only future editions. SQLite retains frozen PDF
 bytes; future daily work still depends on the configured source file.
 
-Single-job preparation, regeneration, URL-selected runs, and retained-material
+Single-opportunity preparation, regeneration, URL-selected runs, and retained-material
 preview ignore the daily override and require tailored material. A brief-only
 run cannot serve a tailored edition.
 
 ## URL-selected occurrence
 
-For one explicitly selected job URL and one authorized email:
+For one explicitly selected posting URL and one authorized email:
 
 ```sh
-platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' \
+platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/POSTING_ID' \
   --id OCCURRENCE_ID
 ```
 
 The occurrence ID contains 1 through 80 ASCII letters, digits, underscores or
 hyphens. It uses the existing ad hoc edition namespace. A new occurrence
-captures the configured local date, selects one retained job from Milieu's export
+captures the configured local date, selects one retained opportunity from Milieu's export
 by canonical supported ATS identity or normalized public URL, prepares or
 resumes its normal packet, performs the ordinary freshness check,
 freezes one ordinary edition and sends it. It creates no separate packet,
@@ -65,7 +69,7 @@ posting identity fails before preparation. This selection performs no Milieu
 collection.
 
 The command uses the existing packet when normal preparation already has a
-ready one. It explicitly enables the selected job, and the successful freeze
+ready one. It explicitly enables the selected opportunity, and the successful freeze
 sets it ineligible like daily selection. A declined, stale or unavailable
 packet creates no edition and sends no email.
 
@@ -95,13 +99,13 @@ accepted edition returns its recorded result without resending, and an
 uncertain edition fails without retrying or preparing replacement packets.
 No ready packets means no edition or email. A later explicit invocation may
 try an empty day again. Missed dates are not backfilled. `prepare-daily` and
-`run-daily` skip jobs whose postings cannot be retrieved, mark them ineligible,
+`run-daily` skip opportunities whose postings cannot be retrieved, mark them ineligible,
 and continue to other candidates. A declined opportunity also permits the next
 candidate. If the final freshness check excludes the entire ready pool,
 `run-daily` prepares other candidates before trying preview again. Other
 preparation errors and failed Milieu exports stop the run before sending.
-Accepted artifacts and frozen delivery records remain retained. Single-job
-preparation reports its retrieval error without selecting a replacement job.
+Accepted artifacts and frozen delivery records remain retained. Single-opportunity
+preparation reports its retrieval error without selecting a replacement opportunity.
 Output contains the edition date, delivery status and selected packet count,
 or the no-edition result. It does not print the message body or PDF bytes.
 
@@ -163,8 +167,8 @@ platter send YYYY-MM-DD --ad-hoc RUN_ID \
 ```
 
 `--ad-hoc` remains a CLI selection operation, not an edition type. These
-editions use the same schema, ordinary subject format and sending behavior.
-The operation leaves job eligibility untouched and performs no Milieu, Annals,
+editions use the same schema, subject format, and sending behavior.
+The operation leaves opportunity eligibility untouched and performs no Milieu, Annals,
 source retrieval, Nucleus or rendering work. Without `--packet`, it selects up
 to three retained complete packets in ID order. Repeated `--packet` specifies
 one through three distinct packets. `RUN_ID` contains 1 through 80 ASCII
@@ -188,7 +192,7 @@ Do not edit SQLite to force success.
 
 Authorized sends disclose the exact message and attachments through Email,
 Resend, and Gmail. Posting freshness retrieval discloses HTTP requests to
-employers. Keep resume contact details, job interests, career history, and
+employers. Keep resume contact details, opportunity interests, career history, and
 frozen editions private. SQLite retains message and attachment bytes. Nucleus
 records and credentials remain separate.
 

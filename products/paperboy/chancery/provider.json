@@ -7,15 +7,15 @@
   },
   "promise_scope": {
     "authoritative_for": [
-      "Paperboy owns version-one TOML renderer manifests, configuration validation, literal command execution, successful stdout handoff, and selection of its per-job Clockwork definitions.",
-      "Paperboy owns the halt-until-approved declaration and job schedule controls. Clockwork owns enforcement, retained incidents, activation history, and schedule delivery evidence."
+      "Paperboy owns version-one TOML production definitions, validation, literal renderer execution, successful stdout handoff, and selection of its per-production Clockwork activation definitions.",
+      "Paperboy owns the halt-until-approved declaration and production schedule controls. Clockwork owns enforcement, retained incidents, activation history, and schedule delivery evidence."
     ],
     "not_authoritative_for": [
       "Renderers own collection, data windows, source access, side effects, content, and source accuracy. Email and Resend own fixed-recipient submission; Gmail owns final delivery. Clockwork and launchd own activation and timer delivery."
     ],
     "inventory": {
       "covers": [
-        "All public Paperboy manifest initialization, configured-job reads, manual rendering and sending, schedule application and control, diagnostics, status observations, and maintained installation outcomes."
+        "All public Paperboy production-definition initialization, configured-production reads, manual rendering and sending, schedule application and control, diagnostics, status observations, and maintained installation outcomes."
       ],
       "completeness": "complete",
       "excludes": [
@@ -31,10 +31,10 @@
       "CLI usage recording requires nonempty CODEX_THREAD_ID. The private journal records command identity, time, and thread ID, not arguments, output, or outcomes. Internal product calls are excluded and recording errors preserve results."
     ],
     "compatibility_and_retirement": [
-      "TOML manifest version one is separate from product and Clockwork schemas. No general future compatibility or deprecation window is promised."
+      "TOML version one is separate from product and Clockwork schemas. The preferred productions table and legacy jobs table are supported, but a file containing both is rejected. Existing files, production IDs, Clockwork binding keys, JSON result keys and retained --job runner snapshots preserve their meaning. New snapshots use --production. No general future compatibility or deprecation window is promised."
     ],
     "operational_limits": [
-      "Renderer execution is bounded to 1200 seconds, stdout to 64000 UTF-8 bytes, stderr diagnostics to 4096 bytes, Email observation to 120 seconds, and Clockwork activation to 1380 seconds. Different jobs can run concurrently; one scheduled binding skips overlap. No trigger-delay or inbox-delivery objective is promised."
+      "Renderer execution is bounded to 1200 seconds, stdout to 64000 UTF-8 bytes, stderr diagnostics to 4096 bytes, Email observation to 120 seconds, and Clockwork activation to 1380 seconds. Different productions can run concurrently; one scheduled binding skips overlap. No trigger-delay or inbox-delivery objective is promised."
     ]
   },
   "overview": "overview.md",

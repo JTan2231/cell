@@ -6,7 +6,7 @@ Semantics-Project: milieu
 - Query this product's registered Semantics repository through its installed
   contract before analysis or changes. Code, tests and product documentation
   remain authoritative for behavior. Do not edit Semantics state directly.
-- Milieu owns accepted current companies and jobs, source metadata, workplaces,
+- Milieu owns accepted current companies and opportunities, source metadata, workplaces,
   source appearances and the read handoff. Selection, application packets, CRM
   cases and email delivery belong to downstream products.
 - Milieu performs no collection or runtime HTTP requests. Do not add a fallback

@@ -42,6 +42,6 @@ fn main() -> Result<()> {
         "Retained: {}",
         state.join(platter::store::DATABASE).display()
     );
-    println!("Job eligibility unchanged.");
+    println!("Opportunity eligibility unchanged.");
     Ok(())
 }

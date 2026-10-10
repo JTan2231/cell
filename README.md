@@ -1,22 +1,22 @@
 # Cell
 
-Cell is a collection of tools that use artificial intelligence (AI) to
-organize information and carry out ongoing work.
-
-Think of it as a small office on a computer. Different tools keep records,
-research questions, prepare documents, and coordinate assignments. For example:
+Cell is a production service. Its tools use artificial intelligence (AI) to
+prepare materials, produce outputs for recipients, and carry those outputs
+through delivery. Production definitions specify the materials, instructions,
+intended output, timing, and delivery route. For example:
 
 - [Annals](products/annals/README.md) keeps documents and helps you find ideas and
   the original passages that support them.
 - [Conatus](products/conatus/README.md) records what you want and helps you see how
   your decisions relate to those wants.
-- [Platter](products/platter/README.md) uses job descriptions and recorded career
-  experience to prepare tailored résumés and short briefs.
+- [Platter](products/platter/README.md) uses postings and recorded career
+  experience to prepare opportunity packets and email editions.
 
 I am exploring how AI assistants with different responsibilities can work
 together. Many human problems need more explanation and context than a fixed
-form can capture. Most workflows here pass readable text documents between
-assistants, with each tool responsible for its own work and records.
+form can capture. Productions can pass readable text documents between tools.
+Each tool owns its materials, acceptance rules, and records. Preparation,
+submission acceptance, and final receipt are separate outcomes.
 
 ## CI
 

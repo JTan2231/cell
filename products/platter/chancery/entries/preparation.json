@@ -4,19 +4,19 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Prepare and continue Platter packets",
-  "summary": "Understand source capture, job eligibility, tailored and brief-only workflows, authoring authority, mechanical acceptance, exact continuation, and limits.",
+  "title": "Prepare and continue Platter opportunity packets",
+  "summary": "Understand source capture, opportunity eligibility, tailored and brief-only workflows, authoring authority, mechanical acceptance, exact continuation, and limits.",
   "use_when": [
     "A reader needs packet readiness, source freshness, current/historical authoring boundaries, eligibility, regeneration, or interruption behavior."
   ],
   "do_not_use_when": [
-    "The goal is sending, recurring activation, job discovery, source-library writing, employer contact, or direct model execution outside Platter."
+    "The goal is sending, recurring activation, opportunity discovery, source-library writing, employer contact, or direct model execution outside Platter."
   ],
   "outcome": "Captured source material produces a retained accepted brief and, for tailored work, a validated one-page resume; expected decline and quota outcomes preserve their stated meaning.",
   "interfaces": [
     {
-      "label": "Prepare a job",
-      "invocation": "platter prepare MILIEU_JOB_ID"
+      "label": "Prepare an opportunity packet",
+      "invocation": "platter prepare MILIEU_OPPORTUNITY_ID"
     },
     {
       "label": "Prepare daily pool",
@@ -24,21 +24,21 @@
     },
     {
       "label": "Fresh incomplete restart",
-      "invocation": "platter prepare MILIEU_JOB_ID --fresh"
+      "invocation": "platter prepare MILIEU_OPPORTUNITY_ID --fresh"
     },
     {
-      "label": "Regenerate one job",
-      "invocation": "platter regenerate MILIEU_JOB_ID --id REQUEST_ID"
+      "label": "Regenerate one opportunity packet",
+      "invocation": "platter regenerate MILIEU_OPPORTUNITY_ID --id REQUEST_ID"
     },
     {
       "label": "Change explicit eligibility",
-      "invocation": "platter eligibility MILIEU_JOB_ID true|false"
+      "invocation": "platter eligibility MILIEU_OPPORTUNITY_ID true|false"
     }
   ],
   "effects": [
     "Preparation captures full posting, all listed Vita works, exact prompt instructions, and applicable template/project directions. It can consume Nucleus model allowance and retrieve employer HTTPS sources.",
     "Current tailored work obtains sequential Weaver project documents, then one Platter brief/Jackson draft. Final accepted content and retained LaTeX/PDF commit together. Brief-only daily override work captures no template/project directions and invokes no Weaver author or LaTeX renderer.",
-    "Retrieval failure or decline sets eligibility false. Initial retrieval failure creates no run; freshness failure retains accepted artifacts with deferred status. Regeneration preserves prior runs and does not enable a job or send."
+    "Retrieval failure or decline sets eligibility false. Initial retrieval failure creates no run; freshness failure retains accepted artifacts with deferred status. Regeneration preserves prior runs and does not enable an opportunity or send."
   ],
   "authority": [
     "Platter owns selection eligibility, capture, content conversion, mechanical acceptance, and packet success. Weaver authors project prose and owns its Annals reads. Nucleus owns admission, execution, and tool history.",
@@ -49,7 +49,7 @@
   ],
   "failure_and_recovery": [
     "Exact retained requests and Weaver IDs continue the same assignments after interruption or quota deferral. A terminal failure receives no automatic replacement identity or direct Codex fallback; accepted content survives later runtime failure.",
-    "Fresh restart requires an eligible incomplete latest run with no accepted resume and terminal or absent prior model jobs. Regeneration IDs bind one captured Milieu job and run; changed-job reuse is refused and terminal failure needs a new request ID.",
+    "Fresh restart requires an eligible incomplete latest run with no accepted resume and terminal or absent prior model jobs. Regeneration IDs bind one captured Milieu opportunity and run; changed-opportunity reuse is refused and terminal failure needs a new request ID.",
     "Renderer infrastructure failure stops work and requests exact-job cancellation. Content/layout rejection permits its bounded correction path. Daily retrieval failures are skipped with ineligibility; other preparation/export failures stop."
   ],
   "privacy": [
@@ -105,7 +105,7 @@
     "preconditions": [
       {
         "status": "declared",
-        "statement": "Canonical supported state, compatible Milieu retained export, nonempty complete Annals vita work list, full supported posting text, complete Bazaar prompt selection, and authenticated compatible Nucleus are required. URL-selected runs require one matching retained Milieu job. Tailored work also requires supported template, compatible Weaver, Tectonic, and Python/pypdf."
+        "statement": "Canonical supported state, compatible Milieu retained export, nonempty complete Annals vita work list, full supported posting text, complete Bazaar prompt selection, and authenticated compatible Nucleus are required. URL-selected runs require one matching retained Milieu opportunity. Tailored work also requires supported template, compatible Weaver, Tectonic, and Python/pypdf."
       },
       {
         "status": "declared",
@@ -115,7 +115,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Milieu job identity or a public URL matching one retained Milieu job by canonical supported ATS identity or normalized URL; complete captured posting and career text; applicable immutable template; pinned prompt components; captured Weaver directions; optional deadline and regeneration identity. Vita work label is career entry ID, first heading is title or label fallback, and complete text is body."
+        "statement": "Milieu opportunity identity or a public URL matching one retained Milieu opportunity by canonical supported ATS identity or normalized URL; complete captured posting and career text; applicable immutable template; pinned prompt components; captured Weaver directions; optional deadline and regeneration identity. Vita work label is career entry ID, first heading is title or label fallback, and complete text is body."
       }
     ],
     "outputs": [
@@ -127,7 +127,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "jobs.eligible is explicit selection policy, separate from preparation readiness and delivery history. Retrieval failure, stale posting, and decline set it false; explicit enabling does not bypass freshness."
+        "statement": "Opportunity eligibility is explicit selection policy retained as jobs.eligible, separate from preparation readiness and delivery history. Retrieval failure, stale posting, and decline set it false; explicit enabling does not bypass freshness."
       },
       {
         "status": "declared",
@@ -141,7 +141,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Regeneration REQUEST_ID contains 1 through 80 ASCII letters, digits, underscores, or hyphens and binds one Milieu job/run atomically with capture. Repeated exact identity continues or returns that run. --stop-after-seconds uses seconds and requests cancellation of the exact live Nucleus job."
+        "statement": "Regeneration REQUEST_ID contains 1 through 80 ASCII letters, digits, underscores, or hyphens and binds one Milieu opportunity/run atomically with capture. Repeated exact identity continues or returns that run. --stop-after-seconds uses seconds and requests cancellation of the exact live Nucleus job."
       }
     ],
     "completeness_and_freshness": [

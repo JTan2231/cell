@@ -207,7 +207,7 @@ impl Store {
         self.write(|tx| crate::current_store::put_current_source(tx, source, metadata))
     }
 
-    /// Replaces one accepted job and its workplace/source associations atomically.
+    /// Replaces one accepted opportunity and its workplace/source associations atomically.
     /// The caller resolves duplicates and conflicting source values before this call.
     pub fn accept_job(&self, record: &crate::current::AcceptedJob) -> Result<()> {
         self.write(|tx| crate::current_store::replace_job(tx, record))

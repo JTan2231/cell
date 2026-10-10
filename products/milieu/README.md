@@ -1,18 +1,18 @@
 # Milieu
 
-Milieu reads retained employers and public job postings and exports a consistent
-snapshot for job selection. Collection has been removed.
+Milieu supplies retained employer and opportunity records as production materials.
+It exports a consistent snapshot for selection. Collection has been removed.
 
 ## Example
 
 With an initialized installation:
 
 ```sh
-milieu jobs list
+milieu opportunities list
 milieu export --json
 ```
 
-New state uses accepted companies, jobs, workplaces, and source appearances.
+New state uses accepted companies, opportunities, workplaces, and source appearances.
 The existing snapshot format remains available. Read the state contract for
 supported storage and recovery.
 

@@ -58,7 +58,7 @@ notes, statuses, thread names, references, and frozen messages private.
 The `clew.ledger.use` feature owns general entry meaning, named threads,
 external references, append transactions, exact retry identity, and corrections.
 The `clew.application.track` feature owns explicit application reports and the
-job-specific view. Plain external job links do not create application reports.
+opportunity-specific view. Plain external opportunity links do not create application reports.
 
 The `clew.digest.email` feature owns message bytes, occurrences, receipts,
 submission recovery, and email schema-one behavior. These records have no
@@ -138,21 +138,21 @@ The product deployment command migrates supported schema-one, schema-two, or sch
 ledgers to schema four under ordinary admission. Migration excludes concurrent
 ledger writers. It does not create a maintenance hold or drain email.
 
-Schema-two conversion is local. It moves canonical Milieu job identity into the
-external reference model and marks existing job reports as explicit application
+Schema-two conversion is local. It moves canonical Milieu opportunity identity into the
+external reference model and marks existing opportunity reports as explicit application
 reports. It preserves legacy aliases and exact write namespace. It creates no
 threads and requires no Milieu or Platter read.
 
-Schema-three conversion renames the owned job column, reference namespace, and
+Schema-three conversion renames the owned opportunity column, reference namespace, and
 write-request field to Milieu in one transaction. Exact retries use the renamed
-request form with the original write ID. Supplied text, opaque job IDs, entry
+request form with the original write ID. Supplied text, opaque opportunity IDs, entry
 order, corrections, and frozen email records stay unchanged. No dependency read
 is required. Older programs refuse schema four.
 
 Schema-one migration also requires Platter's public opportunity reader to map
-every retained legacy reference to its exact Milieu job ID. An empty legacy ledger
+every retained legacy reference to its exact Milieu opportunity ID. An empty legacy ledger
 needs no Platter read. Missing mappings or two legacy references that select the
-same Milieu job stop migration. Clew does not infer mappings from company, role, or
+same Milieu opportunity stop migration. Clew does not infer mappings from company, role, or
 URL and does not merge histories. Platter owns the mappings; Clew owns their
 application to its ledger.
 

@@ -1,4 +1,4 @@
-//! Prepare private job briefs and resumes with a fixed original template.
+//! Prepare private opportunity packets and production materials for email editions.
 #![allow(clippy::missing_errors_doc)]
 pub mod ad_hoc;
 pub mod agent;
@@ -87,7 +87,7 @@ impl Config {
     pub fn validate(&self) -> Result<()> {
         anyhow::ensure!(
             self.daily_count == 3,
-            "this contract sends at most three jobs"
+            "each edition selects at most three opportunity packets"
         );
         anyhow::ensure!(
             self.delivery_hour == 9 && self.delivery_minute == 0,

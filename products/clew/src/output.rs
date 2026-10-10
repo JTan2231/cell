@@ -54,7 +54,7 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
             history(&mut output, &data["history"]);
         }
         Command::Show { .. } => {
-            field(&mut output, "Milieu job", &data["milieu_job_id"]);
+            field(&mut output, "Milieu opportunity", &data["milieu_job_id"]);
             field(&mut output, "Current status", &data["current"]["status"]);
             field(
                 &mut output,
@@ -95,10 +95,10 @@ pub(super) fn render(command: &Command, data: &Value) -> String {
 }
 
 fn candidates(output: &mut String, data: &Value) {
-    output.push_str("Retained job candidates\n");
+    output.push_str("Retained opportunity candidates\n");
     let candidates = data["candidates"].as_array().map_or(&[][..], Vec::as_slice);
     if candidates.is_empty() {
-        output.push_str("No matching retained jobs.\n");
+        output.push_str("No matching retained opportunities.\n");
     }
     for candidate in candidates {
         let _ = writeln!(

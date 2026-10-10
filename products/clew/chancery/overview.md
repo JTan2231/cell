@@ -3,7 +3,7 @@
 Clew is a private ledger notepad. It retains supplied notes and optional status
 in an append-only history. Entries can stand alone, belong to a named thread,
 and link to stable identities outside Clew. It also maintains an explicit
-application-report view for Milieu jobs and an optional daily application email.
+application-report view for Milieu opportunities and an optional daily application email.
 
 The `clew` command prints readable text by default. Use `--json` for the
 schema-four machine response. Entry and history reads keep the full supplied
@@ -19,8 +19,8 @@ authorize a note, report, send, schedule, or installation.
 | ID | Read this to understand |
 | --- | --- |
 | `clew.ledger.use` | Supplied notes, optional status, named threads, optional external links, local search, entry reads, exact retries, corrections, and retractions. |
-| `clew.application.track` | Explicit Milieu job reports, retained-job search, supplied application status, job history, and the boundary between application reports and plain job links. |
-| `clew.digest.email` | Application selection, copied notes, missing job context, frozen occurrences, send authority, uncertain submission, and scheduling failures. |
+| `clew.application.track` | Explicit Milieu opportunity reports, retained opportunity search, supplied application status, opportunity history, and the boundary between application reports and plain opportunity links. |
+| `clew.digest.email` | Application selection, copied notes, missing opportunity context, frozen occurrences, send authority, uncertain submission, and scheduling failures. |
 | `clew.state` | Private state, initialization and integrity, program selection, email maintenance, older-ledger migration and compatible program recovery. |
 
 Use `clew.install.operate` for installation, guarded migration,
@@ -40,8 +40,8 @@ agent can retrieve a matching thread and answer from its statements and
 correction history. Clew does not interpret the question, verify completion,
 execute migrations, or run a model.
 
-An explicit `--milieu-job JOB_ID` report selects the application view. A plain
-`--ref milieu.job JOB_ID` link supplies context and does not change application
+An explicit `--milieu-opportunity OPPORTUNITY_ID` report selects the application view. A plain
+`--ref milieu.job OPPORTUNITY_ID` link supplies context and does not change application
 status or email. The daily email reads only active application reports and joins
 a separate retained Milieu snapshot. Missing context does not omit qualifying
 applications. A send freezes its message and identity before invoking Email.
@@ -49,13 +49,13 @@ Provider acceptance and final inbox delivery are separate outcomes.
 
 Clew owns entries, thread membership, reference associations, retry identity,
 ledger state, email selection, frozen occurrences, and its schedule definition.
-The caller supplies statements and status. Milieu owns job identities and details.
+The caller supplies statements and status. Milieu owns opportunity identities and details.
 Platter supplies legacy migration mappings and owns prepared material. Email
 owns submission; Clockwork owns activation and failure halts.
 
 Private state stays outside source and release trees. Installation publishes the
 matching contracts with the selected program. Guarded migration converts older
-job history without inventing threads or changing frozen email. Recovery
+opportunity history without inventing threads or changing frozen email. Recovery
 preserves history and requires compatible program and state versions.
 
 Required dependencies define documentation compatibility and complete reading.

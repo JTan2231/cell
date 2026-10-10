@@ -128,7 +128,7 @@ pub async fn prepare_fresh(
     prepare_selected(root, job_id, deadline, true).await
 }
 
-/// Prepare another packet without enabling the job or changing prior packets.
+/// Prepare another packet without enabling the opportunity or changing prior packets.
 /// The CLI holds mutation admission across request lookup, capture and execution.
 pub async fn regenerate(
     root: &Path,
@@ -148,7 +148,7 @@ pub async fn regenerate(
         let captured: Captured = store.inputs(&record.id)?;
         ensure!(
             captured.job.id == job_id,
-            "regeneration ID belongs to a different job"
+            "regeneration ID belongs to a different opportunity"
         );
         if record.status != "preparing" {
             return Ok(record);
@@ -162,7 +162,7 @@ pub async fn regenerate(
         .jobs
         .iter()
         .find(|job| job.id == job_id)
-        .context("Milieu job not found")?;
+        .context("Milieu opportunity not found")?;
     ensure!(
         source::eligible(job),
         "opportunity fails availability/compensation constraints"
@@ -170,7 +170,7 @@ pub async fn regenerate(
     let opportunity = source::identity(job)?;
     ensure!(
         store.packet(&opportunity)?.is_some(),
-        "no prior packet for this job; use prepare"
+        "no prior packet for this opportunity; use prepare"
     );
     ensure_other_runs_settled(&store, &opportunity, None).await?;
     let company = snapshot
@@ -245,7 +245,7 @@ async fn prepare_selected(
         .jobs
         .iter()
         .find(|job| job.id == job_id)
-        .context("Milieu job not found")?;
+        .context("Milieu opportunity not found")?;
     let company = snapshot
         .companies
         .iter()
@@ -269,7 +269,7 @@ async fn prepare_job(
     let opportunity = source::identity(job)?;
     ensure!(
         store.is_eligible(&opportunity)?,
-        "job is ineligible for selection"
+        "opportunity is ineligible for selection"
     );
     let mut existing = store
         .packet(&opportunity)?
@@ -726,7 +726,7 @@ async fn prepare_daily_selected(
 pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Result<Option<Edition>> {
     let day = local_day(root, now)?;
     // Frozen, accepted and uncertain editions take the existing send path before
-    // preparation can consume more resources or change job eligibility.
+    // preparation can consume more resources or change opportunity eligibility.
     if Store::open_read_only(root)?.edition(&day)?.is_some() {
         return send(root, &day).map(Some);
     }
@@ -744,11 +744,11 @@ pub async fn run_daily(root: &Path, now: chrono::DateTime<chrono::Utc>) -> Resul
         {
             return send(root, &day).map(Some);
         }
-        // Freshness checks excluded the entire pool. Fill it from other jobs.
+        // Freshness checks excluded the entire pool. Fill it from other opportunities.
     }
 }
 
-/// Prepare, freeze and send one explicitly selected job URL through the same
+/// Prepare, freeze and send one explicitly selected posting URL through the same
 /// packet and edition operations as the daily runner.
 pub async fn run_ad_hoc(
     root: &Path,
@@ -806,7 +806,7 @@ fn ensure_edition_url(root: &Path, edition: &Edition, url: &str) -> Result<()> {
     let captured: Captured = Store::open_read_only(root)?.inputs(packet_id)?;
     ensure!(
         source::job_url_matches(&captured.job, url)?,
-        "occurrence ID belongs to a different job URL"
+        "occurrence ID belongs to a different posting URL"
     );
     Ok(())
 }
@@ -944,7 +944,7 @@ fn compose_selected(
     let mut edition = Edition {
         day: day.into(),
         status: "frozen".into(),
-        subject: format!("Your jobs — {day}"),
+        subject: format!("Your opportunities — {day}"),
         body: String::new(),
         packet_ids: vec![],
         attachments: vec![],
@@ -1097,4 +1097,65 @@ pub(crate) fn validate_day(day: &str) -> Result<()> {
         "date must use YYYY-MM-DD"
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn frozen_editions_keep_historical_payloads_without_preparation() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let store = Store::open(root.path())?;
+        let packet = PacketRecord {
+            id: "retained-packet".into(),
+            opportunity: "retained-opportunity".into(),
+            job_id: "retained-milieu-id".into(),
+            company: "Employer".into(),
+            title: "Engineer".into(),
+            status: "ready".into(),
+            directory: String::new(),
+        };
+        store.insert(&packet)?;
+        let pdf = store.put_artifact(
+            Some(&packet.id),
+            "resume-pdf",
+            "retained-resume.pdf",
+            "application/pdf",
+            b"%PDF-1.7\nretained resume bytes",
+        )?;
+        let edition = Edition {
+            day: "2026-10-10".into(),
+            status: "frozen".into(),
+            subject: "Your jobs — 2026-10-10".into(),
+            body: "Exact retained message".into(),
+            packet_ids: vec![packet.id],
+            attachments: vec![pdf.id],
+            attachment_sha256: vec![pdf.sha256],
+            idempotency_key: "retained-send-key".into(),
+            receipt: None,
+        };
+        store.freeze_as(&edition.day, &edition, true)?;
+        let expected = serde_json::to_value(&edition)?;
+        assert_eq!(
+            serde_json::to_value(preview(root.path(), &edition.day).await?)?,
+            expected
+        );
+        let retained_id = crate::ad_hoc::occurrence_identity("retained")?;
+        let mut retained = edition;
+        retained.idempotency_key = "retained-ad-hoc-send-key".into();
+        store.freeze_as(&retained_id, &retained, false)?;
+        assert_eq!(
+            serde_json::to_value(crate::ad_hoc::preview(
+                root.path(),
+                &retained.day,
+                "retained",
+                &[],
+                None,
+            )?)?,
+            serde_json::to_value(retained)?
+        );
+        assert!(!store.is_eligible(&packet.opportunity)?);
+        Ok(())
+    }
 }

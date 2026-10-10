@@ -1,6 +1,6 @@
 # Milieu records and read handoff
 
-Milieu owns company and job identities, current revisions, source metadata, and
+Milieu owns company and opportunity identities, current revisions, source metadata, and
 read projections. Local callers and downstream products can inspect retained
 fields or export one consistent snapshot. Reads require supported initialized
 state and start no collection, agent, remote request, or downstream workflow.
@@ -13,10 +13,10 @@ and retired administrative commands. Milieu performs no collection.
 
 ```sh
 milieu companies list
-milieu jobs list
+milieu opportunities list
 milieu sources list
 milieu company show COMPANY_ID
-milieu job show JOB_ID
+milieu opportunity show OPPORTUNITY_ID
 milieu search "infrastructure"
 milieu export --json
 milieu export --output /absolute/private/snapshot.json
@@ -25,6 +25,12 @@ milieu export --output /absolute/private/snapshot.json
 Select independent state with global `--state-dir PATH`. Output is readable
 text by default. Lists and search print compact rows and report when more
 results exist. Show prints full retained fields, including posting text.
+
+The canonical commands use `opportunities` and `opportunity`. The hidden aliases
+`jobs` and `job` accept the same arguments. Human output describes opportunities.
+JSON fields such as `jobs` and the row value `kind:"job"`, public Rust `Job`
+types, and database names retain their technical spellings for compatibility.
+This terminology change requires no state migration.
 
 Use global `--json` before or after the command for the machine interface.
 List/search, show, and export success schemas remain unchanged. `snapshot` is
@@ -38,26 +44,26 @@ types. Direct SQLite reads and writes are not supported integration surfaces.
 
 ## Retained record meanings
 
-A company is an accepted company identity. A job refers to its hiring employer
+A company is an accepted company identity. An opportunity refers to its hiring employer
 through `employer_id`. A source can independently refer to its operator through
-optional `operator_id`. Source operator and job employer can be different
+optional `operator_id`. Source operator and opportunity employer can be different
 companies. Matching names alone do not merge company identities.
 
-A job is one accepted current record, with workplace links and one or more
+An opportunity is one accepted current record, with workplace links and one or more
 source appearances. Resolve duplicate matching and conflicting source values
 before writing it. The public `company_id` is its `employer_id`. It is not a
 recommendation, application, or hiring outcome. Relevance reasons describe
-supplied discovery signals. Reads include all retained jobs without a title
-substring requirement; consumers choose jobs by title, seniority, location,
+supplied discovery signals. Reads include all retained opportunities without a title
+substring requirement; consumers choose opportunities by title, seniority, location,
 or other preferences.
 
 A source is a named board or feed with a URL and optional operator. Its
 exported `company_id` retains the separate compatibility association used by
-source enrollment. That association does not establish a job employer or
+source enrollment. That association does not establish an opportunity employer or
 source operator. Its exported enabled flag, status, timestamps, cursor, and
 note remain supplied compatibility metadata. No collector acts on them.
 
-Company, job, and source IDs are opaque stable Milieu identities. Source-native
+Company, opportunity, and source IDs are opaque stable Milieu identities. Source-native
 IDs are scoped to their source namespace. Current record revisions are
 computed from exported material fields, excluding `last_seen_at`. Milieu retains
 only each entity's current revision, without a revision-history table.
@@ -65,7 +71,7 @@ Secondary appearance changes and changes between hybrid and on-site can
 preserve the export revision while advancing the snapshot revision.
 
 Records retain company domains, website URLs, company identity aliases, source
-locators, and accepted job fields. Descriptions are stored as supplied. A
+locators, and accepted opportunity fields. Descriptions are stored as supplied. A
 source locator supports a separate fetch when a consumer needs posting text;
 reading the locator causes no fetch. Milieu retains accepted fields instead of
 whole provider responses and HTML documents.
@@ -73,9 +79,9 @@ whole provider responses and HTML documents.
 ## Availability and freshness
 
 Milieu preserves supplied timestamps and evidence without creating observation
-history. Company/job `first_seen_at` and `last_seen_at` normalize to UTC with
+history. Company/opportunity `first_seen_at` and `last_seen_at` normalize to UTC with
 nine fractional-second digits for chronological string comparison. Writing or
-exporting an accepted job does not establish that its source was observed at
+exporting an accepted opportunity does not establish that its source was observed at
 the write or capture time. Source-supplied publication and update dates use
 separate fields.
 
@@ -97,11 +103,11 @@ With `--json`, list and search return schema-two pages with
 `snapshot_revision`, compact `items`, and `has_more`. The default limit is 20
 items. `--limit` accepts a positive integer. An empty page has no stored record
 matching the selected query and limits; it does not establish that no external
-jobs exist.
+opportunities exist.
 
-Job rows contain stable ID and revision, company, title, location, remote
+Opportunity rows contain stable ID and revision, company, title, location, remote
 eligibility, recorded availability, and `last_seen_at`. Search matches
-substrings in company names, domains, job titles, and descriptions, ignoring
+substrings in company names, domains, opportunity titles, and descriptions, ignoring
 case. Its rows add `matched_field` and a marked excerpt of at most 240 Unicode
 characters. Show and export return full records and source metadata.
 
@@ -118,10 +124,10 @@ compatibility fields, and supplied evidence. `coverage` is an empty array:
 current state has no query coverage or collection history. The `source_health`
 name remains for compatibility and carries retained source metadata.
 
-Each job exports one primary source appearance through `source_id`,
+Each opportunity exports one primary source appearance through `source_id`,
 `source_key`, and `url`. Additional appearances remain in the current store;
 the existing snapshot does not expose all source links. The caller supplies
-the primary appearance when accepting a new job. Its source identity, source
+the primary appearance when accepting a new opportunity. Its source identity, source
 key, and URL remain fixed, and later accepted writes must retain that tuple.
 Additional appearances do not change the consumer identity. Consumers continue
 to use the primary URL and optional `apply_url`; secondary appearance URLs are
@@ -133,7 +139,7 @@ accepts `remote`, `hybrid`, `on-site`, or no value. Remote projects to
 `remote:true`; hybrid and on-site project to `remote:false`; no value projects
 to null. Geography remains separate from work mode.
 
-Company/job exports preserve supplied evidence, compatibility dates,
+Company/opportunity exports preserve supplied evidence, compatibility dates,
 compensation, geographic eligibility, publication semantics, and current
 entity revisions. Export uses one database transaction. `captured_at`
 describes snapshot capture; record dates describe supplied evidence. Separate
@@ -145,7 +151,7 @@ SQLite sidecars, and mutation lock as destinations, including aliases to those
 paths. Stdout reads do not create an export file.
 
 Consumers use stable IDs and record revisions to compare snapshots. They own
-consumed state, selected or dismissed jobs, packets, applications, CRM cases,
+consumed state, selected or dismissed opportunities, packets, applications, CRM cases,
 and sent-message history. Milieu has no durable change-feed acknowledgement or
 consumer-retention protocol.
 

@@ -4,7 +4,7 @@ pub fn canonical_board_url(input: &str) -> Option<String> {
     Board::from_url(&Url::parse(input).ok()?).map(|board| board.url())
 }
 
-/// Identifies an ATS tenant independently from job IDs and shared hosting domains.
+/// Identifies an ATS tenant independently from opportunity IDs and shared hosting domains.
 #[must_use]
 pub fn board_identity(input: &str) -> Option<String> {
     Board::from_url(&Url::parse(input).ok()?).map(|board| board.identity())
@@ -20,7 +20,7 @@ pub fn ats_provider(input: &str) -> Option<&'static str> {
     })
 }
 
-/// Tests whether one stored job is the posting selected by a public job URL.
+/// Tests whether one stored opportunity is the posting selected by a public posting URL.
 ///
 /// # Errors
 /// Returns an error when the URL is not public or names a supported ATS board
@@ -29,7 +29,7 @@ pub fn job_url_matches(job: &Job, input: &str) -> Result<bool, String> {
     Ok(JobSelector::from_url(input)?.matches(&job.source_key, &job.url))
 }
 
-/// Validates that a public URL can select one job.
+/// Validates that a public URL can select one opportunity.
 ///
 /// # Errors
 /// Returns an error for an unsafe URL or a supported ATS board URL without a
@@ -69,7 +69,7 @@ impl JobSelector {
             return Ok(Self::SourceKey(key));
         }
         if Board::from_url(&url).is_some() {
-            return Err("URL must identify one supported ATS job posting".into());
+            return Err("URL must identify one supported ATS posting".into());
         }
         let normalized = crate::normalize_url(input).map_err(|error| error.to_string())?;
         Ok(Self::Url(normalized))

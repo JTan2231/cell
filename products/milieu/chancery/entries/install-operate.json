@@ -11,7 +11,7 @@
     "The caller needs to add a retained careers source or verify local state."
   ],
   "do_not_use_when": [
-    "A current discovery run or a read-only employer/job export is the requested outcome.",
+    "A current discovery run or a read-only employer/opportunity export is the requested outcome.",
     "A schedule, provider subscription purchase, credential change, database deletion or downstream action is intended."
   ],
   "outcome": "An installed matching program/documentation release, initialized schema-two state, supported local diagnostic result, source enrollment, or selected retained program release.",
@@ -66,7 +66,7 @@
     "Milieu reads no provider credentials or executable user shell configuration."
   ],
   "does_not_authorize": [
-    "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
+    "Selecting opportunities for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
     "Changing provider billing, automatic purchases, another product installation, or deleting retained state."
   ],
   "promise": {

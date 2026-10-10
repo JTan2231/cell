@@ -30,7 +30,7 @@ enum Commands {
         #[arg(long)]
         id: Option<String>,
     },
-    /// Author independent new documents in one runner. Return each job outcome.
+    /// Author independent new documents in one runner. Return each document outcome.
     WriteMany {
         #[arg(long)]
         jobs: std::num::NonZeroUsize,

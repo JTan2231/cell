@@ -1,4 +1,4 @@
-//! Manifest-defined renderer execution and personal email submission.
+//! Production runs and personal email submission.
 #![allow(clippy::missing_errors_doc)]
 #![cfg_attr(test, allow(clippy::unwrap_used))]
 

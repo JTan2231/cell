@@ -128,10 +128,10 @@ pub(crate) fn replace_job(tx: &Transaction<'_>, accepted: &current::AcceptedJob)
     let mut projected = accepted.compatibility.clone();
     canonicalize_seen_at(&mut projected.first_seen_at, &mut projected.last_seen_at)?;
     let public = &projected;
-    require_text("job id", &record.id)?;
-    require_text("job employer", &record.employer_id)?;
-    require_text("job title", &record.title)?;
-    require_text("job status", &record.status)?;
+    require_text("opportunity id", &record.id)?;
+    require_text("opportunity employer", &record.employer_id)?;
+    require_text("opportunity title", &record.title)?;
+    require_text("opportunity status", &record.status)?;
     if ![
         "listed",
         "unlisted",
@@ -142,7 +142,8 @@ pub(crate) fn replace_job(tx: &Transaction<'_>, accepted: &current::AcceptedJob)
     .contains(&record.status.as_str())
     {
         return Err(
-            "job status must be listed, unlisted, missing, presumed_closed, or unknown".into(),
+            "opportunity status must be listed, unlisted, missing, presumed_closed, or unknown"
+                .into(),
         );
     }
     let remote = remote(record.work_mode.as_deref())?;
@@ -157,13 +158,13 @@ pub(crate) fn replace_job(tx: &Transaction<'_>, accepted: &current::AcceptedJob)
         || remote != public.remote
         || location != public.location
     {
-        return Err("job compatibility fields must match the current record".into());
+        return Err("opportunity compatibility fields must match the current record".into());
     }
     adapters::validate_job_url(&public.url)?;
     if !adapters::job_url_matches(public, &public.url)?
         || (native_key(&public.source_key) && adapters::ats_provider(&public.url).is_none())
     {
-        return Err("job source key and primary URL identify different postings".into());
+        return Err("opportunity source key and primary URL identify different postings".into());
     }
     if let Some(apply_url) = &public.apply_url {
         adapters::validate_job_url(apply_url)?;
@@ -180,7 +181,8 @@ pub(crate) fn replace_job(tx: &Transaction<'_>, accepted: &current::AcceptedJob)
             || previous.source_key != public.source_key
         {
             return Err(
-                "the existing primary job source, URL and source key must be retained".into(),
+                "the existing primary opportunity source, URL and source key must be retained"
+                    .into(),
             );
         }
         retain_seen_at(
@@ -194,20 +196,23 @@ pub(crate) fn replace_job(tx: &Transaction<'_>, accepted: &current::AcceptedJob)
     let mut primary = false;
     for appearance in &accepted.appearances {
         if appearance.job_id != record.id || !source_ids.insert(&appearance.source_id) {
-            return Err("job appearances must have this job id and distinct source ids".into());
+            return Err(
+                "opportunity appearances must have this opportunity id and distinct source ids"
+                    .into(),
+            );
         }
         adapters::validate_job_url(&appearance.url)?;
         primary |= appearance.source_id == public.source_id && appearance.url == public.url;
     }
     if !primary {
-        return Err("job appearances must contain the primary source and URL".into());
+        return Err("opportunity appearances must contain the primary source and URL".into());
     }
     let mut location_ids = BTreeSet::new();
     for location in &locations {
         require_text("location id", &location.id)?;
         require_text("location name", &location.name)?;
         if !location_ids.insert(&location.id) {
-            return Err("job locations must have distinct ids".into());
+            return Err("opportunity locations must have distinct ids".into());
         }
         let existing: Option<String> = tx
             .query_row(
@@ -408,7 +413,7 @@ fn job(connection: &Connection, id: &str) -> Result<Option<Value>> {
         .optional()?;
     row.map(|(record, body)| {
         let mut value = metadata(&body)?;
-        let source_id = value["source_id"].as_str().ok_or("job primary source id is missing")?;
+        let source_id = value["source_id"].as_str().ok_or("opportunity primary source id is missing")?;
         let url: String = connection.query_row(
             "SELECT url FROM job_source WHERE job_id=?1 AND source_id=?2",
             params![id, source_id],

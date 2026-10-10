@@ -39,12 +39,12 @@ pub fn retained_job(executable: &Path, url: &str) -> Result<Job> {
         if job_url_matches(&job, url)? {
             ensure!(
                 selected.is_none(),
-                "job URL matches multiple retained Milieu jobs"
+                "posting URL matches multiple retained Milieu opportunities"
             );
             selected = Some(job);
         }
     }
-    selected.context("job URL is not retained by Milieu; Milieu collection is unavailable")
+    selected.context("posting URL is not retained by Milieu; Milieu collection is unavailable")
 }
 
 pub fn job_url_matches(job: &Job, url: &str) -> Result<bool> {
@@ -408,7 +408,11 @@ async fn fetch(url: &url::Url, max_bytes: Option<usize>) -> Result<Vec<u8>> {
         .redirect(reqwest::redirect::Policy::none())
         .resolve_to_addrs(host, &addresses)
         .no_proxy()
-        .user_agent("JobPackets/0.1 (public job preparation)")
+        .user_agent(concat!(
+            "Platter/",
+            env!("CARGO_PKG_VERSION"),
+            " (public posting preparation)"
+        ))
         .build()?;
     let mut response = client.get(url.clone()).send().await?.error_for_status()?;
     ensure!(

@@ -1,5 +1,5 @@
 //! Retained-material selection. These operations create ordinary edition records
-//! and leave the explicit job eligibility field alone.
+//! and leave explicit opportunity eligibility alone.
 use crate::{
     store::{Edition, Store},
     workflow,

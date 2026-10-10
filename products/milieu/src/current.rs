@@ -53,7 +53,7 @@ pub struct JobSource {
     pub url: String,
 }
 
-/// One caller-resolved current job and its complete workplace and source links.
+/// One caller-resolved current opportunity and its complete workplace and source links.
 ///
 /// Compatibility values retain facts required by the existing snapshot contract.
 /// Their employer, title, description, status, work mode and workplaces must agree

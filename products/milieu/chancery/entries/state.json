@@ -11,8 +11,8 @@
     "The caller needs storage compatibility and state recovery limits."
   ],
   "do_not_use_when": [
-    "Collection, exact public job-URL retrieval or data migration is required.",
-    "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream job selection."
+    "Collection, exact public posting URL retrieval or data migration is required.",
+    "The intended result is program deployment, a provider credit purchase, credential replacement, destructive reset or downstream opportunity selection."
   ],
   "outcome": "Selected initialized schema-two private state, a local readiness or record-count result, or an accepted source enrollment.",
   "interfaces": [
@@ -89,7 +89,7 @@
       },
       {
         "status": "declared",
-        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS URLs reject that override and use canonical provider/tenant compatibility associations. That association establishes neither the optional source operator nor a job employer."
+        "statement": "source add URL accepts an optional existing company ID for ordinary websites. Supported ATS URLs reject that override and use canonical provider/tenant compatibility associations. That association establishes neither the optional source operator nor an opportunity employer."
       }
     ],
     "outputs": [
@@ -105,11 +105,11 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "milieu::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both joins use composite primary keys with one URL per job/source pair. The core holds one accepted current record per job, with duplicates and conflicts resolved before writing. It has no history or collection mechanics."
+        "statement": "milieu::current defines Company, Job, Source, Location, JobLocation and JobSource plus SCHEMA for company, job, source, location, job_location and job_source. Employer and optional source operator are distinct company references; workplaces and work_mode are distinct. Both joins use composite primary keys with one URL per opportunity/source pair. The core holds one accepted current record per opportunity, with duplicates and conflicts resolved before writing. It has no history or collection mechanics."
       },
       {
         "status": "declared",
-        "statement": "meta retains snapshot revision and company aliases. Compatibility columns in company/job/source retain supplied export fields, including timestamps, evidence, compensation, entity revisions and source metadata. There are no revision-history, observation, request-ledger or run tables. Accepted writes replace a job and its complete workplace/source links atomically. Company/job first_seen_at and last_seen_at must be valid ordered RFC 3339 values; they normalize to UTC with nine fractional-second digits. Updates preserve first_seen_at and do not move last_seen_at backwards. Existing location IDs preserve their names. There is no CLI job ingestion interface."
+        "statement": "meta retains snapshot revision and company aliases. Compatibility columns in company/job/source retain supplied export fields, including timestamps, evidence, compensation, entity revisions and source metadata. There are no revision-history, observation, request-ledger or run tables. Accepted writes replace an opportunity and its complete workplace/source links atomically. Company/opportunity first_seen_at and last_seen_at must be valid ordered RFC 3339 values; they normalize to UTC with nine fractional-second digits. Updates preserve first_seen_at and do not move last_seen_at backwards. Existing location IDs preserve their names. There is no CLI opportunity ingestion interface."
       },
       {
         "status": "declared",
@@ -123,7 +123,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "The selected directory identifies an independent database named milieu.sqlite3. Current counts use retained company, job and source records. Stable IDs and current revisions remain under the read contract."
+        "statement": "The selected directory identifies an independent database named milieu.sqlite3. Current counts use retained company, opportunity and source records. Stable IDs and current revisions remain under the read contract."
       },
       {
         "status": "not_applicable",

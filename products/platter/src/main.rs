@@ -9,7 +9,7 @@ use std::{
 #[derive(Parser)]
 #[command(
     version,
-    about = "Prepare private job briefs and fixed-template resumes"
+    about = "Prepare private opportunity packets and email editions"
 )]
 struct Cli {
     #[arg(long, global = true)]
@@ -47,27 +47,28 @@ enum Command {
         #[arg(long)]
         completion_receipt: Option<PathBuf>,
     },
+    /// Initialize private production materials from a resume template.
     Init {
         #[arg(long)]
         resume: PathBuf,
     },
     /// Import fixed Cell/Wrought presentation for future runs; change only Projects.
-    ImportProjectsTemplate {
-        path: PathBuf,
-    },
+    ImportProjectsTemplate { path: PathBuf },
     /// Replace the full fixed resume template for future runs; preserve prior artifacts.
-    ImportTemplate {
-        path: PathBuf,
-    },
+    ImportTemplate { path: PathBuf },
+    /// Prepare or continue an opportunity packet without sending it.
     Prepare {
+        #[arg(value_name = "MILIEU_OPPORTUNITY_ID")]
         job_id: String,
         /// Restart incomplete preparation with new source capture and no prior model context.
         #[arg(long)]
         fresh: bool,
     },
+    /// Prepare production materials for future daily editions without sending them.
     PrepareDaily,
-    /// Create another packet for a previously prepared job, without enabling it or sending mail.
+    /// Create another packet for a prepared opportunity, without enabling it or sending mail.
     Regenerate {
+        #[arg(value_name = "MILIEU_OPPORTUNITY_ID")]
         job_id: String,
         /// Stable request identity; reuse it to resume or retrieve this preparation.
         #[arg(long)]
@@ -77,6 +78,7 @@ enum Command {
     RunDaily,
     /// Prepare, freeze and send one URL-selected packet with this invocation's authority.
     RunAdHoc {
+        #[arg(value_name = "POSTING_URL")]
         url: String,
         /// Stable occurrence identity for safe retries of this exact send.
         #[arg(long)]
@@ -84,6 +86,7 @@ enum Command {
     },
     /// Print the selected release's daily Clockwork definition; do not enable it.
     ScheduleDefinition,
+    /// Freeze selected packets and materials into an edition without sending it.
     Preview {
         day: String,
         #[arg(long)]
@@ -93,6 +96,7 @@ enum Command {
         #[arg(long, requires = "ad_hoc")]
         brief_overrides: Option<PathBuf>,
     },
+    /// Send one frozen edition with applicable authorization.
     Send {
         day: String,
         #[arg(long)]
@@ -100,10 +104,11 @@ enum Command {
         #[arg(long, requires = "ad_hoc")]
         email_executable: Option<PathBuf>,
     },
-    /// Change whether Platter may select this retained opportunity.
+    /// Change opportunity eligibility for future edition selection.
     Eligibility {
+        #[arg(value_name = "MILIEU_OPPORTUNITY_ID")]
         job_id: String,
-        #[arg(value_parser = clap::value_parser!(bool))]
+        #[arg(action = clap::ArgAction::Set, value_parser = clap::value_parser!(bool))]
         eligible: bool,
     },
     /// Export one retained artifact to an explicitly selected destination.
@@ -111,6 +116,7 @@ enum Command {
         artifact_id: String,
         output: PathBuf,
     },
+    /// Read retained packet preparation and edition delivery state.
     Status,
     /// Read configuration, or set/clear the PDF override for future daily editions.
     Config {
@@ -316,7 +322,9 @@ async fn run() -> Result<()> {
                     edition.packet_ids.len()
                 );
             } else {
-                println!("Selected job produced no ready packet; no edition created or sent");
+                println!(
+                    "Selected opportunity produced no ready packet; no edition created or sent"
+                );
             }
         }
         Command::Preview {
@@ -473,5 +481,18 @@ mod cli_tests {
     fn migration_has_no_backup_option() {
         assert!(Cli::try_parse_from(["platter", "migrate"]).is_ok());
         assert!(Cli::try_parse_from(["platter", "migrate", "--backup", "/private/old"]).is_err());
+    }
+
+    #[test]
+    fn eligibility_accepts_explicit_true_and_false() -> Result<()> {
+        for (value, expected) in [("true", true), ("false", false)] {
+            let cli = Cli::try_parse_from(["platter", "eligibility", "opportunity-id", value])?;
+            let Command::Eligibility { job_id, eligible } = cli.command else {
+                panic!("expected opportunity eligibility command");
+            };
+            assert_eq!(job_id, "opportunity-id");
+            assert_eq!(eligible, expected);
+        }
+        Ok(())
     }
 }

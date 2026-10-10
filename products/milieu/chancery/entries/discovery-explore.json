@@ -4,17 +4,17 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Inspect and export companies and jobs",
-  "summary": "Read accepted current companies, jobs, and source metadata. Export the existing consistent JSON snapshot for downstream selection. Milieu performs no collection.",
+  "title": "Inspect and export companies and opportunities",
+  "summary": "Read accepted current companies, opportunities, and source metadata. Export the existing consistent JSON snapshot for downstream selection. Milieu performs no collection.",
   "use_when": [
-    "A caller needs accepted current company/job records, supplied evidence, or source metadata.",
+    "A caller needs accepted current company/opportunity records, supplied evidence, or source metadata.",
     "A downstream product needs a consistent machine-readable discovery snapshot."
   ],
   "do_not_use_when": [
     "Current remote sources must be fetched; Milieu no longer provides collection.",
     "The caller needs a personal recommendation or application workflow."
   ],
-  "outcome": "Stored company/job records or one consistent schema-one snapshot carrying stable identities, current revisions, compatibility fields, supplied evidence, and source metadata.",
+  "outcome": "Stored company/opportunity records or one consistent schema-one snapshot carrying stable identities, current revisions, compatibility fields, supplied evidence, and source metadata.",
   "interfaces": [
     {
       "label": "Export discovery snapshot",
@@ -25,8 +25,8 @@
       "invocation": "/Users/joey/.local/bin/milieu companies list"
     },
     {
-      "label": "Inspect jobs",
-      "invocation": "/Users/joey/.local/bin/milieu jobs list"
+      "label": "Inspect opportunities",
+      "invocation": "/Users/joey/.local/bin/milieu opportunities list"
     },
     {
       "label": "Inspect source metadata",
@@ -38,7 +38,7 @@
     },
     {
       "label": "Inspect a posting",
-      "invocation": "/Users/joey/.local/bin/milieu job show JOB_ID"
+      "invocation": "/Users/joey/.local/bin/milieu opportunity show OPPORTUNITY_ID"
     },
     {
       "label": "Search retained records",
@@ -58,11 +58,11 @@
     "An explicit export --output writes and atomically replaces a private caller-selected file; stdout reads do not write an export."
   ],
   "authority": [
-    "Milieu owns stored company and job identities, revisions, source metadata and read projections.",
+    "Milieu owns stored company and opportunity identities, revisions, source metadata and read projections.",
     "Consumers own filtering, consumed revisions, packet state and notification history."
   ],
   "success": [
-    "The requested read completes against supported initialized state. Export returns a consistent snapshot with schema version, revision, capture time, companies, jobs, source metadata and an empty query coverage array."
+    "The requested read completes against supported initialized state. Export returns a consistent snapshot with schema version, revision, capture time, companies, opportunities, source metadata and an empty query coverage array."
   ],
   "failure_and_recovery": [
     "An empty result contains no stored records matching the selected query and limits.",
@@ -72,7 +72,7 @@
     "CLI output and exported snapshots are private caller-owned data. Reads send no information to remote systems."
   ],
   "does_not_authorize": [
-    "Selecting jobs for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
+    "Selecting opportunities for the user, creating CRM cases or application packets, sending email, submitting applications, invoking an agent or browser, or enabling a schedule.",
     "Fetching sources during a read operation."
   ],
   "promise": {
@@ -97,17 +97,17 @@
     "outputs": [
       {
         "status": "declared",
-        "statement": "CLI record reads use readable text by default. Global --json selects existing machine schemas. JSON list/search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20; --limit accepts a positive integer. Job rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Show and export return full records and source metadata. The export snapshot uses schema 1. Export --output always writes JSON; --json selects only its stdout receipt format. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. Local status and doctor belong to milieu.state. The native Rust Snapshot handoff remains unchanged."
+        "statement": "CLI record reads use readable text by default. Global --json selects existing machine schemas. JSON list/search return schema-two pages with snapshot_revision, compact items and has_more. The default limit is 20; --limit accepts a positive integer. Opportunity rows contain stable ID and revision, company, title, location, remote eligibility, recorded availability and last_seen_at. Search adds matched_field and a marked excerpt of at most 240 Unicode characters. Show and export return full records and source metadata. The export snapshot uses schema 1. Export --output always writes JSON; --json selects only its stdout receipt format. Operational errors exit 1: text on stderr by default, or schema-one ok:false with error.detail on stderr with --json. Syntax errors remain Clap text on stderr with exit 2. Local status and doctor belong to milieu.state. The native Rust Snapshot handoff remains unchanged."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Reads and exports include all retained jobs without a title substring requirement. Job counts describe retained records rather than all external postings. Consumers choose jobs by title, seniority, location or other preferences."
+        "statement": "Reads and exports include all retained opportunities without a title substring requirement. Opportunity counts describe retained records rather than all external postings. Consumers choose opportunities by title, seniority, location or other preferences."
       },
       {
         "status": "declared",
-        "statement": "A job employer exports as company_id, independently of an optional source operator. Compatibility metadata preserves supplied dates, evidence, compensation and other exported fields without observation or revision history. Company/job first_seen_at and last_seen_at normalize to UTC with nine fractional-second digits. Entity revisions use exported material fields excluding last_seen_at. Secondary appearances and hybrid/on-site changes can preserve the export revision while advancing snapshot_revision."
+        "statement": "An opportunity employer exports as company_id, independently of an optional source operator. Compatibility metadata preserves supplied dates, evidence, compensation and other exported fields without observation or revision history. Company/opportunity first_seen_at and last_seen_at normalize to UTC with nine fractional-second digits. Entity revisions use exported material fields excluding last_seen_at. Secondary appearances and hybrid/on-site changes can preserve the export revision while advancing snapshot_revision."
       },
       {
         "status": "declared",
@@ -115,17 +115,17 @@
       },
       {
         "status": "declared",
-        "statement": "Jobs store multiple source appearances but export one caller-selected primary through source_id, source_key and url. That tuple remains fixed after creation; adding secondary appearances preserves it. Consumers retain the primary URL and optional apply_url. Secondary appearance URLs are not added to this interface. Workplaces export comma-separated names in location-ID order, or null. Remote work_mode exports remote:true; hybrid and on-site export remote:false; absent work_mode exports null. Other values are rejected."
+        "statement": "Opportunities store multiple source appearances but export one caller-selected primary through source_id, source_key and url. That tuple remains fixed after creation; adding secondary appearances preserves it. Consumers retain the primary URL and optional apply_url. Secondary appearance URLs are not added to this interface. Workplaces export comma-separated names in location-ID order, or null. Remote work_mode exports remote:true; hybrid and on-site export remote:false; absent work_mode exports null. Other values are rejected."
       },
       {
         "status": "declared",
-        "statement": "The exported source company_id is a compatibility association distinct from source operator and job employer. Source enabled, status, timestamps, cursor and note remain supplied metadata; no collector acts on them."
+        "statement": "The exported source company_id is a compatibility association distinct from source operator and opportunity employer. Source enabled, status, timestamps, cursor and note remain supplied metadata; no collector acts on them."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Company, job and source IDs are opaque stable Milieu identities. Source-native IDs are scoped to their source namespace. Company identity aliases remain retained. A snapshot revision identifies stored state at export. Matching names alone do not merge companies."
+        "statement": "Company, opportunity and source IDs are opaque stable Milieu identities. Source-native IDs are scoped to their source namespace. Company identity aliases remain retained. A snapshot revision identifies stored state at export. Matching names alone do not merge companies."
       },
       {
         "status": "not_applicable",
@@ -135,7 +135,7 @@
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Export is one consistent view of all stored companies and jobs and projected source metadata. The coverage array is empty because current state has no query coverage or collection history. source_health retains its existing field name and carries source metadata. captured_at describes capture time; record dates describe supplied compatibility evidence."
+        "statement": "Export is one consistent view of all stored companies and opportunities and projected source metadata. The coverage array is empty because current state has no query coverage or collection history. source_health retains its existing field name and carries source metadata. captured_at describes capture time; record dates describe supplied compatibility evidence."
       },
       {
         "status": "declared",
@@ -172,6 +172,10 @@
       {
         "status": "unspecified",
         "statement": "No future deprecation window is promised."
+      },
+      {
+        "status": "declared",
+        "statement": "Canonical commands use opportunities and opportunity, with hidden jobs and job aliases accepting the same arguments. Human output uses opportunity terminology. JSON retains jobs and kind:job, and public Rust Job types and database names remain unchanged. No state migration is required."
       }
     ],
     "reliances": [

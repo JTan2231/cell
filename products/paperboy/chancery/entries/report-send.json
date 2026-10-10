@@ -4,10 +4,10 @@
   "kind": "capability",
   "mode": "use",
   "support": "supported",
-  "title": "Run a renderer and email its stdout",
-  "summary": "Execute one manifest job and send successful nonempty stdout unchanged as plain-text email to the fixed personal recipient.",
+  "title": "Run a production and email its output",
+  "summary": "Run one configured production and submit successful nonempty renderer stdout unchanged as plain-text email to the fixed personal recipient.",
   "use_when": [
-    "Execute a configured collection-and-render script and email its successful stdout, or inspect its manifest and supported output contract."
+    "Execute a configured collection-and-render script and email its successful stdout, or inspect its production definitions and supported output contract."
   ],
   "do_not_use_when": [
     "The request needs a saved-message preview, report-history read, retry of a retained payload, another recipient, source-specific reporting, or delivery confirmation."
@@ -15,19 +15,19 @@
   "outcome": "One renderer execution either skips empty successful stdout or returns Email submission acceptance for the exact nonempty plain-text output.",
   "interfaces": [
     {
-      "label": "Run a configured job now",
-      "invocation": "paperboy run JOB_ID"
+      "label": "Run a configured production now",
+      "invocation": "paperboy run PRODUCTION_ID"
     },
     {
-      "label": "Select an absolute manifest",
-      "invocation": "paperboy --manifest /absolute/paperboy.toml run JOB_ID"
+      "label": "Select an absolute production-definition file",
+      "invocation": "paperboy --manifest /absolute/paperboy.toml run PRODUCTION_ID"
     },
     {
-      "label": "List configured jobs",
+      "label": "List configured productions",
       "invocation": "paperboy list"
     },
     {
-      "label": "Validate configuration and executable paths",
+      "label": "Validate production definitions and executable paths",
       "invocation": "paperboy doctor"
     }
   ],
@@ -42,7 +42,7 @@
   ],
   "failure_and_recovery": [
     "Nonzero renderer exit, timeout, invalid UTF-8, or oversized stdout sends no email. Stderr stays separate and diagnostics exclude captured stdout. No saved body or structured retry state remains.",
-    "Email timeout or interruption can leave acceptance unknown. Inspect Resend before a new run when duplication matters. A new run renders again; it cannot resume or reconcile the prior payload.",
+    "Email timeout or interruption can leave acceptance unknown. Inspect Resend before a new run when duplication matters. A new production run renders again; it cannot resume or reconcile the prior payload.",
     "Scheduled failures use Clockwork halt-until-approved with its shared service-health delay. Later activations can occur while failure is pending. Exact incident approval permits future admission and does not retry failed work."
   ],
   "privacy": [
@@ -67,43 +67,43 @@
     "consumers": [
       {
         "status": "declared",
-        "statement": "The current user and explicitly authorized installed scheduled Paperboy jobs."
+        "statement": "The current user and explicitly authorized installed scheduled Paperboy productions."
       }
     ],
     "preconditions": [
       {
         "status": "declared",
-        "statement": "A valid selected version-one TOML manifest, readable executable renderer, supported Email wrapper, and authority for script execution and its resulting personal email. Scheduled execution also requires an applied enabled Clockwork binding."
+        "statement": "A valid selected version-one TOML production-definition file, readable executable renderer, supported Email wrapper, and authority for script execution and its resulting personal email. Scheduled execution also requires an applied enabled Clockwork binding."
       }
     ],
     "inputs": [
       {
         "status": "declared",
-        "statement": "An absolute manifest selection or the default Paperboy manifest and one stable job ID. Each job supplies nonempty render argv with an absolute executable, an optional subject defaulting to its ID, and one supported interval or local-calendar schedule. Literal -c arguments are unsupported. The selected regular UTF-8 manifest is at most 1 MiB and rejects unknown fields. Arguments contain no NUL; explicit subjects are nonblank and contain no control characters."
+        "statement": "An absolute production-definition file selection or the default Paperboy production-definition file and one stable production ID. Each production supplies nonempty render argv with an absolute executable, an optional subject defaulting to its ID, and one supported interval or local-calendar schedule. Literal -c arguments are unsupported. The selected regular UTF-8 production-definition file is at most 1 MiB and rejects unknown fields. Arguments contain no NUL; explicit subjects are nonblank and contain no control characters. The preferred table name is productions; legacy jobs remains accepted. A file containing both table names is rejected rather than merged."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Results return job_id, body_bytes, and outcome skipped_empty or accepted; accepted results add provider_message_id. Default output is formatted JSON; --json selects compact ok/data or stderr ok:false/error envelopes. No captured stdout appears in the result. status-snapshot uses raw Iatreion schema one."
+        "statement": "Default results return production_id, body_bytes, and outcome skipped_empty or accepted; accepted results add provider_message_id. Default output is formatted JSON with production labels. Machine callers use --json, which retains legacy jobs, job_id, job_count and manifest fields in compact ok/data or stderr ok:false/error envelopes. No captured stdout appears in the result. status-snapshot uses raw Iatreion schema one with aggregate unit paperboy/productions."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Successful nonempty stdout is the unchanged plain-text body; stderr is separate. Zero bytes skip Email, while whitespace-only output is sent. Scripts own collection semantics and reporting windows; Paperboy retains no body or occurrence ledger."
+        "statement": "A production is a reusable renderer, subject and schedule definition; a production run executes it once. Successful nonempty stdout is the unchanged plain-text body; stderr is separate. Zero bytes skip Email, while whitespace-only output is sent. Scripts own collection semantics and reporting windows; Paperboy retains no body or production-run ledger."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Job IDs are at most 63 ASCII bytes, begin with a lowercase letter, and continue with lowercase letters, digits, or hyphens. Each maps to paperboy/JOB_ID. Interval values are whole seconds; calendar values are local hour and minute; output limits count bytes. There is no durable per-run message identity."
+        "statement": "Production IDs are at most 63 ASCII bytes, begin with a lowercase letter, and continue with lowercase letters, digits, or hyphens. Each maps to paperboy/PRODUCTION_ID. Interval values are whole seconds; calendar values are local hour and minute; output limits count bytes. There is no durable per-run message identity."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "List reads configured jobs, not history. Manual execution selects current manifest configuration; scheduled execution selects an applied immutable command snapshot. Neither freezes renderer file bytes or data."
+        "statement": "List reads configured productions, not history. Manual execution selects current production definitions; scheduled execution selects an applied immutable command snapshot. Neither freezes renderer file bytes or data."
       },
       {
         "status": "unspecified",
@@ -119,19 +119,19 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "Paperboy waits for successful renderer exit before invoking Email once. It retains no payload or structured send ledger and performs no process retry. Scheduled logs can retain execution results including receipt IDs, but supply no replay interface. Applied schedules fix argv, subject, and absolute Email wrapper path without runtime manifest reads. Separate executions render again and do not reuse a prior message identity."
+        "statement": "Paperboy waits for successful renderer exit before invoking Email once. It retains no payload or structured send ledger and performs no process retry. Scheduled logs can retain execution results including receipt IDs, but supply no replay interface. Applied schedules fix argv, subject, and absolute Email wrapper path without runtime production-definition reads. Separate executions render again and do not reuse a prior message identity."
       }
     ],
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Manifest maximum 1 MiB; renderer timeout 1200 seconds; stdout maximum 64000 UTF-8 bytes, rejected rather than truncated; stderr diagnostic prefix 4096 bytes, excess drained and discarded; Email observation 120 seconds; Clockwork timeout 1380 seconds. Interval range 1 through 31536000; local hour 0 through 23 and minute 0 through 59; run-at-load false."
+        "statement": "Production-definition file maximum 1 MiB; renderer timeout 1200 seconds; stdout maximum 64000 UTF-8 bytes, rejected rather than truncated; stderr diagnostic prefix 4096 bytes, excess drained and discarded; Email observation 120 seconds; Clockwork timeout 1380 seconds. Interval range 1 through 31536000; local hour 0 through 23 and minute 0 through 59; run-at-load false."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "TOML version one is the configuration format. Paperboy exposes literal renderer execution and stdout submission without retained payloads or a send-recovery interface."
+        "statement": "TOML version one is the configuration format. Paperboy exposes literal renderer execution and stdout submission without retained payloads or a send-recovery interface. Initialization writes productions. Existing jobs files are validated without rewriting. Existing JSON keys and Rust Manifest.jobs/Job names retain their meanings; production IDs and Clockwork binding keys remain unchanged. Retained --job runner snapshots remain valid; new snapshots use --production."
       },
       {
         "status": "unspecified",

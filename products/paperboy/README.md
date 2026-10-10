@@ -1,12 +1,13 @@
 # Paperboy
 
-Paperboy runs configured scripts and sends their successful nonempty stdout as
-plain-text email through Email. Scripts collect and render the data. A small
-TOML manifest selects each command, optional subject, and Clockwork schedule.
+Paperboy runs configured productions and submits their output as plain-text
+email through Email. Each production definition selects a renderer command,
+optional subject, and Clockwork schedule. Scripts collect and render the data;
+successful nonempty stdout becomes the exact email body.
 
 ## Example
 
-Create an empty manifest and inspect configured jobs without executing them:
+Create an empty definition file and inspect production definitions:
 
 ```sh
 paperboy init
@@ -15,13 +16,13 @@ paperboy doctor
 paperboy schedule status
 ```
 
-Adapt [the example manifest](example.toml), then run `paperboy apply` to register
-its schedules. New jobs remain disabled. `paperboy run JOB_ID` executes a script
-and can send real email. Enable recurring execution with `paperboy schedule
-enable JOB_ID`.
+Adapt [the example production definitions](example.toml), then run `paperboy apply`
+to register their schedules. New schedules remain disabled. Start one production
+run with `paperboy run PRODUCTION_ID`; it can send real email. Enable future
+scheduled runs with `paperboy schedule enable PRODUCTION_ID`.
 
 ## Further documentation
 
-- [Manifest, rendering, email, and limits](chancery/manuals/report-send.md)
+- [Production definitions, rendering, email, and limits](chancery/manuals/report-send.md)
 - [Installation and schedule control](chancery/manuals/install-operate.md)
 - [CI submission](../../infrastructure/telete/README.md)

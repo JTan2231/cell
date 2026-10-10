@@ -48,7 +48,7 @@ pub fn main() -> std::process::ExitCode {
     cell_install::simple::main_with_deployment(&specification(), env!("CARGO_PKG_VERSION"), deploy)
 }
 
-/// Install program files, initialize an empty manifest, and refresh selected jobs.
+/// Install programs, initialize absent production definitions, and refresh schedules.
 /// # Errors
 /// Returns installation or product setup failures.
 pub fn deploy(context: &cell_install::adapter::Context) -> cell_install::Result<()> {

@@ -15,6 +15,7 @@ pub struct PacketSummary {
 pub struct Opportunity {
     /// Opaque stable opportunity key. Regeneration preserves this reference.
     pub reference: String,
+    /// Milieu opportunity identity; this retained field name remains compatible.
     pub milieu_job_id: String,
     pub company: String,
     pub title: String,

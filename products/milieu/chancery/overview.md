@@ -1,7 +1,7 @@
 # Milieu
 
-Milieu stores accepted companies, jobs, workplaces, and source appearances, and
-exports a consistent snapshot for downstream job selection. Collection is
+Milieu stores accepted companies, opportunities, workplaces, and source appearances, and
+exports a consistent snapshot for downstream opportunity selection. Collection is
 removed.
 
 Downstream products own personal selection, application packets, CRM cases,

@@ -52,7 +52,7 @@ pub fn from_snapshot(snapshot: Snapshot) -> Result<Vec<Job>> {
         .map(|source| {
             let company = companies
                 .get(&source.company_id)
-                .context("Milieu job has no retained company")?
+                .context("Milieu opportunity has no retained company")?
                 .clone();
             let mut urls = vec![source.url.clone()];
             if let Some(url) = &source.apply_url

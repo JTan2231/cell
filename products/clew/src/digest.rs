@@ -27,7 +27,7 @@ struct Application<'a> {
 impl Application<'_> {
     fn label(&self) -> String {
         self.opportunity.map_or_else(
-            || format!("{} [job details unavailable]", self.reference),
+            || format!("{} [opportunity details unavailable]", self.reference),
             |job| format!("{} — {}", job.company, job.title),
         )
     }
@@ -121,7 +121,7 @@ pub fn render(entries: &[Entry], opportunities: Option<&[Job]>, date: &str) -> R
     let context_available = applications.iter().all(|item| item.opportunity.is_some());
     if !context_available {
         body.push_str(
-            "\nSome job details were unavailable. All qualifying Clew records are included.\n",
+            "\nSome opportunity details were unavailable. All qualifying Clew records are included.\n",
         );
     }
     Ok(Digest {
@@ -157,3 +157,48 @@ pub fn preview(root: &Path, occurrence: Option<&str>) -> Result<Value> {
 }
 
 pub use crate::delivery::send;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store::EntryReference;
+
+    #[test]
+    fn legacy_reference_reports_keep_their_content_when_context_is_missing() -> Result<()> {
+        let entry = Entry {
+            sequence: 1,
+            id: "reported-application".into(),
+            recorded_at: "2026-10-10T12:00:00Z".into(),
+            kind: "record".into(),
+            thread: None,
+            references: vec![EntryReference {
+                namespace: "milieu.job".into(),
+                external_id: "retained-opportunity".into(),
+                role: "application_report".into(),
+            }],
+            status: Some("applied".into()),
+            notes: Some("Applied using the retained packet.\nAwaiting a reply.".into()),
+            replaces: None,
+        };
+        let digest = render(&[entry], None, "2026-10-10")?;
+        assert_eq!(digest.application_count, 1);
+        assert!(!digest.context_available);
+        assert!(
+            digest
+                .body
+                .contains("retained-opportunity [opportunity details unavailable]")
+        );
+        assert!(digest.body.contains("Status: applied"));
+        assert!(
+            digest
+                .body
+                .contains("Applied using the retained packet.\nAwaiting a reply.")
+        );
+        assert!(
+            digest
+                .body
+                .contains("Some opportunity details were unavailable.")
+        );
+        Ok(())
+    }
+}

@@ -38,15 +38,15 @@ execute the interface. If no entry fits, perform ordinary work normally.
 
 | System | Owned outcome | Product reference |
 | --- | --- | --- |
-| Milieu | Retained companies, jobs, source metadata, and exports | [Milieu](/Users/joey/rust/cell/products/milieu/chancery/overview.md) |
+| Milieu | Retained companies, opportunities, source metadata, and exports | [Milieu](/Users/joey/rust/cell/products/milieu/chancery/overview.md) |
 | Bazaar | Versioned strings, shared prompt selection, rendering, and explicit imports | [Bazaar](/Users/joey/rust/cell/infrastructure/bazaar/chancery/overview.md) |
-| Platter | Prepared job packets, frozen editions, and email outcomes | [Platter](/Users/joey/rust/cell/products/platter/README.md) |
+| Platter | Prepared opportunity materials, frozen editions, and delivery outcomes | [Platter](/Users/joey/rust/cell/products/platter/README.md) |
 | Clew | Append-only notes, named threads, optional external links, and explicit application reports with daily snapshots | [Clew](/Users/joey/rust/cell/products/clew/chancery/overview.md) |
 | Annals | Retained sources, library instructions, interpretations, and corpus history | [Annals](/Users/joey/rust/cell/products/annals/README.md) |
 | Conatus | Exact want intake, associations with accepted decisions, and deterministic daily email | [Conatus](/Users/joey/rust/cell/products/conatus/chancery/overview.md) |
 | Email | Fixed-recipient submission and received-account mail reads | [Email](/Users/joey/rust/cell/infrastructure/email/chancery/overview.md) |
 | EMT | Clockwork incident correspondence and one-off agent interventions by email | [EMT](/Users/joey/rust/cell/infrastructure/emt/chancery/overview.md) |
-| Paperboy | Manifest renderer execution and exact stdout email handoff | [Paperboy](/Users/joey/rust/cell/products/paperboy/chancery/overview.md) |
+| Paperboy | Defined productions, renderer preparation, and exact stdout email handoff | [Paperboy](/Users/joey/rust/cell/products/paperboy/chancery/overview.md) |
 | Weaver | Narratives authored from free-form directions and Annals reading | [Weaver](/Users/joey/rust/cell/products/weaver-narrative/README.md) |
 | Conversations | Local Codex task metadata and normalized message reads | [Conversations](/Users/joey/rust/cell/products/conversations/chancery/overview.md) |
 | Krisis | Decision identification, coverage, and delivery to Annals | [Krisis](/Users/joey/rust/cell/products/decisions/README.md) |
@@ -57,6 +57,25 @@ execute the interface. If no entry fits, perform ordinary work normally.
 | Nucleus | Constrained agent execution, authentication, and job history | [Nucleus](/Users/joey/rust/cell/infrastructure/nucleus/README.md) |
 | Chancery | Installed product contracts, promise resolution, and recorded command usage | [Chancery](/Users/joey/rust/cell/infrastructure/chancery/provider/overview.md) |
 | Annals Usage | Live Annals-attributed consumption and account allowance | [Usage reporting](/Users/joey/rust/cell/products/annals/docs/telemetry.md) |
+
+## Production vocabulary
+
+Cell prepares materials and produces outputs for recipients. A production is a
+named configured offering. Its production definition specifies available
+materials, preparation instructions, intended output, acceptance conditions,
+timing, and delivery route. Each product supports its own definition fields;
+this vocabulary adds no configuration or delivery capability.
+
+A production run is one occurrence. Materials can include retained documents,
+templates, briefs, resumes, or an earlier output. A producer prepares those
+materials. Keep specific output names, such as packet, narrative, report, and
+edition. Use opportunity and posting for employment records.
+
+Preparation, submission, provider acceptance, and final receipt have separate
+meanings. Products own output acceptance and delivery records. Nucleus agent
+jobs, Telete CI jobs, and Clockwork activations retain their technical meanings.
+Existing persistent fields, wire formats, and historical identities retain
+their documented compatibility names.
 
 ## Topology and authority
 
@@ -93,8 +112,8 @@ Interpretation belongs to each
 consumer. See [the document exchange](/Users/joey/rust/cell/products/annals/chancery/annals/manuals/decision-account-exchange.md)
 and [Krisis source documents](/Users/joey/rust/cell/products/decisions/docs/source-documents.md).
 
-Milieu owns stored job records and the retained read handoff. Milieu performs no
-collection. Platter owns job selection, packet
+Milieu owns stored opportunity records and the retained read handoff. Milieu
+performs no collection. Platter owns opportunity selection, packet
 preparation, and delivery. It reads career material from the Annals `vita`
 library and obtains project prose from Weaver. Platter and Weaver retain their
 own Nucleus requests. Platter cancellation and drain include its recorded Weaver
@@ -106,9 +125,10 @@ Email owns transport and credential loading. Its receipt means provider
 acceptance, not final inbox delivery. Conatus submits its deterministic daily
 email through Email. The email path invokes no model.
 
-Paperboy executes manifest commands and sends successful nonempty stdout
-unchanged through Email. Its scripts own collection, reporting windows, and
-source integrations. Paperboy itself uses Clockwork and Email; it retains no
+Paperboy executes renderer commands from production definitions. It sends
+successful nonempty stdout unchanged through Email. Its scripts own collection,
+reporting windows, and source integrations. Paperboy itself uses Clockwork and
+Email; it retains no
 report or send ledger and invokes no Nucleus agent.
 
 Source colocation and a shared Cargo workspace do not merge product databases,
@@ -152,7 +172,7 @@ halts. Product recovery still controls whether a particular attempt is safe.
 | `conatus/update` | Preserve source/feed identity; stop after the first failed update stage. |
 | `krisis/observer` | Preserve coverage and pending document identity; explicit observation retry. |
 | `semantics/worker` | Preserve committed revisions and report a new failed reconciliation. |
-| `paperboy/JOB_ID` | Execute the applied renderer snapshot; skip empty stdout and fail without sending invalid output. No retained payload or retry queue. |
+| `paperboy/PRODUCTION_ID` | Execute the applied production snapshot; skip empty stdout and fail without sending invalid output. No retained payload or retry queue. |
 | `platter/daily` | Mark unavailable postings ineligible and continue with other candidates; preserve edition bytes and uncertain-send recovery. |
 | `conatus/daily-email` | Preserve complete want wording, frozen email occurrences, and Email submission receipts; skip explicit maintenance holds. |
 | `clew/daily-email` | Preserve complete application snapshots and frozen messages; require explicit recovery of uncertain submission. |

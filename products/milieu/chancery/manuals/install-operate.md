@@ -65,7 +65,7 @@ presence and release metadata do not prove usable local state.
    ```
 
 3. Verify supported database schema 2 and the intended record counts.
-4. Inspect retained records with `milieu jobs list` or `milieu export --json` when
+4. Inspect retained records with `milieu opportunities list` or `milieu export --json` when
    the requested result requires record verification.
 
 Initialization creates schema-two current state when the database is missing.
@@ -107,7 +107,7 @@ schema 2; export artifacts remain schema 1. The separate operational
 An ordinary website without `--company-id` creates or reuses a hostname
 candidate. Supported ATS URLs use canonical provider/tenant associations and
 reject a company override. This compatibility association does not establish
-the optional source operator or any job employer. Enrollment performs no
+the optional source operator or any opportunity employer. Enrollment performs no
 retrieval and does not establish collection success.
 
 ## Recover programs or prepare state recovery

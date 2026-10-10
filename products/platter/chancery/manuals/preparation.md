@@ -1,9 +1,10 @@
-# Packet preparation
+# Opportunity packet preparation
 
-Use this feature to understand how Platter captures source material, validates
-private briefs and resumes, and continues retained preparation. A packet is a
-preparation run and its artifacts. Platter owns eligibility, mechanical
-acceptance, and domain success. Weaver owns project authoring; Nucleus owns
+Use this feature to understand how Platter captures source material, prepares
+private briefs and resumes as production materials, and continues retained
+preparation. A packet is a preparation run and its artifacts. Platter owns
+opportunity eligibility, mechanical acceptance, and domain success. Weaver owns
+project authoring; Nucleus owns
 runtime execution. Preparation supplies no send authority.
 
 Read `platter.materials` for the canonical library and fixed template contract.
@@ -14,12 +15,12 @@ migration, and maintenance.
 ## Primary interfaces
 
 ```sh
-platter prepare MILIEU_JOB_ID
+platter prepare MILIEU_OPPORTUNITY_ID
 platter prepare-daily
-platter prepare MILIEU_JOB_ID --fresh
-platter regenerate MILIEU_JOB_ID --id REQUEST_ID
-platter eligibility MILIEU_JOB_ID false
-platter eligibility MILIEU_JOB_ID true
+platter prepare MILIEU_OPPORTUNITY_ID --fresh
+platter regenerate MILIEU_OPPORTUNITY_ID --id REQUEST_ID
+platter eligibility MILIEU_OPPORTUNITY_ID false
+platter eligibility MILIEU_OPPORTUNITY_ID true
 ```
 
 Preparation starts or continues the applicable captured workflow without sending.
@@ -29,21 +30,22 @@ selection change. Optional `--stop-after-seconds SECONDS` applies to preparation
 daily preparation, regeneration, and the URL-selected run defined by
 `platter.editions`. Use `platter.packet.prepare` for ordered operating steps.
 
-## Eligibility and source readiness
+## Opportunity eligibility and source readiness
 
-`jobs.eligible` is the explicit selection policy. Preparation/source readiness
-is checked separately. Creating or sending an edition does not derive this
+Opportunity eligibility is the explicit selection policy, retained as
+`jobs.eligible` for compatibility. Preparation and source readiness are checked
+separately. Creating or sending an edition does not derive this
 field from history. The ordinary preview operation atomically freezes the
-edition and sets selected jobs ineligible. Declining preparation also sets
+edition and sets selected opportunities ineligible. Declining preparation also sets
 eligibility false. Posting retrieval failures also set eligibility false,
 including HTTP errors, timeouts and unsupported or incomplete posting text.
-A failed initial retrieval retains the job without creating a preparation run.
+A failed initial retrieval retains the opportunity without creating a preparation run.
 A failed freshness retrieval retains its prepared run as deferred. Changed
 postings become stale and ineligible. The eligibility command explicitly
-enables a job again; older runs and artifacts remain retained. An enabled
+enables an opportunity again; older runs and artifacts remain retained. An enabled
 deferred packet must pass freshness before selection.
-`run-ad-hoc` explicitly enables its URL-selected job before normal preparation.
-Its ordinary one-packet freeze sets that job ineligible again.
+`run-ad-hoc` explicitly enables its URL-selected opportunity before normal preparation.
+Its ordinary one-packet freeze sets that opportunity ineligible again.
 Delivery records retain what happened even after eligibility changes.
 
 Preparation reads supported Milieu export and Annals work list/show interfaces.
@@ -67,9 +69,9 @@ unsupported forms or login, or omit full text. Canonical supported ATS
 identities and normalized URLs identify opportunities. Reposts without shared
 identifiers can remain separate.
 
-For `run-ad-hoc`, Platter selects one retained job from Milieu's export by its
+For `run-ad-hoc`, Platter selects one retained opportunity from Milieu's export by its
 canonical supported ATS identity or normalized public URL. It then uses that
-job through the same preparation path as scheduled work. An unknown URL, an
+opportunity through the same preparation path as scheduled work. An unknown URL, an
 ambiguous match, or a supported ATS board URL without a posting identity fails
 before packet preparation. This selection performs no Milieu collection.
 
@@ -78,7 +80,7 @@ canonical runtime root. Each file contains the complete board response and its
 `retrieved_at` download time. Preparation and preview reuse that board for less
 than 14 days. A missing or invalid cache, an expired or future-dated download,
 or a requested posting absent from the cached board triggers one download. Only a successful
-download with a valid jobs array replaces the file. A refresh failure leaves
+download with a valid `jobs` array replaces the file. A refresh failure leaves
 the old file intact but fails that retrieval; it does not use expired data.
 
 Ashby board downloads have no byte cap. The 30-second HTTP timeout and the
@@ -133,7 +135,7 @@ Jackson within the same draft job. No additional editorial agent is used.
 The draft uses `gpt-5.6-sol` at max effort. Brief sections remain Why it works
 (at most 45 words), Role (at most 30) and optional Culture (at most 25), with at
 most 90 words total. Role and Culture are flat specifics. Unsupported culture
-is omitted. Declining retains its assessment without a resume and sets the job
+is omitted. Declining retains its assessment without a resume and sets the opportunity
 ineligible. Project authoring has already occurred when the draft declines.
 
 Why it works gives one or two direct, evidence-grounded sentences. Role states
@@ -169,19 +171,19 @@ remain unchanged.
 ## New and repeated preparation
 
 For an authorized restart after a failed or cancelled preparation, use
-`prepare MILIEU_JOB_ID --fresh`. The latest run must be incomplete, with no
-accepted resume, and its model jobs must be terminal or absent. The job must
+`prepare MILIEU_OPPORTUNITY_ID --fresh`. The latest run must be incomplete, with no
+accepted resume, and its model jobs must be terminal or absent. The opportunity must
 remain eligible. This operation captures the posting, career entries and
 template again. It creates a new run and new model jobs without copying prior
 outputs, requests, transcripts or error feedback. Older runs and accepted
 artifacts remain retained. Ordinary preparation still resumes retained work.
 Fresh preparation uses the same Ashby cache policy.
 
-To create another packet for a previously prepared job, including one already
-used in an edition, run `regenerate MILIEU_JOB_ID --id REQUEST_ID`. It captures
+To create another packet for a previously prepared opportunity, including one already
+used in an edition, run `regenerate MILIEU_OPPORTUNITY_ID --id REQUEST_ID`. It captures
 source inputs and current writing instructions again, then uses the ordinary
 draft and mechanical validation pipeline. It does not copy prior outputs
-or model context, change old packet statuses, enable an ineligible job, freeze
+or model context, change old packet statuses, enable an ineligible opportunity, freeze
 an edition or send email. Availability, compensation and pursuit checks still
 apply. Retrieval failure or a declined brief still sets eligibility false.
 Successful regeneration leaves the current eligibility policy unchanged.
@@ -189,7 +191,7 @@ Successful regeneration leaves the current eligibility policy unchanged.
 The request ID contains 1 through 80 ASCII letters, digits, underscores or
 hyphens and belongs to the regeneration namespace. It is retained atomically
 with the new run's captured inputs. A failure before capture creates no run
-or request binding. Reuse for another Milieu job is refused. Repeating a captured
+or request binding. Reuse for another Milieu opportunity is refused. Repeating a captured
 request resumes that exact preparation or returns its retained outcome without
 recapturing sources. A terminal stage failure remains a failure; another attempt
 requires a new request ID. Other model jobs for the opportunity must be terminal
@@ -238,11 +240,11 @@ With an override, new runs capture `generation=daily_brief_v1`. They retain the
 posting, Vita career entries and prompt selection, then use the existing brief
 stage and career-read tools. They capture no template or project directions and
 invoke no Weaver writer or resume renderer. An accepted pursuit brief makes the
-run ready for daily override selection. A declined brief sets the job ineligible.
+run ready for daily override selection. A declined brief sets the opportunity ineligible.
 Posting, compensation, preference and freshness checks still apply. Exact brief
 requests and accepted results retain the ordinary interruption and failure rules.
 
-Single-job `prepare`, `prepare --fresh`, `regenerate`, `run-ad-hoc` and retained-
+Single-opportunity `prepare`, `prepare --fresh`, `regenerate`, `run-ad-hoc` and retained-
 material preview continue to use tailored resumes. They ignore the daily override.
 A brief-only run cannot supply a tailored edition. Changing between workflows
 starts a new capture when the latest packet cannot serve the selected workflow;
