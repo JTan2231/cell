@@ -105,7 +105,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Initialization and installation add no ledger entry or application report. Migration preserves entry identity, text, correction history, and exact write identity, including legacy argument aliases. It marks existing job history as explicit application reports in normalized external references and creates no threads. Frozen email bytes, keys, and receipts remain unchanged."
+        "statement": "Initialization and installation add no ledger entry or application report. Migration preserves entry identity, text, correction history, and exact write identity, including legacy argument aliases. It marks existing opportunity history as explicit application reports in normalized external references and creates no threads. Frozen email bytes, keys, and receipts remain unchanged."
       }
     ],
     "identity_and_units": [
@@ -165,7 +165,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-three conversion renames the owned job column, canonical reference namespace and retry-request field to Milieu atomically. It preserves supplied content, opaque job and entry IDs, order, corrections, and frozen email records. Exact retries use the renamed request form and original write ID. Ordinary programs require schema four."
+        "statement": "Schema-three conversion renames the owned opportunity column, canonical reference namespace and retry-request field to Milieu atomically. It preserves supplied content, opaque opportunity and entry IDs, order, corrections, and frozen email records. Exact retries use the renamed request form and original write ID. Ordinary programs require schema four."
       }
     ],
     "reliances": [
@@ -178,7 +178,7 @@
       },
       {
         "status": "declared",
-        "statement": "A nonempty schema-one migration requires the exact legacy-reference-to-Milieu-job mapping from the Platter public opportunity reader. Schema-two conversion and ordinary generic ledger work require no Platter read.",
+        "statement": "A nonempty schema-one migration requires the exact legacy-reference-to-Milieu-opportunity mapping from the Platter public opportunity reader. Schema-two conversion and ordinary generic ledger work require no Platter read.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"

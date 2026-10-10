@@ -36,7 +36,7 @@ pub fn list(root: &Path, query: Option<&str>) -> Result<OpportunityList> {
                 }
             }
         }
-        // A retrieval failure can leave a job with no preparation or captured URL.
+        // A retrieval failure can leave an opportunity without a preparation or captured URL.
         if packets.is_empty() {
             continue;
         }

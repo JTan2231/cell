@@ -1,4 +1,4 @@
-//! Manifest-owned jobs translated into immutable Clockwork definitions.
+//! Production schedules translated into immutable Clockwork activation definitions.
 
 use anyhow::{Context, Result, ensure};
 use clockwork::api::{
@@ -19,8 +19,8 @@ const PATH: &str = "/usr/bin:/bin:/usr/sbin:/sbin";
 const TIMEOUT_SECONDS: u64 = 1_380;
 const INVENTORY_LIMIT: usize = 10_000;
 
-/// Apply every job while retaining existing enablement and failure incidents.
-/// New jobs remain disabled until explicitly enabled.
+/// Apply every production schedule while retaining enablement and failure incidents.
+/// New production schedules remain disabled until explicitly enabled.
 pub fn apply(root: &Path, manifest: &Manifest) -> Result<Value> {
     let home = crate::home()?;
     apply_with(
@@ -75,7 +75,7 @@ pub fn apply_with_prior(
     }
     for (id, job) in &manifest.jobs {
         crate::runtime::executable(Path::new(&job.render[0]))
-            .with_context(|| format!("renderer for job {id} unavailable"))?;
+            .with_context(|| format!("renderer for production {id} unavailable"))?;
     }
     let _lock = mutation_lock(root)?;
     let client = Client::new(clockwork_binary);
@@ -124,7 +124,7 @@ pub fn apply_with_prior(
     Ok(json!({"jobs":selected,"removed":removed}))
 }
 
-/// Change admission for an already selected job without changing its definition.
+/// Change scheduled admission for a selected production without changing its snapshot.
 pub fn set_enabled(root: &Path, id: &str, enabled: bool) -> Result<Value> {
     let key = key(id)?;
     let _lock = mutation_lock(root)?;
@@ -134,11 +134,11 @@ pub fn set_enabled(root: &Path, id: &str, enabled: bool) -> Result<Value> {
         let digest = binding
             .definition_digest
             .as_deref()
-            .context("apply the Paperboy manifest before enabling this job")?;
+            .context("apply the Paperboy production definitions before enabling this schedule")?;
         let definition = client.definition(digest)?;
         ensure!(
             definition.key == key && selected_runner(id, &definition.manifest.arguments),
-            "apply the Paperboy manifest before enabling this job; its selected definition is not a manifest job runner"
+            "apply the Paperboy production definitions before enabling this schedule; its selected activation definition is not a production runner"
         );
         if binding.enabled {
             binding
@@ -160,7 +160,7 @@ pub fn status(_root: &Path, id: Option<&str>) -> Result<Value> {
     Ok(json!({"jobs":bindings(&client)?.into_values().collect::<Vec<_>>()}))
 }
 
-/// Snapshot a job's command and subject into an exact installed runner definition.
+/// Snapshot a production's command and subject into an exact activation definition.
 pub fn definition(
     root: &Path,
     id: &str,
@@ -301,16 +301,16 @@ fn register(
 }
 
 fn selected_runner(id: &str, arguments: &[String]) -> bool {
-    let Some([command, flag, job]) = arguments.get(..3) else {
+    let Some([command, flag, production]) = arguments.get(..3) else {
         return false;
     };
-    command == "execute" && flag == "--job" && job == id
+    command == "execute" && matches!(flag.as_str(), "--production" | "--job") && production == id
 }
 
 fn arguments(id: &str, job: &Job, email_binary: &Path) -> Result<Vec<String>> {
     let mut arguments = vec![
         "execute".to_string(),
-        "--job".to_string(),
+        "--production".to_string(),
         id.to_string(),
         "--subject".to_string(),
         job.subject(id).to_string(),
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn binding_identity_is_job_specific_and_closed() -> Result<()> {
+    fn binding_identity_is_production_specific_and_closed() -> Result<()> {
         assert_eq!(key("daily")?, "paperboy/daily");
         assert_eq!(key("jobs-2")?, "paperboy/jobs-2");
         for invalid in ["", "Daily", "jobs/daily", "jobs_daily", "2jobs", "../jobs"] {
@@ -452,7 +452,11 @@ mod tests {
     }
 
     #[test]
-    fn enablement_requires_the_selected_job_runner() {
+    fn enablement_accepts_current_and_retained_production_runners() {
+        assert!(selected_runner(
+            "daily",
+            &["execute".into(), "--production".into(), "daily".into()]
+        ));
         assert!(selected_runner(
             "daily",
             &["execute".into(), "--job".into(), "daily".into()]

@@ -1,8 +1,8 @@
-# Retained materials and resume templates
+# Production materials and resume templates
 
-Use this feature to understand Platter's private library, artifact identities,
-fixed templates, configuration, and explicit exports. Platter owns captured
-bytes and accepted content. Annals owns source career material; Weaver owns its
+Use this feature to understand Platter's private production materials, artifact
+identities, fixed templates, configuration, and explicit exports. Platter owns
+captured bytes and accepted content. Annals owns source career material; Weaver owns its
 source reads; Nucleus owns execution history and credentials.
 
 Read `platter.packet.prepare` for initialization, import, configuration, and
@@ -46,20 +46,25 @@ maintenance holds all live in that database. Artifact IDs are not file paths.
 An explicit export writes a private new file at the supplied destination and
 refuses to overwrite one. Platter never relies on exported copies.
 
-The core records are jobs, runs, artifacts, editions, selected edition packets
-and ordered edition attachments. A packet is a run and its artifacts. Content references its
+The core records describe opportunities, preparation runs, production materials,
+editions, selected edition packets, and ordered edition attachments. A packet
+is a preparation run and its artifacts. Content references its
 producing run; imported templates have no producing run. Nucleus owns tool
 and execution history. Platter retains exact requests and compact execution
 progress needed for recovery, without a separate tool-receipt ledger.
 
-| Record | Owned meaning |
+| Stored record | Owned meaning |
 | --- | --- |
-| jobs | Canonical opportunity identity, Milieu correlation, employer/title, and explicit eligibility. |
+| jobs | Canonical opportunity identity, Milieu correlation, employer/title, and explicit opportunity eligibility. |
 | runs | One preparation's captured inputs, status, timestamps, and compact execution correlation. |
 | artifacts | Immutable bytes, producing run when applicable, kind, filename, media type, and integrity hash. |
 | editions | Frozen subject/body, date, occurrence identity, send key, delivery state, and acceptance. |
 | edition_packets | Ordered selected preparation runs. |
 | edition_attachments | Ordered immutable artifact references. |
+
+Stored record names remain compatible. The `jobs` table represents opportunities;
+it does not define runtime execution. Supported consumers use opportunity reads
+rather than these tables.
 
 Settings retain configuration and the selected original-template artifact.
 Maintenance holds are owner-keyed rows. A state-directory advisory activity
@@ -85,7 +90,7 @@ brief/Jackson-only draft interface.
 
 Run executions retain exact requests, input fingerprints, compact runtime
 state, and attempt correlation. They do not copy Nucleus's tool-call log.
-Regeneration also retains its `regeneration_id`, binding the captured Milieu job
+Regeneration also retains its `regeneration_id`, binding the captured Milieu opportunity
 and run as defined by `platter.preparation`.
 
 `platter status` reads local preparation and delivery state. It does not prove
@@ -148,7 +153,7 @@ no email. Keep the PDF outside the repository.
 
 `prepare-daily`, `run-daily` and ordinary `preview` use this setting. A new daily
 invocation reads and validates the file before source or model work and before
-changing job eligibility. `run-daily` uses that single PDF snapshot through
+changing opportunity eligibility. `run-daily` uses that single PDF snapshot through
 preparation and freeze. Missing, unreadable or invalid PDFs stop the invocation;
 there is no fallback to generation. Validation uses Python with pypdf, but does
 not compile LaTeX or impose the generated template's one-page and content rules.

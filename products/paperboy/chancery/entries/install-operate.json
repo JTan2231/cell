@@ -4,15 +4,15 @@
   "kind": "capability",
   "mode": "operate",
   "support": "supported",
-  "title": "Install Paperboy and select renderer schedules",
-  "summary": "Install Paperboy, initialize its TOML manifest, apply per-job Clockwork snapshots, and explicitly enable or disable selected renderer jobs.",
+  "title": "Install Paperboy and select production schedules",
+  "summary": "Install Paperboy, initialize its TOML production definitions, apply Clockwork activation snapshots, and explicitly enable or disable production schedules.",
   "use_when": [
-    "Install or update Paperboy, initialize or validate its manifest, publish configured schedules, inspect schedule selection, or control one selected job."
+    "Install or update Paperboy, initialize or validate its production definitions, publish configured schedules, inspect schedule selection, or control one selected production."
   ],
   "do_not_use_when": [
-    "The request is to execute a job now, retry a saved email, modify another product, or infer inbox delivery."
+    "The request is to execute a production now, retry a saved email, modify another product, or infer inbox delivery."
   ],
-  "outcome": "Matching Paperboy programs and provider bytes are selected; configured jobs have exact Clockwork schedule selections with preserved existing enabled intent and new jobs disabled.",
+  "outcome": "Matching Paperboy programs and provider bytes are selected; configured productions have exact Clockwork schedule selections with preserved existing enabled intent and new production schedules disabled.",
   "interfaces": [
     {
       "label": "Deploy committed source",
@@ -23,7 +23,7 @@
       "invocation": "paperboy-install inspect"
     },
     {
-      "label": "Initialize an absent manifest",
+      "label": "Initialize absent production definitions",
       "invocation": "paperboy init"
     },
     {
@@ -31,19 +31,19 @@
       "invocation": "paperboy apply"
     },
     {
-      "label": "Enable one configured job",
-      "invocation": "paperboy schedule enable JOB_ID"
+      "label": "Enable future scheduling for one production",
+      "invocation": "paperboy schedule enable PRODUCTION_ID"
     },
     {
-      "label": "Disable one selected job",
-      "invocation": "paperboy schedule disable JOB_ID"
+      "label": "Disable future scheduling for one production",
+      "invocation": "paperboy schedule disable PRODUCTION_ID"
     },
     {
       "label": "Read Paperboy schedule selection",
-      "invocation": "paperboy schedule status [JOB_ID]"
+      "invocation": "paperboy schedule status [PRODUCTION_ID]"
     },
     {
-      "label": "Validate configuration without execution",
+      "label": "Validate production definitions without execution",
       "invocation": "paperboy doctor"
     },
     {
@@ -52,18 +52,18 @@
     }
   ],
   "effects": [
-    "Installation selects matching program and provider files, initializes only a missing default manifest, and applies configured schedule snapshots. It does not execute renderers or send their output.",
-    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new jobs disabled, and disables removed jobs without deleting history or incidents. Explicit enable permits future renderer executions and email.",
+    "Installation selects matching program and provider files, initializes only a missing default production-definition file, and applies configured schedule snapshots. It does not execute renderers or send their output.",
+    "Apply registers all definitions before binding changes, preserves existing enabled intent, leaves new production schedules disabled, and disables removed schedules without deleting history or incidents. Explicit enable permits future renderer executions and email.",
     "Program publication copies the selected release into fixed regular files beneath ~/Library/Application Support/Paperboy/install/runtime. Public commands use that runtime tree; current and previous retain immutable UUID archive selections. Code signing and runtime path identity are separate from release identity. New Clockwork definitions use schema 3: they retain the archive release ID, root and exact hashes, and execute the fixed runtime image. Publication precedes registration. Before publication, deployment runs the disable transition for owned Clockwork bindings and waits for their active processes, including an active manual run on a disabled binding. It restores saved enabled intent after registration; a failed instruction can leave the owned bindings disabled. Existing history, delivery records, enabled intent and incident halts retain their meaning. Retained definitions and wrapper bytes from before this change keep their legacy execution paths until a new installation or definition selects the runtime image."
   ],
   "authority": [
-    "Paperboy owns its manifest and schedule selection. Clockwork owns atomic per-key transitions, runtime history, overlap and failure halts. Cell deployment owns instruction execution and retained receipts; renderer and Email success remain separate."
+    "Paperboy owns its production definitions and schedule selection. Clockwork owns atomic per-key transitions, runtime history, overlap and failure halts. Cell deployment owns instruction execution and retained receipts; renderer and Email success remain separate."
   ],
   "success": [
-    "Initialization succeeds when the absent manifest is written or existing valid configuration is preserved. Apply succeeds after every requested selection and removal transition completes. Installation succeeds when declared instructions complete. None establishes renderer correctness, future timer delivery, or inbox receipt."
+    "Initialization succeeds when the absent production-definition file is written or existing valid configuration is preserved. Apply succeeds after every requested selection and removal transition completes. Installation succeeds when declared instructions complete. None establishes renderer correctness, future timer delivery, or inbox receipt."
   ],
   "failure_and_recovery": [
-    "Multi-job apply is not atomic. Earlier successful transitions remain after a later failure. Inspect schedule status, correct the reported problem, and reapply the same manifest. Retain Clockwork history and established incidents.",
+    "Applying several production schedules is not atomic. Earlier successful transitions remain after a later failure. Inspect schedule status, correct the reported problem, and reapply the same production-definition file. Retain Clockwork history and established incidents.",
     "Failed deployment retains completed effects and executes no automatic rollback or recovery. Inspect retained evidence before an explicitly authorized new attempt.",
     "An established scheduling halt requires exact incident approval through Clockwork. Enable, disable, apply, and installation do not clear it. Approval does not retry a renderer or uncertain email."
   ],
@@ -93,7 +93,7 @@
     }
   ],
   "does_not_authorize": [
-    "Catalog presence does not authorize installation, enabling a renderer job, deleting retained state, retrying email, or clearing a failure incident."
+    "Catalog presence does not authorize installation, enabling a production schedule, deleting retained state, retrying email, or clearing a failure incident."
   ],
   "promise": {
     "consumers": [
@@ -111,31 +111,31 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "An absolute --manifest path or the default manifest and literal configured job definitions. Enable and disable require one job ID; status accepts an optional ID. Init writes an empty version-one manifest only if absent. Installation accepts no product settings and always uses the default manifest. The selected manifest governs the complete paperboy/ binding namespace; alternate paths do not isolate bindings."
+        "statement": "An absolute --manifest path or the default production-definition file and literal configured production definitions. Enable and disable require one production ID; status accepts an optional ID. Init writes an empty version-one production-definition file only if absent. Installation accepts no product settings and always uses the default production-definition file. The selected production-definition file governs the complete paperboy/ binding namespace; alternate paths do not isolate bindings."
       }
     ],
     "outputs": [
       {
         "status": "declared",
-        "statement": "Configured-job validation, immutable definition selections, binding enabled and halt metadata, aggregate local status evidence, and retained deployment instruction outcomes. These observations do not run a renderer."
+        "statement": "Configured-production validation, immutable activation definition selections, binding enabled and halt metadata, aggregate local status evidence, and retained deployment instruction outcomes. These observations do not run a renderer. Default output uses production labels; --json retains compatible jobs fields. The raw Iatreion snapshot uses aggregate unit paperboy/productions, while individual Clockwork binding keys remain unchanged."
       }
     ],
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "The manifest is configuration authority; applied definitions are scheduled command snapshots. Existing jobs retain enabled intent, new jobs are disabled, and removed jobs retain disabled selection and history. Status represents retained binding metadata rather than guaranteed future activation. Scheduled logs can retain result metadata, including an accepted provider message ID, but no body or structured send-recovery ledger."
+        "statement": "The production-definition file is configuration authority; applied activation definitions are scheduled command snapshots. Existing production schedules retain enabled intent, new schedules are disabled, and removed schedules retain disabled selection and history. Status represents retained binding metadata rather than guaranteed future activation. Scheduled logs can retain result metadata, including an accepted provider message ID, but no body or structured send-recovery ledger."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Each stable manifest ID maps to paperboy/JOB_ID. Changing its configuration changes the immutable definition; renaming it creates a different binding. Durations use whole seconds and calendar schedules use the host local hour and minute."
+        "statement": "Each stable production ID maps to paperboy/PRODUCTION_ID. Changing its production definition changes the immutable activation definition; renaming it creates a different binding. Durations use whole seconds and calendar schedules use the host local hour and minute."
       }
     ],
     "completeness_and_freshness": [
       {
         "status": "declared",
-        "statement": "Apply validates all configured jobs and registers their definitions before binding mutations. Status reads selected Clockwork metadata at invocation. The product aggregate status-snapshot describes configuration and readiness, not each dynamic binding or execution history. Initialization validates and preserves an existing manifest rather than replacing it."
+        "statement": "Apply validates all configured productions and registers their definitions before binding mutations. Status reads selected Clockwork metadata at invocation. The product aggregate status-snapshot describes production definitions and readiness, not each dynamic binding or execution history. Initialization validates and preserves an existing production-definition file rather than replacing it."
       },
       {
         "status": "unspecified",
@@ -151,7 +151,7 @@
     "lifecycle_and_consistency": [
       {
         "status": "declared",
-        "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; multi-job apply retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new job."
+        "statement": "One schedule lock serializes Paperboy mutations. Clockwork provides per-key transition atomicity; applying several production schedules retains earlier completed transitions after failure. Identical selections need no transition. Disable retains definitions and incidents, and no apply enables a new production schedule."
       },
       {
         "status": "declared",
@@ -161,13 +161,13 @@
     "operational_limits": [
       {
         "status": "declared",
-        "statement": "Manifest maximum 1 MiB. Per-job schedules use overlap skip, run-at-load false, and a 1380-second outer timeout. Different jobs can run concurrently. Interval range is 1 through 31536000 seconds; local hour 0 through 23 and minute 0 through 59. Logs append under the private Paperboy logs directory."
+        "statement": "Production-definition file maximum 1 MiB. Per-production schedules use overlap skip, run-at-load false, and a 1380-second outer timeout. Different productions can run concurrently. Interval range is 1 through 31536000 seconds; local hour 0 through 23 and minute 0 through 59. Logs append under the private Paperboy logs directory."
       }
     ],
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Installation selects manifest job schedules. The version-one TOML manifest is the configuration authority. Product installation and Clockwork selection remain separate from renderer execution."
+        "statement": "Installation selects production schedules. The version-one TOML production-definition file is the configuration authority. Product installation and Clockwork selection remain separate from renderer execution. The preferred productions table and legacy jobs table select the same definitions; combining both in one file is rejected. Existing files are not rewritten. Retained --job runner snapshots remain valid alongside new --production snapshots. JSON result keys remain compatible."
       },
       {
         "status": "unspecified",
@@ -177,7 +177,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "The Paperboy renderer feature defines manifest input, execution, exact stdout handoff, email success, privacy, and limits.",
+        "statement": "The Paperboy renderer feature defines production-definition input, execution, exact stdout handoff, email success, privacy, and limits.",
         "target": "paperboy",
         "kind": "control",
         "contract": "paperboy.report.send"

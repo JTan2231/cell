@@ -61,7 +61,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no new entries, statuses, or threads. Migration preserves entry IDs, times, sequence, text, corrections, retractions, and original write namespace. Existing jobs receive explicit application-report associations in the external reference model. Platter supplies only schema-one legacy-to-Milieu mappings; schema-two conversion is local."
+        "statement": "Installation selects programs and initializes or migrates ledger state. It creates no new entries, statuses, or threads. Migration preserves entry IDs, times, sequence, text, corrections, retractions, and original write namespace. Existing opportunities receive explicit application-report associations in the external reference model. Platter supplies only schema-one legacy-to-Milieu mappings; schema-two conversion is local."
       }
     ],
     "identity_and_units": [
@@ -105,20 +105,20 @@
       },
       {
         "status": "declared",
-        "statement": "Schema-three conversion is local and transactionally renames owned job-reference and retry-request fields to Milieu. Retained supplied content, identifiers, order, correction links and frozen delivery evidence stay unchanged. Exact retries use the renamed argument and original write ID."
+        "statement": "Schema-three conversion is local and transactionally renames owned opportunity-reference and retry-request fields to Milieu. Retained supplied content, identifiers, order, correction links and frozen delivery evidence stay unchanged. Exact retries use the renamed argument and original write ID."
       }
     ],
     "reliances": [
       {
         "status": "declared",
-        "statement": "Application features require the complete Milieu snapshot reader for first-job admission, job search, and email context. Installation and generic ledger operations do not probe Milieu.",
+        "statement": "Application features require the complete Milieu snapshot reader for initial opportunity admission, opportunity search, and email context. Installation and generic ledger operations do not probe Milieu.",
         "target": "milieu",
         "kind": "readiness",
         "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Milieu job ID. Schema-two conversion and generic ledger operations do not read Platter.",
+        "statement": "Migration of a nonempty schema-one ledger reads retained Platter opportunities to map each legacy reference to its exact Milieu opportunity ID. Schema-two conversion and generic ledger operations do not read Platter.",
         "target": "platter",
         "kind": "data",
         "contract": "platter.opportunity.explore"

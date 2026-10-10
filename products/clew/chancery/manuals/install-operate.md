@@ -8,7 +8,7 @@ keeps prerequisites, effects, stop conditions, and verification in place.
 
 General notes, named threads, plain external links, and generic reads require
 no external reader. Explicit application features need Milieu read contract two
-for job search, first-job admission, and email context.
+for opportunity search, initial opportunity admission, and email context.
 A nonempty schema-one migration also needs Platter read contract one. Email contract four supplies submission; Clockwork contract
 four supplies activation and the shared service-health delay before a new halt. Clew runs no model requester.
 
@@ -75,7 +75,7 @@ private state outside source and release trees.
 2. Exclude concurrent ledger writers through the guarded migration transaction.
 3. Resolve every retained legacy reference through Platter's public opportunity
    reader for schema-one state. Stop on missing mappings or two legacy references
-   that select the same Milieu job. An empty schema-one ledger needs no Platter read.
+   that select the same Milieu opportunity. An empty schema-one ledger needs no Platter read.
    Schema-two and schema-three conversion are local and need no external reader. Do not infer a
    mapping from company, role, or URL and do not merge histories.
 4. Commit schema four, canonical external references, explicit application-report
@@ -85,7 +85,7 @@ private state outside source and release trees.
    Keep a schema-four-compatible program selected after migration. Preserve
    saved or explicitly requested schedule intent.
 
-Existing job identity becomes a `milieu.job` external reference with an explicit
+Existing opportunity identity becomes a `milieu.job` external reference with an explicit
 application-report association. Migration preserves entry IDs, sequence,
 timestamps, supplied text, corrections, and retractions. Legacy aliases retain
 their exact argument identity for retries. No old entry receives an invented
@@ -96,9 +96,9 @@ Frozen email occurrences, message bytes, send keys, and acceptance receipts stay
 unchanged. Old writers are rejected after commit. Do not replay a legacy write
 with a changed argument namespace. Migration does not downgrade state.
 
-Schema-three conversion changes owned job-reference names and stored retry fields
+Schema-three conversion changes owned opportunity-reference names and stored retry fields
 to Milieu. Use the renamed application argument with the original write ID for
-an exact retry. This conversion preserves supplied content and job identity.
+an exact retry. This conversion preserves supplied content and opportunity identity.
 
 ## Prepare the daily definition
 

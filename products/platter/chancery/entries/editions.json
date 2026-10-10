@@ -28,7 +28,7 @@
     },
     {
       "label": "Authorized URL-selected run",
-      "invocation": "platter run-ad-hoc JOB_URL --id OCCURRENCE_ID"
+      "invocation": "platter run-ad-hoc POSTING_URL --id OCCURRENCE_ID"
     },
     {
       "label": "Retained-material preview",
@@ -44,7 +44,7 @@
     }
   ],
   "effects": [
-    "Ordinary preview retrieves freshness under the posting cache policy, freezes selected packet and attachment identities, and sets selected jobs ineligible atomically. It sends nothing.",
+    "Ordinary preview retrieves freshness under the posting cache policy, freezes selected packet and attachment identities, and sets selected opportunities ineligible atomically. It sends nothing.",
     "Retained-material preview freezes the same edition representation without changing eligibility or calling source, model, or renderer dependencies. Daily override can freeze one shared PDF for independently selected packets.",
     "Authorized send durably records sending before invoking Email with exact body and base64 attachment bytes, then retains recognized acceptance. A run command may prepare and freeze before sending, under one mutation lock. Definition printing registers or enables nothing."
   ],
@@ -115,7 +115,7 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "All editions share one model. --ad-hoc is a selection operation, not an edition type. Packet selection is independent of attachments: a daily override can provide one shared PDF artifact for up to three briefs. Ordinary selection spends job eligibility; retained selection does not."
+        "statement": "All editions share one model. --ad-hoc is a selection operation, not an edition type. Packet selection is independent of attachments: a daily override can provide one shared PDF artifact for up to three briefs. Ordinary selection spends opportunity eligibility; retained selection does not."
       },
       {
         "status": "declared",

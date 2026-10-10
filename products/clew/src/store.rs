@@ -61,7 +61,7 @@ CREATE TRIGGER entry_references_no_late_insert BEFORE INSERT ON entry_references
 CREATE TRIGGER application_reference_namespace BEFORE INSERT ON entry_references
  WHEN NEW.role='application_report' AND
  (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'milieu.job'
- BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu job reference'); END;
+ BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu opportunity reference'); END;
 CREATE TRIGGER threads_no_update BEFORE UPDATE ON threads
  BEGIN SELECT RAISE(ABORT,'Clew thread identities are immutable'); END;
 CREATE TRIGGER threads_no_delete BEFORE DELETE ON threads
@@ -369,7 +369,7 @@ impl Store {
         if let Some(mapped) = mapped {
             ensure!(
                 mapped == reference || !self.knows_job(reference)?,
-                "reference is ambiguous between a Milieu job and a legacy Platter reference"
+                "reference is ambiguous between a Milieu opportunity and a legacy Platter reference"
             );
             return Ok(mapped);
         }
@@ -434,7 +434,9 @@ impl Store {
                     |row| row.get(0),
                 )
                 .optional()?
-                .context("unknown legacy Platter reference; supply --milieu-job JOB_ID")?,
+                .context(
+                    "unknown legacy Platter reference; supply --milieu-opportunity OPPORTUNITY_ID",
+                )?,
             ),
             (None, None) => None,
             _ => unreachable!("validated application target"),
@@ -621,7 +623,7 @@ fn validate_record(record: &Record) -> Result<()> {
     validate_id(&record.id)?;
     ensure!(
         record.milieu_job_id.is_none() || record.platter_job_ref.is_none(),
-        "supply at most one Milieu job ID or legacy Platter reference"
+        "supply at most one Milieu opportunity ID or legacy Platter reference"
     );
     for value in [
         &record.milieu_job_id,
@@ -824,12 +826,12 @@ fn migration_mappings(
         );
         ensure!(
             mappings.values().all(|id| !id.trim().is_empty()),
-            "migration requires a Milieu job ID for every retained reference"
+            "migration requires a Milieu opportunity ID for every retained reference"
         );
         let distinct: BTreeSet<_> = mappings.values().collect();
         ensure!(
             distinct.len() == mappings.len(),
-            "multiple Platter histories map to one Milieu job; resolve the mapping before migration"
+            "multiple Platter histories map to one Milieu opportunity; resolve the mapping before migration"
         );
         Ok(mappings)
     } else {
@@ -897,7 +899,7 @@ fn migrate_ledger(
                 .get(reference)
                 .context("legacy entry has no Milieu mapping")?
                 .clone(),
-            _ => anyhow::bail!("retained application entry has no job identity"),
+            _ => anyhow::bail!("retained application entry has no opportunity identity"),
         };
         let request = if entry.kind == "record" {
             record_request(&Record {
@@ -987,7 +989,7 @@ fn migrate_identity(root: &Path) -> Result<()> {
         "identity migration requires schema three"
     );
     let previous = rename_job_column(&tx, "legacy_references")?
-        .context("previous job identity column is missing")?;
+        .context("previous opportunity identity column is missing")?;
     let namespace = format!("{}.job", previous.trim_end_matches("_job_id"));
     tx.execute_batch("DROP TRIGGER entries_no_update; DROP TRIGGER external_references_no_update; DROP TRIGGER application_reference_namespace;")?;
     tx.execute(
@@ -1026,7 +1028,7 @@ fn migrate_identity(root: &Path) -> Result<()> {
     }
     tx.execute_batch("CREATE TRIGGER entries_no_update BEFORE UPDATE ON entries BEGIN SELECT RAISE(ABORT,'Clew entries are append-only'); END;
         CREATE TRIGGER external_references_no_update BEFORE UPDATE ON external_references BEGIN SELECT RAISE(ABORT,'Clew external references are immutable'); END;
-        CREATE TRIGGER application_reference_namespace BEFORE INSERT ON entry_references WHEN NEW.role='application_report' AND (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'milieu.job' BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu job reference'); END;")?;
+        CREATE TRIGGER application_reference_namespace BEFORE INSERT ON entry_references WHEN NEW.role='application_report' AND (SELECT namespace FROM external_references WHERE id=NEW.reference_id) != 'milieu.job' BEGIN SELECT RAISE(ABORT,'Application reports require a Milieu opportunity reference'); END;")?;
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()?;
     std::fs::File::open(root)?.sync_all()?;

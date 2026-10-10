@@ -14,7 +14,7 @@ authority to author or disclose private sources.
 ## Write and read
 
 ```sh
-weaver write 'Cell helped me find a job'
+weaver write 'Explain how Cell prepares materials for a recipient'
 weaver write-many --jobs 3 'Tell the origin story' 'Explain the turning point' 'Describe what came next'
 weaver list --limit 20
 weaver show DOCUMENT_ID

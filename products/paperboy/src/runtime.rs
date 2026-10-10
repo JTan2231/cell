@@ -91,7 +91,9 @@ pub async fn run(id: &str, subject: &str, argv: &[String], email_binary: &Path) 
     crate::manifest::validate_id(id)?;
     crate::manifest::validate_subject(subject)?;
     executable(email_binary).context("installed Email wrapper is unavailable")?;
-    let body = render(argv).await.with_context(|| format!("job {id}"))?;
+    let body = render(argv)
+        .await
+        .with_context(|| format!("production run {id}"))?;
     if body.is_empty() {
         return Ok(json!({"job_id":id,"outcome":"skipped_empty","body_bytes":0}));
     }

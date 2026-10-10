@@ -5,7 +5,7 @@
   "mode": "use",
   "support": "supported",
   "title": "Preview or send the daily Clew application email",
-  "summary": "Show every explicitly tracked application except current rejections, with retained job details and verbatim application notes, in a deterministic personal email.",
+  "summary": "Show every explicitly tracked application except current rejections, with retained opportunity details and verbatim application notes, in a deterministic personal email.",
   "manual": "manuals/digest-email.md",
   "use_when": [
     "Preview, explicitly send, inspect a retained occurrence, or explicitly retry the daily application snapshot."
@@ -15,17 +15,17 @@
   ],
   "outcome": "A complete qualifying application snapshot or a frozen email occurrence with provider acceptance or explicit uncertainty.",
   "effects": [
-    "Reads one Clew ledger snapshot and one complete retained Milieu job snapshot.",
+    "Reads one Clew ledger snapshot and one complete retained Milieu opportunity snapshot.",
     "Send creates private delivery state, freezes the message and invokes Email. It changes no application records and invokes no model."
   ],
   "authority": [
-    "The user supplies statuses. Clew owns selection, content, occurrence identity and recovery; Milieu owns job metadata; Email owns transport; Clockwork owns activation and failure halts."
+    "The user supplies statuses. Clew owns selection, content, occurrence identity and recovery; Milieu owns opportunity metadata; Email owns transport; Clockwork owns activation and failure halts."
   ],
   "success": [
     "Preview returns all qualifying applications and active notes. An acceptance receipt proves provider submission only."
   ],
   "failure_and_recovery": [
-    "Ledger read failure stops rendering. Missing Milieu context leaves all qualifying jobs visible under their Milieu IDs with a footer.",
+    "Ledger read failure stops rendering. Missing Milieu context leaves all qualifying opportunities visible under their Milieu IDs with a footer.",
     "Uncertain acceptance requires provider inspection and explicit retry of retained bytes within 23 hours. A scheduled failure ends the current send; Clockwork permits later activations before its shared service-health threshold establishes a halt. Healthy or inactive checks clear a pending episode. An established halt requires exact approval."
   ],
   "privacy": [
@@ -107,13 +107,13 @@
     "data_semantics": [
       {
         "status": "declared",
-        "statement": "Only active explicit application-report associations contribute status and notes; generic entries and plain milieu.job links are excluded. Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active application notes are copied in ledger sequence order. Items sort by company, role and opaque Milieu job ID. No application-age, response, or work-completion inference occurs."
+        "statement": "Only active explicit application-report associations contribute status and notes; generic entries and plain milieu.job links are excluded. Current status uses the last nonnull active report. Only trimmed case-insensitive rejected is excluded. All other supplied statuses remain unchanged; null displays No status recorded. Active application notes are copied in ledger sequence order. Items sort by company, role and opaque Milieu opportunity ID. No application-age, response, or work-completion inference occurs."
       }
     ],
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Milieu job IDs identify tracked jobs. Occurrences use manual/UUIDv7 or daily/YYYY-MM-DD for the most recent local 09:00. A random UUID key identifies each frozen payload; attempted_at is UTC Unix seconds. ledger_sequence is the last observed append, not an application date."
+        "statement": "Milieu opportunity IDs identify tracked opportunities. Occurrences use manual/UUIDv7 or daily/YYYY-MM-DD for the most recent local 09:00. A random UUID key identifies each frozen payload; attempted_at is UTC Unix seconds. ledger_sequence is the last observed append, not an application date."
       }
     ],
     "completeness_and_freshness": [
@@ -153,7 +153,7 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Clew reads retained job metadata through the supported complete Milieu snapshot interface.",
+        "statement": "Clew reads retained opportunity metadata through the supported complete Milieu snapshot interface.",
         "target": "milieu",
         "kind": "data",
         "contract": "milieu.discovery.explore"

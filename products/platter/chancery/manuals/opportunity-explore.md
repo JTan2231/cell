@@ -24,10 +24,13 @@ its run `id`, UTC `created_at`, `preparation_status`, and `has_resume`.
 run can be ready with `has_resume=false`; its shared PDF belongs to the edition. These fields do not
 establish application submission or employer response.
 
+`milieu_job_id` identifies the Milieu opportunity. Its spelling and the
+schema-two wire fields remain compatible.
+
 The read includes every opportunity with at least one retained preparation run,
-including declined, stale, deferred and ineligible records. A job left by a
+including declined, stale, deferred and ineligible records. An opportunity left by a
 retrieval failure before preparation has no run and is excluded. URLs come from
-the captured job and posting. Missing historical URLs remain absent. No source
+the captured opportunity and posting. Missing historical URLs remain absent. No source
 text, career material, resume bytes or delivery body is returned.
 
 Text search matches references, Milieu IDs, companies, titles and URLs without
@@ -47,5 +50,5 @@ does not repair or initialize state. Results cover retained records only, not
 current employer availability. Full reads use memory proportional to the
 retained library; no size or latency guarantee is supplied.
 
-Keep returned URLs and job interests private. CLI dispatch attempts metadata-only
+Keep returned URLs and opportunity interests private. CLI dispatch attempts metadata-only
 Chancery usage observation. It preserves the read result if observation fails.

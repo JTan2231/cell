@@ -12,7 +12,7 @@
     "An operator must preserve a separately managed Clockwork daily binding while upgrading its pinned Platter runner."
   ],
   "do_not_use_when": [
-    "The requested outcome is packet preparation, a test email, job discovery, profile editing or scheduled delivery.",
+    "The requested outcome is packet preparation, a test email, opportunity discovery, profile editing or scheduled delivery.",
     "The caller expects arbitrary direct rollback, a schema reset or implicit installation of dependencies."
   ],
   "outcome": "An installation with matching Platter command and provider, supported maintenance state, or a local readiness result. Stored domain history remains intact.",
@@ -216,7 +216,7 @@
       },
       {
         "status": "declared",
-        "statement": "Schemas two through seven migrate owned discovery job and configuration names to Milieu without changing captured requests, artifacts, editions, eligibility or opaque identities. Older programs cannot open schema eight."
+        "statement": "Schemas two through seven migrate owned discovery opportunity and configuration names to Milieu without changing captured requests, artifacts, editions, eligibility or opaque identities. Older programs cannot open schema eight."
       }
     ],
     "reliances": [

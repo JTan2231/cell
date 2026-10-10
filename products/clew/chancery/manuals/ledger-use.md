@@ -35,8 +35,8 @@ merge, or delete operation.
 clew record --id sla-commit --thread 'SLA implementation' \
   --notes 'The implementation is in this commit.' \
   --ref repository.commit 'repository-id/commit-id'
-clew record --id job-context --notes 'This posting explains the requirement.' \
-  --ref milieu.job JOB_ID
+clew record --id posting-context --notes 'This posting explains the requirement.' \
+  --ref milieu.job OPPORTUNITY_ID
 ```
 
 Repeat `--ref NAMESPACE EXTERNAL_ID` to attach several links. An external
@@ -53,10 +53,10 @@ identity without belonging to the same thread. A thread can contain entries
 with different references or no references. Thread membership and external links
 are separate facts.
 
-A plain `--ref milieu.job JOB_ID` is a link. It neither creates an application
+A plain `--ref milieu.job OPPORTUNITY_ID` is a link. It neither creates an application
 report nor changes application status, `clew list`, or the daily email. Use the
-explicit `--milieu-job JOB_ID` form for an application report. Read
-`chancery show clew.application.track` for first-job admission, legacy aliases,
+explicit `--milieu-opportunity OPPORTUNITY_ID` form for an application report. Read
+`chancery show clew.application.track` for initial opportunity admission, legacy aliases,
 and the application view. Generic entries require no Milieu or Platter read.
 
 ## Read entries and threads

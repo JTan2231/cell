@@ -62,6 +62,12 @@ products.
 
 ## Documentation
 
+- Use production language for product-facing work. A production definition is
+  reusable configuration; a production run is one occurrence. Materials feed
+  preparation, outputs can feed another production, and delivery has its own
+  outcome. Use opportunities and postings for employment records. Preserve
+  specific terms such as packet and edition, technical agent and CI jobs,
+  retained identities, and compatibility field names.
 - Follow the shared [documentation rules](infrastructure/nucleus/docs/operator-manual.md#where-facts-and-changes-belong).
   Keep text that helps readers understand the current system, make a decision,
   perform a task, or interpret a result. Retain supported limits and recovery rules.

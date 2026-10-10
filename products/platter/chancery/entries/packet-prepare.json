@@ -4,23 +4,23 @@
   "kind": "operation",
   "mode": "use",
   "support": "supported",
-  "title": "Prepare and deliver private job application packets",
-  "summary": "Prepare private job briefs and tailored resumes, or use one configured PDF for daily emails. Freeze editions and send retained attachment bytes through authorized runs.",
+  "title": "Prepare and deliver private opportunity packets",
+  "summary": "Prepare private briefs and tailored resumes as production materials, or select one configured PDF for daily editions. Freeze editions and send retained attachment bytes through authorized runs.",
   "use_when": [
     "The user wants to prepare or preview eligible Milieu opportunities with a concise brief and a constrained resume.",
     "The user wants an explicitly authorized send or another edition composed from retained materials.",
-    "The user wants to change job eligibility or export a retained artifact to an explicit destination.",
+    "The user wants to change opportunity eligibility or export a retained artifact to an explicit destination.",
     "The user has authorized daily email and wants one invocation to prepare, freeze and send the current local-date edition.",
-    "The user explicitly wants one supplied public job URL prepared and emailed to the fixed personal recipient.",
-    "The user wants another packet for a previously prepared job, including one already used in an edition, without re-enabling it or sending email.",
+    "The user explicitly wants one supplied public posting URL prepared and emailed to the fixed personal recipient.",
+    "The user wants another packet for a previously prepared opportunity, including one already used in an edition, without re-enabling it or sending email.",
     "The user wants to replace the fixed resume template for future preparations while retaining earlier templates and packets.",
     "The user wants to set or clear one static PDF override for future daily email resumes."
   ],
   "do_not_use_when": [
-    "The request is job discovery, source-library editing, employer outreach or application submission.",
+    "The request is opportunity discovery, source-library editing, employer outreach or application submission.",
     "The caller expects stored delivery settings or installation alone to enable a schedule, or expects preparation to change fixed content outside its editable regions."
   ],
-  "outcome": "Stored private job briefs and either tailored resumes or one shared PDF for a daily edition. Preview freezes selected packets and attachments; authorized send records provider acceptance.",
+  "outcome": "Stored private opportunity briefs and either tailored resumes or one shared PDF for a daily edition. Preview freezes selected packets and attachments; authorized send records provider acceptance.",
   "interfaces": [
     {
       "label": "Initialize from original resume",
@@ -28,15 +28,15 @@
     },
     {
       "label": "Prepare one Milieu opportunity",
-      "invocation": "platter prepare JOB_ID"
+      "invocation": "platter prepare MILIEU_OPPORTUNITY_ID"
     },
     {
       "label": "Restart incomplete preparation without prior model context",
-      "invocation": "platter prepare JOB_ID --fresh"
+      "invocation": "platter prepare MILIEU_OPPORTUNITY_ID --fresh"
     },
     {
-      "label": "Generate another packet for a previously prepared job",
-      "invocation": "platter regenerate MILIEU_JOB_ID --id REQUEST_ID"
+      "label": "Prepare another packet for a previously prepared opportunity",
+      "invocation": "platter regenerate MILIEU_OPPORTUNITY_ID --id REQUEST_ID"
     },
     {
       "label": "Prepare the daily ready pool",
@@ -48,7 +48,7 @@
     },
     {
       "label": "Prepare, freeze and send one URL-selected packet",
-      "invocation": "platter run-ad-hoc JOB_URL --id OCCURRENCE_ID"
+      "invocation": "platter run-ad-hoc POSTING_URL --id OCCURRENCE_ID"
     },
     {
       "label": "Freeze and preview a dated edition",
@@ -75,8 +75,8 @@
       "invocation": "platter preview YYYY-MM-DD --ad-hoc RUN_ID --packet PACKET_ID --brief-overrides /absolute/reviewed-paragraphs.json"
     },
     {
-      "label": "Change explicit job eligibility",
-      "invocation": "platter eligibility MILIEU_JOB_ID true|false"
+      "label": "Change explicit opportunity eligibility",
+      "invocation": "platter eligibility MILIEU_OPPORTUNITY_ID true|false"
     },
     {
       "label": "Export a retained artifact",
@@ -110,11 +110,11 @@
   "effects": [
     "Initialization/import/configuration selects private future material without preparing or sending. Explicit export creates a new private file.",
     "Preparation captures source material and can consume Nucleus/Weaver allowance. Normal repetition continues saved work; an explicitly authorized fresh restart or regeneration creates its supported new capture.",
-    "Ordinary preview checks freshness, freezes exact material, and spends selected job eligibility. Retained-material preview freezes the same representation without changing eligibility or calling preparation dependencies.",
+    "Ordinary preview checks freshness, freezes exact material, and spends selected opportunity eligibility. Retained-material preview freezes the same representation without changing eligibility or calling preparation dependencies.",
     "An applicable authorized send records sending before Email and acceptance afterward. Daily/URL-selected run commands may prepare and freeze before that send under one mutation lock. Definition printing starts no schedule."
   ],
   "authority": [
-    "Platter owns captured inputs, content validation, explicit job eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
+    "Platter owns captured inputs, content validation, explicit opportunity eligibility, edition identity and delivery state. Nucleus owns execution and tool-call history.",
     "Weaver authors project bullets. Platter owns fixed presentation, Markdown conversion, at most three bullets per project and mechanical acceptance. Its draft agent writes only brief and Jackson; its toolset cannot submit project fields. Historical runs retain their original boundaries.",
     "Each send requires applicable user authority. Explicit authorization to enable recurring daily email supplies standing authority for ordinary daily briefs and resume attachments to the fixed personal recipient. Invoking run-ad-hoc is one explicit send instruction for its selected URL and occurrence. Preparation, preview, catalog presence and model output grant no send authority."
   ],
@@ -126,7 +126,7 @@
   "failure_and_recovery": [
     "Stop for unsupported state, failed prerequisites, foreign holds, incomplete source reads, invalid template/PDF, or preparation failure. Preserve accepted artifacts and exact requests.",
     "Normal repetition resumes retained work. A terminal failure receives no automatic replacement or direct Codex fallback. --fresh and regeneration require their feature-defined terminal-job and capture preconditions.",
-    "Posting retrieval failure marks a job ineligible; daily work can try another candidate. Other preparation/export errors stop before sending.",
+    "Posting retrieval failure marks an opportunity ineligible; daily work can try another candidate. Other preparation/export errors stop before sending.",
     "Exact frozen/accepted/uncertain occurrences use platter.editions: do not create replacement payloads or send keys to bypass held uncertainty.",
     "Repair the exact renderer/source/runtime failure before an authorized new attempt. Use platter.install.operate for maintained schema migration; do not edit SQLite.",
     "Clockwork continuation permits only future scheduling and preserves Platter preparation/delivery recovery."
@@ -200,7 +200,7 @@
   "does_not_authorize": [
     "Installing or enabling any scheduled activation.",
     "Sending when the user requested only preparation or preview.",
-    "Changing fixed resume content, modifying Vita or Milieu, applying to a job or contacting an employer."
+    "Changing fixed resume content, modifying Vita or Milieu, applying for an opportunity or contacting an employer."
   ],
   "promise": {
     "consumers": [
@@ -222,7 +222,7 @@
     "inputs": [
       {
         "status": "declared",
-        "statement": "Select a Milieu job, daily pool, exact public URL, or retained complete packets. Supply exact regeneration/occurrence identities and applicable explicit template, PDF, brief-override, export, and deadline inputs. Required features own their formats and meaning."
+        "statement": "Select a Milieu opportunity, daily pool, exact public URL, or retained complete packets. Supply exact regeneration/occurrence identities and applicable explicit template, PDF, brief-override, export, and deadline inputs. Required features own their formats and meaning."
       }
     ],
     "outputs": [
@@ -240,7 +240,7 @@
     "identity_and_units": [
       {
         "status": "declared",
-        "statement": "Retain the exact selected job, run, regeneration request, edition occurrence, and send key. Apply the compatible identity/units rules in required features; another deliberately changed capture or frozen payload needs its appropriate new identity."
+        "statement": "Retain the exact selected opportunity, run, regeneration request, edition occurrence, and send key. Apply the compatible identity/units rules in required features; another deliberately changed capture or frozen payload needs its appropriate new identity."
       }
     ],
     "completeness_and_freshness": [
@@ -274,7 +274,7 @@
     "compatibility_and_evolution": [
       {
         "status": "declared",
-        "statement": "Operation contract 16 preserves supported commands and exact historical input/output/delivery meaning while limiting URL-selected runs to retained Milieu jobs. Required features define current and historical generation, template, state, and prompt compatibility."
+        "statement": "Operation contract 16 preserves supported commands and exact historical input/output/delivery meaning while limiting URL-selected runs to retained Milieu opportunities. Required features define current and historical generation, template, state, and prompt compatibility."
       },
       {
         "status": "unspecified",
@@ -284,14 +284,14 @@
     "reliances": [
       {
         "status": "declared",
-        "statement": "Retained job evidence and stable discovery IDs come from Milieu supported exports.",
+        "statement": "Retained opportunity evidence and stable discovery IDs come from Milieu supported exports.",
         "target": "milieu",
         "kind": "data",
         "contract": "milieu.discovery.explore"
       },
       {
         "status": "declared",
-        "statement": "URL-selected runs match one retained Milieu job by canonical supported ATS identity or normalized public URL; unknown or ambiguous matches fail before preparation.",
+        "statement": "URL-selected runs match one retained Milieu opportunity by canonical supported ATS identity or normalized public URL; unknown or ambiguous matches fail before preparation.",
         "target": "milieu",
         "kind": "data",
         "contract": "milieu.discovery.explore"
@@ -375,7 +375,7 @@
   "steps": [
     "Inspect canonical state and dependency readiness; select preparation, preview, or a separately authorized send.",
     "Initialize or explicitly select supported private templates/PDF configuration when requested.",
-    "Prepare or continue the selected exact job/request, or perform an authorized fresh restart/regeneration only after its preconditions.",
+    "Prepare or continue the selected exact opportunity/request, or perform an authorized fresh restart/regeneration only after its preconditions.",
     "Freeze the intended ordinary or retained-material selection and inspect the retained result.",
     "Send only the applicable authorized occurrence and verify retained acceptance or held uncertainty.",
     "Use supported source/prompt/activation operations separately, preserving exact historical work and external halts."
@@ -387,7 +387,7 @@
     "The exact frozen selection/body/attachment identity and send outcome are retained."
   ],
   "adaptation": [
-    "Use tailored single-job/regeneration/URL-selected work or supported daily PDF brief work as intended; do not continue a packet through the wrong workflow.",
+    "Use tailored single-opportunity/regeneration/URL-selected work or supported daily PDF brief work as intended; do not continue a packet through the wrong workflow.",
     "Use retained-material selection when no source/model/rendering work is intended.",
     "Preserve the original request or occurrence on interruption; an explicit genuinely new capture or payload uses its supported new identity."
   ],

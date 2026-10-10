@@ -6,12 +6,12 @@ and comparing without case sensitivity. Other status text is shown unchanged.
 A missing status appears as `No status recorded`. A notes-only report does not
 change status. Retractions and replacements use the same current-record rules
 as `clew list`. Only explicit application reports contribute status and notes.
-Generic ledger notes and plain `--ref milieu.job JOB_ID` links do not appear in the
+Generic ledger notes and plain `--ref milieu.job OPPORTUNITY_ID` links do not appear in the
 application view or email, even when they share a thread with an application report.
 
 Each included application shows company, role, supplied status and all retained
-job URLs. Items sort by company, then role, without case sensitivity, with the
-opaque Milieu job ID as the final tie-breaker. Saved notes follow the list,
+posting URLs. Items sort by company, then role, without case sensitivity, with the
+opaque Milieu opportunity ID as the final tie-breaker. Saved notes follow the list,
 grouped in the same application order. Every active note appears unchanged in
 ledger sequence order. Superseded and retracted records, and retraction
 explanations, are excluded. Rejected applications contribute no counts or notes.
@@ -22,8 +22,8 @@ calculation, correspondence read, status inference or application write occurs.
 The ledger's `recorded_at` records reporting time, not application time.
 
 Clew reads the ledger once and joins Milieu's complete retained snapshot by exact
-job ID. These are separate snapshots. A Milieu read failure or missing job leaves
-each qualifying application visible under its Milieu job ID, with missing job
+opportunity ID. These are separate snapshots. A Milieu read failure or missing opportunity leaves
+each qualifying application visible under its Milieu opportunity ID, with missing opportunity
 details marked and one context-unavailable footer.
 A ledger read failure stops rendering. An empty selected list needs no Milieu
 read. Retained links do not establish that a posting is still open.
@@ -52,7 +52,7 @@ standing authority for this exact daily content to Email's fixed personal
 recipient. Preview, installation and definition generation grant no send
 authority. The installed Email wrapper owns credentials, fixed addresses and
 bounded transport retries. A returned `accepted_id` proves provider acceptance,
-not final inbox delivery. Complete selected statuses, job details, links and
+not final inbox delivery. Complete selected statuses, opportunity details, links and
 notes are disclosed to Resend and Gmail. No attachments are sent.
 
 Clew retains an exact message, a random stable idempotency key, first-attempt

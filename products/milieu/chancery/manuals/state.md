@@ -26,29 +26,29 @@ job_source   job_id -> job, source_id -> source, url
 
 Both join tables use their two foreign keys as the composite primary key.
 `employer_id` identifies who hires. `operator_id` identifies who operates a
-source. Locations identify workplaces; `work_mode` is a separate job field. A
-job can appear in several sources. Each job/source pair has one URL.
+source. Locations identify workplaces; `work_mode` is a separate opportunity field. An
+opportunity can appear in several sources. Each opportunity/source pair has one URL.
 
-The core represents one accepted current record per job. Resolve duplicate
+The core represents one accepted current record per opportunity. Resolve duplicate
 matching and conflicting values before writing that record. A write replaces
-the job and its workplace and source links in one transaction. The core has no
+the opportunity and its workplace and source links in one transaction. The core has no
 collection runs, observation history, affiliation history, assessments, or
 decision history.
 
 Milieu executes this schema when it initializes a missing database. The runtime
 also retains snapshot revision, company identity aliases, and current
 compatibility metadata. A `meta` table holds snapshot revision and alias
-lookup values. Compatibility columns in company, job, and source rows carry
+lookup values. Compatibility columns in `company`, `job`, and `source` rows carry
 existing export fields, including current entity revisions, supplied dates
 and evidence, compensation, and source metadata. This is not a second company
-or job identity model. There are no revision-history, observation,
+or opportunity identity model. There are no revision-history, observation,
 request-ledger, or run tables.
 
-Company and job compatibility dates must be valid RFC 3339 values, with
+Company and opportunity compatibility dates must be valid RFC 3339 values, with
 `first_seen_at` no later than `last_seen_at`. Milieu normalizes these two fields
 to UTC with nine fractional-second digits for chronological string comparison.
 Updates preserve the first-seen instant and do not move the last-seen instant
-backwards. An existing location ID preserves its name. There is no CLI job
+backwards. An existing location ID preserves its name. There is no CLI opportunity
 ingestion interface.
 
 `milieu.discovery.explore` defines the schema-one export, public read types,
@@ -116,14 +116,14 @@ milieu sources list
 
 `source add URL --company-id COMPANY_ID` associates an ordinary website source
 with an existing company in compatibility metadata. This association does not
-establish `source.operator_id` or a job's employer. Without the company option,
+establish `source.operator_id` or an opportunity's employer. Without the company option,
 an ordinary website URL creates or reuses a company candidate from its
 hostname. For a supported ATS URL, omit `--company-id`: Milieu assigns its
 canonical provider/tenant company identity and rejects an explicit override.
 
 Source enrollment retains metadata and makes no remote request. The exported
 source `enabled`, status, timestamps, cursor, and note are compatibility
-metadata. No collector acts on them. Source operator and job employer remain
+metadata. No collector acts on them. Source operator and opportunity employer remain
 independent accepted company references.
 
 ## Retired interfaces

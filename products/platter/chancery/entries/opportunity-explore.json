@@ -9,7 +9,7 @@
   "manual": "manuals/opportunity-explore.md",
   "interfaces": [
     {
-      "label": "Find prepared jobs",
+      "label": "Find prepared opportunities",
       "invocation": "platter opportunities list --query QUERY"
     },
     {

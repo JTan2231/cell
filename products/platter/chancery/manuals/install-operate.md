@@ -61,7 +61,7 @@ platter --json doctor --state-only
 `inspect` accepts `--home ABSOLUTE_PATH` and reads release metadata. Installation
 does not run doctor or audit artifact integrity. Separately, full doctor checks retained state,
 configured PDF and documented command/runtime prerequisites. It collects no
-jobs, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
+opportunities, reads no Vita works, renders no PDF, creates no model job, and sends no mail.
 Executable identity alone does not prove initialized Milieu or Vita libraries.
 State-only verification needs no renderer or external service readiness.
 

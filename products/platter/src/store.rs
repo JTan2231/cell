@@ -349,7 +349,7 @@ impl Store {
                 "UPDATE jobs SET eligible=?2 WHERE opportunity=?1 OR milieu_job_id=?1",
                 params![opportunity, eligible]
             )? == 1,
-            "job is absent or ambiguous"
+            "opportunity is absent or ambiguous"
         );
         tx.commit()?;
         Ok(())
@@ -552,7 +552,7 @@ impl Store {
         self.insert_edition(id, edition)?;
         if spend {
             for run in &edition.packet_ids {
-                ensure!(self.connection.execute("UPDATE jobs SET eligible=0 WHERE eligible=1 AND opportunity=(SELECT opportunity FROM runs WHERE id=?1 AND status='ready')", [run])? == 1, "job is ineligible or packet is not ready");
+                ensure!(self.connection.execute("UPDATE jobs SET eligible=0 WHERE eligible=1 AND opportunity=(SELECT opportunity FROM runs WHERE id=?1 AND status='ready')", [run])? == 1, "opportunity is ineligible or packet is not ready");
             }
         }
         tx.commit()?;

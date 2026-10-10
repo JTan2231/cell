@@ -4,7 +4,7 @@ Weaver turns a free-form direction into a private Markdown narrative. Its
 authoring agent reads the Annals decision history through Nucleus.
 
 ```sh
-weaver write 'Cell helped me find a job'
+weaver write 'Explain how Cell prepares materials for a recipient'
 ```
 
 - [Product overview and feature inventory](chancery/overview.md)

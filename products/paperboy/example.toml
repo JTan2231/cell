@@ -2,19 +2,19 @@
 # Each renderer's successful nonempty stdout becomes the exact email body.
 version = 1
 
-[jobs.daily-report]
+[productions.daily-report]
 render = ["/absolute/path/render-report", "--daily"]
 subject = "Daily report"
 
-[jobs.daily-report.schedule]
+[productions.daily-report.schedule]
 kind = "local-calendar"
 hour = 9
 minute = 0
 
-[jobs.hourly-report]
+[productions.hourly-report]
 render = ["/absolute/path/render-hourly"]
 # Omitted subject defaults to hourly-report.
 
-[jobs.hourly-report.schedule]
+[productions.hourly-report.schedule]
 kind = "interval"
 seconds = 3600

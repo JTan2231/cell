@@ -1,5 +1,5 @@
 //! Readable views of Milieu's command results. JSON remains the machine interface.
-use crate::{Command, JobCommand, SourceCommand};
+use crate::{Command, OpportunityCommand, SourceCommand};
 use serde_json::Value;
 use std::fmt::Write;
 
@@ -21,8 +21,8 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
         Command::Status => status(&mut out, value),
         Command::Export { output, .. } => export(&mut out, value, output.is_some()),
         Command::Company { .. } => company(&mut out, value),
-        Command::Job {
-            command: JobCommand::Show { .. },
+        Command::Opportunity {
+            command: OpportunityCommand::Show { .. },
         } => job(&mut out, value),
         Command::Source {
             command: SourceCommand::Add { .. },
@@ -33,7 +33,7 @@ pub(super) fn human(command: &Command, value: &Value) -> String {
             field(&mut out, "Enabled", &value["enabled"]);
         }
         Command::Companies { .. } => page(&mut out, "Companies", value),
-        Command::Jobs { .. } => page(&mut out, "Jobs", value),
+        Command::Opportunities { .. } => page(&mut out, "Opportunities", value),
         Command::Sources { .. } => page(&mut out, "Sources", value),
         Command::Search { query, .. } => {
             page(&mut out, &format!("Search results for {query}"), value);
@@ -52,7 +52,7 @@ fn export(out: &mut String, value: &Value, saved: bool) {
     field(out, "Captured at", &value["captured_at"]);
     let _ = writeln!(
         out,
-        "Retained companies: {}\nRetained jobs: {}\nSources: {}",
+        "Retained companies: {}\nRetained opportunities: {}\nSources: {}",
         items(&value["companies"]).len(),
         items(&value["jobs"]).len(),
         items(&value["source_health"]).len()
@@ -224,7 +224,7 @@ fn company(out: &mut String, value: &Value) {
 fn job(out: &mut String, value: &Value) {
     record(
         out,
-        &format!("Job: {}", text(&value["title"])),
+        &format!("Opportunity: {}", text(&value["title"])),
         value,
         &[
             ("ID", "id"),
@@ -232,7 +232,7 @@ fn job(out: &mut String, value: &Value) {
             ("Company", "company_id"),
             ("Source", "source_id"),
             ("Source key", "source_key"),
-            ("URL", "url"),
+            ("Posting URL", "url"),
             ("Application URL", "apply_url"),
             ("Location", "location"),
             ("Remote", "remote"),
@@ -246,7 +246,7 @@ fn job(out: &mut String, value: &Value) {
             ("Source updated at", "source_updated_at"),
             ("Source internal ID", "source_internal_id"),
             (
-                "Complete scans without this job",
+                "Complete scans without this opportunity",
                 "missing_complete_snapshots",
             ),
             ("First missing at (Unix seconds)", "first_missing_at"),
@@ -285,7 +285,7 @@ fn status(out: &mut String, value: &Value) {
     for (label, key) in [
         ("Snapshot revision", "snapshot_revision"),
         ("Retained companies", "companies"),
-        ("Retained jobs", "jobs"),
+        ("Retained opportunities", "jobs"),
         ("Sources", "sources"),
     ] {
         field(out, label, &value[key]);

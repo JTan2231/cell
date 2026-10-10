@@ -81,7 +81,7 @@ fn legacy_mapping(
         }
         ensure!(
             !opportunity.milieu_job_id.trim().is_empty(),
-            "legacy Platter reference has no Milieu job ID: {}",
+            "legacy Platter reference has no Milieu opportunity ID: {}",
             opportunity.reference
         );
         ensure!(
@@ -91,7 +91,7 @@ fn legacy_mapping(
         );
         ensure!(
             jobs.insert(opportunity.milieu_job_id.clone()),
-            "multiple legacy Clew histories map to one Milieu job; resolve before migration"
+            "multiple legacy Clew histories map to one Milieu opportunity; resolve before migration"
         );
         mapping.insert(opportunity.reference, opportunity.milieu_job_id);
     }

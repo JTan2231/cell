@@ -1,8 +1,8 @@
-# Prepare and deliver private job packets
+# Prepare and deliver private opportunity packets
 
-Use this operation to initialize private resume material, prepare or regenerate
-packets, freeze an edition, or carry out an authorized send. Platter owns
-captured content, eligibility, editions, and delivery records. Nucleus owns
+Use this operation to select private production materials, prepare or regenerate
+opportunity packets, freeze an edition, or carry out an authorized send. Platter
+owns captured content, opportunity eligibility, editions, and delivery records. Nucleus owns
 execution; Weaver authors project bullets; Email owns transport acceptance.
 
 Read `chancery resolve platter.packet.prepare` for this procedure and its
@@ -85,15 +85,15 @@ Choose the applicable setter. The path must be absolute and readable and must
 identify a valid unencrypted PDF with at least one page. The setter validates
 before saving. These commands change future daily work and send nothing.
 Frozen editions retain their bytes after the source file or setting changes.
-Single-job preparation, regeneration, URL-selected runs, and retained-material
+Single-opportunity preparation, regeneration, URL-selected runs, and retained-material
 preview continue to use tailored resumes.
 
 ## Prepare or continue a packet
 
-Select a Milieu job, or prepare the ordinary daily pool without sending:
+Select a Milieu opportunity, or prepare the ordinary daily pool without sending:
 
 ```sh
-platter prepare MILIEU_JOB_ID
+platter prepare MILIEU_OPPORTUNITY_ID
 platter prepare-daily
 platter status
 ```
@@ -112,7 +112,7 @@ A terminal failure receives no automatic replacement job or direct Codex
 fallback. Inspect the retained result and correct the failed dependency before
 an explicitly authorized new attempt.
 
-Single-job retrieval failure reports an error and selects no replacement job.
+Single-opportunity retrieval failure reports an error and selects no replacement opportunity.
 Daily preparation marks unavailable postings ineligible and tries other
 candidates. Declined opportunities and an empty ready pool are expected
 outcomes. Other preparation failures and failed Milieu exports stop the run.
@@ -120,25 +120,25 @@ outcomes. Other preparation failures and failed Milieu exports stop the run.
 For an explicitly authorized fresh restart of incomplete work:
 
 ```sh
-platter prepare MILIEU_JOB_ID --fresh
+platter prepare MILIEU_OPPORTUNITY_ID --fresh
 ```
 
-Require an eligible job, an incomplete latest run with no accepted resume, and
+Require an eligible opportunity, an incomplete latest run with no accepted resume, and
 terminal or absent prior model jobs. This captures new inputs and creates new
 run and model identities without copying previous outputs or error context.
 Older runs and accepted artifacts remain intact.
 
-To create another packet for a previously prepared job:
+To create another packet for a previously prepared opportunity:
 
 ```sh
-platter regenerate MILIEU_JOB_ID --id REQUEST_ID
+platter regenerate MILIEU_OPPORTUNITY_ID --id REQUEST_ID
 ```
 
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens. Other model
 jobs for the opportunity must be terminal or absent. An exact repeated ID
 continues its captured request or returns the retained outcome; reuse for a
-different Milieu job is refused. A terminal stage failure needs a new ID for
-another attempt. Regeneration does not enable the job, freeze an edition, or
+different Milieu opportunity is refused. A terminal stage failure needs a new ID for
+another attempt. Regeneration does not enable the opportunity, freeze an edition, or
 send. Retrieval failure or decline can still set eligibility false.
 
 An optional `--stop-after-seconds SECONDS` on `prepare`, `prepare-daily`,
@@ -147,11 +147,11 @@ job and retains progress. Normal source, renderer, and execution timeouts still
 apply. Renderer infrastructure failure stops work and requests exact-job
 cancellation; it is not model content feedback.
 
-Change explicit selection eligibility only when intended:
+Change opportunity eligibility only when intended:
 
 ```sh
-platter eligibility MILIEU_JOB_ID false
-platter eligibility MILIEU_JOB_ID true
+platter eligibility MILIEU_OPPORTUNITY_ID false
+platter eligibility MILIEU_OPPORTUNITY_ID true
 ```
 
 Enabling a deferred packet does not bypass freshness checks. Eligibility changes
@@ -165,7 +165,7 @@ platter preview YYYY-MM-DD
 
 Ordinary preview retrieves posting text under the source cache policy, excludes
 unavailable or changed packets, and atomically freezes up to three ready
-packets while making selected jobs ineligible. It sends nothing. Ashby changes
+packets while making selected opportunities ineligible. It sends nothing. Ashby changes
 and closures can remain undetected until its next download, up to 14 days later.
 A frozen edition keeps its exact body, packet selection, attachment bytes, and
 send key. Reopening it does not fetch sources or read a configured PDF again.
@@ -203,14 +203,14 @@ Other preparation failures stop before sending.
 For one explicitly requested public URL and one email, run:
 
 ```sh
-platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/JOB_ID' --id OCCURRENCE_ID
+platter run-ad-hoc 'https://jobs.ashbyhq.com/COMPANY/POSTING_ID' --id OCCURRENCE_ID
 ```
 
 Use 1 through 80 ASCII letters, digits, underscores, or hyphens. A new occurrence
-selects one retained job from Milieu's export by canonical supported ATS identity
-or normalized public URL, enables that job, prepares or reuses its tailored
+selects one retained opportunity from Milieu's export by canonical supported ATS identity
+or normalized public URL, enables that opportunity, prepares or reuses its tailored
 packet, checks freshness, freezes one ordinary edition, and sends. Freeze makes
-that job ineligible again. Unknown URLs, ambiguous matches, and supported ATS
+that opportunity ineligible again. Unknown URLs, ambiguous matches, and supported ATS
 board URLs without a posting identity fail before preparation. A declined,
 stale, or unavailable packet creates no edition or email. Exact retries use the original date and
 retained send path before Milieu or preparation. Reuse for another URL or an

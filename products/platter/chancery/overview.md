@@ -1,11 +1,18 @@
 # Platter
 
-Platter prepares private job briefs and resumes, freezes selected material into
-editions, and records authorized email submission. It owns captured inputs,
-preparation and acceptance, explicit job eligibility, immutable artifacts,
+Platter is a production service for private opportunity packets and email
+editions. It prepares briefs and resumes, freezes selected production materials
+into editions, and records authorized email submission. It owns captured inputs,
+preparation and acceptance, explicit opportunity eligibility, immutable artifacts,
 editions, delivery records, configuration, and maintenance holds.
 
-Milieu owns discovery and retained job records. Annals owns career works in the
+Production materials include source captures, resume templates, accepted briefs,
+and retained resume PDFs. Configuration selects materials and defines future
+preparation and edition selection. A packet joins one opportunity's preparation
+with its artifacts. An edition fixes the selected packets, message, and
+attachments for one authorized delivery occurrence.
+
+Milieu owns discovery and retained opportunity records. Annals owns career works in the
 fixed `vita` library. Weaver supplies project prose and owns its source reads.
 Nucleus owns constrained execution. Email and Resend own submission acceptance;
 Gmail owns final receipt. Clockwork owns separately authorized activation and
@@ -52,7 +59,7 @@ Daily PDF override runs prepare briefs and retain one shared PDF at edition
 freeze. Historical captures preserve their original instructions and workflow.
 
 Ordinary freeze selects up to three ready packets and atomically makes their
-jobs ineligible. Retained-material selection preserves eligibility. Selected
+opportunities ineligible. Retained-material selection preserves eligibility. Selected
 packets and attachment identities remain separate. Authorized sending uses
 exact retained bytes and a stable key; accepted editions are not resent and
 uncertain attempts stay held. Runtime completion alone does not prove either

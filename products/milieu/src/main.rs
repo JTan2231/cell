@@ -21,7 +21,11 @@ fn emit_iatreion_snapshot() -> bool {
 }
 
 #[derive(Parser)]
-#[command(name = "milieu", version, about = "Private company and job records")]
+#[command(
+    name = "milieu",
+    version,
+    about = "Private company and opportunity records"
+)]
 struct Cli {
     #[arg(long, global = true, env = "MILIEU_STATE_DIR")]
     state_dir: Option<PathBuf>,
@@ -46,7 +50,8 @@ enum Command {
         #[command(subcommand)]
         command: ListCommand,
     },
-    Jobs {
+    #[command(alias = "jobs")]
+    Opportunities {
         #[command(subcommand)]
         command: ListCommand,
     },
@@ -58,9 +63,10 @@ enum Command {
         #[command(subcommand)]
         command: ShowCommand,
     },
-    Job {
+    #[command(alias = "job")]
+    Opportunity {
         #[command(subcommand)]
-        command: JobCommand,
+        command: OpportunityCommand,
     },
     Source {
         #[command(subcommand)]
@@ -84,8 +90,11 @@ enum ShowCommand {
     Show { id: String },
 }
 #[derive(Subcommand)]
-enum JobCommand {
-    Show { id: String },
+enum OpportunityCommand {
+    Show {
+        #[arg(value_name = "OPPORTUNITY_ID")]
+        id: String,
+    },
 }
 #[derive(Subcommand)]
 enum SourceCommand {
@@ -153,7 +162,7 @@ fn execute(cli: Cli) -> Result<()> {
                 *limit,
             )?
         }
-        Command::Jobs {
+        Command::Opportunities {
             command: ListCommand::List { limit },
         } => {
             let snapshot = store.snapshot()?;
@@ -187,15 +196,15 @@ fn execute(cli: Cli) -> Result<()> {
                 .find(|c| c.id == *id)
                 .ok_or("company not found")?,
         )?,
-        Command::Job {
-            command: JobCommand::Show { id },
+        Command::Opportunity {
+            command: OpportunityCommand::Show { id },
         } => serde_json::to_value(
             store
                 .snapshot()?
                 .jobs
                 .into_iter()
                 .find(|j| j.id == *id)
-                .ok_or("job not found")?,
+                .ok_or("opportunity not found")?,
         )?,
         Command::Source {
             command: SourceCommand::Add { url, company_id },
@@ -301,4 +310,39 @@ fn match_excerpt(text: &str, query: &str) -> String {
         result.push('…');
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn opportunity_commands_preserve_legacy_aliases_and_hide_them_in_help() {
+        for spelling in ["opportunities", "jobs"] {
+            let cli = Cli::try_parse_from(["milieu", spelling, "list", "--limit", "7"])
+                .expect("supported list command");
+            assert!(matches!(
+                cli.command,
+                Command::Opportunities {
+                    command: ListCommand::List { limit: 7 }
+                }
+            ));
+        }
+        for spelling in ["opportunity", "job"] {
+            let cli = Cli::try_parse_from(["milieu", spelling, "show", "retained-id"])
+                .expect("supported record command");
+            assert!(matches!(
+                cli.command,
+                Command::Opportunity {
+                    command: OpportunityCommand::Show { id }
+                } if id == "retained-id"
+            ));
+        }
+        let help = Cli::command().render_long_help().to_string();
+        assert!(help.contains("opportunities"));
+        assert!(help.contains("opportunity"));
+        assert!(!help.contains("jobs"));
+        assert!(!help.contains("job"));
+    }
 }
