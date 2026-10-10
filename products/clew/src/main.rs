@@ -330,8 +330,7 @@ mod tests {
                 "write-id",
                 "--status",
                 "applied",
-            ])
-            ?;
+            ])?;
             assert!(matches!(
                 cli.command,
                 Command::Record {

@@ -320,8 +320,7 @@ mod tests {
     #[test]
     fn opportunity_commands_preserve_legacy_aliases_and_hide_them_in_help() -> Result<()> {
         for spelling in ["opportunities", "jobs"] {
-            let cli = Cli::try_parse_from(["milieu", spelling, "list", "--limit", "7"])
-                ?;
+            let cli = Cli::try_parse_from(["milieu", spelling, "list", "--limit", "7"])?;
             assert!(matches!(
                 cli.command,
                 Command::Opportunities {
@@ -330,8 +329,7 @@ mod tests {
             ));
         }
         for spelling in ["opportunity", "job"] {
-            let cli = Cli::try_parse_from(["milieu", spelling, "show", "retained-id"])
-                ?;
+            let cli = Cli::try_parse_from(["milieu", spelling, "show", "retained-id"])?;
             assert!(matches!(
                 cli.command,
                 Command::Opportunity {
